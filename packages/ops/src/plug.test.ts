@@ -7,23 +7,27 @@ import {
   encode,
   ownSocket,
   type PlugConfig,
+  type PlugDef,
   type PlugDeps,
-  type PlugSend,
+  PlugSilent,
   parseStatus,
   plug,
   socketSend,
 } from './plug'
 
-const cfg: PlugConfig = {
+const shed: PlugDef = {
+  name: 'shed',
   address: '192.168.87.217',
   port: 9999,
-  timeoutSeconds: 5,
-  cycleSeconds: 10,
-  sockets: [
-    { machine: 'davion-sidarli', hostnames: ['davion-sidarli'] },
-    { machine: 'davion-gem', hostnames: ['davion-gem', 'aico'] },
-  ],
+  sockets: [{ machine: 'davion-sidarli', hostnames: ['davion-sidarli'] }, { machine: null }],
 }
+const house: PlugDef = {
+  name: 'house',
+  address: '192.168.87.193',
+  port: 9999,
+  sockets: [{ machine: 'davion-gem', hostnames: ['davion-gem', 'aico'] }, { machine: null }],
+}
+const cfg: PlugConfig = { timeoutSeconds: 5, cycleSeconds: 10, plugs: [shed, house] }
 
 const sysinfo = (states: [number, number], onTime = [594, 7300]) => ({
   system: {
@@ -39,26 +43,32 @@ const sysinfo = (states: [number, number], onTime = [594, 7300]) => ({
   },
 })
 
-/** A plug that is only a list of states: records every request, never touches the network. */
-function fakePlug(states: [number, number] = [1, 1]) {
-  const requests: unknown[] = []
-  const send: PlugSend = async (request) => {
-    requests.push(request)
+/** Two plugs that are only lists of states: records every request, never touches the network. */
+function fakePlugs(states: Record<string, [number, number]>, silent: string[] = []) {
+  const requests: { plug: string; request: unknown }[] = []
+  const send: PlugDeps['send'] = async (plug, request) => {
+    requests.push({ plug: plug.name, request })
+    if (silent.includes(plug.name)) throw new PlugSilent(plug.address)
     const r = request as {
       context?: { child_ids: string[] }
       system: { set_relay_state?: { state: number } }
     }
+    const mine = states[plug.name] as [number, number]
     if (r.system.set_relay_state) {
-      states[Number(r.context?.child_ids[0]?.slice(-1))] = r.system.set_relay_state.state
+      mine[Number(r.context?.child_ids[0]?.slice(-1))] = r.system.set_relay_state.state
       return { system: { set_relay_state: { err_code: 0 } } }
     }
-    return sysinfo(states)
+    return sysinfo(mine)
   }
-  return { send, requests, states }
+  return { send, requests }
 }
 
-function harness(host: string, states: [number, number] = [1, 1]) {
-  const fake = fakePlug(states)
+function harness(
+  host: string,
+  states: Record<string, [number, number]> = { shed: [1, 1], house: [1, 1] },
+  silent: string[] = [],
+) {
+  const fake = fakePlugs(states, silent)
   const lines: string[] = []
   const slept: number[] = []
   const deps: PlugDeps = {
@@ -69,7 +79,7 @@ function harness(host: string, states: [number, number] = [1, 1]) {
     out: (line) => void lines.push(line),
   }
   const switches = () =>
-    fake.requests.filter((r) => Object.hasOwn((r as { system: object }).system, 'set_relay_state'))
+    fake.requests.filter((r) => 'set_relay_state' in (r.request as { system: object }).system)
   return { deps, lines, slept, switches, states }
 }
 
@@ -97,13 +107,15 @@ it('reads a reply split over several packets and says nothing answered on silenc
   })
   await new Promise<void>((done) => server?.listen(0, '127.0.0.1', done))
   const port = (server.address() as { port: number }).port
-  const local = { ...cfg, address: '127.0.0.1', port, timeoutSeconds: 1 }
-  expect(await socketSend(local)({ system: { get_sysinfo: {} } })).toEqual(sysinfo([1, 0]))
+  const local: PlugDef = { ...shed, address: '127.0.0.1', port }
+  expect(await socketSend(local, 1)({ system: { get_sysinfo: {} } })).toEqual(sysinfo([1, 0]))
   server.close()
   server = createServer(() => {})
   await new Promise<void>((done) => server?.listen(0, '127.0.0.1', done))
-  const quiet = { ...local, port: (server.address() as { port: number }).port, timeoutSeconds: 0.1 }
-  await expect(socketSend(quiet)({})).rejects.toThrow("The power plug at 127.0.0.1 didn't answer")
+  const quiet = { ...local, port: (server.address() as { port: number }).port }
+  await expect(socketSend(quiet, 0.1)({})).rejects.toThrow(
+    "The power plug at 127.0.0.1 didn't answer",
+  )
 })
 
 it('says the plug did not answer when nothing listens', async () => {
@@ -111,72 +123,116 @@ it('says the plug did not answer when nothing listens', async () => {
   await new Promise<void>((done) => server?.listen(0, '127.0.0.1', done))
   const port = (server.address() as { port: number }).port
   server.close()
-  await expect(socketSend({ ...cfg, address: '127.0.0.1', port })({})).rejects.toThrow(
+  await expect(socketSend({ ...shed, address: '127.0.0.1', port }, 1)({})).rejects.toThrow(
     "The power plug at 127.0.0.1 didn't answer",
   )
 })
 
-it('parses each socket: machine, on or off, how long on', () => {
-  const parsed = parseStatus(sysinfo([1, 0]), cfg)
+it('parses each socket: machine or empty, on or off, how long on', () => {
+  const parsed = parseStatus(sysinfo([1, 0]), shed)
   expect(parsed.model).toBe('EP40(US)')
   expect(parsed.sockets).toEqual([
-    { index: 0, id: 'ID00', machine: 'davion-sidarli', on: true, onSeconds: 594 },
-    { index: 1, id: 'ID01', machine: 'davion-gem', on: false, onSeconds: null },
+    { plug: 'shed', index: 0, id: 'ID00', machine: 'davion-sidarli', on: true, onSeconds: 594 },
+    { plug: 'shed', index: 1, id: 'ID01', machine: null, on: false, onSeconds: null },
   ])
-  expect(() => parseStatus({ system: {} }, cfg)).toThrow(Refusal)
+  expect(() => parseStatus({ system: {} }, shed)).toThrow(Refusal)
   expect(duration(45)).toBe('45 s')
   expect(duration(594)).toBe('9 min')
   expect(duration(7300)).toBe('2 h 1 min')
   expect(duration(200000)).toBe('2 d 7 h')
 })
 
-it('knows which socket this computer is wired to', () => {
-  expect(ownSocket(cfg, 'davion-sidarli')).toBe(0)
-  expect(ownSocket(cfg, 'Davion-Gem.lan')).toBe(1)
-  expect(ownSocket(cfg, 'aico')).toBe(1)
+it('knows which plug and socket this computer is wired to', () => {
+  expect(ownSocket(cfg, 'davion-sidarli')).toEqual({ plug: 'shed', index: 0 })
+  expect(ownSocket(cfg, 'Davion-Gem.lan')).toEqual({ plug: 'house', index: 0 })
+  expect(ownSocket(cfg, 'aico')).toEqual({ plug: 'house', index: 0 })
   expect(ownSocket(cfg, 'laptop')).toBeNull()
 })
 
-it('prints the status, marking this computer', async () => {
-  const h = harness('davion-sidarli', [1, 0])
+it('prints every plug, marking this computer and the empty sockets', async () => {
+  const h = harness('davion-sidarli', { shed: [1, 0], house: [1, 1] })
   expect(await plug([], h.deps)).toBe(0)
   expect(h.lines).toEqual([
-    'Power plug at 192.168.87.217 (EP40(US))',
+    'Shed plug (192.168.87.217, EP40(US))',
     '  0  davion-sidarli  on   for 9 min  (this computer)',
-    '  1  davion-gem      off',
+    '  1  (empty)         off',
+    'House plug (192.168.87.193, EP40(US))',
+    '  0  davion-gem      on   for 9 min',
+    '  1  (empty)         on   for 2 h 1 min',
   ])
   expect(h.switches()).toEqual([])
 })
 
-it('refuses to switch off or cycle its own socket without --force, and says why', async () => {
-  for (const verb of ['off', 'cycle']) {
-    const h = harness('aico')
-    const refusal = await plug([verb, 'davion-gem'], h.deps).catch((e) => e)
-    expect(refusal).toBeInstanceOf(Refusal)
-    expect(refusal.message).toContain('davion-gem is this computer')
-    expect(refusal.message).toContain('cut this computer')
-    expect(h.switches()).toEqual([])
-  }
-  const forced = harness('aico')
-  await plug(['off', '1', '--force'], forced.deps)
-  expect(forced.switches()).toHaveLength(1)
-  // On is always fine, and the other machine's socket is not protected.
-  const other = harness('aico', [0, 0])
-  await plug(['on', 'davion-gem'], other.deps)
-  await plug(['off', 'davion-sidarli'], other.deps)
-  expect(other.states).toEqual([0, 1])
+it('shows the plugs that answer when one is silent, and fails only when none answers', async () => {
+  const some = harness('davion-sidarli', { shed: [1, 1], house: [1, 1] }, ['house'])
+  expect(await plug([], some.deps)).toBe(0)
+  expect(some.lines).toContain(
+    "House plug (192.168.87.193): The power plug at 192.168.87.193 didn't answer",
+  )
+  expect(some.lines).toContain('Shed plug (192.168.87.217, EP40(US))')
+  const none = harness('davion-sidarli', { shed: [1, 1], house: [1, 1] }, ['house', 'shed'])
+  expect(await plug([], none.deps)).toBe(1)
+  const json = harness('davion-sidarli', { shed: [1, 1], house: [1, 1] }, ['house'])
+  await plug(['--json'], json.deps)
+  const parsed = JSON.parse(json.lines[0] as string)
+  expect(parsed.plugs[1]).toEqual({
+    name: 'house',
+    address: '192.168.87.193',
+    error: "The power plug at 192.168.87.193 didn't answer",
+  })
+  expect(parsed.plugs[0].sockets).toHaveLength(2)
 })
 
-it('cycles another machine: off, wait, on', async () => {
+it('refuses to switch off or cycle its own socket without --force, and says why', async () => {
+  for (const verb of ['off', 'cycle']) {
+    for (const target of ['davion-gem', 'house:0']) {
+      const h = harness('aico')
+      const refusal = await plug([verb, target], h.deps).catch((e) => e)
+      expect(refusal).toBeInstanceOf(Refusal)
+      expect(refusal.message).toContain('davion-gem is this computer')
+      expect(refusal.message).toContain('cut this computer')
+      expect(h.switches()).toEqual([])
+    }
+  }
+  const forced = harness('aico')
+  await plug(['off', 'house:0', '--force'], forced.deps)
+  expect(forced.switches()).toHaveLength(1)
+  // On is always fine, and the other machine's socket is not protected.
+  const other = harness('aico', { shed: [0, 0], house: [0, 0] })
+  await plug(['on', 'davion-gem'], other.deps)
+  await plug(['off', 'davion-sidarli'], other.deps)
+  expect(other.states).toEqual({ shed: [0, 0], house: [1, 0] })
+})
+
+it('finds a machine across plugs and addresses an empty socket as PLUG:SOCKET', async () => {
+  const h = harness('aico')
+  await plug(['off', 'davion-sidarli'], h.deps)
+  await plug(['on', 'shed:1'], h.deps)
+  await plug(['off', 'House:1'], h.deps)
+  expect(h.switches().map((r) => [r.plug, JSON.stringify(r.request)])).toEqual([
+    ['shed', '{"context":{"child_ids":["ID00"]},"system":{"set_relay_state":{"state":0}}}'],
+    ['shed', '{"context":{"child_ids":["ID01"]},"system":{"set_relay_state":{"state":1}}}'],
+    ['house', '{"context":{"child_ids":["ID01"]},"system":{"set_relay_state":{"state":0}}}'],
+  ])
+  expect(h.lines.at(-1)).toBe('empty socket (house:1) is off')
+})
+
+it('cycles another machine: off, wait, on, on the plug that feeds it', async () => {
   const h = harness('aico')
   expect(await plug(['cycle', 'davion-sidarli'], h.deps)).toBe(0)
   expect(h.slept).toEqual([10])
   expect(h.switches()).toEqual([
-    { context: { child_ids: ['ID00'] }, system: { set_relay_state: { state: 0 } } },
-    { context: { child_ids: ['ID00'] }, system: { set_relay_state: { state: 1 } } },
+    {
+      plug: 'shed',
+      request: { context: { child_ids: ['ID00'] }, system: { set_relay_state: { state: 0 } } },
+    },
+    {
+      plug: 'shed',
+      request: { context: { child_ids: ['ID00'] }, system: { set_relay_state: { state: 1 } } },
+    },
   ])
-  const quick = harness('aico')
-  await plug(['cycle', '0', '--wait', '3'], quick.deps)
+  const quick = harness('davion-sidarli')
+  await plug(['cycle', 'house:0', '--wait', '3'], quick.deps)
   expect(quick.slept).toEqual([3])
 })
 
@@ -186,18 +242,23 @@ it('rejects bad input with exit code 2 and plain words', async () => {
     ((await plug(argv, h.deps).catch((e) => e)) as Refusal).code
   expect(await code(['off'])).toBe(2)
   expect(await code(['off', 'nobody'])).toBe(2)
-  expect(await code(['off', '7'])).toBe(2)
-  expect(await code(['toggle', '0'])).toBe(2)
-  expect(await code(['on', '0', '--bogus'])).toBe(2)
-  expect(await code(['cycle', '0', '--wait', 'x'])).toBe(2)
+  expect(await code(['off', '1'])).toBe(2)
+  expect(await code(['off', 'shed:7'])).toBe(2)
+  expect(await code(['off', 'garage:0'])).toBe(2)
+  expect(await code(['toggle', 'shed:0'])).toBe(2)
+  expect(await code(['on', 'shed:0', '--bogus'])).toBe(2)
+  expect(await code(['cycle', 'shed:0', '--wait', 'x'])).toBe(2)
   expect(h.switches()).toEqual([])
 })
 
 it('reports a plug that refuses the switch', async () => {
   const h = harness('aico')
-  h.deps.send = async (request) =>
+  const before = h.deps.send
+  h.deps.send = async (p, request) =>
     (request as { system: { set_relay_state?: unknown } }).system.set_relay_state
       ? { system: { set_relay_state: { err_code: -1 } } }
-      : sysinfo([1, 1])
-  await expect(plug(['off', '0'], h.deps)).rejects.toThrow('refused to switch davion-sidarli off')
+      : before(p, request)
+  await expect(plug(['off', 'davion-sidarli'], h.deps)).rejects.toThrow(
+    'refused to switch davion-sidarli off',
+  )
 })

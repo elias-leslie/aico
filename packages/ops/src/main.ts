@@ -38,10 +38,10 @@ const USAGE = `Usage:
   aico vm observe ID... --storage NAME               read-only inventory as one JSON document
   aico vm reset ID --name NAME --snapshot SNAPSHOT   roll a stopped guest back; it stays stopped
       Proxmox guests with Aico Logins' scoped API token (Proxmox enforces its pools)
-  aico plug [status] [--json]                        the power plug: each socket, its machine, on or off, how long on
-  aico plug on|off MACHINE|SOCKET [--force]          switch one socket (sockets count from 0)
-  aico plug cycle MACHINE|SOCKET [--wait S] [--force]  off, wait (default 10 s), on
-      the Kasa plug on the lab network, no login; a computer will not switch off its own socket
+  aico plug [status] [--json]                        every power plug: its sockets, machine, on or off, how long on
+  aico plug on|off MACHINE|PLUG:SOCKET [--force]     switch one socket (PLUG:SOCKET, e.g. shed:1, also for an empty one)
+  aico plug cycle MACHINE|PLUG:SOCKET [--wait S] [--force]  off, wait (default 10 s), on
+      the Kasa plugs on the lab network, no login; a computer will not switch off its own socket
       (that would cut its own power) unless --force`
 
 /** One verb's part of USAGE (`aico logs --help` shows logs, not deploy). */
