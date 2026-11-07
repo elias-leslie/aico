@@ -27,8 +27,8 @@ import { takeAskFromUrl } from '../asks/NeedsYou'
 import styles from './Frame.module.css'
 import { useFrame } from './FrameContext'
 
-/** Notes opens on a new note, ready to type; nothing is saved until something is typed. */
-const NEW_NOTE_HREF = '/notes?new=note'
+/** Notes opens on the notes list, in its own window on a desktop. */
+const NOTES_HREF = '/notes'
 const QUOTA_HREF = '/quota'
 
 /** Bring the open session's row into view once the list is on screen. */
@@ -81,7 +81,7 @@ export function TopBar() {
     void queryClient.refetchQueries({ type: 'active' })
   }
   const openNotes = () => {
-    if (!docked || !popOutNotes(NEW_NOTE_HREF)) router.push(NEW_NOTE_HREF)
+    if (!docked || !popOutNotes(NOTES_HREF)) router.push(NOTES_HREF)
   }
 
   // Health: the worst state's dot and the problem count; unknown when it couldn't be read.

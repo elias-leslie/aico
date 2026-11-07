@@ -173,7 +173,7 @@ describe('Panel', () => {
       screen
         .getAllByRole('heading', { level: 2 })
         .map((heading) => heading.textContent),
-    ).toEqual(['Sessions', 'Worst problem', 'Quota', 'Everything else'])
+    ).toEqual(['Sessions', 'Everything else'])
     // "1 of them failed" opens the failed sessions.
     expect(
       screen.getByRole('link', { name: '1 of them failed' }),
@@ -190,7 +190,7 @@ describe('Panel', () => {
     expect(since).not.toHaveTextContent(/Since/)
   })
 
-  it('lists every place to open, Quota and Recovery included, at their own addresses', () => {
+  it('lists every place to open, Quota and Recovery included, at their own addresses, and no Notes entry (the top bar opens Notes)', () => {
     render(<Panel slots={slots} onSelect={vi.fn()} />)
     const places = screen.getByRole('region', { name: 'Everything else' })
     const href = (name: RegExp | string) =>
@@ -200,77 +200,13 @@ describe('Panel', () => {
     expect(href('Machines')).toBe('/machines')
     fireEvent.click(within(places).getByRole('link', { name: 'Quota' }))
     expect(state.open).toHaveBeenCalledWith('/quota', 'wide')
+    expect(within(places).queryByText('Notes')).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Worst problem' })).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Quota' })).toBeNull()
   })
 
-  it('names the worst problem and opens Status', () => {
+  it('shows glance values only where read', () => {
     render(<Panel slots={slots} onSelect={vi.fn()} />)
-    expect(screen.getByText('Restore drill')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('link', { name: 'Open Status' }))
-    expect(state.open).toHaveBeenCalledWith('/status', 'wide')
-  })
-
-  it('names the session and offers Open for the worst problem, a failure ahead of a warning', () => {
-    state.status = {
-      ...state.status,
-      view: {
-        summary: { problems: 2, top: [] },
-        rows: [
-          row({
-            id: 'check-memory',
-            kind: 'backup',
-            what: 'Memory',
-            meaning: 'Session fa41c0c8: jobs killed again and again.',
-            state: 'warn',
-            shown: 'warn',
-          }),
-          row({
-            id: 'job/restore',
-            kind: 'job',
-            what: 'Restore drill',
-            meaning: 'It failed.',
-            shown: 'failed',
-          }),
-        ],
-      },
-    }
-    const { rerender } = render(<Panel slots={slots} onSelect={vi.fn()} />)
-    expect(screen.getByText('Restore drill')).toBeInTheDocument()
-    expect(screen.queryByText('Memory')).toBeNull()
-    // Without the failure, the warning leads, by the tier Status shows it under.
-    state.status = {
-      ...state.status,
-      view: {
-        summary: { problems: 1, top: [] },
-        rows: [
-          row({
-            id: 'check-memory',
-            kind: 'backup',
-            what: 'Memory',
-            actions: [{ kind: 'session', ref: 'fa41c0c8' }],
-            meaning: 'Session fa41c0c8: jobs killed again and again.',
-            state: 'warn',
-            shown: 'warn',
-          }),
-        ],
-      },
-    }
-    rerender(<Panel slots={slots} onSelect={vi.fn()} />)
-    const worst = screen.getByRole('region', { name: 'Worst problem' })
-    expect(within(worst).getByText('Lost work')).toBeVisible()
-    expect(within(worst).getByText(/Warning/)).toBeVisible()
-    expect(worst).toHaveTextContent('Session “Aico”: jobs killed')
-    expect(worst).not.toHaveTextContent('fa41c0c8')
-    fireEvent.click(within(worst).getByRole('button', { name: 'Open' }))
-    expect(state.push).toHaveBeenCalledWith('/?session=fa41c0c8')
-  })
-
-  it('shows a quota bar with what is used, and glance values only where read', () => {
-    render(<Panel slots={slots} onSelect={vi.fn()} />)
-    expect(
-      screen.getByRole('img', {
-        name: 'Claude: 82% left, 60% of the way through the window',
-      }),
-    ).toBeVisible()
     expect(
       screen.getByRole('link', { name: /Status.*3 problems/ }),
     ).toBeVisible()
@@ -287,15 +223,12 @@ describe('Panel', () => {
     state.usage = { ...state.usage, report: null, loading: true }
     const { rerender } = render(<Panel slots={slots} onSelect={vi.fn()} />)
     expect(screen.getByText('Checking what happened…')).toBeVisible()
-    expect(screen.getByText('Checking Status…')).toBeVisible()
 
     state.digest = { ...state.digest, loading: false, failed: true }
     state.status = { view: null, loading: false, failed: true, stale: false }
     state.usage = { ...state.usage, loading: false, failed: true }
     rerender(<Panel slots={slots} onSelect={vi.fn()} />)
     expect(screen.getByText(/Couldn’t read what happened/)).toBeVisible()
-    expect(screen.getByText('Status couldn’t be read.')).toBeVisible()
-    expect(screen.getByText('Quota couldn’t be read.')).toBeVisible()
     expect(screen.queryByText('No problems.')).toBeNull()
 
     state.digest = {

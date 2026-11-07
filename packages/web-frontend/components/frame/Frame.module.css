@@ -285,9 +285,6 @@
 .side[data-tier="hidden"] {
   border-right: none;
 }
-.side[data-tier="hidden"] .handle {
-  right: -10px;
-}
 .sideSpacer:has(.dragging) {
   transition: none;
 }
@@ -394,6 +391,9 @@
 }
 .handle:focus-visible {
   outline: none;
+}
+.side[data-tier="hidden"] .handle {
+  right: -10px;
 }
 .grip {
   position: absolute;

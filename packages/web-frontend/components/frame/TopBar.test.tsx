@@ -179,7 +179,7 @@ describe('TopBar', () => {
     expect(needs).toHaveAccessibleName('Needs you: not loaded yet')
   })
 
-  it('opens health and quota beside the session, and Notes in its own window on a new note', () => {
+  it('opens health and quota beside the session, and Notes in its own window on the notes list', () => {
     render(<TopBar />)
     expect(screen.getByTestId('top-bar-health')).toHaveTextContent('2problems')
     fireEvent.click(screen.getByTestId('top-bar-health'))
@@ -188,7 +188,7 @@ describe('TopBar', () => {
     fireEvent.click(screen.getByTestId('top-bar-quota'))
     expect(state.frame?.open).toHaveBeenCalledWith('/quota', 'wide')
     fireEvent.click(screen.getByTestId('top-bar-notes'))
-    expect(state.popOut).toHaveBeenCalledWith('/notes?new=note')
+    expect(state.popOut).toHaveBeenCalledWith('/notes')
   })
 
   it('when the server is gone, says since when with Retry in health’s place', () => {
@@ -215,10 +215,10 @@ describe('TopBar', () => {
     fireEvent.click(menu)
     expect(state.frame?.setSheetOpen).toHaveBeenCalledWith(true)
     expect(screen.queryByTestId('top-bar-quota')).toBeNull()
-    // Notes is a button on the phone too, as a new note in the page itself.
+    // Notes is a button on the phone too, opening the notes list in the page itself.
     fireEvent.click(screen.getByTestId('top-bar-notes'))
     expect(screen.getByTestId('top-bar-notes')).toHaveAccessibleName('Notes')
     expect(state.popOut).not.toHaveBeenCalled()
-    expect(state.push).toHaveBeenCalledWith('/notes?new=note')
+    expect(state.push).toHaveBeenCalledWith('/notes')
   })
 })

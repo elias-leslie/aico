@@ -11,7 +11,6 @@ import {
   KeyRound,
   Server,
   Smartphone,
-  StickyNote,
   Undo2,
   UserRound,
 } from 'lucide-react'
@@ -29,7 +28,7 @@ import {
   useDigest,
   useLastLook,
 } from '@/lib/frame/digest'
-import { type QuotaGlance, quotaGlances, quotaTitle } from '@/lib/frame/quota'
+import type { QuotaGlance } from '@/lib/frame/quota'
 import { askCounts, useApprovals, useOwnerAsks } from '@/lib/hooks/use-asks'
 import { useClock } from '@/lib/hooks/use-clock'
 import { useHosts } from '@/lib/hooks/use-hosts'
@@ -39,21 +38,7 @@ import {
   RECOVERY_QUERY_KEY,
   useStatusSessions,
 } from '@/lib/hooks/use-status-sessions'
-import { useUsage } from '@/lib/hooks/use-usage'
-import { machineLabel } from '@/lib/machine-name'
-import { popOutNotes } from '@/lib/notes-window'
-import {
-  ACTION_LABEL,
-  plural,
-  reason,
-  rowButtons,
-  type StatusRow,
-  tierLabel,
-  tierOf,
-  WORD,
-  withSessionNames,
-  worstProblem,
-} from '@/lib/status'
+import { plural, rowButtons, type StatusRow } from '@/lib/status'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
 import { NeedsYouSection } from '../asks/NeedsYou'
 import { CaptureLauncher } from '../capture/CaptureLauncher'
@@ -260,79 +245,6 @@ export function useRowSessionAction(top: StatusRow | undefined) {
 }
 
 /** The one problem that matters most: a failure first, then Status's own ranking. */
-function WorstProblem({ frame }: { frame: Frame | null }) {
-  const { view, loading, failed, stale } = useStatus()
-  const problems = view?.summary.problems
-  const top: StatusRow | undefined =
-    (view && worstProblem(view.rows)) ?? view?.summary.top[0]
-  const { session, sessionName, note, act, title, names } =
-    useRowSessionAction(top)
-  return (
-    <section className={styles.section} aria-label="Worst problem">
-      <SectionHead
-        title="Worst problem"
-        more={
-          problems && problems > 1 ? (
-            <MoreLink frame={frame} href="/status">
-              See all {problems} in Status
-            </MoreLink>
-          ) : null
-        }
-      />
-      {loading ? (
-        <p className={styles.note}>Checking Status…</p>
-      ) : failed ? (
-        <p className={styles.note}>Status couldn’t be read.</p>
-      ) : !view || problems === 0 || !top ? (
-        <p className={styles.note}>
-          {stale ? 'As of the last read: no problems.' : 'No problems.'}
-        </p>
-      ) : (
-        <div className={styles.worst} data-stale={stale ? 'true' : undefined}>
-          <div className={styles.worstMeta}>
-            <span
-              className="lantern-chip"
-              data-tone={
-                top.shown === 'failed' || tierOf(top) === 'lost'
-                  ? 'bad'
-                  : 'wait'
-              }
-            >
-              {tierLabel(tierOf(top))}
-            </span>
-            <span>
-              {WORD[top.shown]} · {machineLabel(top.machine)}
-            </span>
-          </div>
-          <h3>{top.what}</h3>
-          <p>{withSessionNames(reason(top) || top.meaning, names)}</p>
-          {note && (
-            <p className={styles.worstNote} role="alert">
-              {sessionName ? `“${sessionName}” didn’t resume: ` : ''}
-              {note}
-            </p>
-          )}
-          <div className={styles.worstActions}>
-            {session && (
-              <button
-                type="button"
-                className="lantern-btn small primary"
-                title={title}
-                onClick={act}
-              >
-                {ACTION_LABEL[session.kind]}
-              </button>
-            )}
-            <MoreLink frame={frame} href="/status">
-              Open Status
-            </MoreLink>
-          </div>
-        </div>
-      )}
-    </section>
-  )
-}
-
 export function QuotaBar({ glance }: { glance: QuotaGlance }) {
   const unknown = glance.left === null
   return (
@@ -357,52 +269,6 @@ export function QuotaBar({ glance }: { glance: QuotaGlance }) {
         )}
       </div>
     </li>
-  )
-}
-
-function Quota({ frame }: { frame: Frame | null }) {
-  const { report, loading, failed, stale } = useUsage()
-  const glances = quotaGlances(report)
-  return (
-    <section className={styles.section} aria-label="Quota">
-      <SectionHead
-        title="Quota"
-        more={
-          <MoreLink frame={frame} href="/quota">
-            Spend by day
-          </MoreLink>
-        }
-      />
-      {loading ? (
-        <p className={styles.note}>Checking quota…</p>
-      ) : failed ? (
-        <p className={styles.note}>Quota couldn’t be read.</p>
-      ) : glances.length === 0 ? (
-        <p className={styles.note}>No quota reports yet.</p>
-      ) : (
-        <>
-          <ul
-            className={styles.quotas}
-            title={quotaTitle(glances)}
-            data-stale={stale ? 'true' : undefined}
-          >
-            {glances.map((glance) => (
-              <QuotaBar key={glance.id} glance={glance} />
-            ))}
-          </ul>
-          <p className={styles.legend}>
-            <span>
-              <i />
-              left
-            </span>
-            <span>
-              <i className={styles.legendTick} />
-              how far into the window
-            </span>
-          </p>
-        </>
-      )}
-    </section>
   )
 }
 
@@ -466,20 +332,6 @@ function Everything({ frame }: { frame: Frame | null }) {
             </Link>
           )
         })}
-        <button
-          type="button"
-          className={styles.place}
-          onClick={() => {
-            if (!popOutNotes('/notes')) window.location.assign('/notes')
-          }}
-          title="Notes open in their own window"
-        >
-          <StickyNote className="h-4 w-4" strokeWidth={1.7} />
-          <span>
-            <span className={styles.label}>Notes</span>
-            <span className={styles.value}>own window</span>
-          </span>
-        </button>
         <div className={styles.capture}>
           <CaptureLauncher variant="row" />
         </div>
@@ -489,7 +341,7 @@ function Everything({ frame }: { frame: Frame | null }) {
 }
 
 /** The left side's Panel: the triage view. What waits on you, every session
- * by state, the worst problem, quota, then everything else. */
+ * by state, then everything else. */
 export function Panel({
   slots,
   currentId,
@@ -526,8 +378,6 @@ export function Panel({
           )}
         </nav>
       </section>
-      <WorstProblem frame={frame} />
-      <Quota frame={frame} />
       <Everything frame={frame} />
     </div>
   )
