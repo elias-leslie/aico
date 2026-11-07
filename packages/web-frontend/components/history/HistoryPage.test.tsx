@@ -125,6 +125,15 @@ describe('recent sessions list', () => {
     expect(screen.queryByText('No sessions yet')).toBeNull()
   })
 
+  it('offers Aico agent chats in the tool filter', async () => {
+    api.list = { items: [session()] }
+    renderPage()
+    await screen.findAllByText(/demo/)
+    expect(
+      screen.getByRole('option', { name: 'Aico agent' }),
+    ).toBeInTheDocument()
+  })
+
   it('asks for one tool when it is picked', async () => {
     api.list = { items: [session()] }
     renderPage()
@@ -268,6 +277,39 @@ describe('transcript', () => {
     const transcript = screen.getByRole('region', { name: 'Transcript' })
     expect(transcript.querySelector('strong')?.textContent).toBe('done')
     expect(transcript).not.toHaveTextContent('**')
+  })
+
+  it('shows a linked file as its name in the final reply, never as [name](path)', async () => {
+    api.detail = {
+      ...session(),
+      path: '/x',
+      files: [],
+      subagents: {
+        count: 0,
+        toolCalls: 0,
+        tokens: { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 },
+      },
+    }
+    api.events = {
+      newest: {
+        items: [
+          {
+            offset: 1,
+            at: null,
+            role: 'assistant',
+            kind: 'text',
+            text: 'Wrote [the report](/srv/x/report.md).',
+          },
+        ],
+        older: null,
+        newer: null,
+        size: 1,
+      },
+    }
+    renderPage('codex:abc')
+    const final = await screen.findByTestId('history-final')
+    expect(final).toHaveTextContent('Wrote the report.')
+    expect(final).not.toHaveTextContent('](')
   })
 
   const detail = () => ({

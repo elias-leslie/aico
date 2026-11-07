@@ -304,6 +304,43 @@ describe('Codex reader', () => {
   })
 })
 
+describe('Codex setup text', () => {
+  it("keeps the owner's words and drops what Codex puts in the user seat itself", async () => {
+    const dir = join(home, '.codex', 'sessions', '2026', '11', '05')
+    mkdirSync(dir, { recursive: true })
+    const id = '01a19787-5491-7ac2-ab1f-147ed57e36a3'
+    const said = (role: string, text: string) => ({
+      type: 'response_item',
+      timestamp: '2026-11-05T10:00:01Z',
+      payload: { type: 'message', role, content: [{ type: 'input_text', text }] },
+    })
+    writeFileSync(
+      join(dir, `rollout-2026-11-05T10-00-00-${id}.jsonl`),
+      jsonl(
+        {
+          type: 'session_meta',
+          timestamp: '2026-11-05T10:00:00Z',
+          payload: { id, cwd: '/work/demo' },
+        },
+        said('user', '<environment_context>\n  <cwd>/work/demo</cwd>\n</environment_context>'),
+        said('user', '# AGENTS.md instructions for /work/demo\n\nbe brief'),
+        said('user', 'fix the login bug'),
+        said('assistant', 'done'),
+      ),
+    )
+    const h = history()
+    await h.scan()
+    const row = h.find(`codex:${id}`)
+    if (!row || row === 'ambiguous') throw new Error('missing')
+    const page = h.events(row, {})
+    if (page === 'gone') throw new Error('gone')
+    expect(page.items.map((e) => [e.role, e.text])).toEqual([
+      ['user', 'fix the login bug'],
+      ['assistant', 'done'],
+    ])
+  })
+})
+
 describe('Pi reader', () => {
   it('adds each message and reads write calls', async () => {
     const dir = join(home, '.pi', 'agent', 'sessions', '--work-demo--')

@@ -1,7 +1,7 @@
 'use client'
 
 import { Plus, RotateCcw } from 'lucide-react'
-import { useSearchParams } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import { newChat } from '@/lib/chat'
 import { useServerReach } from '@/lib/frame/server-reach'
 import { useSessionAttention } from '@/lib/hooks/use-session-attention'
@@ -39,8 +39,11 @@ export function EmptySessionState({
   const down = useServerReach().down
   const { isError, retry } = usePaneListError()
   const failed = isError && slots.length === 0
-  // The link named a session that isn't running (or isn't listed yet).
-  const missing = useSearchParams()?.get('session') ?? null
+  // The link named a session that isn't running (or isn't listed yet). Only
+  // the home link does: Recent's ?session= names a past session beside it.
+  const onHome = usePathname() === '/'
+  const linked = useSearchParams()?.get('session') ?? null
+  const missing = onHome ? linked : null
   return (
     <div
       className="h-full w-full overflow-y-auto p-4"

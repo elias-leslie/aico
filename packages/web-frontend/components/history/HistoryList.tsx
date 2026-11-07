@@ -21,6 +21,7 @@ import {
 import { useClock } from '@/lib/hooks/use-clock'
 import { useHistory } from '@/lib/hooks/use-history'
 import { useSessionLabels } from '@/lib/hooks/use-session-labels'
+import styles from './HistoryList.module.css'
 
 /** The list of recent sessions, newest first, one link each to its transcript. */
 export function HistoryList({ failedOnly = false }: { failedOnly?: boolean }) {
@@ -202,7 +203,10 @@ export function HistoryList({ failedOnly = false }: { failedOnly?: boolean }) {
         </div>
       )}
       {shown && shown.length > 0 && (
-        <div className="status-rows" data-testid="history-rows">
+        <div
+          className={`status-rows ${styles.rows}`}
+          data-testid="history-rows"
+        >
           {shown.map((session) => {
             const state = standing(session, now, liveOf(session.id))
             return (

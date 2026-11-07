@@ -1,0 +1,20 @@
+/* A link or file in formatted text: amber, underlined, a real control. */
+.link {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--lantern);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  text-align: left;
+}
+.link:hover {
+  color: var(--bone);
+}
+.link:focus-visible {
+  outline: 2px solid var(--amber-line);
+  outline-offset: 2px;
+}

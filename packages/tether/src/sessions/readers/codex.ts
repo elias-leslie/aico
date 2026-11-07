@@ -84,7 +84,8 @@ function read(record: Record<string, unknown>, _state: State, wantEvents: boolea
       const role = str(payload.role)
       const text = textOf(payload.content)
       if (role === 'assistant' && payload.channel === 'final' && text) fold.outcome = 'completed'
-      if (wantEvents && text && (role === 'user' || role === 'assistant')) {
+      const injected = role === 'user' && INJECTED_USER_TEXT.test(text)
+      if (wantEvents && text && !injected && (role === 'user' || role === 'assistant')) {
         events.push({ at: at ?? null, role, kind: 'text', text: clip(text) })
       }
     } else if (kind === 'function_call' || kind === 'custom_tool_call') {
@@ -112,6 +113,10 @@ function read(record: Record<string, unknown>, _state: State, wantEvents: boolea
   }
   return { fold, events }
 }
+
+/** Setup Codex puts in the user's seat itself (working folder, instructions, hook text): not something the owner said. */
+const INJECTED_USER_TEXT =
+  /^\s*(<environment_context>|<user_instructions>|<hook_prompt[\s>]|# AGENTS\.md instructions)/
 
 function listDir(path: string): string[] {
   try {

@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { PlainMarkdown } from '@/components/PlainMarkdown'
 import { TranscriptFold } from '@/components/TranscriptFold'
 import { ApiError } from '@/lib/api-fetch'
+import { openFiles } from '@/lib/files-opener'
 import { useLiveSessions } from '@/lib/frame/live'
 import {
   clock,
@@ -22,6 +23,9 @@ import {
   useHistoryEvents,
   useHistorySession,
 } from '@/lib/hooks/use-history'
+
+/** A file the agent linked: opens in the session view's Files, when one is on screen. */
+const openPath = (path: string) => openFiles({ kind: 'path', path })
 
 const ROLE: Record<HistoryEvent['role'], string> = {
   user: 'You',
@@ -76,7 +80,11 @@ function EventItem({ event }: { event: HistoryEvent }) {
         <code>{event.text}</code>
       ) : event.role === 'assistant' ? (
         // What the agent said is markdown: shown formatted, as in the final reply.
-        <PlainMarkdown text={event.text} className="lantern-ask-body" />
+        <PlainMarkdown
+          text={event.text}
+          className="lantern-ask-body"
+          onOpenPath={openPath}
+        />
       ) : (
         <pre>{event.text}</pre>
       )}
@@ -253,7 +261,11 @@ export function HistoryTranscript({ id }: { id: string }) {
               <span className="n">{clock(finalReply.at)}</span>
             )}
           </h2>
-          <PlainMarkdown text={finalReply.text} className="lantern-ask-body" />
+          <PlainMarkdown
+            text={finalReply.text}
+            className="lantern-ask-body"
+            onOpenPath={openPath}
+          />
         </section>
       )}
 

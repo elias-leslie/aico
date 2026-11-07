@@ -58,6 +58,7 @@ export const TOOLS = [
   ['claude-code', 'Claude Code'],
   ['codex', 'Codex'],
   ['pi', 'Pi'],
+  ['aico-agent', 'Aico agent'],
 ] as const
 
 export function toolName(tool: string): string {

@@ -33,3 +33,29 @@ it('shows fenced code as a block and numbers an ordered list', () => {
   )
   expect(container.querySelectorAll('ol li')).toHaveLength(2)
 })
+
+it('shows a markdown link as its label, never as [label](path)', () => {
+  const opened: string[] = []
+  const { container, getByRole } = render(
+    <PlainMarkdown
+      text={
+        'See [the report](/srv/x/report.md) and [docs](https://example.com/a).'
+      }
+      onOpenPath={(path) => opened.push(path)}
+    />,
+  )
+  expect(container.textContent).toBe('See the report and docs.')
+  getByRole('button', { name: 'the report' }).click()
+  expect(opened).toEqual(['/srv/x/report.md'])
+  const web = getByRole('link', { name: 'docs' })
+  expect(web.getAttribute('href')).toBe('https://example.com/a')
+  expect(web.getAttribute('rel')).toContain('noopener')
+})
+
+it('names a local file when the page cannot open it', () => {
+  const { container } = render(
+    <PlainMarkdown text={'[report](/srv/x/report.md)'} />,
+  )
+  expect(container.textContent).toBe('report')
+  expect(container.querySelector('button')).toBeNull()
+})
