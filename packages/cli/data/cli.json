@@ -89,6 +89,10 @@
           "away",
           "leaving: shut the hosts down cleanly and cut their power; start again from the Kasa app"
         ],
+        [
+          "wip",
+          "copies of the active repos, uncommitted work too, on the other full machines: run, restore"
+        ],
         ["phones", "paired phones: list, remove"],
         ["app", "the phone app's published version and outage drills"],
         ["declare", "record a host change you made, so Status knows it was you"],
