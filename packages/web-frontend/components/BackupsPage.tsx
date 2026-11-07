@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import {
+  ageByTarget,
   type BackupEntry,
   type BackupTarget,
   backupSummary,
@@ -33,6 +34,12 @@ interface FileNode {
   size?: number
 }
 const title = targetLabel
+function span(ms: number) {
+  const minutes = Math.max(1, Math.round(ms / 60_000))
+  if (minutes < 90) return `${minutes} min`
+  const hours = Math.round(minutes / 60)
+  return hours < 48 ? `${hours} h` : `${Math.round(hours / 24)} days`
+}
 const when = shortWhen
 async function api<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(
@@ -139,6 +146,44 @@ function Group({
   )
 }
 
+/** Per destination, the oldest live copy against its own limit. */
+function AgeChart({ entries }: { entries: Entry[] }) {
+  const ages = ageByTarget(entries, Date.now())
+  if (ages.length === 0) return null
+  return (
+    <section className={styles.ages} aria-label="How old each destination is">
+      <h2>Oldest copy at each destination</h2>
+      <ul>
+        {ages.map((age) => {
+          const late = age.ageMs > age.limitMs
+          const text = `${span(age.ageMs)} old, late after ${span(age.limitMs)}`
+          return (
+            <li key={age.target} data-late={late ? 'true' : undefined}>
+              <span className={styles.agesName}>{title(age.target)}</span>
+              <span
+                className={styles.agesTrack}
+                role="img"
+                aria-label={`${title(age.target)}: ${text}`}
+              >
+                <span
+                  className={styles.agesFill}
+                  style={{
+                    width: `${Math.min(100, Math.max(2, (age.ageMs / age.limitMs) * 100))}%`,
+                  }}
+                />
+              </span>
+              <span className={styles.agesText}>
+                {text}
+                {age.copies > 1 ? ` (${age.name})` : ''}
+              </span>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
+  )
+}
+
 export function BackupsPage() {
   // When the whole server is down the top bar's Retry is the only one.
   const down = useServerReach().down
@@ -230,6 +275,7 @@ export function BackupsPage() {
           <p className={styles.help}>
             Last good data, where it is kept, and when the next copy runs.
           </p>
+          <AgeChart entries={data.entries} />
           {message && (
             <p role="status" className={styles.notice}>
               {message}
@@ -255,7 +301,7 @@ export function BackupsPage() {
                   <button
                     key={target}
                     type="button"
-                    className="lantern-btn ghost small"
+                    className="lantern-btn small"
                     disabled={!!busy}
                     onClick={() => run(target)}
                   >

@@ -218,3 +218,13 @@
   align-items: center;
   padding: 0 2px;
 }
+
+/* Phone and tablet: text links and link buttons are 44px touch targets. */
+@media (max-width: 1023px) {
+  .moreLink,
+  .linkBtn {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+}

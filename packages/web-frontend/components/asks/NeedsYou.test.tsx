@@ -423,7 +423,7 @@ describe('Needs you page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Reply “Done”' }))
     expect(screen.getByRole('button', { name: 'Not now' })).toHaveAttribute(
       'title',
-      'Tells the agent: Not now',
+      'Sends the agent “Not now”; the question counts as answered, and it moves on',
     )
     expect(state.sent).toEqual([
       { id: 'abcdefabcdef', reply: { kind: 'answer', text: 'Done' } },

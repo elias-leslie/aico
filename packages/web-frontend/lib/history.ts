@@ -185,3 +185,15 @@ export function shortFolder(cwd: string | null): string {
 export function sessionHref(id: string): string {
   return `/history?session=${encodeURIComponent(id)}`
 }
+
+/** What the session said last, one line: markdown links and marks reduced to their words. */
+export function plainLine(text: string): string {
+  return (
+    text
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+      .replace(/[`*_#>]+/g, '')
+      .split('\n')
+      .map((line) => line.trim())
+      .find(Boolean) ?? ''
+  )
+}

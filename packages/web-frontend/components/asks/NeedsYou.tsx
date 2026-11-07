@@ -802,7 +802,10 @@ export function AskCard({
             className="lantern-btn small"
             disabled={reply.isPending || away}
             onClick={() => send({ kind: 'answer', text: 'Done' }, 'Done')}
-            title={waitTitle ?? 'Tells the agent: Done'}
+            title={
+              waitTitle ??
+              'Sends the agent “Done”; the question counts as answered'
+            }
           >
             Reply “Done”
           </button>
@@ -823,7 +826,10 @@ export function AskCard({
                 'Not now',
               )
             }
-            title={waitTitle ?? 'Tells the agent: Not now'}
+            title={
+              waitTitle ??
+              'Sends the agent “Not now”; the question counts as answered, and it moves on'
+            }
           >
             Not now
           </button>
@@ -1038,7 +1044,7 @@ export function NeedsYouSection() {
         {total > 0 && <span className="n">{total}</span>}
         <button
           type="button"
-          className="ml-auto text-[11px] normal-case tracking-normal"
+          className="ml-auto text-[11px] normal-case tracking-normal max-lg:min-h-11"
           style={{ color: 'var(--lantern)' }}
           onClick={openPage}
         >

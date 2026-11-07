@@ -92,12 +92,14 @@ export const UnifiedTerminalHeaderContent = memo(
           />
         )}
 
-        {/* The phone's top bar already names the session; without the list
-            beside it (allSlots), the switcher in this name carries the list. */}
+        {/* Beside the session list the top bar already names the session and
+            says its state, so the toolbar repeats neither (Rename still opens
+            the name field here); without the list, the switcher in this name
+            carries it. */}
         <div
           className={clsx(
             'flex min-w-0 flex-[0_1_auto] items-center',
-            isMobile && !allSlots && !isRenaming && 'hidden',
+            !allSlots && !isRenaming && 'hidden',
           )}
         >
           <HeaderNameDisplay
@@ -112,7 +114,9 @@ export const UnifiedTerminalHeaderContent = memo(
           />
         </div>
 
-        <PaneStatusBadge status={connectionStatus} compact={isMobile} />
+        {allSlots && (
+          <PaneStatusBadge status={connectionStatus} compact={isMobile} />
+        )}
         <ContextFillBadge
           sessionId={getSlotSessionId(slot)}
           mode={slot.type === 'project' ? slot.activeMode : slot.sessionMode}

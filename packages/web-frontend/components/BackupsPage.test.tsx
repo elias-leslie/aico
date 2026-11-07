@@ -79,6 +79,23 @@ describe('BackupsPage', () => {
     expect(screen.getAllByText('Drive')).toHaveLength(2)
   })
 
+  it('draws the oldest copy at each destination against its limit', async () => {
+    const hoursAgo = (h: number) =>
+      new Date(Date.now() - h * 3_600_000).toISOString()
+    answer([
+      copy({ dataAt: hoursAgo(2), limitHours: 6 }),
+      copy({ target: 'drive', dataAt: hoursAgo(30), limitHours: 26 }),
+    ])
+    render(<BackupsPage />)
+    await screen.findByTestId('backups-summary')
+    expect(
+      screen.getByRole('img', { name: 'T7: 2 h old, late after 6 h' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('img', { name: 'Drive: 30 h old, late after 26 h' }),
+    ).toBeInTheDocument()
+  })
+
   it('shows a failed copy first with its reason', async () => {
     answer([
       copy({ source: 'a', name: 'Alpha' }),

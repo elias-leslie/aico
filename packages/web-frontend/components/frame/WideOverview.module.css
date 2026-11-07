@@ -77,3 +77,43 @@ a.main:hover .title {
   color: var(--mist);
   overflow-wrap: anywhere;
 }
+
+.final {
+  display: block;
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--bone);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.quotas {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.spends {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+.spend {
+  margin: 0;
+  font-size: 12.5px;
+}
+.spend svg {
+  display: block;
+  width: 100%;
+  height: 36px;
+  margin-top: 4px;
+}
+.bar1 {
+  fill: var(--lantern);
+}
+.today {
+  fill: var(--beacon);
+}

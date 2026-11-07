@@ -266,8 +266,8 @@ describe('launchLine', () => {
 })
 
 describe('paneCommand', () => {
-  it('replaces the verified gate with the real interactive shell for a shell widget', () => {
-    expect(paneCommand(null)).toBe(`exec "\${SHELL:-/bin/bash}"`)
+  it('replaces the verified gate with the real interactive shell for a shell widget, after clearing the typed line', () => {
+    expect(paneCommand(null)).toBe(`printf '\\033[3J\\033[H\\033[2J'; exec "\${SHELL:-/bin/bash}"`)
   })
 
   it('runs the TUI then execs an interactive shell so the pane survives its exit', () => {

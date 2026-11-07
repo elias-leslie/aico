@@ -18,8 +18,9 @@ import {
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import type { ComponentType, ReactNode } from 'react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { apiFetch } from '@/lib/api-fetch'
+import { type BackupEntry, backupGlance } from '@/lib/backups'
 import {
   digestParts,
   digestStart,
@@ -203,17 +204,15 @@ function SinceLine({ frame }: { frame: Frame | null }) {
   )
 }
 
-/** The one problem that matters most: a failure first, then Status's own ranking. */
-function WorstProblem({ frame }: { frame: Frame | null }) {
-  const { view, loading, failed, stale } = useStatus()
+/** The session button a Status row offers (Resume for one that stopped, else Open), and what
+ * pressing it does. Shared by the Worst problem card and Wide's Status rows. */
+export function useRowSessionAction(top: StatusRow | undefined) {
   const sessions = useStatusSessions()
+  const { view } = useStatus()
   const { hosts } = useHosts()
   const router = useRouter()
   const queryClient = useQueryClient()
   const [note, setNote] = useState<string | null>(null)
-  const problems = view?.summary.problems
-  const top: StatusRow | undefined =
-    (view && worstProblem(view.rows)) ?? view?.summary.top[0]
   const session = top
     ? rowButtons(top, {
         here: view?.machine,
@@ -247,6 +246,27 @@ function WorstProblem({ frame }: { frame: Frame | null }) {
       await queryClient.invalidateQueries({ queryKey: ['terminal-sessions'] })
     }
   }
+  const act = () => {
+    if (!session) return
+    if (session.kind === 'resume') void resume(session.ref)
+    else router.push(`/?session=${encodeURIComponent(session.ref)}`)
+  }
+  const title = session
+    ? session.kind === 'resume'
+      ? `Resume “${sessionName ?? 'the session'}”, which stopped`
+      : `Open “${sessionName ?? 'the session'}”`
+    : undefined
+  return { session, sessionName, note, act, title, names: sessions.names }
+}
+
+/** The one problem that matters most: a failure first, then Status's own ranking. */
+function WorstProblem({ frame }: { frame: Frame | null }) {
+  const { view, loading, failed, stale } = useStatus()
+  const problems = view?.summary.problems
+  const top: StatusRow | undefined =
+    (view && worstProblem(view.rows)) ?? view?.summary.top[0]
+  const { session, sessionName, note, act, title, names } =
+    useRowSessionAction(top)
   return (
     <section className={styles.section} aria-label="Worst problem">
       <SectionHead
@@ -285,7 +305,7 @@ function WorstProblem({ frame }: { frame: Frame | null }) {
             </span>
           </div>
           <h3>{top.what}</h3>
-          <p>{withSessionNames(reason(top) || top.meaning, sessions.names)}</p>
+          <p>{withSessionNames(reason(top) || top.meaning, names)}</p>
           {note && (
             <p className={styles.worstNote} role="alert">
               {sessionName ? `“${sessionName}” didn’t resume: ` : ''}
@@ -297,18 +317,8 @@ function WorstProblem({ frame }: { frame: Frame | null }) {
               <button
                 type="button"
                 className="lantern-btn small primary"
-                title={
-                  session.kind === 'resume'
-                    ? `Resume “${sessionName ?? 'the session'}”, which stopped`
-                    : `Open “${sessionName ?? 'the session'}”`
-                }
-                onClick={() =>
-                  session.kind === 'resume'
-                    ? void resume(session.ref)
-                    : router.push(
-                        `/?session=${encodeURIComponent(session.ref)}`,
-                      )
-                }
+                title={title}
+                onClick={act}
               >
                 {ACTION_LABEL[session.kind]}
               </button>
@@ -323,7 +333,7 @@ function WorstProblem({ frame }: { frame: Frame | null }) {
   )
 }
 
-function QuotaBar({ glance }: { glance: QuotaGlance }) {
+export function QuotaBar({ glance }: { glance: QuotaGlance }) {
   const unknown = glance.left === null
   return (
     <li className={styles.quota} title={glance.meaning}>
@@ -400,6 +410,17 @@ function Quota({ frame }: { frame: Frame | null }) {
 function Everything({ frame }: { frame: Frame | null }) {
   const { view } = useStatus()
   const { approvals } = useApprovals()
+  const [backups, setBackups] = useState<BackupEntry[] | null>(null)
+  useEffect(() => {
+    let live = true
+    fetch('/api/backups')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => live && setBackups(body?.entries ?? null))
+      .catch(() => live && setBackups(null))
+    return () => {
+      live = false
+    }
+  }, [])
   const problems = view?.summary.problems
   const waiting = approvals?.state === 'ok' ? approvals.taps.length : undefined
   const glance: Record<string, { text: string; warn?: boolean } | undefined> = {
@@ -409,6 +430,7 @@ function Everything({ frame }: { frame: Frame | null }) {
         : problems
           ? { text: plural(problems, 'problem'), warn: true }
           : { text: 'all healthy' },
+    Backups: backups ? backupGlance(backups) : undefined,
     Grants: waiting ? { text: `${waiting} waiting`, warn: true } : undefined,
   }
   return (

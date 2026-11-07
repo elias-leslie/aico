@@ -109,6 +109,8 @@ export interface BackupEntry {
   project?: string
   /** A retired source whose path is gone: listed for its old copies, but no Status row. */
   gone?: boolean
+  /** How old its data may get before it counts as late, in hours. */
+  limitHours?: number
 }
 /** How often a target's backup job runs, in minutes (Drive: daily). */
 export function runPeriodMinutes(target: BackupTarget, cfg: BackupConfig): number {
@@ -162,6 +164,7 @@ export function entry(
     path: copy?.path ?? null,
     running,
     machine,
+    limitHours: limit,
   }
 }
 export function entries(
@@ -277,6 +280,7 @@ export function entries(
         running: false,
         machine,
         project: external.owner_project,
+        limitHours: external.frequency === 'weekly' ? 8 * 24 : cfg.schedule.freshDriveHours,
       })
     }
   // Backups of a project's data that no source row names (Proxmox copies, the Aico databases).

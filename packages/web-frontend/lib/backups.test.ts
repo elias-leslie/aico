@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { type BackupEntry, backupSummary, groupBySource } from './backups'
+import {
+  ageByTarget,
+  type BackupEntry,
+  backupGlance,
+  backupSummary,
+  groupBySource,
+} from './backups'
 
 const entry = (over: Partial<BackupEntry>): BackupEntry => ({
   id: `${over.target ?? 'native'}/${over.source ?? 'a'}`,
@@ -77,5 +83,50 @@ describe('groupBySource', () => {
     expect(groups[0]?.state).toBe('warn')
     expect(groups[0]?.copies.map((c) => c.target)).toEqual(['native', 'drive'])
     expect(groups[2]?.state).toBe('off')
+  })
+})
+
+describe('ageByTarget', () => {
+  const now = Date.parse('2026-11-07T12:00:00Z')
+  const hoursAgo = (h: number) => new Date(now - h * 3_600_000).toISOString()
+
+  it('shows each destination by its most overdue copy against that copy limit', () => {
+    const list = [
+      entry({ source: 'a', dataAt: hoursAgo(1), limitHours: 6 }),
+      entry({ source: 'b', name: 'Beta', dataAt: hoursAgo(4), limitHours: 6 }),
+      entry({
+        source: 'a',
+        target: 'drive',
+        dataAt: hoursAgo(30),
+        limitHours: 26,
+      }),
+    ]
+    const ages = ageByTarget(list, now)
+    expect(ages.map((age) => age.target)).toEqual(['drive', 'native'])
+    expect(ages[1]).toMatchObject({ name: 'Beta', copies: 2 })
+    expect(ages[1]?.ageMs).toBe(4 * 3_600_000)
+  })
+
+  it('leaves out archived copies, a machine that is off and copies with no date', () => {
+    const list = [
+      entry({ source: 'old', gone: true, state: 'off', limitHours: 6 }),
+      entry({ source: 'jobs', state: 'off', limitHours: 6 }),
+      entry({ source: 'new', dataAt: null, limitHours: 6 }),
+    ]
+    expect(ageByTarget(list, now)).toEqual([])
+  })
+})
+
+describe('backupGlance', () => {
+  it('says the worst thing first and that all is current otherwise', () => {
+    expect(backupGlance([])).toBeUndefined()
+    expect(backupGlance([entry({})])).toEqual({ text: 'all current' })
+    expect(
+      backupGlance([entry({}), entry({ source: 'b', state: 'failed' })]),
+    ).toEqual({ text: '1 failed', warn: true })
+    expect(backupGlance([entry({ state: 'warn' })])).toEqual({
+      text: '1 late',
+      warn: true,
+    })
   })
 })

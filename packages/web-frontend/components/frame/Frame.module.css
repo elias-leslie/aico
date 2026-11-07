@@ -160,6 +160,13 @@
 .topbar[data-docked] .wideOnly {
   display: inline;
 }
+/* Phone: a short word beside the count, so a number is never alone. */
+.phoneOnly {
+  display: inline;
+}
+.topbar[data-docked] .phoneOnly {
+  display: none;
+}
 .dot {
   width: 8px;
   height: 8px;

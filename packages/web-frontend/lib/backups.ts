@@ -19,6 +19,8 @@ export interface BackupEntry {
   running?: boolean
   /** The source path is gone: older copies are kept, no new ones are made. */
   gone?: boolean
+  /** How old its data may get before it counts as late, in hours. */
+  limitHours?: number
 }
 
 export interface BackupGroup {
@@ -100,6 +102,17 @@ export function backupSummary(entries: readonly BackupEntry[]): string {
   return `${parts.join(', ')}.`
 }
 
+/** The short form for a glance: the worst thing first, or that all is current. */
+export function backupGlance(
+  entries: readonly BackupEntry[],
+): { text: string; warn?: boolean } | undefined {
+  if (!entries.length) return undefined
+  const { current, late, failed } = countBackups(groupBySource(entries))
+  if (failed) return { text: `${failed} failed`, warn: true }
+  if (late) return { text: `${late} late`, warn: true }
+  return current ? { text: 'all current' } : undefined
+}
+
 /** Sources with their copies: problems first, then by name; archived sources last. */
 export function groupBySource(entries: readonly BackupEntry[]): BackupGroup[] {
   const bySource = new Map<string, BackupEntry[]>()
@@ -131,4 +144,51 @@ export function groupBySource(entries: readonly BackupEntry[]): BackupGroup[] {
   return groups.sort(
     (a, b) => RANK[a.state] - RANK[b.state] || a.name.localeCompare(b.name),
   )
+}
+
+export interface TargetAge {
+  target: BackupTarget
+  /** The age of the oldest copy still counted as live there, in ms. */
+  ageMs: number
+  /** What that copy's limit is, in ms. */
+  limitMs: number
+  /** The oldest copy's source, by name. */
+  name: string
+  copies: number
+}
+
+/** Per destination, how old its most overdue live copy is against that copy's own limit. A copy
+ * with no data date or no limit, one on a machine that is off, and archived ones are left out:
+ * they have no age to compare. Most overdue first. */
+export function ageByTarget(
+  entries: readonly BackupEntry[],
+  now: number,
+): TargetAge[] {
+  const worst = new Map<BackupTarget, TargetAge & { ratio: number }>()
+  for (const entry of entries) {
+    if (entry.gone || entry.state === 'off') continue
+    if (!entry.dataAt || !entry.limitHours) continue
+    const ageMs = Math.max(0, now - Date.parse(entry.dataAt))
+    if (Number.isNaN(ageMs)) continue
+    const limitMs = entry.limitHours * 3_600_000
+    const ratio = ageMs / limitMs
+    const seen = worst.get(entry.target)
+    if (!seen)
+      worst.set(entry.target, {
+        target: entry.target,
+        ageMs,
+        limitMs,
+        name: entry.name,
+        copies: 1,
+        ratio,
+      })
+    else {
+      seen.copies += 1
+      if (ratio > seen.ratio)
+        Object.assign(seen, { ageMs, limitMs, name: entry.name, ratio })
+    }
+  }
+  return [...worst.values()]
+    .sort((a, b) => b.ratio - a.ratio)
+    .map(({ ratio: _ratio, ...rest }) => rest)
 }

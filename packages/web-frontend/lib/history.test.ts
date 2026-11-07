@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { agoAt, count, standing, tokenLine, WORKING_MS } from './history'
+import {
+  agoAt,
+  count,
+  plainLine,
+  standing,
+  tokenLine,
+  WORKING_MS,
+} from './history'
 
 const base = {
   id: 'codex:a',
@@ -46,5 +53,14 @@ describe('recent sessions copy', () => {
     expect(agoAt(0, 30_000)).toBe('just now')
     expect(agoAt(0, 5 * 60_000)).toBe('5 min ago')
     expect(agoAt(0, 3 * 3_600_000)).toBe('3 h ago')
+  })
+})
+
+describe('plainLine', () => {
+  it('reduces a reply to its first line of plain words', () => {
+    expect(
+      plainLine('\n**Done.** See [the report](/files?path=a.md) now\nmore'),
+    ).toBe('Done. See the report now')
+    expect(plainLine('')).toBe('')
   })
 })

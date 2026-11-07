@@ -10,6 +10,15 @@ import { PersonIcon, ProblemIcon } from './icons'
 import styles from './ProjectsPage.module.css'
 
 /** Only Status's failed state is ember; warnings and quiet checks are amber. */
+/** The one short word beside a badge's count; the full sentence stays in its tooltip. */
+const PROBLEM_WORD: Record<ProblemKind, string> = {
+  fail: 'failed',
+  warn: 'warn',
+  quiet: 'quiet',
+  publish: 'publish',
+  backup: 'backup',
+}
+
 const tone = (kind: ProblemKind, worst?: ProblemWorst) =>
   kind === 'quiet' || kind === 'warn' || worst === 'warn' ? 'warn' : 'fail'
 
@@ -38,7 +47,7 @@ export function ProblemBadge({
       onClick={onClick}
     >
       <ProblemIcon kind={kind} />
-      {count}
+      {count} {PROBLEM_WORD[kind]}
     </button>
   )
 }
@@ -61,7 +70,7 @@ export function AgentsBadge({
       onClick={onClick}
     >
       <PersonIcon />
-      {count}
+      {count} working
     </button>
   )
 }

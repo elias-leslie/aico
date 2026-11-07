@@ -113,12 +113,12 @@ export function resumeLaunchLine(spec: TuiSpec): string | null {
  */
 export function paneCommand(line: string | null, agentExitDir: string | null = null): string {
   const interactiveShell = `exec "\${SHELL:-/bin/bash}"`
-  if (line === null) return interactiveShell
-
   // `runInPaneArgs` types this line into the already-contained no-RC gate. Clear
   // the typed launcher from both the visible grid and scrollback before the TUI
-  // paints, preserving the clean first frame without racing tmux's cgroup move.
+  // (or the shell's first prompt) paints, preserving the clean first frame without
+  // racing tmux's cgroup move.
   const clearTypedLauncher = "printf '\\033[3J\\033[H\\033[2J'"
+  if (line === null) return `${clearTypedLauncher}; ${interactiveShell}`
   // Replace the no-RC gate itself with a small supervisor shell. Leaving the
   // gate as the pane root while the TUI ran as its child made every healthy
   // workload indistinguishable from a contaminated pre-launch gate during

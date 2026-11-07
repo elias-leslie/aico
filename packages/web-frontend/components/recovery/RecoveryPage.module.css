@@ -147,3 +147,12 @@
     flex-basis: 100%;
   }
 }
+
+/* Phone and tablet: the link inside a notice is a 44px touch target. */
+@media (max-width: 1023px) {
+  .notice a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+}

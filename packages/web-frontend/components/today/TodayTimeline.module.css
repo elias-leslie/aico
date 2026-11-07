@@ -101,3 +101,11 @@ a.row:hover .label {
 .key[data-state="failed"] {
   background: var(--ember);
 }
+
+/* Phone and tablet: a row that opens a session is a 44px touch target. */
+@media (max-width: 1023px) {
+  a.row {
+    min-height: 44px;
+    height: auto;
+  }
+}

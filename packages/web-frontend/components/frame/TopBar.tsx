@@ -235,9 +235,17 @@ export function TopBar() {
               <span className={styles.wideOnly}>
                 {problems === 1 ? 'problem' : 'problems'}
               </span>
+              <span className={styles.phoneOnly}>
+                {problems === 1 ? 'problem' : 'problems'}
+              </span>
             </>
           ) : (
-            <span className={styles.wideOnly}>{healthLabel}</span>
+            <>
+              <span className={styles.wideOnly}>{healthLabel}</span>
+              <span className={styles.phoneOnly}>
+                {summary && !stale && !failed ? 'healthy' : 'status'}
+              </span>
+            </>
           )}
         </button>
       )}

@@ -221,3 +221,48 @@
     align-items: center;
   }
 }
+
+.ages h2 {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--bone-dim, var(--bone));
+  margin: 12px 0 6px;
+}
+.ages ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-width: none;
+}
+.ages li {
+  display: grid;
+  grid-template-columns: 72px minmax(80px, 1fr) minmax(0, 2fr);
+  gap: 12px;
+  align-items: center;
+  padding: 4px 0;
+  font-size: 13px;
+}
+.agesTrack {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--paper-veil);
+  overflow: hidden;
+}
+.agesFill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--lantern);
+  transition: width 0.24s var(--ease-out, ease-out);
+}
+.ages li[data-late="true"] .agesFill {
+  background: var(--ember);
+}
+@media (max-width: 640px) {
+  .ages li {
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+  .agesText {
+    grid-column: 1 / -1;
+  }
+}

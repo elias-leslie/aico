@@ -2634,3 +2634,41 @@ a.lantern-ask-attached {
 .lantern-menu-item.unavailable:hover {
   background: transparent;
 }
+
+/* Phone and tablet (the frame's slide-over layout): every button, link, chip
+   and field is a full 44px touch target. The hit area is the box itself, so
+   short text links and small chips grow rather than rely on padding tricks. */
+@media (max-width: 1023px) {
+  .lantern-btn,
+  .lantern-btn.small,
+  .lantern-icon-btn,
+  .lantern-icon-btn.compact,
+  .status-chip,
+  .status-row .what,
+  .status-project,
+  .history-row .what,
+  .lantern-field,
+  .status-select,
+  select.lantern-field,
+  input.lantern-field {
+    min-height: 44px;
+  }
+
+  .lantern-icon-btn,
+  .lantern-icon-btn.compact {
+    min-width: 44px;
+  }
+
+  .status-row .what,
+  .status-project,
+  .history-row .what {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  /* The text size steps in the session menu. */
+  .lantern-menu-item .lantern-btn[aria-label$="text"] {
+    width: 44px !important;
+    height: 44px !important;
+  }
+}
