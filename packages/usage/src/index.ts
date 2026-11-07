@@ -18,6 +18,7 @@ export {
   pacePerDay,
 } from './plans'
 export { type ReadingEvent, storeReading } from './readings'
+export { type UsageReport, usageReport } from './report'
 export { type SpendInput, spendRow, spendRows, when } from './spend'
 export {
   type Credit,

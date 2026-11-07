@@ -31,7 +31,7 @@ const count = (value: number) =>
       ? `${(value / 1000).toFixed(1)}K`
       : String(Math.round(value))
 
-function windowText(window: Window): string {
+export function windowText(window: Window): string {
   if (window.state === 'used_up')
     return `${window.label} used up${window.resets_at ? ` until ${when(window.resets_at)}` : ''}`
   if (window.state === 'unknown')
@@ -39,7 +39,7 @@ function windowText(window: Window): string {
   return `${window.label} ${window.left_percent}% left${window.resets_at ? `, resets ${when(window.resets_at)}` : ''}`
 }
 
-function creditText(credit: NonNullable<Usage['credits']>): string {
+export function creditText(credit: NonNullable<Usage['credits']>): string {
   let text = `${count(credit.balance)} credits left`
   if (credit.lasts_past_reset === false && credit.lasts_days !== null)
     text += `, enough for about ${credit.lasts_days} days at the recent pace, so not until the reset`
@@ -49,7 +49,7 @@ function creditText(credit: NonNullable<Usage['credits']>): string {
   return text
 }
 
-const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
+export const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
 
 const LEAD: Partial<Record<Usage['status'], string>> = {
   on_credits: 'Running on credits. ',
