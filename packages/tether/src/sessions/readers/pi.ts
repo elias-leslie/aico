@@ -13,6 +13,7 @@ import {
   type SessionEvent,
   str,
   type TranscriptFile,
+  textOf,
   time,
 } from '../types'
 
@@ -21,15 +22,6 @@ type EventDraft = Omit<SessionEvent, 'offset'>
 
 const WRITERS = new Set(['write', 'edit'])
 const SESSION_ID = /_([0-9a-f-]{36})\.jsonl$/
-
-function textOf(content: unknown): string {
-  if (typeof content === 'string') return content
-  if (!Array.isArray(content)) return ''
-  return content
-    .map((block) => str(obj(block)?.text) ?? '')
-    .filter(Boolean)
-    .join('\n')
-}
 
 function describe(args: Record<string, unknown> | undefined): string {
   if (!args) return ''

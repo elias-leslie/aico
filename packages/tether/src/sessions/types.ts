@@ -96,6 +96,16 @@ export function obj(value: unknown): Record<string, unknown> | undefined {
     : undefined
 }
 
+/** The text of a message's content: a string, or the `text` of each block, one per line. */
+export function textOf(content: unknown): string {
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return ''
+  return content
+    .map((block) => str(obj(block)?.text) ?? '')
+    .filter(Boolean)
+    .join('\n')
+}
+
 export function time(value: unknown): number | undefined {
   if (typeof value === 'number' && Number.isFinite(value))
     return value > 1e12 ? value : value * 1000

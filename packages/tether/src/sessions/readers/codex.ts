@@ -16,6 +16,7 @@ import {
   type SessionEvent,
   str,
   type TranscriptFile,
+  textOf,
   time,
   type Usage,
 } from '../types'
@@ -34,15 +35,6 @@ function totalOf(raw: Record<string, unknown>): Usage {
     cacheWrite: num(raw.cache_write_input_tokens),
     output: num(raw.output_tokens),
   }
-}
-
-function textOf(content: unknown): string {
-  if (typeof content === 'string') return content
-  if (!Array.isArray(content)) return ''
-  return content
-    .map((block) => str(obj(block)?.text) ?? '')
-    .filter(Boolean)
-    .join('\n')
 }
 
 function outputText(output: unknown): string {
