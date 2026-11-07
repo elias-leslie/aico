@@ -47,8 +47,15 @@ type Config struct {
 		Shell string `json:"shell"`
 		Edit  string `json:"edit"`
 	} `json:"tools"`
-	shell, edit   *regexp.Regexp // Tools, compiled by loadConfig
-	GitHubPATHint string         `json:"github_pat_hint"`
+	shell, edit *regexp.Regexp // Tools, compiled by loadConfig
+	// Ask is the owner-question channel: tools that put a question to the owner outside Aico's Needs you are
+	// refused with Refusal, which names the one form to use instead ({tool} is the refused tool).
+	Ask struct {
+		Tools   string `json:"tools"`
+		Refusal string `json:"refusal"`
+	} `json:"ask"`
+	ask           *regexp.Regexp
+	GitHubPATHint string `json:"github_pat_hint"`
 	Inbox         struct {
 		TimeoutSeconds float64 `json:"timeout_seconds"`
 	} `json:"inbox"`
@@ -99,6 +106,11 @@ func loadConfig(dir string) (*Config, error) {
 	}
 	if c.edit, err = regexp.Compile(c.Tools.Edit); err != nil {
 		return nil, fmt.Errorf("hook.json tools.edit: %w", err)
+	}
+	if c.Ask.Tools != "" {
+		if c.ask, err = regexp.Compile(c.Ask.Tools); err != nil {
+			return nil, fmt.Errorf("hook.json ask.tools: %w", err)
+		}
 	}
 	return &c, nil
 }
@@ -238,6 +250,9 @@ func dispatch(cfg *Config, tool, event string, payload map[string]any, raw []byt
 		return Out{Event: event}
 	}
 	name := str(payload["tool_name"])
+	if event == "PreToolUse" && cfg.ask != nil && cfg.ask.MatchString(name) {
+		return Out{Event: event, Deny: strings.ReplaceAll(cfg.Ask.Refusal, "{tool}", name)}
+	}
 	lease.New(cfg.Lease, payload).RecordAgent()
 	switch event {
 	case "PreToolUse":

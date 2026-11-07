@@ -17,6 +17,10 @@
     "shell": "^(Bash|bash|exec_command|shell)$",
     "edit": "^(Write|Edit|MultiEdit|NotebookEdit|apply_patch|edit|write)$"
   },
+  "ask": {
+    "tools": "^(AskUserQuestion|request_user_input|request_user_input_async)$",
+    "refusal": "{tool} is off in Aico: the owner is asked through Needs you, one channel for every agent. Run: tether ask create \"<one line that stands alone>\" --option A --option B --recommend 1 [--blocking] [--body-file PATH] (up to 5 options; --blocking only if you stop and wait; add --body-file for long context). Then keep doing the work you can finish. The answer arrives as a message in this session; run tether ask done ID once you act on it."
+  },
   "github_pat_hint": "GitHub 403 (gh PAT lacks admin scope): get a 30-min grant (the owner taps once) with aico grants request github-admin --reason '<what, in owner words>' --wait, then aico grants run github-admin -- gh ...; never print the credential.",
   "context": {
     "command": ["~/.local/lib/aico/ops/packages/web-server/scripts/aico", "context", "deliver"],

@@ -427,3 +427,28 @@ func TestCodexTrustDropsStaleSlots(t *testing.T) {
 		t.Fatalf("config after codex-trust:\n%s", got)
 	}
 }
+
+// The owner-question tools are refused in every tool's hook, for every session, with the one form to use instead.
+func TestOwnerQuestionToolsAreRefusedWithTheTetherAskForm(t *testing.T) {
+	sandbox(t)
+	for mode, tools := range map[string][]string{
+		"claude": {"AskUserQuestion"},
+		"codex":  {"request_user_input", "request_user_input_async"},
+		"pi":     {"AskUserQuestion"},
+	} {
+		for _, tool := range tools {
+			call := `{"hook_event_name":"PreToolUse","tool_name":"` + tool + `","tool_input":{"questions":[{"question":"A or B?"}]},"cwd":"/tmp"}`
+			deny, _ := verdict(t, runMain(t, mode, call))
+			if !strings.Contains(deny, tool) || !strings.Contains(deny, `tether ask create "`) ||
+				!strings.Contains(deny, "--option") || !strings.Contains(deny, "--recommend") {
+				t.Errorf("%s %s: want a redirect to tether ask create, got %q", mode, tool, deny)
+			}
+		}
+	}
+	// Other tools, and the same names as results, are untouched.
+	for _, call := range []string{callLs, callEdit, `{"hook_event_name":"PostToolUse","tool_name":"AskUserQuestion","tool_input":{}}`} {
+		if deny, _ := verdict(t, runMain(t, "claude", call)); deny != "" {
+			t.Errorf("%s: want it allowed, got deny %q", call, deny)
+		}
+	}
+}
