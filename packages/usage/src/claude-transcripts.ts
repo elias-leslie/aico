@@ -14,7 +14,7 @@ import { existsSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { transaction } from '@aico/store'
 import config from '../data/usage.json' with { type: 'json' }
-import { headHash, newLines, projectOf, sha } from './codex'
+import { type Found, gatherFiles, headHash, newLines, projectOf } from './codex'
 import type { Database } from './db'
 import { localDay } from './plans'
 
@@ -50,8 +50,6 @@ export interface ClaudeTranscriptResult {
   roots: number
   unreadable: number
 }
-
-type Found = { path: string; size: number; mtime: number }
 
 const num = (value: unknown): number =>
   typeof value === 'number' && Number.isFinite(value) ? value : 0
@@ -104,35 +102,14 @@ function pass(db: Database, options: ClaudeTranscriptOptions): ClaudeTranscriptR
   }
   const [y, m, d] = cutoverDay.split('-').map(Number) as [number, number, number]
   const sinceMs = Math.max(new Date(y, m - 1, d).getTime(), now - config.lookback_days * 86400_000)
-  const roots = options.roots.filter((root) => existsSync(root))
-  result.roots = roots.length
-  const files = new Map<string, Found>()
-  for (const root of roots) {
-    try {
-      for (const file of recentFiles(root, sinceMs)) files.set(file.path, file)
-    } catch {
-      result.unreadable += 1
-    }
-  }
-  const hashedKey = (path: string) => `private:${sha(path)}`
-  const saved = new Map<string, { offset: number; state: string }>()
-  for (const row of db
-    .prepare(
-      "SELECT path, offset, state FROM cursors WHERE path LIKE '%.jsonl' OR path LIKE 'private:%'",
-    )
-    .all() as unknown as { path: string; offset: number; state: string }[]) {
-    saved.set(row.path, row)
-    // A file with a saved cursor that grew, wherever it is (a session can run for days).
-    if (row.path.startsWith('private:') || files.has(row.path)) continue
-    if (!roots.some((root) => row.path.startsWith(`${root}/`))) continue
-    try {
-      const stat = statSync(row.path)
-      if (stat.size !== row.offset)
-        files.set(row.path, { path: row.path, size: stat.size, mtime: stat.mtimeMs })
-    } catch {
-      // gone
-    }
-  }
+  const { files, saved, hashedKey } = gatherFiles(
+    db,
+    options.roots,
+    sinceMs,
+    recentFiles,
+    "SELECT path, offset, state FROM cursors WHERE path LIKE '%.jsonl' OR path LIKE 'private:%'",
+    result,
+  )
 
   const rollups = new Map<string, [number, number, number, number, number]>()
   const roll = (key: string) => {

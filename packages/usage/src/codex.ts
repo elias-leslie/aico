@@ -43,8 +43,7 @@ interface FileState {
   rolls?: Record<string, [number, number, number, number]>
 }
 
-export const sha = (text: string) =>
-  createHash('sha256').update(text, 'utf8').digest('hex').slice(0, 16)
+const sha = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex').slice(0, 16)
 
 /** The first bytes' hash of a file (a rewritten file starts differently), or '' when empty. */
 export function headHash(path: string, size: number): string {
@@ -122,7 +121,57 @@ export function* newLines(path: string, offset: number, end: number): Generator<
   }
 }
 
-type Found = { path: string; size: number; mtime: number }
+export type Found = { path: string; size: number; mtime: number }
+
+export interface SavedCursor {
+  offset: number
+  state: string
+}
+
+/**
+ * The transcript files a pass reads: those under the existing `roots` changed since `sinceMs`,
+ * plus any file with a saved cursor (`cursorSql` lists them) that changed in size, wherever its
+ * folder is (a session that runs for days appends to the folder it began in). Sets the folder
+ * counts on `result`. `hashedKey` is how a private file's cursor is stored.
+ */
+export function gatherFiles(
+  db: Database,
+  rootPaths: string[],
+  sinceMs: number,
+  recentFiles: (root: string, sinceMs: number) => Found[],
+  cursorSql: string,
+  result: { roots: number; unreadable: number },
+): {
+  files: Map<string, Found>
+  saved: Map<string, SavedCursor>
+  hashedKey: (path: string) => string
+} {
+  const files = new Map<string, Found>()
+  const roots = rootPaths.filter((root) => existsSync(root))
+  result.roots = roots.length
+  for (const root of roots) {
+    try {
+      for (const file of recentFiles(root, sinceMs)) files.set(file.path, file)
+    } catch {
+      result.unreadable += 1
+    }
+  }
+  const hashedKey = (path: string) => `private:${sha(path)}`
+  const saved = new Map<string, SavedCursor>()
+  for (const row of db.prepare(cursorSql).all() as unknown as (SavedCursor & { path: string })[]) {
+    saved.set(row.path, row)
+    if (row.path.startsWith('private:') || files.has(row.path)) continue
+    if (!roots.some((root) => row.path.startsWith(`${root}/`))) continue
+    try {
+      const stat = statSync(row.path)
+      if (stat.size !== row.offset)
+        files.set(row.path, { path: row.path, size: stat.size, mtime: stat.mtimeMs })
+    } catch {
+      // gone
+    }
+  }
+  return { files, saved, hashedKey }
+}
 
 /** The JSONL files under the sessions root changed since `sinceMs`, newest day folders only. */
 function recentFiles(root: string, sinceMs: number): Found[] {
@@ -192,37 +241,16 @@ function pass(db: Database, options: CodexOptions): CodexResult {
   const lookbackMs = now - config.lookback_days * 86400_000
   // Never earlier than the lookback (not the cutover: once that is old, every run would walk
   // every folder since it): an older file is read only when it has a cursor.
-  const files = new Map<string, Found>()
-  const roots = options.roots.filter((root) => existsSync(root))
-  result.roots = roots.length
-  for (const root of roots) {
-    try {
-      for (const file of recentFiles(root, lookbackMs)) files.set(file.path, file)
-    } catch {
-      result.unreadable += 1
-    }
-  }
-  const hashedKey = (path: string) => `private:${sha(path)}`
-  // Files with a saved cursor that changed in size, wherever their day folder is (a session
-  // that runs for days appends to the folder it began in). A private file's cursor is keyed by
-  // a hash, so it can only be found again in the recent day folders.
-  const saved = new Map<string, { offset: number; state: string }>()
-  for (const row of db.prepare('SELECT path, offset, state FROM cursors').all() as unknown as {
-    path: string
-    offset: number
-    state: string
-  }[]) {
-    saved.set(row.path, row)
-    if (row.path.startsWith('private:') || files.has(row.path)) continue
-    if (!roots.some((root) => row.path.startsWith(`${root}/`))) continue
-    try {
-      const stat = statSync(row.path)
-      if (stat.size !== row.offset)
-        files.set(row.path, { path: row.path, size: stat.size, mtime: stat.mtimeMs })
-    } catch {
-      // gone
-    }
-  }
+  // A private file's cursor is keyed by a hash, so it can only be found again in the recent
+  // day folders.
+  const { files, saved, hashedKey } = gatherFiles(
+    db,
+    options.roots,
+    lookbackMs,
+    recentFiles,
+    'SELECT path, offset, state FROM cursors',
+    result,
+  )
   hidePrivateCursors(db, options, saved)
   const events: ReadingEvent[] = []
   const balances: Balance[] = []
