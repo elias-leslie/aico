@@ -210,6 +210,21 @@ describe('buildMachines with Proxmox guests', () => {
     ).toBe('restarting')
   })
 
+  it('does not undo a start Tether is following, or a link that is already up, with a stale reading', () => {
+    const work = (host: HostChoice) =>
+      buildMachines(view(ROWS), [host], NOW, [
+        guest({ machine: 'agent-work', vmid: 200, state: 'stopped' }),
+      ]).machines.find((m) => m.key === 'agent-work')
+    expect(
+      work({
+        name: 'agent-work',
+        state: 'powered_off',
+        wake: { state: 'starting', step: 'powering_on' },
+      })?.up,
+    ).toBe('starting')
+    expect(work({ name: 'agent-work', state: 'connected' })?.up).toBe('on')
+  })
+
   it('has no guest while Proxmox could not be read', () => {
     expect(by(null).apps?.guest).toBeNull()
   })

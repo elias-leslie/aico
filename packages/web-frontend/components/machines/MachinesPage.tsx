@@ -7,7 +7,7 @@ import { ConfirmationDialog } from '@/components/ConfirmationDialog'
 import styles from '@/components/pages/FullPage.module.css'
 import { useClock } from '@/lib/hooks/use-clock'
 import { HostCallError, powerHost, trustHost } from '@/lib/hooks/use-host-admin'
-import { useHosts } from '@/lib/hooks/use-hosts'
+import { isStarting, useHosts } from '@/lib/hooks/use-hosts'
 import {
   powerMachine,
   setAutostart,
@@ -39,7 +39,7 @@ type Confirm = {
 export function MachinesPage() {
   const status = useStatus()
   const hosts = useHosts()
-  const proxmox = useMachineGuests()
+  const proxmox = useMachineGuests(hosts.hosts.some(isStarting))
   const now = useClock()
   const queryClient = useQueryClient()
 
@@ -317,8 +317,13 @@ function MachineRow({
   const canStart =
     guest?.powerable &&
     (guest.state === 'stopped' || guest.state === 'down') &&
+    machine.up === 'off' &&
     !working
-  const canStop = guest?.powerable && guest.state === 'running' && !working
+  const canStop =
+    guest?.powerable &&
+    guest.state === 'running' &&
+    machine.up !== 'off' &&
+    !working
   const progress =
     busy === 'on' || machine.up === 'starting'
       ? 'Starting…'

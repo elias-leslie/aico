@@ -34,9 +34,9 @@ interface GuestsAnswer {
 const POLL_MS = 15_000
 const POLL_BUSY_MS = 2_000
 
-/** The Proxmox guests; `guests` is null when they could not be read (and `failure` says why),
+/** The Proxmox guests (`fast`: ask every 2 s, while a start is being followed); `guests` is null when they could not be read (and `failure` says why),
  * never an empty list standing in for unknown. */
-export function useMachineGuests() {
+export function useMachineGuests(fast = false) {
   const query = useQuery({
     queryKey: ['machine-guests'],
     queryFn: () =>
@@ -47,7 +47,7 @@ export function useMachineGuests() {
       ),
     staleTime: 5_000,
     refetchInterval: (current) =>
-      current.state.data?.items.some((guest) => guest.busy)
+      fast || current.state.data?.items.some((guest) => guest.busy)
         ? POLL_BUSY_MS
         : POLL_MS,
   })

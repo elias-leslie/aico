@@ -237,11 +237,18 @@ function noteFor(
 }
 
 /** Proxmox knows better than a lagging report whether a guest is running or being stopped. */
-function upWithGuest(up: Up, guest: MachineGuest): Up {
+function upWithGuest(up: Up, guest: MachineGuest, linked: boolean): Up {
   if (guest.busy === 'shutdown') return 'stopping'
   if (guest.busy === 'restart') return 'restarting'
   if (guest.busy === 'start' || guest.state === 'starting') return 'starting'
-  if ((guest.state === 'stopped' || guest.state === 'down') && up !== 'off')
+  // A reading that is a few seconds old must not undo a start Tether is following or a link
+  // that is already up.
+  if (
+    (guest.state === 'stopped' || guest.state === 'down') &&
+    up !== 'off' &&
+    up !== 'starting' &&
+    !linked
+  )
     return 'off'
   if (guest.state === 'running' && up === 'off') return 'starting'
   return up
@@ -290,7 +297,7 @@ export function buildMachines(
       isWorkstation || GUEST_FREE.has(key)
         ? null
         : (guests?.find((g) => g.machine === key) ?? null)
-    if (guest) up = upWithGuest(up, guest)
+    if (guest) up = upWithGuest(up, guest, host?.state === 'connected')
     const sessionHost = isWorkstation || !!host || (!!link && hosts === null)
     const sessionHostName = host?.name ?? null
     const note =

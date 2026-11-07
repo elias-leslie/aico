@@ -14,7 +14,11 @@ const data = vi.hoisted(() => ({
   autostart: vi.fn(async () => ({})),
 }))
 vi.mock('@/lib/hooks/use-status', () => ({ useStatus: () => data.status }))
-vi.mock('@/lib/hooks/use-hosts', () => ({ useHosts: () => data.hosts }))
+vi.mock('@/lib/hooks/use-hosts', () => ({
+  useHosts: () => data.hosts,
+  isStarting: (h: { wake?: { state?: string } | null }) =>
+    h.wake?.state === 'starting',
+}))
 vi.mock('@/lib/hooks/use-host-admin', () => ({
   HostCallError: class extends Error {
     status = 409
