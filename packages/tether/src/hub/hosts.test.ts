@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { hostsFilePath, loadHosts, parseHosts, peerDir } from '@aico/fleet/hosts'
+import { hostForwards, hostsFilePath, loadHosts, parseHosts, peerDir } from '@aico/fleet/hosts'
 import { linkPaths } from '@aico/fleet/link'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -34,6 +34,7 @@ describe('hosts registry', () => {
           health: ['http://127.0.0.1:8001/health', 'http://127.0.0.1:8003/health'],
           wakeTimeoutSec: 240,
           stateDir: null,
+          idleOffMin: 15,
         },
       ],
       errors: [],
@@ -136,9 +137,34 @@ it('uses fleet sockets for control, commands and sync', () => {
   })
 })
 
-it('ignores obsolete reverse forwards while keeping the peer', () => {
-  const result = parseHosts(JSON.stringify([{ ...VALID, forwards: [8001] }]))
-  expect(result.hosts).toHaveLength(1)
+it('reads forwards as the ports lent to a host, apart from its peer entry', () => {
+  const result = parseHosts(JSON.stringify([{ ...VALID, forwards: [3017] }]))
+  expect(result.errors).toEqual([])
   expect(result.hosts[0]).not.toHaveProperty('forwards')
-  expect(result.errors.join(' ')).toContain('forwards')
+  const dir = mkdtempSync(join(tmpdir(), 'tether-hosts-'))
+  const file = join(dir, 'hosts.json')
+  writeFileSync(
+    file,
+    JSON.stringify([
+      { ...VALID, forwards: [3017, 3017, 3002] },
+      { ...VALID, name: 'b' },
+    ]),
+  )
+  expect(hostForwards(file, 'agent-work')).toEqual([3017, 3002])
+  expect(hostForwards(file, 'b')).toEqual([])
+  expect(hostForwards(file, 'nobody')).toEqual([])
+  writeFileSync(file, JSON.stringify([{ ...VALID, forwards: ['3017'] }]))
+  expect(hostForwards(file, 'agent-work')).toEqual([])
+  expect(hostForwards(join(dir, 'missing.json'), 'agent-work')).toEqual([])
+  rmSync(dir, { recursive: true, force: true })
+})
+
+it('holds a host whose forwards or idleOffMin are not usable', () => {
+  const bad = parseHosts(JSON.stringify([{ ...VALID, forwards: [0] }]))
+  expect(bad.hosts).toEqual([])
+  expect(bad.errors.join(' ')).toContain('forwards must be a list of ports')
+  expect(parseHosts(JSON.stringify([{ ...VALID, idleOffMin: 0 }])).hosts[0]?.idleOffMin).toBe(0)
+  expect(parseHosts(JSON.stringify([{ ...VALID, idleOffMin: -1 }])).errors.join(' ')).toContain(
+    'idleOffMin must be',
+  )
 })

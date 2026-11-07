@@ -85,6 +85,15 @@ export interface HubDeps {
  * by another hub release. */
 type UpdateFailure = PeerUpdate & { release: string }
 
+/** A host as the idle power-off reads it. */
+export interface IdleFacts {
+  entry: HostEntry
+  live: boolean
+  sessions: number
+  wakes: number
+  busy: boolean
+}
+
 export interface Lineage {
   coordinatorId: string
   coordinatorColor: string | null
@@ -143,6 +152,8 @@ export class Hub {
   private readonly gates = new Map<string, Promise<void>>()
   /** The update running per host; a create there waits for it. */
   private readonly updates = new Map<string, Promise<void>>()
+  /** Creates in flight per host (they may be waking it or sending to it). */
+  private readonly creating = new Map<string, number>()
   private readonly updater: Updater
   private readonly release: string
 
@@ -528,6 +539,26 @@ export class Hub {
     if (!peer.live) throw unavailable(peer)
   }
 
+  /** What the idle power-off (src/hub/idle-off.ts) reads about a host, or null when unknown.
+   * `sessions` counts those not ended and `wakes` the pending wakes in the host's list; `busy`
+   * is a create, a wake or an update in progress for it. */
+  idleFacts(name: string): IdleFacts | null {
+    const peer = this.peers.get(name)
+    if (!peer) return null
+    const items = peer.descriptors()
+    return {
+      entry: peer.entry,
+      live: peer.live,
+      sessions: items.filter((item) => item.status !== 'ended').length,
+      wakes: items.filter((item) => Array.isArray(item.wakes) && item.wakes.length > 0).length,
+      busy:
+        this.gates.has(name) ||
+        this.updates.has(name) ||
+        this.creating.has(name) ||
+        peer.wake?.state === 'starting',
+    }
+  }
+
   /** The hosts this hub knows, in hosts.json order. */
   hostNames(): string[] {
     return [...this.peers.keys()]
@@ -700,6 +731,22 @@ export class Hub {
     body: Record<string, unknown>,
   ): Promise<void> {
     const peer = this.knownPeer(body.host)
+    this.creating.set(peer.name, (this.creating.get(peer.name) ?? 0) + 1)
+    try {
+      await this.createOn(peer, res, path, body)
+    } finally {
+      const left = (this.creating.get(peer.name) ?? 1) - 1
+      if (left > 0) this.creating.set(peer.name, left)
+      else this.creating.delete(peer.name)
+    }
+  }
+
+  private async createOn(
+    peer: Peer,
+    res: ServerResponse,
+    path: '/v1/sessions' | '/v1/roots',
+    body: Record<string, unknown>,
+  ): Promise<void> {
     // Also waits out an update of the host's Tether, within the host's bound.
     await this.ready(peer)
     if (!peer.live) throw unavailable(peer)

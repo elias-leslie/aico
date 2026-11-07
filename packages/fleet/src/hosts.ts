@@ -33,6 +33,9 @@ export interface HostEntry {
   wakeTimeoutSec: number
   /** The remote Tether's state directory, when it is not `~/.local/state/tether`. */
   stateDir: string | null
+  /** Minutes a powered-on host with a `sleep` command may sit with no sessions before the hub
+   * powers it off (src/hub/idle-off.ts); 0 keeps it on. */
+  idleOffMin: number
 }
 
 export interface HostsLoad {
@@ -66,10 +69,14 @@ const FIELDS = new Set([
   'health',
   'wakeTimeoutSec',
   'stateDir',
+  'idleOffMin',
+  'forwards',
 ])
 /** A loopback URL on the host: safe to pass through the remote shell unquoted. */
 const HEALTH_URL = /^http:\/\/127\.0\.0\.1:\d{1,5}(\/[A-Za-z0-9._~/-]*)?$/
 export const DEFAULT_WAKE_TIMEOUT_SEC = 240
+/** The plan's rule (docs/plans/remote-hosts.md "Power"): 15 idle minutes. */
+export const DEFAULT_IDLE_OFF_MIN = 15
 /** How `st vm status` says a VM is off ("VM 200 (agent-work): stopped | …"). */
 export const DEFAULT_STATUS_OFF = '\\bstopped\\b'
 /** sockaddr_un's sun_path limit, less the terminating NUL. */
@@ -174,6 +181,15 @@ function parseEntry(value: unknown, index: number): HostEntry | string {
     stateDir = absolutePath(raw.stateDir)
     if (!stateDir) return `${name}: stateDir must be an absolute path`
   }
+  let idleOffMin = DEFAULT_IDLE_OFF_MIN
+  if (raw.idleOffMin !== undefined) {
+    const value = raw.idleOffMin
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 1_440)
+      return `${name}: idleOffMin must be whole minutes, 0-1440 (0 keeps the host on)`
+    idleOffMin = value
+  }
+  if (raw.forwards !== undefined && !forwardPorts(raw.forwards))
+    return `${name}: forwards must be a list of ports 1-65535`
   return {
     name,
     ssh,
@@ -186,7 +202,36 @@ function parseEntry(value: unknown, index: number): HostEntry | string {
     health,
     wakeTimeoutSec,
     stateDir,
+    idleOffMin,
   }
+}
+
+/** A `forwards` list of loopback ports, or null when it is malformed. */
+function forwardPorts(value: unknown): number[] | null {
+  if (!Array.isArray(value)) return null
+  const ports = value.filter(
+    (port): port is number =>
+      typeof port === 'number' && Number.isInteger(port) && port >= 1 && port <= 65_535,
+  )
+  return ports.length === value.length ? [...new Set(ports)] : null
+}
+
+/** The ports this machine lends to `host` (`forwards` in its hosts.json entry): the host may reach
+ * them on this machine's loopback through the fleet link (packages/fleet/src/fleet.ts). Read from the
+ * file on each ask, so an edit takes effect without a restart; none when the file or entry is
+ * missing or unusable. */
+export function hostForwards(path: string, host: string): number[] {
+  try {
+    const value: unknown = JSON.parse(readFileSync(path, 'utf8'))
+    if (!Array.isArray(value)) return []
+    for (const item of value) {
+      const raw = item as Record<string, unknown> | null
+      if (raw?.name === host) return forwardPorts(raw.forwards ?? []) ?? []
+    }
+  } catch {
+    // A missing or half-written file lends nothing.
+  }
+  return []
 }
 
 function unknownFields(value: unknown): string[] {

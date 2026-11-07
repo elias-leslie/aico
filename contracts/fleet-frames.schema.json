@@ -53,7 +53,12 @@
           "const": "open"
         },
         "target": {
-          "enum": ["control", "sync", "exec", "jobs"]
+          "enum": ["control", "sync", "exec", "jobs", "forwards", "tcp"]
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
         },
         "argv": {
           "type": "array",
@@ -77,11 +82,22 @@
         {
           "properties": {
             "target": {
-              "enum": ["control", "sync", "jobs"]
+              "const": "tcp"
+            }
+          },
+          "required": ["port"],
+          "not": {
+            "required": ["argv"]
+          }
+        },
+        {
+          "properties": {
+            "target": {
+              "enum": ["control", "sync", "jobs", "forwards"]
             }
           },
           "not": {
-            "required": ["argv"]
+            "anyOf": [{ "required": ["argv"] }, { "required": ["port"] }]
           }
         }
       ]

@@ -16,10 +16,23 @@ new connection. See [Node TLS](https://nodejs.org/docs/latest-v22.x/api/tls.html
 and [Node crypto](https://nodejs.org/docs/latest-v22.x/api/crypto.html).
 
 `contracts/fleet-frames.schema.json` defines hello, auth, control, event, sync and
-terminal-view frames. Channel opens name a local service (control, sync, jobs)
-or carry a command argv (exec). Proxies live under `$XDG_RUNTIME_DIR/aico/fleet`,
+terminal-view frames. Channel opens name a local service (control, sync, jobs),
+carry a command argv (exec), or carry a loopback port (tcp, below). Proxies live under `$XDG_RUNTIME_DIR/aico/fleet`,
 separate from legacy SSH sockets. Data frames carry bytes as base64. Terminal
 commands preserve literal argv, stdout, stderr, stdin and exit status.
+
+## Lent ports
+
+A machine can lend ports on its loopback to a worker: `forwards` in that
+worker's entry of the lending machine's `hosts.json` (for example the Neri
+backend, 3017, to `neri-hunters`). A worker (`"mode": "worker"`) sends a
+`forwards` channel to each linked peer on connect and every minute; the peer
+answers `{"ports":[...]}`. The worker listens on `127.0.0.1:<port>` for each
+and opens a `tcp` channel with that `port` per connection; the lender checks the
+port against its current `hosts.json` before connecting to its own
+`127.0.0.1:<port>`, and closes the channel otherwise. Both worker and full roles
+may open `forwards` and `tcp`; nothing is lent by default. Older releases close
+the link on these two targets, so update the lending machines first.
 
 ## Enrollment
 

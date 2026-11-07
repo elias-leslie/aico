@@ -20,7 +20,9 @@ import { configureEntryScan } from './entry-files'
 import { parseGraphicalEnvironment } from './env'
 import { EventBus } from './events'
 import { listenPrivateSocket } from './http'
+import { HostAdmin } from './hub/host-admin'
 import { Hub } from './hub/hub'
+import { IdleOff, statusWriter } from './hub/idle-off'
 import { LOCAL_HOST, localRootFate, Placement } from './hub/placement'
 import { LaneReporter, LaneReportStore, laneView } from './lane-reports'
 import { hostAdmissionPath, hostAdmissionRed } from './lifecycle/agent-admission'
@@ -363,6 +365,22 @@ function createHub(
         },
       })
     : null
+}
+
+/** Powers off a host that has sat with no sessions for its `idleOffMin` (src/hub/idle-off.ts). */
+function startIdleOff(context: DaemonContext, env: NodeJS.ProcessEnv, hosts: Hub): IdleOff {
+  const admin = new HostAdmin({ hub: hosts, env })
+  const idle = new IdleOff({
+    hostNames: () => hosts.hostNames(),
+    idleFacts: (name) => hosts.idleFacts(name),
+    booked: (host) => context.placement?.list().some((item) => item.host === host) ?? false,
+    powerOff: (host) => admin.power(host, 'off', false),
+    status: statusWriter(env),
+    log: (message) => console.log(`[tether:hosts] ${message}`),
+    now: Date.now,
+  })
+  idle.start()
+  return idle
 }
 
 /** `--host auto`: pick a host with room from live readings (src/hub/placement.ts). */
@@ -919,6 +937,7 @@ export async function startDaemon(
   await fleet.start()
   const ready = startLifecycle({ reconcile: reconcileEnabled(env) })
   hosts?.start()
+  const idleOff = hosts ? startIdleOff(context, env, hosts) : null
   // Agent state: hook reports always; the poll only where Tether observes tmux.
   const agentStates = new AgentStateTracker((id) => {
     notifySessionChanged(id, { force: true })
@@ -942,6 +961,7 @@ export async function startDaemon(
     ready,
     close: async () => {
       await fleet?.close()
+      idleOff?.stop()
       hosts?.close()
       stopLifecycle()
       context.memoryPolicy.stop()

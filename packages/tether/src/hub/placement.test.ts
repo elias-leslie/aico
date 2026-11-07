@@ -75,6 +75,7 @@ const ENTRY: HostEntry = {
   statusOff: '\\bstopped\\b',
   health: [],
   wakeTimeoutSec: 240,
+  idleOffMin: 15,
   stateDir: null,
 }
 

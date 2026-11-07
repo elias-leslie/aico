@@ -9,6 +9,8 @@ export interface OpenChannel {
   type: ChannelKind
   target: string
   argv?: string[]
+  /** The loopback port a `tcp` channel connects to on the peer. */
+  port?: number
 }
 export interface ConnectionOptions {
   identity: Identity
@@ -164,7 +166,12 @@ export class Connection {
       const stream = this.channel(frame.id, frame.type)
       this.options.open(
         stream,
-        { type: frame.type, target: frame.target, ...(frame.argv ? { argv: frame.argv } : {}) },
+        {
+          type: frame.type,
+          target: frame.target,
+          ...(frame.argv ? { argv: frame.argv } : {}),
+          ...(frame.port ? { port: frame.port } : {}),
+        },
         this.peer,
       )
       return
@@ -239,6 +246,7 @@ export class Connection {
       op: 'open',
       target: request.target,
       ...(request.argv ? { argv: request.argv } : {}),
+      ...(request.port ? { port: request.port } : {}),
     })
     return stream
   }

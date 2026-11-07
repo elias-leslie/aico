@@ -22,8 +22,9 @@ export const CAPTURE_USAGE = `Usage:
       or when it could not be read. --json prints the full result.
   tether capture file <id> [--out DIR]
       Print the file's path on this host. With --out, download it into DIR
-      and print that path (use this when aico-web runs on another host; that
-      host's port 3002 must be in this host's forwards in hosts.json).
+      and print that path (use this when aico-web runs on another host: that
+      host lists port 3002 under forwards for this host in its hosts.json,
+      and the link then serves it here on 127.0.0.1:3002).
 
 Talks to http://127.0.0.1:3002 (AICO_WEB_URL overrides).`
 

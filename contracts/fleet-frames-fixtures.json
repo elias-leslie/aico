@@ -131,5 +131,58 @@
       "machine": "a",
       "publicKey": "test-public-key"
     }
+  },
+  {
+    "name": "forwards request",
+    "valid": true,
+    "frame": {
+      "type": "control",
+      "id": "c-2",
+      "op": "open",
+      "target": "forwards"
+    }
+  },
+  {
+    "name": "tcp forward",
+    "valid": true,
+    "frame": {
+      "type": "control",
+      "id": "c-3",
+      "op": "open",
+      "target": "tcp",
+      "port": 3017
+    }
+  },
+  {
+    "name": "tcp without port",
+    "valid": false,
+    "frame": {
+      "type": "control",
+      "id": "c-3",
+      "op": "open",
+      "target": "tcp"
+    }
+  },
+  {
+    "name": "tcp port out of range",
+    "valid": false,
+    "frame": {
+      "type": "control",
+      "id": "c-3",
+      "op": "open",
+      "target": "tcp",
+      "port": 70000
+    }
+  },
+  {
+    "name": "port on a service target",
+    "valid": false,
+    "frame": {
+      "type": "control",
+      "id": "c-3",
+      "op": "open",
+      "target": "control",
+      "port": 3017
+    }
   }
 ]

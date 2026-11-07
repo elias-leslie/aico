@@ -11,6 +11,7 @@ import { connect, createServer, type Server, type TLSSocket } from 'node:tls'
 import type { StatusRow } from '@aico/status'
 import { Connection, type OpenChannel } from './connection'
 import { serveExec } from './exec'
+import { hostForwards, hostsFilePath } from './hosts'
 import { type Identity, loadIdentity, validName } from './identity'
 import { loginPeerRpc } from './logins-client'
 import { serveLoginWire } from './logins-wire'
@@ -28,7 +29,22 @@ export interface FleetOptions {
   log?: (message: string) => void
   failed?: (error: Error) => void
   peerPower?: () => Promise<ReadonlyMap<string, string>>
+  /** The loopback ports this machine lends to a peer: `forwards` in that host's hosts.json
+   * entry, read at each ask. */
+  forwards?: (peer: string) => number[]
+  /** The address a lent port is reached on here (default loopback; tests move it). */
+  lendHost?: string
 }
+
+/** The loopback listeners a worker holds for one connection to a machine that lends ports. */
+interface Forwarding {
+  servers: Map<number, UnixServer>
+  failed: Set<number>
+  timer: NodeJS.Timeout
+}
+
+const FORWARDS_ASK_MS = 10_000
+const FORWARDS_BYTES = 4096
 
 /** One connection per unordered machine pair; the lower name is the dialer.
  * Both ends may open channels. Local sockets preserve callers' HTTP/stream APIs. */
@@ -41,6 +57,7 @@ export class Fleet {
   private readonly seen = new Map<string, number>()
   private readonly unix: UnixServer[] = []
   private readonly local = new Set<Socket>()
+  private readonly forwarding = new Map<Connection, Forwarding>()
   private readonly identity: Identity
   private readonly pins: () => Pin[]
   private readonly pinCache?: PinCache
@@ -155,6 +172,7 @@ export class Fleet {
           stable.unref()
           this.stable.set(connection.peer, stable)
           this.log(`${connection.peer}: connected`)
+          if (this.options.settings.mode === 'worker') this.startForwards(connection)
           void this.report()
           if (
             this.pins().find((pin) => pin.name === this.options.settings.machine)?.role === 'full'
@@ -174,6 +192,7 @@ export class Fleet {
           }
         },
         closed: (connection) => {
+          this.stopForwards(connection)
           if (this.connections.get(connection.peer) === connection) {
             clearTimeout(this.stable.get(connection.peer))
             this.stable.delete(connection.peer)
@@ -340,8 +359,31 @@ export class Fleet {
   private openLocal(channel: Duplex, request: OpenChannel, peer: string): void {
     const s = this.options.settings
     const pin = this.pins().find((entry) => entry.name === peer)
-    if (!pin || (pin.role !== 'full' && !['sync', 'jobs'].includes(request.target))) {
+    if (
+      !pin ||
+      (pin.role !== 'full' && !['sync', 'jobs', 'forwards', 'tcp'].includes(request.target))
+    ) {
       channel.destroy(new Error('Peer role does not allow this action'))
+      return
+    }
+    if (request.target === 'forwards') {
+      channel.end(JSON.stringify({ ports: this.lent(peer) }))
+      return
+    }
+    if (request.target === 'tcp') {
+      // Only a port this machine lends to that peer, re-read now: an edit of hosts.json applies
+      // to the next connection.
+      const port = request.port
+      if (!port || !this.lent(peer).includes(port)) {
+        channel.destroy(new Error('Port is not lent to this peer'))
+        return
+      }
+      const socket = createConnection({
+        host: this.options.lendHost ?? '127.0.0.1',
+        port,
+        allowHalfOpen: true,
+      })
+      this.pipeSocket(socket, channel)
       return
     }
     if (request.target === 'exec' && request.argv) {
@@ -389,6 +431,127 @@ export class Fleet {
         channel.resume()
       })
     } else forward()
+  }
+
+  private lent(peer: string): number[] {
+    return this.options.forwards
+      ? this.options.forwards(peer)
+      : hostForwards(hostsFilePath(this.options.env ?? process.env), peer)
+  }
+
+  private pipeSocket(socket: Socket, channel: Duplex): void {
+    this.local.add(socket)
+    socket.once('close', () => this.local.delete(socket))
+    socket.on('error', () => channel.destroy())
+    channel.on('error', () => socket.destroy())
+    channel.once('close', () => socket.end(() => socket.destroy()))
+    socket.once('close', () => channel.destroy())
+    channel.pipe(socket).pipe(channel)
+  }
+
+  /** A worker asks the machine it linked to which of that machine's loopback ports it lends, and
+   * listens on the same ports here; each connection to one is carried to the peer's port over the
+   * link. A machine that lends nothing (no hosts.json entry or no `forwards`) leaves this idle. The
+   * answer is read again every minute and listeners follow it; a dropped link closes them. */
+  private startForwards(connection: Connection): void {
+    const state: Forwarding = {
+      servers: new Map(),
+      failed: new Set(),
+      timer: setInterval(() => void this.syncForwards(connection, state), 60_000),
+    }
+    state.timer.unref()
+    this.forwarding.set(connection, state)
+    void this.syncForwards(connection, state)
+  }
+
+  private stopForwards(connection: Connection): void {
+    const state = this.forwarding.get(connection)
+    if (!state) return
+    clearInterval(state.timer)
+    for (const server of state.servers.values()) server.close()
+    this.forwarding.delete(connection)
+  }
+
+  private async syncForwards(connection: Connection, state: Forwarding): Promise<void> {
+    let ports: number[]
+    try {
+      ports = await this.askForwards(connection)
+    } catch (error) {
+      if (this.forwarding.get(connection) === state)
+        this.log(`${connection.peer}: could not read its lent ports: ${(error as Error).message}`)
+      return
+    }
+    if (this.forwarding.get(connection) !== state) return
+    for (const [port, server] of state.servers)
+      if (!ports.includes(port)) {
+        server.close()
+        state.servers.delete(port)
+        this.log(`${connection.peer}: stopped forwarding 127.0.0.1:${port}`)
+      }
+    for (const port of ports) {
+      if (state.servers.has(port)) continue
+      const server = createUnixServer({ allowHalfOpen: true }, (socket) =>
+        this.carry(connection, port, socket),
+      )
+      const bound = await new Promise<boolean>((resolve) => {
+        server.once('error', (error) => {
+          if (!state.failed.has(port))
+            this.log(`${connection.peer}: cannot listen on 127.0.0.1:${port}: ${error.message}`)
+          state.failed.add(port)
+          resolve(false)
+        })
+        server.listen(port, '127.0.0.1', () => resolve(true))
+      })
+      if (!bound) continue
+      if (this.forwarding.get(connection) !== state) {
+        server.close()
+        return
+      }
+      state.failed.delete(port)
+      state.servers.set(port, server)
+      this.log(`${connection.peer}: forwarding 127.0.0.1:${port} to ${connection.peer}`)
+    }
+  }
+
+  private askForwards(connection: Connection): Promise<number[]> {
+    return new Promise((resolve, reject) => {
+      const channel = connection.open({ type: 'control', target: 'forwards' })
+      const chunks: Buffer[] = []
+      let size = 0
+      const timer = setTimeout(() => channel.destroy(new Error('no answer')), FORWARDS_ASK_MS)
+      const done = (error?: Error) => {
+        clearTimeout(timer)
+        if (error) return reject(error)
+        try {
+          const answer: unknown = JSON.parse(Buffer.concat(chunks).toString())
+          const ports = (answer as { ports?: unknown } | null)?.ports
+          if (
+            !Array.isArray(ports) ||
+            ports.some((p) => !Number.isInteger(p) || p < 1 || p > 65535)
+          )
+            throw new Error('invalid answer')
+          resolve(ports as number[])
+        } catch (failure) {
+          reject(failure as Error)
+        }
+      }
+      channel.on('data', (chunk: Buffer) => {
+        size += chunk.length
+        if (size > FORWARDS_BYTES) channel.destroy(new Error('answer too large'))
+        else chunks.push(chunk)
+      })
+      channel.once('end', () => done())
+      channel.once('error', (error) => done(error))
+      channel.once('close', () => done(new Error('closed before an answer')))
+    })
+  }
+
+  private carry(connection: Connection, port: number, socket: Socket): void {
+    try {
+      this.pipeSocket(socket, connection.open({ type: 'control', target: 'tcp', port }))
+    } catch {
+      socket.destroy()
+    }
   }
 
   status(): { name: string; connected: boolean; lastSeen: number | null }[] {
@@ -464,6 +627,7 @@ export class Fleet {
     for (const socket of this.accepted) socket.destroy()
     for (const socket of this.local) socket.destroy()
     for (const connection of this.connections.values()) connection.socket.destroy()
+    for (const connection of [...this.forwarding.keys()]) this.stopForwards(connection)
     await Promise.all(
       [...this.unix, ...(this.server ? [this.server] : [])].map(
         (server) => new Promise<void>((resolve) => server.close(() => resolve())),

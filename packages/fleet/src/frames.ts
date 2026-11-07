@@ -6,7 +6,7 @@ export type ChannelKind = (typeof CHANNEL_KINDS)[number]
 export type Frame =
   | { type: 'hello'; version: 1; machine: string; publicKey: string }
   | { type: 'auth'; signature: string }
-  | { type: ChannelKind; id: string; op: 'open'; target: string; argv?: string[] }
+  | { type: ChannelKind; id: string; op: 'open'; target: string; argv?: string[]; port?: number }
   | { type: ChannelKind; id: string; op: 'data'; data: string }
   | { type: ChannelKind; id: string; op: 'end' | 'close' }
 
@@ -33,8 +33,11 @@ export function parseFrame(value: unknown): Frame {
     if (typeof f.id !== 'string' || !/^[a-z0-9-]{1,80}$/.test(f.id))
       throw new Error('Invalid channel id')
     if (f.op === 'open') {
-      fields = ['type', 'id', 'op', 'target', 'argv']
-      if (typeof f.target !== 'string' || !['control', 'sync', 'exec', 'jobs'].includes(f.target))
+      fields = ['type', 'id', 'op', 'target', 'argv', 'port']
+      if (
+        typeof f.target !== 'string' ||
+        !['control', 'sync', 'exec', 'jobs', 'forwards', 'tcp'].includes(f.target)
+      )
         throw new Error('Invalid channel target')
       if (
         f.argv !== undefined &&
@@ -44,6 +47,12 @@ export function parseFrame(value: unknown): Frame {
       )
         throw new Error('Invalid command argv')
       if ((f.target === 'exec') !== (f.argv !== undefined)) throw new Error('Exec needs argv')
+      if (
+        (f.target === 'tcp') !== (f.port !== undefined) ||
+        (f.port !== undefined &&
+          (typeof f.port !== 'number' || !Number.isInteger(f.port) || f.port < 1 || f.port > 65535))
+      )
+        throw new Error('Invalid forward port')
     } else if (f.op === 'data') {
       fields = ['type', 'id', 'op', 'data']
       if (typeof f.data !== 'string' || f.data.length % 4 || !/^[A-Za-z0-9+/]*={0,2}$/.test(f.data))

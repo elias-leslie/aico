@@ -342,6 +342,18 @@ describe('hub', () => {
     })
   })
 
+  it('tells the idle power-off what runs on a host, from its sessions and wakes', async () => {
+    expect(hub.idleFacts('nobody')).toBeNull()
+    expect(hub.idleFacts('vm')).toMatchObject({ live: true, sessions: 2, wakes: 1, busy: false })
+    peer.emit('session.updated', {
+      session: { ...peer.sessions[0], status: 'ended', wakes: [] },
+    })
+    peer.emit('session.updated', { session: { ...peer.sessions[1], status: 'ended' } })
+    await vi.waitFor(() =>
+      expect(hub.idleFacts('vm')).toMatchObject({ sessions: 0, wakes: 0, busy: false }),
+    )
+  })
+
   describe('asks and shares', () => {
     const ask = (id: string, extra: Record<string, unknown> = {}) => ({
       id,

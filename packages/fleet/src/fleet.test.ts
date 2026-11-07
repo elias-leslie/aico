@@ -29,10 +29,13 @@ async function port(): Promise<number> {
   await new Promise<void>((r) => server.close(() => r()))
   return p
 }
-async function pair(reporting?: {
-  postRows: NonNullable<import('./fleet').FleetOptions['postRows']>
-  peerPower: NonNullable<import('./fleet').FleetOptions['peerPower']>
-}) {
+async function pair(
+  reporting?: {
+    postRows: NonNullable<import('./fleet').FleetOptions['postRows']>
+    peerPower: NonNullable<import('./fleet').FleetOptions['peerPower']>
+  },
+  forwards?: (peer: string) => number[],
+) {
   const root = mkdtempSync(join(tmpdir(), 'fleet-'))
   cleanup.push(() => rmSync(root, { recursive: true }))
   const a = loadIdentity(join(root, 'a'), 'peer-a')
@@ -73,6 +76,7 @@ async function pair(reporting?: {
       pins: () => pins,
       postRows: async () => {},
       log: () => {},
+      ...(forwards ? { forwards, lendHost: '127.0.0.2' } : {}),
       ...reporting,
     })
   const makeB = () =>
@@ -540,6 +544,47 @@ it('carries complete Logins responses over the real fleet link and binds worker 
   expect(saved.ok).toBe(true)
   expect(JSON.stringify(saved)).not.toContain('fixture-new-password')
   expect(store.list().some((entry) => entry.name === identity.name)).toBe(true)
+})
+
+it('lends a loopback port to a worker over the link, only while hosts.json lists it', async () => {
+  let lent: number[] = []
+  const p = await pair(undefined, (peer) => (peer === 'peer-b' ? lent : []))
+  p.setPins([
+    { name: p.a.name, publicKey: p.a.publicKey, role: 'full' },
+    { name: p.b.name, publicKey: p.b.publicKey, role: 'worker' },
+  ])
+  p.sb.mode = 'worker'
+  // One machine plays both ends: the lender connects on 127.0.0.2 so the worker can listen on
+  // the same port number on 127.0.0.1.
+  const target = createServer((socket) => socket.pipe(socket))
+  await new Promise<void>((r) => target.listen(0, '127.0.0.2', r))
+  cleanup.push(() => new Promise<void>((r) => target.close(() => r())))
+  const lentPort = (target.address() as { port: number }).port
+  const echoes = (): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const socket = createConnection({ host: '127.0.0.1', port: lentPort })
+      socket.on('error', (error) => reject(error))
+      socket.once('connect', () => socket.write('ping'))
+      socket.once('data', (data) => {
+        socket.destroy()
+        resolve(data.toString())
+      })
+      socket.once('close', () => reject(new Error('closed')))
+    })
+  await p.fa.start()
+  await p.fb.start()
+  await vi.waitFor(() => expect(p.fa.status()[0]?.connected).toBe(true))
+  // Nothing is lent: the worker listens on nothing.
+  await new Promise((r) => setTimeout(r, 200))
+  await expect(echoes()).rejects.toThrow()
+  // hosts.json now lists the port: the worker's next read opens it and bytes cross the link.
+  lent = [lentPort]
+  await p.fb.close()
+  await p.replaceB().start()
+  await vi.waitFor(async () => expect(await echoes()).toBe('ping'))
+  // A port the lender does not list is refused by the lender even when asked for directly.
+  lent = []
+  await expect(echoes()).rejects.toThrow()
 })
 
 it('forwards a full-peer merge to an already-connected downstream worker', async () => {

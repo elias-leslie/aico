@@ -28,14 +28,27 @@ st aico / SF ─┘   └ peers from hosts.json     └ via the fleet link (TLS,
 ```json
 [{ "name": "agent-work", "ssh": "agent-work",
    "socket": "/run/user/1000/tether/default/control.sock",
-   "forwards": ["8001", "8003"],
-   "wake": ["st", "vm", "start", "200"] }]
+   "forwards": [3017],
+   "wake": ["st", "vm", "start", "200"],
+   "sleep": ["st", "vm", "shutdown", "200"],
+   "idleOffMin": 15 }]
 ```
 
 - `ssh` is an ssh Host alias, never an IP address.
-- `forwards` is optional, per host. It lists the workstation SummitFlow and
-  Agent Hub ports exposed to that host through `-R`.
+- `forwards` is optional, per host. It lists ports on this machine's loopback
+  that the host may reach on its own loopback at the same number (Neri's
+  backend, 3017, for the hunter VM; aico-web, 3002, for `tether capture file
+  --out`). It rides the fleet link as a TCP channel, not ssh: a worker asks
+  the machine it is linked to which ports it lends (every minute and on each
+  link-up), listens on `127.0.0.1:<port>` and carries each connection over the
+  link; the lending machine re-reads hosts.json for every connection, so
+  removing a port closes it for new connections at once.
 - `wake` is optional. It is the command that powers the host on.
+- `sleep` is optional. It is the command that powers the host off (the Hosts
+  panel's Power off, and the idle power-off below).
+- `idleOffMin` is optional, default 15: minutes a powered-on host with a
+  `sleep` command may have no sessions before the hub powers it off; 0 keeps it
+  on.
 
 ### Link: the fleet link (inside the Tether daemon)
 
@@ -166,12 +179,20 @@ It retries quietly with backoff and never powers a host on. ssh (the
 ### Power
 
 - **Start:** only on create, via `wake`.
-- **Stop:** a timer on the guest powers it off after 15 minutes with all of
-  these true:
-  - zero sessions;
+- **Stop (built 2026-11-07, `src/hub/idle-off.ts`):** the hub, not a timer on
+  the guest, powers a host off with its `sleep` command after `idleOffMin`
+  minutes (default 15) with all of these true:
+  - zero sessions that have not ended;
   - no pending wakes;
-  - low load;
-  - no ssh sessions other than the link.
+  - no placement booking, and no create, wake or update in progress for it.
+  It applies to every host with a `sleep` command, however it was started:
+  a VM the owner started by hand with `st vm start` is powered off the same
+  way once it has sat idle (there is no "owner started" mark to respect). Each
+  power-off is logged (`[tether:hosts] <host>: powered off after N minutes
+  with no sessions`) and shown in Status as an off row `tether/idle-off/<host>`
+  that is cleared when the host is up again. A refused or failed power-off is
+  logged and tried again after another idle period. The earlier guest-side
+  load and ssh checks were dropped: sessions and wakes are what the hub sees.
 
 ### Placement (`--host auto`, built 2026-10-31)
 
