@@ -135,7 +135,7 @@ describe('GET /api/recovery', () => {
       machine: 'here',
       what: 'Ran out of memory (the agent itself was using most of it)',
       outcome: 'gave_up',
-      note: 'Gave up: it crashed again within 10 minutes of being recovered.',
+      note: 'It crashed again within 10 minutes of being recovered.',
       attemptsLeft: 0,
       resumable: true,
       canOpen: false,
@@ -146,7 +146,9 @@ describe('GET /api/recovery', () => {
       attemptsLeft: 1,
       resumable: false,
     })
-    expect(body.items[1].note).toContain('Waiting to resume:')
+    expect(body.items[1].note).toBe(
+      'Waiting until host admission has allowed agent launches for a minute.',
+    )
     expect(body.items[2]).toMatchObject({
       outcome: 'resumed',
       machine: 'agent-work',
@@ -219,7 +221,7 @@ describe('GET /api/recovery', () => {
     expect(byId[c.id]).toMatchObject({
       outcome: 'gave_up',
       resumable: false,
-      note: 'Gave up: no live agent with its conversation appeared within 2 minutes.',
+      note: 'No live agent with its conversation appeared within 2 minutes.',
     })
   })
 

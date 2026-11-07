@@ -131,7 +131,7 @@
     align-items: center;
   }
 
-  .page :is(.open, .action button) {
+  .page :is(.open, .action button, .head button, .notice button) {
     min-height: 44px;
   }
 

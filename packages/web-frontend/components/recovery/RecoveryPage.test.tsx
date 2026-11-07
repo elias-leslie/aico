@@ -59,7 +59,7 @@ const item = (over: Partial<RecoveryItem>): RecoveryItem => ({
   atApprox: false,
   outcome: 'gave_up',
   resumedAt: null,
-  note: 'Gave up: it crashed again within 10 minutes of being recovered.',
+  note: 'It crashed again within 10 minutes of being recovered.',
   attemptsLeft: 0,
   resumable: true,
   canOpen: false,
@@ -128,7 +128,7 @@ describe('Recovery page', () => {
           what: 'Stopped when the workstation restarted',
           outcome: 'gave_up',
           resumable: false,
-          note: 'Gave up: no live agent appeared.',
+          note: 'No live agent appeared.',
         }),
         item({
           id: 'bbbbbbbb',

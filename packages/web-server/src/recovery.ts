@@ -114,8 +114,13 @@ const num = (value: unknown): number | null =>
 
 /** Tether's reason ("it crashed again within 10 minutes...") as a sentence start. */
 function reasonText(reason: string | null | undefined): string {
-  const clean = (reason ?? '').replace(/\s+/g, ' ').trim().slice(0, MAX_WORDS)
-  return clean
+  return (reason ?? '').replace(/\s+/g, ' ').trim().slice(0, MAX_WORDS)
+}
+
+/** The reason as its own sentence: "It crashed again within 10 minutes of being recovered." */
+function sentence(reason: string | null | undefined): string {
+  const clean = reasonText(reason).replace(/[.\s]+$/, '')
+  return clean ? `${clean[0].toUpperCase()}${clean.slice(1)}.` : ''
 }
 
 function crashRows(body: unknown): { rows: CrashRow[]; maxAttempts: number; windowHours: number } {
@@ -184,14 +189,14 @@ function crashItem(
     return {
       ...base,
       outcome: 'gave_up',
-      note: why ? `Gave up: ${why}.` : 'Gave up after it stopped.',
+      note: sentence(why) || 'It stopped and Aico gave up bringing it back.',
       attemptsLeft: 0,
       resumable: row.resumable,
     }
   return {
     ...base,
     outcome: 'waiting',
-    note: why ? `Waiting to resume: ${why}.` : 'Waiting to resume by itself.',
+    note: sentence(why) || 'Waiting to resume by itself.',
     attemptsLeft: Math.max(0, maxAttempts - row.attempt),
     resumable: false,
   }
@@ -223,8 +228,8 @@ function restartNote(row: RestoreRow, outcome: RecoveryOutcome): string {
     return row.resumed === false
       ? 'Started again fresh; it had no conversation to resume.'
       : 'Resumed where it left off.'
-  if (outcome === 'waiting') return why ? `Still restarting: ${why}.` : 'Still restarting.'
-  return why ? `Gave up: ${why}.` : 'Gave up restarting it.'
+  if (outcome === 'waiting') return sentence(why) || 'Still restarting.'
+  return sentence(why) || 'It didn’t come back after the restart.'
 }
 
 async function bestEffort<T>(work: () => Promise<T>): Promise<T | null> {
