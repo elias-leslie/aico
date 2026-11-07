@@ -30,6 +30,8 @@ export interface Publication extends Delivery {
   sha: string | null
   failed: string[]
   state: 'ok' | 'failed' | 'skip'
+  /** The default branch this pass looked at (main, or master when that is the only one). */
+  branch?: string
   /** Why the commit counts as checked when its own record is an earlier acceptance. */
   accepted_note?: string
   /** Status could not record this result; the publication outcome itself stands. */
@@ -81,7 +83,7 @@ export function publicationRow(result: Publication, now = new Date()): StatusRow
   const source = result.sha ? ` at ${result.sha.slice(0, 10)}` : ''
   const problem =
     result.reason === 'unchecked_commit'
-      ? `Main has no full or acceptance check${source}. Owning agent: run st check --acceptance.`
+      ? `${result.branch ? `The ${result.branch} branch` : 'The default branch'} has no full or acceptance check${source}. Owning agent: run st check --acceptance.`
       : result.reason === 'acceptance_failed'
         ? `Acceptance failed${source}: ${result.failed.join(', ') || 'a stage'}. Log: ${result.acceptance_log}. Owning agent: fix it.`
         : result.reason === 'acceptance_incomplete'
@@ -102,7 +104,7 @@ export function publicationRow(result: Publication, now = new Date()): StatusRow
       ? problem
       : result.state === 'skip'
         ? `Publication skipped: ${result.reason.replaceAll('_', ' ')}.`
-        : `${result.pushed ? 'Published main' : 'Main is on GitHub'}${source}${result.accepted_note ? ` (${result.accepted_note})` : ''}.`
+        : `${result.pushed ? `Published ${result.branch ?? 'main'}` : `${result.branch ? `The ${result.branch} branch` : 'Main'} is on GitHub`}${source}${result.accepted_note ? ` (${result.accepted_note})` : ''}.`
     ).slice(0, 300),
     last_run: now.toISOString(),
     actions: [{ kind: 'run', ref: `aico publish --source ${result.project}` }],
@@ -149,6 +151,14 @@ function deliver(root: string, sha: string, authorized: string[]): Promise<Deliv
   })
 }
 
+/** The repo's one default branch: main, or master when that is the only one of the two. */
+function defaultBranch(root: string): 'main' | 'master' | null {
+  const found = (['main', 'master'] as const).filter((name) =>
+    gitOk(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${name}`]),
+  )
+  return found.length === 1 ? found[0] : null
+}
+
 export async function publishRepos(
   projects: readonly PublishProject[],
   options: PublishOptions = {},
@@ -176,10 +186,10 @@ export async function publishRepos(
       else {
         const root = project.root_path
         try {
-          if (!gitOk(root, ['rev-parse', '--verify', '--quiet', 'refs/heads/main']))
-            result.reason = 'main_unavailable'
+          const branch = defaultBranch(root)
+          if (!branch) result.reason = 'no_default_branch'
           else {
-            const main = git(root, ['rev-parse', 'refs/heads/main']).trim()
+            const main = git(root, ['rev-parse', `refs/heads/${branch}`]).trim()
             // A hold through REV still publishes REV once main contains it.
             const through = hold?.through
             const reachable =
@@ -188,7 +198,7 @@ export async function publishRepos(
               gitOk(root, ['merge-base', '--is-ancestor', through, main])
             const sha = through && reachable ? through : main
             const held = !reachable
-            result = { ...result, sha, state: held ? 'skip' : 'failed' }
+            result = { ...result, sha, branch, state: held ? 'skip' : 'failed' }
             let accepted = held ? null : acceptedCheck(root, sha)
             const noteAccepted = () => {
               result.failed = accepted?.check.failed ?? []

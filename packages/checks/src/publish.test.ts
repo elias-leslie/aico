@@ -101,6 +101,26 @@ it('publishes passed main, refuses failed or unchecked commits, and clears the s
   expect(rows.at(-1)).toMatchObject({ id: 'publish:example', state: 'ok' })
 })
 
+it('a master-only repo publishes its checked master; a repo with both or neither branch is skipped with that reason, not guessed', async () => {
+  const root = repo()
+  git(root, 'branch', '-m', 'main', 'master')
+  const sha = git(root, 'rev-parse', 'HEAD')
+  recordLocalCheck(root, sha, result(true))
+  const deliver = vi.fn(async () => ({
+    publication_complete: true,
+    pushed: true,
+    reason: 'source_published',
+  }))
+  const [done] = await publishRepos([project(root)], { deliver })
+  expect(done).toMatchObject({ state: 'ok', branch: 'master', sha })
+  expect(deliver).toHaveBeenCalledWith(root, sha, [])
+  expect(publicationRow(done).meaning).toBe(`Published master at ${sha.slice(0, 10)}.`)
+  git(root, 'branch', 'main')
+  const [both] = await publishRepos([project(root)], { dryRun: true })
+  expect(both).toMatchObject({ state: 'skip', reason: 'no_default_branch', sha: null })
+  expect(publicationRow(both).meaning).toBe('Publication skipped: no default branch.')
+})
+
 it('a pass on the previous commit or a tampered tree never checks a new main', async () => {
   const root = repo()
   recordLocalCheck(root, git(root, 'rev-parse', 'HEAD'), result(true))

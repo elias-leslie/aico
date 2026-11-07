@@ -1,9 +1,9 @@
 """Checked-main delivery to GitHub: one exact committed source, one plain fast-forward push.
 
 `aico publish` chooses the project and source and records the local check; this is the transport it runs
-(`st vcs deliver`, the github-delivery extension). It accepts only a commit that is the tip of `main` with a
-passing local-check receipt, verifies the complete outgoing history and the workflow-effects authority, and
-then pushes `<sha>:refs/heads/main`. It creates no commit, never touches the worktree, index, branch or git
+(`st vcs deliver`, the github-delivery extension). It accepts only a commit that is the tip of the repo's
+default branch (`main`, or `master` when that is the only one) with a passing local-check receipt, verifies the
+complete outgoing history and the workflow-effects authority, and then pushes `<sha>:refs/heads/<branch>`. It creates no commit, never touches the worktree, index, branch or git
 config, never forces, and never handles tokens (git's credential helper and gh own them). Diagnostics from git
 or GitHub never reach the result: it carries fixed reason codes only.
 
@@ -143,12 +143,20 @@ def _git_plain(root: Path, *args: str) -> str:
     return result.stdout.strip()
 
 
-def checked_main(root: Path, sha: str) -> bool:
+def default_branch(root: Path) -> str | None:
+    """The repo's one default branch: `main`, or `master` when that is the only one of the two."""
+    found = [name for name in ("main", "master")
+             if subprocess.run(["git", "-C", str(root), "show-ref", "--verify", "--quiet", f"refs/heads/{name}"],
+                               check=False).returncode == 0]
+    return found[0] if len(found) == 1 else None
+
+
+def checked_main(root: Path, sha: str, branch: str = "main") -> bool:
     """Recheck the caller's proof at the transport boundary; a private unchecked commit never passes."""
     if not _OID.fullmatch(sha):
         return False
     try:
-        if _git_plain(root, "rev-parse", "refs/heads/main") != sha:
+        if _git_plain(root, "rev-parse", f"refs/heads/{branch}") != sha:
             return False
         value = json.loads(_receipt(root, sha).read_text())
         return (isinstance(value, dict) and value.get("kind") == "aico.local-check.v1"
@@ -263,16 +271,14 @@ def publish_source(source: dict[str, Any], source_commit: str, *, authorized_wor
         if Path(top.stdout.strip()).resolve() != project:
             return outcome("skipped", "repository_root_mismatch")
         # The selected source is independent of the mutable branch or HEAD.
-        branches = [name for name in ("main", "master")
-                    if _git(project, "show-ref", "--verify", "--quiet", f"refs/heads/{name}").returncode == 0]
-        if len(branches) != 1:
+        branch = default_branch(project)
+        if branch is None:
             return outcome("pending", "manual_default_branch_required")
-        branch = branches[0]
         head_result = _git(project, "rev-parse", "--verify", f"{source_commit}^{{commit}}")
         if head_result.returncode != 0 or head_result.stdout.strip() != source_commit:
             return outcome("failed", "manual_source_unavailable")
         head = source_commit
-        if branch != "main" or not checked_main(project, head):
+        if not checked_main(project, head, branch):
             return outcome("failed", "local_check_required")
         result.update(head=head, branch=branch, source_status="captured", vcs="git", captured_source_commit=head,
                       source_tree=_value(project, "rev-parse", f"{head}^{{tree}}"))
@@ -355,7 +361,7 @@ def publish_source(source: dict[str, Any], source_commit: str, *, authorized_wor
 
 
 def deliver(root: Path, sha: str, *, authorized_workflows: tuple[str, ...] = ()) -> dict[str, Any]:
-    if not checked_main(root, sha):
+    if not checked_main(root, sha, default_branch(root) or "main"):
         return {"publication_complete": False, "pushed": False, "reason": "local_check_required"}
     # No registry lookup here: `aico publish` resolved the registered root and policy before this call.
     source = {"id": root.name, "project_id": root.name, "path": str(root), "source_type": "project", "enabled": True}

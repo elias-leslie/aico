@@ -86,6 +86,22 @@ def test_checked_main_is_fast_forwarded_after_outgoing_verification(source):
     assert delivery.verify_outgoing.call_args.kwargs["published_bases"] != ()
 
 
+def test_a_master_only_repo_publishes_its_checked_master(source, monkeypatch):
+    project, remote, sha = source["path"], source["remote"], _head(source)
+    _git(project, "branch", "-m", "main", "master")
+    _git(remote, "branch", "-m", "main", "master")
+    _git(project, "update-ref", "-d", "refs/remotes/origin/main")
+    _git(project, "update-ref", "refs/remotes/origin/master", "HEAD~1")
+    monkeypatch.setattr(delivery.GitHub, "api", lambda *_: {"private": True, "default_branch": "master"})
+    result = delivery.deliver(project, sha)
+    assert result["publication_complete"] and result["pushed"] and result["branch"] == "master"
+    assert _git(remote, "rev-parse", "master") == sha
+    # With both branches there is no single default: nothing is guessed.
+    _git(project, "branch", "main", "HEAD")
+    assert delivery.default_branch(project) is None
+    assert delivery.deliver(project, sha)["reason"] == "manual_default_branch_required"
+
+
 def test_no_passing_check_on_main_never_reaches_the_remote(source):
     project, sha = source["path"], _head(source)
     before = _remote_main(source)
