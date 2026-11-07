@@ -182,6 +182,11 @@ export class ShareStore {
     return row && fromRow(row)
   }
 
+  /** Drop one share; false when there is none with that ID. */
+  remove(id: string): boolean {
+    return Number(this.db.prepare('DELETE FROM shares WHERE id = ?').run(id).changes) > 0
+  }
+
   /** The newest shares, oldest first. */
   list(): Share[] {
     const rows = this.db
@@ -207,6 +212,11 @@ export function registerShowRoute(
       const share = shares.add(request)
       events.publish('show.requested', share)
       sendJson(res, 201, share)
+    })
+    .add('DELETE', '/v1/shares/:id', (_req, res, params) => {
+      const id = params.id ?? ''
+      if (!/^[0-9a-f]{12}$/.test(id) || !shares.remove(id)) throw new HttpError(404, 'not_found')
+      sendJson(res, 200, { id, removed: true })
     })
     .add('GET', '/v1/shares', (_req, res, _params, query) => {
       const items = shares.list()

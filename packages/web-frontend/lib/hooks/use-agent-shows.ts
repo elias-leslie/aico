@@ -74,6 +74,11 @@ export function fetchShows(since?: string, signal?: AbortSignal) {
   }).then(parseShows)
 }
 
+/** Take one share out of Files > Shared; a refusal throws with the server's reason. */
+export function removeShow(id: string) {
+  return apiFetch<unknown>(`/api/shows/${id}`, { method: 'DELETE' })
+}
+
 function readSeenAt(): string | null {
   try {
     return window.localStorage.getItem(SEEN_KEY)

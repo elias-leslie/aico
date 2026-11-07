@@ -145,6 +145,25 @@ describe('POST /v1/show', () => {
   })
 })
 
+describe('DELETE /v1/shares/:id', () => {
+  const remove = (id: string) => callSocket(paths.socket, 'DELETE', `/v1/shares/${id}`)
+
+  it('removes one share and leaves the others', async () => {
+    const a = (await show({ url: 'https://example.com/a' })).body as { id: string }
+    const b = (await show({ url: 'https://example.com/b' })).body as { id: string }
+    expect(await remove(a.id)).toMatchObject({ status: 200, body: { id: a.id, removed: true } })
+    expect((await listed()).map((item) => (item as { id: string }).id)).toEqual([b.id])
+  })
+
+  it('answers 404 for an unknown or already removed ID, and a malformed one', async () => {
+    const a = (await show({ url: 'https://example.com/a' })).body as { id: string }
+    await remove(a.id)
+    for (const id of [a.id, '000000000000', 'nope']) {
+      expect(await remove(id)).toMatchObject({ status: 404, body: { error: 'not_found' } })
+    }
+  })
+})
+
 describe('ShareStore', () => {
   it('drops shares past the retention when the next one arrives', () => {
     const store = new Store(':memory:')

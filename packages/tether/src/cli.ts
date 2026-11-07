@@ -40,6 +40,9 @@ Commands:
                                 (Aico: Files > Shared; nothing is copied);
                                 relative paths are from here
   share --url <url> [--title T]
+  share remove <id>...          take entries out of Files > Shared (a file named
+                                "remove" is ./remove); an unknown id exits 1,
+                                the rest are still removed
                                 the session is this pane's own; --session ID
                                 overrides it
   ask create|get|list|done|withdraw
@@ -206,6 +209,37 @@ export function shareBody(
     ...(title === undefined ? {} : { title }),
     ...(url === undefined ? { paths: files } : { url }),
   }
+}
+
+/** `tether share remove ID...`: each entry goes; exit 1 if any ID was unknown. */
+async function runShareRemove(
+  io: Io,
+  json: boolean,
+  socket: string,
+  ids: string[],
+): Promise<number> {
+  if (!ids.length) {
+    io.err('tether share remove: give the ID of each entry to remove')
+    return 2
+  }
+  const results: { id: string; removed: boolean }[] = []
+  for (const id of ids) {
+    const response = await callSocket(socket, 'DELETE', `/v1/shares/${encodeURIComponent(id)}`)
+    if (response.status !== 200 && response.status !== 404) {
+      return render(io, json, response.status, response.body)
+    }
+    results.push({ id, removed: response.status === 200 })
+  }
+  const missing = results.filter((result) => !result.removed)
+  if (json) io.out(JSON.stringify({ results }))
+  else {
+    for (const { id, removed } of results) io.out(removed ? `Removed ${id}` : `No share ${id}`)
+  }
+  if (missing.length) {
+    io.err(`tether share remove: no such share: ${missing.map((result) => result.id).join(', ')}`)
+    return 1
+  }
+  return 0
 }
 
 /**
@@ -563,6 +597,7 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
         }
         return runNote(io, json, parsed.args.slice(1), withOwnWidget(process.env))
       case 'share': {
+        if (sub === 'remove') return runShareRemove(io, json, paths.socket, rest)
         const body = shareBody(parsed.args.slice(1), withOwnWidget(process.env), process.cwd())
         if (typeof body === 'string') {
           io.err(`tether share: ${body}`)
@@ -570,11 +605,14 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
         }
         const response = await callSocket(paths.socket, 'POST', '/v1/show', body)
         if (json || response.status !== 201) return render(io, json, response.status, response.body)
-        const shared = response.body as { paths?: string[] }
+        const shared = response.body as { id?: string; paths?: string[] }
+        const remove = shared.id ? ` To take it out again: tether share remove ${shared.id}` : ''
         io.out(
-          shared.paths
-            ? `Shared ${shared.paths.length === 1 ? '1 path' : `${shared.paths.length} paths`} as links (nothing copied); the owner opens them in Aico under Files > Shared.`
-            : 'Shared the link; the owner sees it in Aico.',
+          `${
+            shared.paths
+              ? `Shared ${shared.paths.length === 1 ? '1 path' : `${shared.paths.length} paths`} as links (nothing copied); the owner opens them in Aico under Files > Shared.`
+              : 'Shared the link; the owner sees it in Aico.'
+          }${remove}`,
         )
         return 0
       }

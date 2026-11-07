@@ -85,11 +85,14 @@ function serve(url: string) {
 function renderDialog(
   request: FilesRequest | null,
   project: ProjectSource | null = null,
+  fetcher: (url: string, init?: RequestInit) => Promise<Response> | Response = (
+    url,
+  ) => serve(url),
 ) {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async (url: string) => serve(url)),
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) =>
+    fetcher(url, init),
   )
+  vi.stubGlobal('fetch', fetchMock)
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
@@ -106,7 +109,7 @@ function renderDialog(
       />
     </QueryClientProvider>,
   )
-  return { onInsertPath }
+  return { onInsertPath, fetchMock }
 }
 
 afterEach(() => {
@@ -133,6 +136,49 @@ describe('FilesDialog', () => {
     expect(onInsertPath).toHaveBeenCalledWith('/srv/out/image.png')
     fireEvent.click(screen.getByRole('button', { name: 'Back to Shared' }))
     expect(await screen.findByText('Image and prompt')).toBeVisible()
+  })
+
+  it('removes a share from Shared and the list refreshes without it', async () => {
+    let removed = false
+    const { fetchMock } = renderDialog(
+      { kind: 'shared' },
+      null,
+      (url, init) => {
+        if (init?.method === 'DELETE') {
+          removed = true
+          return json({ id: share.id, removed: true })
+        }
+        return url.startsWith('/api/shows') && removed
+          ? json({ shows: [] })
+          : serve(url)
+      },
+    )
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Remove Image and prompt from Shared',
+      }),
+    )
+    expect(await screen.findByText(/Nothing shared yet/)).toBeVisible()
+    expect(fetchMock).toHaveBeenCalledWith(`/api/shows/${share.id}`, {
+      method: 'DELETE',
+    })
+  })
+
+  it('says so when a share could not be removed, and keeps it', async () => {
+    renderDialog({ kind: 'shared' }, null, (url, init) =>
+      init?.method === 'DELETE'
+        ? json({ detail: 'Tether is not reachable' }, 503)
+        : serve(url),
+    )
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Remove Image and prompt from Shared',
+      }),
+    )
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Couldn’t remove it: Tether is not reachable',
+    )
+    expect(screen.getByText('Image and prompt')).toBeVisible()
   })
 
   it('opens a shared web page rendered in its own tab, with Source beside it', async () => {

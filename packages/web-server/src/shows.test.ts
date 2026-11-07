@@ -1,3 +1,4 @@
+import { TetherError } from '@aico/tether-client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   pushTitle,
@@ -159,10 +160,23 @@ describe('Shows', () => {
 
 describe('share routes', () => {
   let server: Awaited<ReturnType<typeof serveRoutes>>
+  const tether = {
+    request: vi.fn(async (method: string, path: string) => {
+      if (method === 'DELETE') {
+        if (path === '/v1/shares/cccccccccccc') throw new TetherError(404, 'not_found', {})
+        return { status: 200, body: { id: path.split('/').pop(), removed: true } as never }
+      }
+      return {
+        status: 200,
+        body: { items: [payload(), payload({ id: 'bbbbbbbbbbbb', title: null })] } as never,
+      }
+    }),
+  }
 
   beforeEach(async () => {
+    tether.request.mockClear()
     const shows = new Shows({
-      tether: tetherWith([payload(), payload({ id: 'bbbbbbbbbbbb', title: null })]),
+      tether,
       publicHost: null,
       notices: QUIET,
     })
@@ -182,5 +196,19 @@ describe('share routes', () => {
     expect(await list(`?since=${SHOW_ID}`)).toEqual(['bbbbbbbbbbbb'])
     expect(await list('?since=bbbbbbbbbbbb')).toEqual([])
     expect(await list('?since=cccccccccccc')).toEqual([SHOW_ID, 'bbbbbbbbbbbb'])
+  })
+
+  it('removes a share through Tether and says plainly when it is gone', async () => {
+    const remove = (id: string) => fetch(`${server.base}/api/shows/${id}`, { method: 'DELETE' })
+    const done = await remove(SHOW_ID)
+    expect(done.status).toBe(200)
+    expect(await done.json()).toEqual({ id: SHOW_ID, removed: true })
+    expect(tether.request).toHaveBeenCalledWith('DELETE', `/v1/shares/${SHOW_ID}`)
+    for (const id of ['cccccccccccc', 'not-an-id']) {
+      const gone = await remove(id)
+      expect(gone.status).toBe(404)
+      expect(await gone.json()).toEqual({ detail: 'That share is already gone' })
+    }
+    expect(tether.request).toHaveBeenCalledTimes(2)
   })
 })

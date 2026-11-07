@@ -1,10 +1,14 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
-import { Code, File, Folder, Globe, Link } from 'lucide-react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Code, File, Folder, Globe, Link, X } from 'lucide-react'
 import { baseName } from '@/components/AgentShowToast'
 import { isHtmlPath, sharedPageUrl } from '@/lib/api/pane-files'
-import { type AgentShow, fetchShows } from '@/lib/hooks/use-agent-shows'
+import {
+  type AgentShow,
+  fetchShows,
+  removeShow,
+} from '@/lib/hooks/use-agent-shows'
 
 /** When it was shared: the time today, else the day. */
 function sharedWhen(createdAt: string, now = new Date()): string {
@@ -34,6 +38,12 @@ export function SharedFiles({
   sessionName?: (session: string) => string | null
   onOpenPath: (path: string) => void
 }) {
+  const client = useQueryClient()
+  const remove = useMutation({
+    mutationFn: removeShow,
+    onSuccess: () =>
+      client.invalidateQueries({ queryKey: ['agent-shows', 'all'] }),
+  })
   const shares = useQuery<AgentShow[]>({
     queryKey: ['agent-shows', 'all'],
     queryFn: ({ signal }) => fetchShows(undefined, signal),
@@ -78,18 +88,46 @@ export function SharedFiles({
             }
             className="lantern-share"
           >
-            <p
-              className="m-0 px-2.5 pt-2.5 pb-1 text-xs"
-              style={{ color: 'var(--mist)' }}
-            >
-              <span style={{ color: 'var(--bone)' }} dir="auto">
-                {share.title ??
-                  (share.kind === 'url' ? 'A link' : baseName(share.paths[0]))}
-              </span>
-              {' · '}
-              {from ?? 'an agent'} · {sharedWhen(share.createdAt)}
-              {share.host ? ` · on ${share.host}` : ''}
-            </p>
+            <div className="flex items-start gap-1 pr-1">
+              <p
+                className="m-0 min-w-0 flex-1 px-2.5 pt-2.5 pb-1 text-xs"
+                style={{ color: 'var(--mist)' }}
+              >
+                <span style={{ color: 'var(--bone)' }} dir="auto">
+                  {share.title ??
+                    (share.kind === 'url'
+                      ? 'A link'
+                      : baseName(share.paths[0]))}
+                </span>
+                {' · '}
+                {from ?? 'an agent'} · {sharedWhen(share.createdAt)}
+                {share.host ? ` · on ${share.host}` : ''}
+              </p>
+              {share.host ? null : (
+                <button
+                  type="button"
+                  className="lantern-btn ghost h-8! flex-none px-2! text-xs! max-md:h-10!"
+                  aria-label={`Remove ${
+                    share.title ??
+                    (share.kind === 'url' ? 'link' : baseName(share.paths[0]))
+                  } from Shared`}
+                  disabled={remove.isPending && remove.variables === share.id}
+                  onClick={() => remove.mutate(share.id)}
+                >
+                  <X className="h-3.5 w-3.5" strokeWidth={1.7} />
+                  Remove
+                </button>
+              )}
+            </div>
+            {remove.isError && remove.variables === share.id ? (
+              <p
+                role="alert"
+                className="m-0 px-2.5 pb-1 text-xs"
+                style={{ color: 'var(--ember)' }}
+              >
+                Couldn’t remove it: {remove.error.message}
+              </p>
+            ) : null}
             {share.kind === 'url' ? (
               <a
                 href={share.url}

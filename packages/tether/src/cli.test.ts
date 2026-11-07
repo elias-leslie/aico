@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { attachPlan, main, parseArgs, render, shareBody } from './cli'
+import { callSocket } from './client'
 import { resolvePaths } from './config'
 import { type RunningDaemon, startDaemon } from './daemon'
 import { VERSION } from './version'
@@ -159,6 +160,36 @@ describe('main', () => {
     ).toBe(0)
     const rm = capture()
     expect(await main(['-i', 'clitest', 'tools', 'rm', 'aider'], rm.io)).toBe(0)
+  })
+
+  it('shares, then removes entries by ID; an unknown ID exits 1 and the rest still go', async () => {
+    const link = (url: string) =>
+      callSocket(resolvePaths({ instance: 'clitest' }).socket, 'POST', '/v1/show', { url })
+    const a = (await link('https://example.com/a')).body as { id: string }
+    const b = (await link('https://example.com/b')).body as { id: string }
+    const shared = capture()
+    expect(
+      await main(['-i', 'clitest', 'share', '--url', 'https://example.com/c'], shared.io),
+    ).toBe(0)
+    expect(shared.out.join('\n')).toMatch(/tether share remove [0-9a-f]{12}/)
+
+    const none = capture()
+    expect(await main(['-i', 'clitest', 'share', 'remove'], none.io)).toBe(2)
+
+    const removal = capture()
+    expect(
+      await main(['-i', 'clitest', 'share', 'remove', a.id, '000000000000', b.id], removal.io),
+    ).toBe(1)
+    expect(removal.out).toEqual([`Removed ${a.id}`, 'No share 000000000000', `Removed ${b.id}`])
+    expect(removal.err.join('\n')).toContain('no such share: 000000000000')
+    const left = (
+      await callSocket(resolvePaths({ instance: 'clitest' }).socket, 'GET', '/v1/shares')
+    ).body as {
+      items: { id: string }[]
+    }
+    expect(left.items.map((item) => item.id)).not.toContain(a.id)
+    expect(left.items.map((item) => item.id)).not.toContain(b.id)
+    expect(left.items).toHaveLength(1)
   })
 
   it('lists an empty session catalog and dry-runs an import', async () => {

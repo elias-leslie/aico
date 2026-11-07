@@ -7,7 +7,9 @@
 
 import { isAbsolute } from 'node:path'
 import type { Router } from './http'
+import { tetherCall } from './lifecycle'
 import { type Notice, type NoticeSink, sendNotice } from './notice'
+import { HttpError } from './tether'
 
 /** Ids pushed already, so a replayed event never pushes twice. */
 const PUSHED_KEPT = 500
@@ -166,6 +168,11 @@ export class Shows {
     await sendNotice(this.options.notices, showNotice(share, this.options.publicHost))
   }
 
+  /** Take one of this computer's shares out of Tether's list. */
+  async remove(id: string): Promise<void> {
+    await this.options.tether.request('DELETE', `/v1/shares/${id}`)
+  }
+
   /** Tether's shares (with the linked hosts', or this host's only), oldest first; any that fail the checks are left out. */
   async list(hosts: 'all' | 'here' = 'all'): Promise<Share[]> {
     const { body } = await this.options.tether.request<{ items?: unknown }>(
@@ -184,5 +191,13 @@ export function registerShowRoutes(router: Router, shows: Shows): void {
     const index = since ? items.findIndex((item) => item.id === since) : -1
     // An unknown cursor (an expired share) gets the whole list.
     return { shows: index >= 0 ? items.slice(index + 1) : items }
+  })
+
+  // Takes an entry out of Files > Shared. A linked host's share is removed on that host.
+  router.on('DELETE', '/api/shows/:id', async (ctx) => {
+    const id = ctx.params.id ?? ''
+    if (!ID.test(id)) throw new HttpError(404, 'That share is already gone')
+    await tetherCall(() => shows.remove(id), 'That share is already gone')
+    return { id, removed: true }
   })
 }
