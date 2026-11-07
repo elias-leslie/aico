@@ -13,6 +13,7 @@ const data = vi.hoisted(() => ({
   machinePower: vi.fn(async () => ({})),
   autostart: vi.fn(async () => ({})),
   away: vi.fn(async () => {}),
+  awayStatus: { enabled: true } as { enabled: boolean; reason?: string } | null,
 }))
 vi.mock('@/lib/hooks/use-status', () => ({ useStatus: () => data.status }))
 vi.mock('@/lib/hooks/use-hosts', () => ({
@@ -36,6 +37,7 @@ vi.mock('@/lib/hooks/use-machine-guests', () => ({
   setAutostart: (...args: unknown[]) =>
     (data.autostart as (...a: unknown[]) => unknown)(...args),
   awayAll: () => data.away(),
+  useAwayStatus: () => data.awayStatus,
 }))
 
 const row = (over: Partial<StatusRow>): StatusRow => ({
@@ -98,6 +100,7 @@ describe('MachinesPage', () => {
     data.machinePower.mockClear()
     data.autostart.mockClear()
     data.away.mockClear()
+    data.awayStatus = { enabled: true }
     data.guests = {
       guests: null,
       failure: null,
@@ -156,6 +159,22 @@ describe('MachinesPage', () => {
     )
     expect(await screen.findByText('Shutting down.')).toBeInTheDocument()
     expect(data.away).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows Shut down all disabled, with the reason, until remote power is set up', () => {
+    data.awayStatus = {
+      enabled: false,
+      reason: 'Remote power isn’t set up yet.',
+    }
+    renderPage()
+    const button = screen.getByRole('button', { name: 'Shut down all' })
+    expect(button).toBeDisabled()
+    expect(button).toHaveAttribute('title', 'Remote power isn’t set up yet.')
+    data.awayStatus = null
+    renderPage()
+    expect(
+      screen.getAllByRole('button', { name: 'Shut down all' })[1],
+    ).toBeDisabled()
   })
 
   it('keeps the dialog open with the reason when the shutdown is refused', async () => {

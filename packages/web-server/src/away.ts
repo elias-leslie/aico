@@ -1,5 +1,6 @@
 // Leaving with the machines off (`aico away`), from the Machines page and from the command line.
 //
+//   GET  /api/machines/away     {enabled, reason?}: whether shutting down is set up (`aico away --status`)
 //   POST /api/machines/away     the page's button: runs `aico away --all` here. A refusal that comes
 //                               at once (a plug that does not answer, a shutdown that cannot run)
 //                               is the answer; otherwise it answers 202 and the shutdown goes on.
@@ -9,7 +10,7 @@
 //                               ask (`aico away` calls it here and, over ssh, on the other Aico).
 //                               `guests` adds every Proxmox guest this Aico lists.
 
-import { spawn } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import type { StatusStore } from '@aico/status'
 import { fromThisMachine } from './guard'
 import { objectBody, type Router } from './http'
@@ -19,6 +20,23 @@ const MACHINE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
 const MAX_MACHINES = 64
 /** How long the page waits for an early refusal before it answers "started". */
 const EARLY_MS = 4_000
+
+export interface AwayStatus {
+  enabled: boolean
+  reason?: string
+}
+
+/** Whether `aico away` may shut hosts down (its `away.enabled` setting); unreadable counts as not. */
+const awayStatus = (): Promise<AwayStatus> =>
+  new Promise((done) => {
+    execFile('aico', ['away', '--status'], { timeout: 10_000 }, (error, stdout) => {
+      try {
+        const parsed = JSON.parse(stdout) as AwayStatus
+        if (!error && typeof parsed.enabled === 'boolean') return done(parsed)
+      } catch {}
+      done({ enabled: false, reason: 'Couldn’t check whether shutting down is set up.' })
+    })
+  })
 
 export type AwayStart = () => Promise<{ code: number; output: string } | null>
 
@@ -62,12 +80,17 @@ export interface AwayRoutes {
   /** The machine names of the Proxmox guests this Aico lists. */
   guestMachines: () => Promise<string[]>
   start?: AwayStart
+  setup?: () => Promise<AwayStatus>
   now?: () => number
 }
 
 export function registerAwayRoutes(router: Router, options: AwayRoutes): void {
   let going = false
+  const state = () => (options.setup ?? awayStatus)()
+  router.on('GET', '/api/machines/away', () => state())
   router.on('POST', '/api/machines/away', async () => {
+    const ready = await state()
+    if (!ready.enabled) throw new HttpError(409, ready.reason ?? 'Shutting down is not set up.')
     if (going) throw new HttpError(409, 'Already shutting down.')
     going = true
     try {

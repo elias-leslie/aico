@@ -50,7 +50,8 @@ const USAGE = `Usage:
       (that would cut its own power) unless --force
   aico away MACHINE... | --all [--dry-run]           shut hosts down cleanly and leave: marks the outage so Status does not page,
                                                      sets the plug countdown, powers off (remote host first, this one last)
-      --dry-run prints the steps and changes nothing; start again from the Kasa app (socket on)`
+      --dry-run prints the steps and changes nothing; start again from the Kasa app (socket on)
+      refuses until \`away.enabled\` in data/ops.json is true (the owner confirms the plugs and BIOS power-on)`
 
 /** One verb's part of USAGE (`aico logs --help` shows logs, not deploy). */
 export function verbUsage(verb: string): string {

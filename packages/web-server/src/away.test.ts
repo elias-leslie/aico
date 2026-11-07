@@ -1,7 +1,7 @@
 import { createServer, type Server } from 'node:http'
 import { StatusStore } from '@aico/status'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { type AwayStart, refusalOf, registerAwayRoutes } from './away'
+import { type AwayStart, type AwayStatus, refusalOf, registerAwayRoutes } from './away'
 import { Router } from './http'
 
 const T0 = Date.parse('2026-11-07T12:00:00Z')
@@ -10,15 +10,18 @@ let server: Server
 let base: string
 let status: StatusStore
 let start: AwayStart
+let ready: AwayStatus
 
 beforeEach(async () => {
   status = new StatusStore(':memory:', () => T0)
   start = async () => null
+  ready = { enabled: true }
   const router = new Router()
   registerAwayRoutes(router, {
     status,
     guestMachines: async () => ['ominull-hub', 'apps'],
     start: () => start(),
+    setup: async () => ready,
     now: () => T0,
   })
   server = createServer((req, res) => {
@@ -79,6 +82,23 @@ describe('POST /api/machines/outage', () => {
       (await post('/api/machines/outage', { machines: ['x'], settleSeconds: -1 })).status,
     ).toBe(422)
     expect(status.plannedOutages().size).toBe(0)
+  })
+})
+
+describe('GET and POST /api/machines/away when remote power is not set up', () => {
+  const reason = 'Remote power isn’t set up yet.'
+  it('says so, and the button refuses without starting anything', async () => {
+    ready = { enabled: false, reason }
+    let started = false
+    start = async () => {
+      started = true
+      return null
+    }
+    expect(await (await fetch(`${base}/api/machines/away`)).json()).toEqual(ready)
+    const answer = await post('/api/machines/away', {})
+    expect(answer.status).toBe(409)
+    expect(((await answer.json()) as { detail: string }).detail).toBe(reason)
+    expect(started).toBe(false)
   })
 })
 

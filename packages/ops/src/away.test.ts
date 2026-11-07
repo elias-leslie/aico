@@ -1,5 +1,12 @@
 import { expect, it } from 'vitest'
-import { type AwayConfig, type AwayDeps, away, namesOf, shutdownCommand } from './away'
+import {
+  type AwayConfig,
+  type AwayDeps,
+  type AwayHost,
+  away,
+  namesOf,
+  shutdownCommand,
+} from './away'
 import { Refusal } from './deploy'
 import type { PlugConfig, PlugDef } from './plug'
 import type { RunResult } from './sh'
@@ -21,6 +28,7 @@ const network: PlugDef = {
 }
 const plugCfg: PlugConfig = { timeoutSeconds: 5, cycleSeconds: 10, plugs: [shed, network] }
 const awayCfg: AwayConfig = {
+  enabled: true,
   countdownSeconds: 120,
   settleSeconds: 120,
   statusUrl: 'http://127.0.0.1:3002',
@@ -38,6 +46,7 @@ const awayCfg: AwayConfig = {
 }
 
 interface Options {
+  disabled?: boolean
   host?: string
   /** Sockets of the shed plug that are on. */
   on?: [number, number]
@@ -56,7 +65,7 @@ function harness(options: Options = {}) {
   const marks: unknown[] = []
   const on = options.on ?? [1, 1]
   const deps: AwayDeps = {
-    cfg: awayCfg,
+    cfg: options.disabled ? { ...awayCfg, enabled: false } : awayCfg,
     plug: {
       cfg: plugCfg,
       host: options.host ?? 'davion-sidarli',
@@ -253,8 +262,25 @@ it('aico away mark asks this Aico only, and --clear takes the mark back', async 
 it('names a machine by its own name and the hostnames the plug settings give it', () => {
   expect(namesOf(plugCfg, 'davion-gem')).toEqual(['davion-gem', 'aico'])
   expect(namesOf(plugCfg, 'davion-sidarli')).toEqual(['davion-sidarli'])
-  expect(shutdownCommand(awayCfg.hosts['davion-sidarli']!)).toEqual([
+  expect(shutdownCommand(awayCfg.hosts['davion-sidarli'] as AwayHost)).toEqual([
     'sudo',
     ['-n', 'systemctl', 'poweroff', '--no-ask-password'],
   ])
+})
+
+it('while remote power is not set up, refuses to shut anything down or mark, but dry run and status still work', async () => {
+  const h = harness({ disabled: true })
+  const reason =
+    "Remote power isn't set up yet: the plugs and BIOS power-on aren't confirmed. See docs/power-off-test.md."
+  await expect(away(['--all'], h.deps)).rejects.toThrow(reason)
+  await expect(away(['mark', 'davion-gem'], h.deps)).rejects.toThrow(reason)
+  expect(h.events).toEqual([])
+  expect(await away(['--all', '--dry-run'], h.deps)).toBe(0)
+  expect(h.lines.at(-1)).toBe('Dry run: nothing was changed.')
+  h.lines.length = 0
+  expect(await away(['--status'], h.deps)).toBe(0)
+  expect(JSON.parse(h.lines[0] as string)).toEqual({ enabled: false, reason })
+  const on = harness()
+  await away(['--status'], on.deps)
+  expect(JSON.parse(on.lines[0] as string)).toEqual({ enabled: true })
 })

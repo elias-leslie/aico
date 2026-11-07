@@ -84,6 +84,7 @@
     ]
   },
   "away": {
+    "enabled": false,
     "countdownSeconds": 120,
     "settleSeconds": 120,
     "statusUrl": "http://127.0.0.1:3002",

@@ -68,6 +68,7 @@ What the planned outage silences, until the host reports again more than 2 minut
 ## On hold (Nov 7)
 
 The owner paused the test runs. Where it stands:
+- `aico away` (and the Machines page **Shut down all**, disabled with the reason) refuses to shut anything down while `away.enabled` in packages/ops/data/ops.json is `false`, which it is now. Set it to true only after the owner confirms the plugs are wired and the BIOS power-on is set. `--dry-run` works either way.
 - `aico plug` and `aico away` are built (tests with stubbed plugs and shutdowns only; the countdown rule's field names follow the Kasa protocol and are not yet proven on the real plug). The settings are the layout above; nothing is wired to either plug yet.
 - On Nov 7 neither plug answered on TCP 9999 from the workstation (no route to host), so `aico plug` and `aico away --dry-run` could not read them; the dry run prints the steps and says the sockets were not checked.
 - Router: fixed addresses and TCP 9999 rules for both plugs (lan → house), nothing else opened.

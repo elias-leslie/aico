@@ -12,6 +12,7 @@ import {
   awayAll,
   powerMachine,
   setAutostart,
+  useAwayStatus,
   useMachineGuests,
 } from '@/lib/hooks/use-machine-guests'
 import { useStatus } from '@/lib/hooks/use-status'
@@ -67,6 +68,7 @@ export function MachinesPage() {
   }, [settling, moving, refetchHosts])
   const now = useClock()
   const queryClient = useQueryClient()
+  const awaySetup = useAwayStatus()
   const [askAway, setAskAway] = useState(false)
   const [awayState, setAwayState] = useState<'idle' | 'starting' | 'started'>(
     'idle',
@@ -151,8 +153,17 @@ export function MachinesPage() {
           <button
             type="button"
             className="lantern-btn small"
-            disabled={loading || bothFailed || awayState !== 'idle'}
-            title="Shut down the Workstation and the Proxmox host so you can leave. Start them again from the Kasa app."
+            disabled={
+              loading ||
+              bothFailed ||
+              awayState !== 'idle' ||
+              awaySetup?.enabled !== true
+            }
+            title={
+              awaySetup?.enabled === false
+                ? awaySetup.reason
+                : 'Shut down the Workstation and the Proxmox host so you can leave. Start them again from the Kasa app.'
+            }
             onClick={() => {
               setAwayError(null)
               setAskAway(true)

@@ -122,3 +122,23 @@ export async function awayAll(): Promise<void> {
     res.status,
   )
 }
+
+/** Whether shutting everything down is set up; `reason` says why not. Null while unread. */
+export function useAwayStatus() {
+  const query = useQuery({
+    queryKey: ['machines-away'],
+    queryFn: () =>
+      apiFetch<{ enabled: boolean; reason?: string }>(
+        '/api/machines/away',
+        undefined,
+        'Couldn’t check whether shutting down is set up',
+      ),
+    staleTime: 60_000,
+  })
+  return query.isError
+    ? {
+        enabled: false,
+        reason: 'Couldn’t check whether shutting down is set up.',
+      }
+    : (query.data ?? null)
+}

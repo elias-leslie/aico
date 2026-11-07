@@ -34,6 +34,8 @@ export interface AwayHost {
 }
 
 export interface AwayConfig {
+  /** Off until the owner confirms the plugs are wired and the BIOS powers each host on; then `aico away` may shut hosts down. */
+  enabled: boolean
   countdownSeconds: number
   /** How long after the mark a report from the host counts as the host being back. */
   settleSeconds: number
@@ -259,8 +261,20 @@ async function markCommand(deps: AwayDeps, argv: string[]): Promise<number> {
   return 0
 }
 
+const NOT_SET_UP =
+  "Remote power isn't set up yet: the plugs and BIOS power-on aren't confirmed. See docs/power-off-test.md."
+
 export async function away(argv: string[], deps: AwayDeps): Promise<number> {
-  if (argv[0] === 'mark') return await markCommand(deps, argv.slice(1))
+  if (argv[0] === '--status') {
+    deps.out(
+      JSON.stringify(deps.cfg.enabled ? { enabled: true } : { enabled: false, reason: NOT_SET_UP }),
+    )
+    return 0
+  }
+  if (argv[0] === 'mark') {
+    if (!deps.cfg.enabled) throw new Refusal(NOT_SET_UP)
+    return await markCommand(deps, argv.slice(1))
+  }
   const flags = new Set(['--all', '--dry-run'])
   const bad = argv.find((a) => a.startsWith('--') && !flags.has(a))
   if (bad) throw new Refusal(`unknown option ${bad}; aico away --help shows how`, 2)
@@ -269,6 +283,7 @@ export async function away(argv: string[], deps: AwayDeps): Promise<number> {
   if (argv.includes('--all') && words.length)
     throw new Refusal('aico away takes machine names or --all, not both', 2)
   const machines = pickHosts(deps, words, argv.includes('--all'))
+  if (!dry && !deps.cfg.enabled) throw new Refusal(NOT_SET_UP)
   const notes: string[] = []
   const steps = await prepare(deps, machines, dry ? notes : null)
   for (const line of planLines(deps, steps)) deps.out(line)
