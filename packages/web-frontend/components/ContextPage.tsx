@@ -11,6 +11,7 @@ import type {
   ContextView,
 } from '@/lib/context'
 import { useSessionContext } from '@/lib/hooks/use-session-context'
+import { shortWhen } from '@/lib/short-when'
 import styles from './ContextPage.module.css'
 
 const count = (n: number) => n.toLocaleString('en-US')
@@ -56,14 +57,14 @@ function Costs({ view }: { view: ContextView }) {
   return (
     <section aria-label="Context cost">
       <p className={styles.help}>
-        Token counts for loaded context are estimates from text size. The
-        conversation and provider billing add more. Context in use comes from
-        the provider’s own count at the session’s latest reply.
+        What an agent starts with and how much room it takes. Sizes are
+        estimates from the text; the conversation itself and your provider’s
+        billing add more.
       </p>
       {!view.deliveries.length ? (
         <p>
-          No recent deliveries. Costs and usage are unknown until an agent
-          receives context.
+          No agent has started recently, so there is nothing to size yet. Sizes
+          and use show up once an agent starts with context.
         </p>
       ) : (
         <>
@@ -81,7 +82,7 @@ function Costs({ view }: { view: ContextView }) {
               </select>
             </label>
             <label className={styles.grow}>
-              Agent / role
+              Agent and role
               <select
                 value={current ? group(current) : ''}
                 onChange={(e) => setSelected(e.target.value)}
@@ -97,49 +98,48 @@ function Costs({ view }: { view: ContextView }) {
           {current && (
             <>
               <div className={styles.summary}>
-                <strong>~{count(current.tokens)} tokens loaded</strong>
+                <strong>~{count(current.tokens)} tokens at start</strong>
                 <span>
                   {current.budget === null
-                    ? 'No token budget set'
-                    : `Loaded-context budget ${count(current.budget)} tokens${current.tokens > current.budget ? ' · Over budget' : ''}`}
+                    ? 'No size limit set'
+                    : `Size limit ${count(current.budget)} tokens${current.tokens > current.budget ? ` · Over by ${count(current.tokens - current.budget)}` : ''}`}
                 </span>
                 <span>
                   {contextInUse === null ? (
-                    <span title="No provider count has been read for this session yet.">
-                      Context in use unknown
+                    <span title="No count has been read from the provider for this session yet.">
+                      Conversation size not read yet
                     </span>
                   ) : (
-                    `${count(contextInUse)} tokens in use at last reply`
+                    `${count(contextInUse)} tokens in the conversation at its last reply`
                   )}
                 </span>
                 <time dateTime={current.at}>
-                  {new Date(current.at).toLocaleString()}
+                  Started {shortWhen(current.at)}
                 </time>
               </div>
               {current.missing.length > 0 && (
                 <p role="status">
-                  Partial delivery. {current.missing.length} item
-                  {current.missing.length === 1 ? '' : 's'} did not load:{' '}
-                  {current.missing.map((m) => m.reason).join('; ')}
+                  Part of it didn’t load: {current.missing.length} item
+                  {current.missing.length === 1 ? ' is' : 's are'} missing (
+                  {current.missing.map((m) => m.reason).join('; ')})
                 </p>
               )}
               <p className={styles.help}>
-                Use in the last {view.recentDays} days, for this agent, role and
-                project. “No recorded use” needs {view.minObservedSessions}{' '}
-                fully observed sessions without a citation or load marker. It
-                does not measure influence on the model.
+                Whether the agent used each item in the last {view.recentDays}{' '}
+                days. “No recorded use” needs {view.minObservedSessions} full
+                sessions where it never cited or opened the item. It doesn’t
+                measure how much the item shaped the answer.
               </p>
               {!current.observed && (
                 <p className={styles.help}>
-                  This session’s transcript could not be fully read (it is
-                  missing, cut short or still running), so its use stays
-                  unknown.
+                  Couldn’t read this session’s full transcript (it is missing,
+                  cut short or still running), so use stays unknown.
                 </p>
               )}
               {useUnknown && (
                 <p className={styles.help} role="status">
-                  Use is not known yet: {mostObserved} of{' '}
-                  {view.minObservedSessions} fully observed sessions so far.
+                  Use isn’t known yet: {mostObserved} of{' '}
+                  {view.minObservedSessions} full sessions read so far.
                 </p>
               )}
               <label className={styles.toggle}>
@@ -148,7 +148,7 @@ function Costs({ view }: { view: ContextView }) {
                   checked={onlyUnused}
                   onChange={(e) => setOnlyUnused(e.target.checked)}
                 />
-                Show items with no recorded use
+                Only items with no recorded use
               </label>
               <ul className={styles.items} aria-label="Loaded items">
                 {current.items
@@ -163,14 +163,14 @@ function Costs({ view }: { view: ContextView }) {
                       </div>
                       <span className={styles.size}>
                         ~{count(i.tokens)}
-                        <small>tokens{i.cut ? ' · Cut' : ''}</small>
+                        <small>tokens{i.cut ? ' · cut' : ''}</small>
                       </span>
                       {(i.cut || !useUnknown) && (
                         <span
                           className={`${styles.badge} ${i.use === 'unused' ? styles.warning : ''}`}
                           title={
                             i.use === 'unknown' && !i.cut
-                              ? `Seen in ${i.observedSessions} of ${view.minObservedSessions} fully observed sessions needed to say.`
+                              ? `Read in ${i.observedSessions} of the ${view.minObservedSessions} full sessions needed to say.`
                               : undefined
                           }
                         >
@@ -246,8 +246,7 @@ function PromptEditor({
       }}
     >
       <p className={styles.help}>
-        {prompt.slug} · Version {prompt.version}. Changes apply to the next
-        delivery.
+        Version {prompt.version}. Changes apply to the next session that starts.
       </p>
       <label>
         Name
@@ -274,14 +273,14 @@ function PromptEditor({
         />
       </label>
       <details>
-        <summary>Where this prompt loads</summary>
+        <summary>When this prompt loads</summary>
         <p className={styles.help}>
-          Policy fields: scope (global, project or agent), targets (project or
-          role names), activation (always, on_demand or triggered), and
-          applicability. An empty scope loads only through role links.
+          Rules: scope (global, project or agent), targets (project or role
+          names), activation (always, on_demand or triggered) and applicability.
+          With no scope it loads only through roles that link it.
         </p>
         <label>
-          Context policy (JSON)
+          Loading rules (JSON)
           <textarea
             rows={8}
             value={policy}
@@ -294,7 +293,7 @@ function PromptEditor({
       </details>
       {state === 'failed' && <p role="alert">{error}</p>}
       {state === 'saved' && (
-        <p role="status">Saved. New sessions will use this text.</p>
+        <p role="status">Saved. New sessions will start with this text.</p>
       )}
       <button
         className="lantern-btn primary"
@@ -364,7 +363,7 @@ function RoleEditor({
       }}
     >
       <p className={styles.help}>
-        {role.name}. Models and launch rules are managed through agents.
+        {role.name}. Which model runs it and when it launches aren’t set here.
       </p>
       <label>
         Name
@@ -385,9 +384,9 @@ function RoleEditor({
         />
       </label>
       <label>
-        Loaded context
+        Starts with
         <select value={context} onChange={(e) => setContext(e.target.value)}>
-          <option value="default">Default context</option>
+          <option value="default">The usual context</option>
           <option value="blank-slate">Blank slate</option>
         </select>
       </label>
@@ -479,16 +478,14 @@ export function ContextPage({ memory }: { memory?: ReactNode }) {
       {tab !== 'memory' && query.isError && (
         <p role="alert">
           {view
-            ? 'Refresh failed. Showing the last loaded view.'
-            : 'Could not load prompts, roles and cost.'}{' '}
+            ? 'Can’t refresh. Showing the last read.'
+            : 'Can’t load prompts, roles and cost.'}{' '}
           Use Refresh to try again.
         </p>
       )}
       {view && tab !== 'memory' && (
         <>
-          <p className={styles.asof}>
-            Read {new Date(view.at).toLocaleString()}
-          </p>
+          <p className={styles.asof}>Read {shortWhen(view.at)}</p>
           {tab === 'cost' && <Costs view={view} />}
           {tab === 'prompts' && (
             <section aria-label="Prompts">

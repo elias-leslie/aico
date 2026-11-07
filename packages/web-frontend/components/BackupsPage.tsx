@@ -2,23 +2,19 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
+import {
+  type BackupEntry,
+  type BackupTarget,
+  backupSummary,
+  groupBySource,
+  targetLabel,
+} from '@/lib/backups'
+import { shortWhen } from '@/lib/short-when'
 import styles from './BackupsPage.module.css'
 
-type Target = 'native' | 'drive' | 'append' | 'external'
-interface Entry {
-  id: string
-  source: string
-  name: string
-  target: Target
-  dataAt: string | null
-  nextRun: string | null
-  state: string
-  meaning: string
-  snapshot: string | null
-  path: string | null
-  machine: string
-  running?: boolean
-}
+type Entry = BackupEntry
+
+type Target = BackupTarget
 interface Overview {
   machine: string
   entries: Entry[]
@@ -35,16 +31,8 @@ interface FileNode {
   type: string
   size?: number
 }
-const title = (target: Target) =>
-  target === 'native'
-    ? 'T7'
-    : target === 'drive'
-      ? 'Drive'
-      : target === 'append'
-        ? 'CT 160'
-        : 'Owner backup'
-const when = (time: string | null) =>
-  time ? new Date(time).toLocaleString() : 'Not recorded'
+const title = targetLabel
+const when = shortWhen
 async function api<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(
     path,
@@ -55,8 +43,10 @@ async function api<T>(path: string, body?: unknown): Promise<T> {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(body),
         },
-  )
-  const value = await response.json()
+  ).catch(() => {
+    throw new Error('Aico is not answering.')
+  })
+  const value = await response.json().catch(() => ({}))
   if (!response.ok)
     throw new Error(
       value.detail || value.error || `Aico answered ${response.status}.`,
@@ -78,9 +68,80 @@ function Header({ restore = false }: { restore?: boolean }) {
     </header>
   )
 }
+const BADGE: Record<string, string> = {
+  ok: 'Current',
+  failed: 'Failed',
+  off: 'Archived',
+}
+const badgeWord = (row: Entry) =>
+  row.running ? 'Copying…' : (BADGE[row.state] ?? 'Needs a fresh copy')
+
+function Copy({ row, machine }: { row: Entry; machine: boolean }) {
+  return (
+    <li>
+      <div>
+        <strong>
+          {title(row.target)}
+          {machine ? ` · ${row.machine}` : ''}
+        </strong>
+        {row.state !== 'ok' && row.state !== 'off' && <p>{row.meaning}</p>}
+        <small>
+          Last good data: {when(row.dataAt)}
+          {row.state !== 'off' && row.nextRun && (
+            <>
+              <br />
+              Next copy: {when(row.nextRun)}
+            </>
+          )}
+        </small>
+      </div>
+      <span className={styles.badge} data-state={row.state}>
+        {badgeWord(row)}
+      </span>
+      <div className={styles.actions}>
+        {row.target === 'external' ? (
+          <Link
+            className="lantern-btn ghost small"
+            href={row.path || '/status'}
+          >
+            Open status
+          </Link>
+        ) : (
+          <Link
+            className="lantern-btn ghost small"
+            href={`/backups/restore?source=${encodeURIComponent(row.source)}&target=${row.target}&name=${encodeURIComponent(row.name)}`}
+          >
+            Restore
+          </Link>
+        )}
+      </div>
+    </li>
+  )
+}
+
+function Group({
+  group,
+  machine,
+}: {
+  group: ReturnType<typeof groupBySource>[number]
+  machine: boolean
+}) {
+  return (
+    <li className={styles.group} data-state={group.state}>
+      <h3>{group.name}</h3>
+      <ul className={styles.copies}>
+        {group.copies.map((row) => (
+          <Copy key={row.id} row={row} machine={machine} />
+        ))}
+      </ul>
+    </li>
+  )
+}
+
 export function BackupsPage() {
   const [data, setData] = useState<Overview | null>(null),
     [error, setError] = useState(''),
+    [loadedAt, setLoadedAt] = useState<number | null>(null),
     [message, setMessage] = useState(''),
     [busy, setBusy] = useState<Target | null>(null),
     [search, setSearch] = useState('')
@@ -88,6 +149,7 @@ export function BackupsPage() {
     api<Overview>('/api/backups')
       .then((value) => {
         setData(value)
+        setLoadedAt(Date.now())
         setError('')
       })
       .catch((error) => setError(error.message))
@@ -104,7 +166,7 @@ export function BackupsPage() {
       const result = await api<{ message: string }>('/api/backups/run', {
         target,
       })
-      setMessage(result.message)
+      setMessage(result.message || `${title(target)} is starting a copy.`)
       load()
     } catch (error) {
       setMessage((error as Error).message)
@@ -112,37 +174,59 @@ export function BackupsPage() {
       setBusy(null)
     }
   }
-  const rows = data?.entries.filter((row) =>
-    `${row.name} ${title(row.target)} ${row.machine} ${row.meaning}`
-      .toLowerCase()
-      .includes(search.toLowerCase()),
+  const needle = search.trim().toLowerCase()
+  const rows = data?.entries.filter(
+    (row) =>
+      !needle ||
+      `${row.name} ${title(row.target)} ${row.machine} ${row.meaning}`
+        .toLowerCase()
+        .includes(needle),
+  )
+  const groups = rows ? groupBySource(rows) : []
+  const live = groups.filter((group) => group.state !== 'off')
+  const archived = groups.filter((group) => group.state === 'off')
+  const machines = new Set(data?.entries.map((row) => row.machine))
+  const manyMachines = machines.size > 1
+  const runnable = (['native', 'drive', 'append'] as const).filter((target) =>
+    data?.entries.some((row) => row.target === target && row.state !== 'off'),
   )
   return (
-    <main className={styles.page}>
+    <main className={styles.page} data-testid="backups-page">
       <Header />
-      <p className={styles.help}>
-        Last good data, where it is kept, and when the next copy runs.
-      </p>
       {error && (
         <div role="alert" className={styles.notice}>
           <p>
             {data
-              ? 'The list could not refresh. Showing the last loaded data.'
-              : error}
+              ? `Can't refresh the list. Showing what was read at ${new Date(loadedAt ?? Date.now()).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.`
+              : `Can't read backups. ${error}`}
           </p>
-          <button className="lantern-btn ghost small" onClick={load}>
+          <button
+            type="button"
+            className="lantern-btn ghost small"
+            onClick={load}
+          >
             Try again
           </button>
         </div>
       )}
       {!data && !error && <p role="status">Loading backups…</p>}
-      {message && (
-        <p role="status" className={styles.notice}>
-          {message}
-        </p>
-      )}
       {data && (
         <>
+          <p
+            className={styles.summary}
+            role="status"
+            data-testid="backups-summary"
+          >
+            {backupSummary(data.entries)}
+          </p>
+          <p className={styles.help}>
+            Last good data, where it is kept, and when the next copy runs.
+          </p>
+          {message && (
+            <p role="status" className={styles.notice}>
+              {message}
+            </p>
+          )}
           <div className={styles.toolbar}>
             <label>
               Find a backup
@@ -150,75 +234,66 @@ export function BackupsPage() {
                 type="search"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Name, copy or machine"
+                placeholder="Name, destination or machine"
               />
             </label>
-            <span>
-              {data.entries.length} backup copies · {data.machine}
-            </span>
+            {runnable.length > 0 && (
+              <div
+                className={styles.actions}
+                role="group"
+                aria-label="Back up now"
+              >
+                {runnable.map((target) => (
+                  <button
+                    key={target}
+                    type="button"
+                    className="lantern-btn ghost small"
+                    disabled={!!busy}
+                    onClick={() => run(target)}
+                  >
+                    {busy === target
+                      ? `Starting ${title(target)}…`
+                      : `Back up to ${title(target)} now`}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-          {rows?.length === 0 ? (
+          {groups.length === 0 ? (
             <p>
               {search
                 ? 'No backups match your search.'
                 : 'No backups are registered on this machine yet.'}
             </p>
           ) : (
-            <ul className={styles.rows}>
-              {rows?.map((row) => (
-                <li key={row.id}>
-                  <div>
-                    <strong>{row.name}</strong>
-                    <small>
-                      {title(row.target)} · {row.machine}
-                    </small>
-                    <p>{row.meaning}</p>
-                    <small>
-                      Last good data: {when(row.dataAt)}
-                      <br />
-                      Next run: {when(row.nextRun)}
-                    </small>
-                  </div>
-                  <span className={styles.badge} data-state={row.state}>
-                    {row.running
-                      ? 'Copying…'
-                      : row.state === 'ok'
-                        ? 'Current'
-                        : row.state === 'failed'
-                          ? 'Failed'
-                          : row.state === 'off'
-                            ? 'Archived'
-                            : 'Needs a fresh copy'}
-                  </span>
-                  <div className={styles.actions}>
-                    {row.target === 'external' ? (
-                      <Link
-                        className="lantern-btn ghost small"
-                        href={row.path || '/status'}
-                      >
-                        Open status
-                      </Link>
-                    ) : row.state === 'off' ? null : (
-                      <button
-                        className="lantern-btn ghost small"
-                        disabled={!!busy}
-                        onClick={() => run(row.target)}
-                      >
-                        {busy === row.target ? 'Making due…' : 'Run now'}
-                      </button>
-                    )}
-                    {row.target !== 'external' && (
-                      <Link
-                        className="lantern-btn ghost small"
-                        href={`/backups/restore?source=${encodeURIComponent(row.source)}&target=${row.target}&name=${encodeURIComponent(row.name)}`}
-                      >
-                        Open restore
-                      </Link>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <>
+              <ul className={styles.groups}>
+                {live.map((group) => (
+                  <Group
+                    key={group.source}
+                    group={group}
+                    machine={manyMachines}
+                  />
+                ))}
+              </ul>
+              {archived.length > 0 && (
+                <details className={styles.archived}>
+                  <summary>
+                    Archived ({archived.length}): their source is gone, older
+                    copies are kept
+                  </summary>
+                  <ul className={styles.groups}>
+                    {archived.map((group) => (
+                      <Group
+                        key={group.source}
+                        group={group}
+                        machine={manyMachines}
+                      />
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </>
           )}
         </>
       )}

@@ -91,24 +91,24 @@ it('is called Context, opens on Prompts, and has Roles, Memory and Cost', async 
   expect(screen.queryByLabelText('Prompt text')).toBeNull()
 })
 afterEach(() => vi.unstubAllGlobals())
-it('shows partial delivery, unknown use and no budget without inventing zeros', async () => {
+it('shows a partial start, unknown use and no limit without inventing zeros', async () => {
   show(vi.fn(async () => Response.json(view)))
   expect(screen.getByRole('status')).toHaveTextContent('Loading')
   // Nothing is known about use: said once, not as a badge on every row.
   expect(
     await screen.findByText(
-      'Use is not known yet: 0 of 3 fully observed sessions so far.',
+      'Use isn’t known yet: 0 of 3 full sessions read so far.',
     ),
   ).toBeInTheDocument()
   expect(screen.queryByText('Usage unknown')).toBeNull()
-  expect(screen.getByText('No token budget set')).toBeInTheDocument()
-  expect(screen.getByText(/Partial delivery/)).toHaveTextContent(
-    '1 item did not load: Unavailable',
+  expect(screen.getByText('No size limit set')).toBeInTheDocument()
+  expect(screen.getByText(/Part of it didn’t load/)).toHaveTextContent(
+    '1 item is missing (Unavailable)',
   )
-  expect(screen.getByText(/Partial delivery/)).not.toHaveTextContent(
+  expect(screen.getByText(/Part of it didn’t load/)).not.toHaveTextContent(
     'tool-usage',
   )
-  expect(screen.getByText('Context in use unknown')).toBeInTheDocument()
+  expect(screen.getByText('Conversation size not read yet')).toBeInTheDocument()
   expect(screen.queryByText(/prompt:guide|UTF-8/)).toBeNull()
   expect(screen.getByText('Prompt')).toBeInTheDocument()
   fireEvent.click(screen.getByRole('checkbox'))
@@ -123,10 +123,12 @@ it('shows the context in use when the provider counted it', async () => {
   }
   show(vi.fn(async () => Response.json(counted)))
   expect(
-    await screen.findByText('41,250 tokens in use at last reply'),
+    await screen.findByText(
+      '41,250 tokens in the conversation at its last reply',
+    ),
   ).toBeInTheDocument()
 })
-it('labels the budget and explains a badge when some use is known', async () => {
+it('labels the size limit and explains a badge when some use is known', async () => {
   const mixed = {
     ...view,
     deliveries: [
@@ -148,12 +150,12 @@ it('labels the budget and explains a badge when some use is known', async () => 
   }
   show(vi.fn(async () => Response.json(mixed)))
   expect(
-    await screen.findByText('Loaded-context budget 60,000 tokens'),
+    await screen.findByText('Size limit 60,000 tokens'),
   ).toBeInTheDocument()
   expect(screen.getByText('Use recorded')).toBeInTheDocument()
   expect(screen.getByText('Usage unknown')).toHaveAttribute(
     'title',
-    'Seen in 2 of 3 fully observed sessions needed to say.',
+    'Read in 2 of the 3 full sessions needed to say.',
   )
 })
 it("shows a live session's context in use from its history", async () => {
@@ -170,7 +172,9 @@ it("shows a live session's context in use from its history", async () => {
     ),
   )
   expect(
-    await screen.findByText('88,000 tokens in use at last reply'),
+    await screen.findByText(
+      '88,000 tokens in the conversation at its last reply',
+    ),
   ).toBeInTheDocument()
 })
 it('keeps a draft when a stale save is refused', async () => {
@@ -190,7 +194,7 @@ it('keeps a draft when a stale save is refused', async () => {
       return Response.json(view)
     }),
   )
-  await screen.findByText(/Use is not known yet/)
+  await screen.findByText(/Use isn’t known yet/)
   fireEvent.click(screen.getByRole('button', { name: 'Prompts' }))
   fireEvent.change(screen.getByLabelText('Prompt text'), {
     target: { value: 'My unsaved change.' },
@@ -212,13 +216,13 @@ it('keeps the last view visible when refresh fails', async () => {
         : Response.json(view),
     ),
   )
-  await screen.findByText(/Use is not known yet/)
+  await screen.findByText(/Use isn’t known yet/)
   failed = true
   fireEvent.click(screen.getByRole('button', { name: 'Refresh context' }))
   await waitFor(() =>
     expect(screen.getByRole('alert')).toHaveTextContent(
-      'Showing the last loaded view',
+      'Showing the last read',
     ),
   )
-  expect(screen.getByText(/Use is not known yet/)).toBeInTheDocument()
+  expect(screen.getByText(/Use isn’t known yet/)).toBeInTheDocument()
 })

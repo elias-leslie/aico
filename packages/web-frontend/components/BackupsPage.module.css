@@ -153,3 +153,70 @@
     gap: 8px;
   }
 }
+.summary {
+  font: 500 15px / 1.4 var(--font-display);
+  color: var(--bone);
+  margin-block: 4px 2px;
+}
+.groups {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.group {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--paper-veil);
+}
+.group h3 {
+  font-size: 14px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.group[data-state="failed"] h3 {
+  color: var(--ember);
+}
+.copies {
+  list-style: none;
+  padding: 0;
+  margin: 6px 0 0;
+}
+.copies > li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 140px 100px;
+  gap: 14px;
+  align-items: center;
+  padding: 6px 0;
+  font-size: 13px;
+}
+.copies strong {
+  display: block;
+  font-weight: 400;
+}
+.copies p {
+  margin-block: 2px;
+}
+.archived {
+  margin-top: 18px;
+  color: var(--mist);
+}
+.archived > summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-size: 13px;
+}
+@media (max-width: 600px) {
+  .copies > li {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px 10px;
+  }
+  .copies > li > .actions {
+    grid-column: 1 / -1;
+  }
+  .actions :is(a, button) {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+}

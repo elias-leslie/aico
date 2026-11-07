@@ -36,14 +36,48 @@ const targetOf = (value: string | null) => {
     throw new HttpError(422, 'Choose Drive or CT 160.')
   return value
 }
-export function registerBackupRoutes(router: Router, run: BackupCommand = backupCommand): void {
-  router.on('GET', '/api/backups', () => run(['list', '--json']))
+/** A listing this young is answered at once, with a refresh started behind it
+ * once it is older than FRESH_MS. The listing asks the Proxmox host over ssh,
+ * which alone takes most of a second; the page polls every 15 s. */
+export const FRESH_MS = 10_000
+/** Past this age a failed refresh is an error, not a quiet fall back to old data. */
+export const STALE_MS = 5 * 60_000
+
+export function registerBackupRoutes(
+  router: Router,
+  run: BackupCommand = backupCommand,
+  now: () => number = Date.now,
+): void {
+  let cached: { value: unknown; at: number } | null = null
+  let refreshing: Promise<unknown> | null = null
+  const refresh = () => {
+    refreshing ??= run(['list', '--json'])
+      .then((value) => {
+        cached = { value, at: now() }
+        return value
+      })
+      .finally(() => {
+        refreshing = null
+      })
+    return refreshing
+  }
+  router.on('GET', '/api/backups', async () => {
+    if (!cached) return refresh()
+    if (now() - cached.at > FRESH_MS) {
+      const next = refresh()
+      if (now() - cached.at > STALE_MS) return next
+      next.catch(() => {})
+    }
+    return cached.value
+  })
   router.on('POST', '/api/backups/run', async (ctx) => {
     const body = objectBody(await ctx.body()),
       target = requiredString(body, 'target')
     if (!['native', 'drive', 'append'].includes(target))
       throw new HttpError(422, 'Choose T7, Drive or CT 160.')
-    return run(['request', target])
+    const started = await run(['request', target])
+    cached = null
+    return started
   })
   router.on('GET', '/api/backups/snapshots', (ctx) => {
     const source = ctx.query.get('source')

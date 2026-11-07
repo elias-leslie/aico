@@ -895,6 +895,22 @@ it('the Jobinator snapshot row reads the container with pct exec, is off while i
   expect((await row())?.state).toBe('ok')
 })
 
+it('asks every backup owner machine at once, so the listing waits for one ssh round trip, not the sum', async () => {
+  const c = cfg(),
+    state = emptyState()
+  let active = 0,
+    peak = 0
+  const run = vi.fn(async (argv: string[]) => {
+    active++
+    peak = Math.max(peak, active)
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    active--
+    return { code: 0, out: argv.includes('status') ? 'status: stopped\n' : '[]', err: '' }
+  })
+  await observeExternal({ cfg: c, run, now: () => new Date() }, state)
+  expect(peak).toBeGreaterThan(1)
+})
+
 it('a stopped VM or container file source is read from its disk by the host; whole guests are not', () => {
   expect(hostReadsStoppedDisk('qemu', ['qemu', '180', 'files'], 'agent')).toBe(true)
   expect(hostReadsStoppedDisk('lxc', ['lxc', '191', 'files'], 'pct')).toBe(true)
