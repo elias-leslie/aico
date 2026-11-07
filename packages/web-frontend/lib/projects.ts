@@ -269,7 +269,7 @@ const monthDay = (ms: number) =>
   new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 
 /** "Today · Nov 6", "Yesterday · Nov 5", "Wed · Nov 4", "Fri · Dec 12, 2025". */
-export function dayLabel(date: string, now: number): string {
+export function timelineDay(date: string, now: number): string {
   const ms = Date.parse(date.length === 10 ? `${date}T12:00:00` : date)
   if (Number.isNaN(ms)) return date
   const md = monthDay(ms)

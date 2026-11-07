@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   clip,
-  dayLabel,
   joinDays,
   orderProjects,
   type Place,
@@ -16,6 +15,7 @@ import {
   problemText,
   shortAge,
   splitProjects,
+  timelineDay,
 } from './projects'
 
 const project = (over: Partial<ProjectSummary>): ProjectSummary => ({
@@ -74,9 +74,9 @@ describe('words', () => {
   it('gives short ages and day labels', () => {
     expect(shortAge('2026-11-06T11:51:00', NOW)).toBe('9 min')
     expect(shortAge('2026-11-04T12:00:00', NOW)).toBe('2 d')
-    expect(dayLabel('2026-11-06', NOW)).toBe('Today · Nov 6')
-    expect(dayLabel('2026-11-05', NOW)).toBe('Yesterday · Nov 5')
-    expect(dayLabel('2026-11-04', NOW)).toBe('Wed · Nov 4')
+    expect(timelineDay('2026-11-06', NOW)).toBe('Today · Nov 6')
+    expect(timelineDay('2026-11-05', NOW)).toBe('Yesterday · Nov 5')
+    expect(timelineDay('2026-11-04', NOW)).toBe('Wed · Nov 4')
   })
 
   it('clips long subjects to one line', () => {

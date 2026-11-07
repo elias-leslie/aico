@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import { useProjectTimeline } from '@/lib/hooks/use-projects'
-import { clip, dayLabel, joinDays, type ProjectDetail } from '@/lib/projects'
+import { clip, joinDays, type ProjectDetail, timelineDay } from '@/lib/projects'
 import styles from './ProjectsPage.module.css'
 import { Roadmap } from './Roadmap'
 
@@ -105,7 +105,7 @@ export function Timeline({
               ? 'No git history for this project'
               : days.length === 0
                 ? 'No commits yet'
-                : `Start of history${oldest ? ` · ${dayLabel(oldest, now).replace(/^[A-Za-z]+ · /, '')}` : ''}`}
+                : `Start of history${oldest ? ` · ${timelineDay(oldest, now).replace(/^[A-Za-z]+ · /, '')}` : ''}`}
           </li>
         )}
       </ul>
@@ -125,7 +125,7 @@ function DayBlock({
 }) {
   return (
     <>
-      <li className={styles.dayLabel}>{dayLabel(day.date, now)}</li>
+      <li className={styles.dayLabel}>{timelineDay(day.date, now)}</li>
       {day.commits.map((commit) => (
         <li key={commit.sha} className={styles.done}>
           <span className={styles.dot} aria-hidden="true" />
