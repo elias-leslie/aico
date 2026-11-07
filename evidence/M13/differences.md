@@ -6,15 +6,15 @@ Updated 2026-11-06 against main at c000d4f9. This replaces the 2026-11-05 versio
 
 | | Fixed | On purpose | Still missed | Still cut short | In progress | Total |
 | --- | --- | --- | --- | --- | --- | --- |
-| Original 106 differences | 31 | 62 | 2 | 9 | 2 | 106 |
-| M14 review findings | 52 | 2 | 0 | 11 | 0 | 65 |
+| Original 106 differences | 31 | 64 | 2 | 7 | 2 | 106 |
+| M14 review findings | 55 | 2 | 0 | 8 | 0 | 65 |
 | New since 2026-11-05 | 6 | 5 | 0 | 1 | 2 | 14 |
 
 Live now: `aico status` shows 8 problems and 304 healthy rows, all warnings, none failed or unknown. The three biggest changes since yesterday: SummitFlow, Agent Hub and Nightshift are retired and archived; Postgres, Redis and Hatchet are off on the workstation; Neri runs on SQLite.
 
 ## Still open
 
-From the original 106 (11):
+From the original 106 (9):
 - Missed: no copy of active repos to the peer host after each commit (failover work, on the roadmap under Next).
 - Missed: the `repo` Status row type still exists with no producer (per-repo publication rows cover it); delete the type or build the rows.
 - Cut short: scheduled jobs cannot move to another machine when their home is down; all 14 jobs stay bound to their home.
@@ -22,25 +22,39 @@ From the original 106 (11):
 - Cut short: the session engine is still 3,340 lines (roadmap Next).
 - Cut short: the power-off journey (phone rescue and notes with each machine down) has not been run; planned with the owner.
 - Cut short: the Keep import has had a dry run and verify only; the recipe and car-note spot check is not recorded.
-- Cut short: the old 14 host registrations have no recorded disposition (3 hosts are linked now).
 - Cut short: the project keep-list and history reconciliation is not recorded.
-- Cut short: the old root and CI helper scripts have no recorded one-line disposition (VM 130 st-ci-runner still exists, stopped).
 - Cut short: the rendered session-list check was never done (the browser failed once); the Haiku user-test round in 4.3 covers it.
 
 New (1): the canary webhook path skips the Access check at the origin (b6a203fd) while the plan record says the owner rejected public callbacks; whether the Cloudflare edge lets it through is not checked. Needs the owner to confirm it is wanted (details under New differences).
 
-From M14 (11):
+From M14 (8):
 - `st aico`, `st aico --help` and `st aico list` print the root-watch helper's usage instead of Aico help.
-- The startup trust dialog shows "No status" on the session.
 - Non-blocking asks do not show on the session row.
 - There is no "working, quiet N min" signal.
 - Antigravity (agy) sessions may have no guard hook; not confirmed.
-- The Sudo use check warns daily: `summitflow-backup-window` ran 289 times against 13 a day (the 5-minute backups guard calls it through sudo).
 - Delivered context still names retired systems (3 memories; prompts not counted); the context audit in 4.3 covers it.
 - Does the Neri entry map crashes to exit 75 (which skips crash-loop limits)? Unanswered; Neri coordinator's to answer.
 - Archive counts differ from the cutlist (notifications 741 vs 1680); the archive is not readable from here.
-- `tether@.service` has no wait for network-online (hygiene; the 5 s retry covers it).
 - Ended launch lanes showing as open in the session list: not rechecked (`st sessions list` today still shows some old `live-smoke-*` rows as open).
+
+## Dispositions (recorded 2026-11-06)
+
+The 14 old host registrations (Agent Hub `remote_hosts`, read 2026-11-04 in M11b preflight.json):
+- `agent-work` (VM 200): linked to the fleet (`tether hosts`; off on purpose until used).
+- `neri-hunters` (VM 201): linked to the fleet (off on purpose until used).
+- `neri-local`: not a machine. It was the host token Neri's hunt containers on the workstation used for Agent Hub's Pi key shim; Neri owns its replacement (neri docs/reports/aico-cutover-2026-11-06.md, "Still depends on Agent Hub"). Not re-enrolled.
+- The 11 revoked ones (`e2e-shim`, `neri-box-1`..`3`, `neri-box-9900001`, `neri-box-9900002`, `neri-p2a-helper-fixture`, `neri-p2a-helper-lab-fixture`, `neri-p2a-helper-live-fixture`, `neri-p2a-spike-20261031`, `p2a-registration-probe`): test fixtures, probes and one-off boxes already revoked in Agent Hub. Dropped, not re-enrolled.
+- CT 190 `aico` is new (the always-on peer), not one of the 14.
+
+SummitFlow's root and CI helper scripts (`scripts/` in /srv/workspaces/archive/summitflow-2026-11-06/repo):
+- `summitflow-backup-window`, `summitflow-native-capture`, `summitflow-snapshot-delete`, `summitflow-steward-receipt`: ported unchanged to native/backup-hosts/workstation/ (Aico's backups call them; names kept).
+- `pve-backup/`, `pve-restic-append/`: ported to native/backup-hosts/.
+- `backup-repository-recover.sh`, `recovery-bootstrap.py`: replaced by packages/ops/scripts/recovery.py (standalone recovery, docs/recovery.md).
+- `infra-restore-drill.sh`: replaced by Aico's scratch-only restores (`aico backups`, packages/ops/src/backups.ts).
+- `ci-runner/` (`provision.sh`, `prepare.sh`): retired. Aico checks run locally with `st check`; nothing offloads to a runner. VM 130 st-ci-runner stays stopped; deleting it is the owner's call (asked in Aico).
+- `test-install.sh`, `install-host-infra.sh`: retired with SummitFlow's installer and its Postgres/Redis/Hatchet stack (Aico installs with scripts/install.sh).
+- `agent-observability-sync.py`, `backup-cleanup-inventory.py`, `configure-hosted-project-ingress.sh`, `agent-browser-cloudflare-auth.js`: retired with SummitFlow (Agent Hub session sync, a one-off inventory, SummitFlow's project ingress; browser-automation keeps its own Cloudflare Access login in its repo).
+- `authorize-backup-drive.sh`: not ported. The Drive backup keeps using the rclone config it made (`summitflow-drive`, docs/recovery.md); rclone refreshes the login itself. Only a revoked Google login needs it again, from the archive.
 
 ## In progress elsewhere
 
