@@ -143,25 +143,18 @@ describe('placement', () => {
       env,
       hostNames: () => world.hosts,
       peer: (name): PeerView | null =>
-        name === 'pve'
+        // The Proxmox node ('pve') is not a fleet peer: it is read over ssh only.
+        name === 'vm'
           ? {
-              entry: { ...ENTRY, name: 'pve' },
-              live: true,
-              state: 'connected',
-              socket: '/pve-sock',
-              control: '/pve-ctl',
+              entry: ENTRY,
+              live: world.peerLive,
+              state: world.peerState,
+              socket: '/sock',
+              control: '/ctl',
             }
-          : name === 'vm'
-            ? {
-                entry: ENTRY,
-                live: world.peerLive,
-                state: world.peerState,
-                socket: '/sock',
-                control: '/ctl',
-              }
-            : name === 'box' && world.hosts.includes('box')
-              ? { ...world.box, socket: '/box-sock', control: '/box-ctl' }
-              : null,
+          : name === 'box' && world.hosts.includes('box')
+            ? { ...world.box, socket: '/box-sock', control: '/box-ctl' }
+            : null,
       localRoot: (id) => world.local[id] ?? 'live',
       existingHost: (id) => (id in world.existing ? world.existing[id] : undefined),
       settings: {
@@ -177,7 +170,7 @@ describe('placement', () => {
       run: async (argv) => {
         world.runs.push(argv)
         const line = argv.at(-1) ?? ''
-        if (argv.includes('/pve-ctl'))
+        if (argv[0] === 'ssh' && argv.includes('pve'))
           return world.proxmox === null
             ? {
                 code: 255,

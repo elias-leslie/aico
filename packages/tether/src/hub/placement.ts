@@ -411,6 +411,11 @@ export interface ProxmoxReading {
   storageAvailBytes: number | null
 }
 
+/** ssh argv reading the Proxmox node; BatchMode so a missing key fails, never prompts. */
+function proxmoxArgv(ref: ProxmoxRef): string[] {
+  return ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', ref.ssh, proxmoxLine(ref)]
+}
+
 function proxmoxLine(ref: ProxmoxRef): string {
   const get = (path: string) => `pvesh get ${path} --output-format json`
   const parts = [
@@ -948,9 +953,9 @@ export class Placement {
     let pveRoom = Number.POSITIVE_INFINITY
     let pveDetail = ''
     if (ref) {
-      const authority = this.deps.peer(ref.ssh)
-      if (!authority?.live) return this.unknown(name, `Proxmox authority ${ref.ssh} is not linked`)
-      const result = await this.readGuest(authority, proxmoxLine(ref))
+      // The Proxmox node is never an Aico machine on the fleet link: read it over
+      // root ssh to its configured alias, as the VM wake and status commands do.
+      const result = await this.run(proxmoxArgv(ref), READ_MS)
       if (result.code !== 0)
         return this.unknown(name, `the Proxmox reading failed (${clean(result.output, 80)})`)
       try {
