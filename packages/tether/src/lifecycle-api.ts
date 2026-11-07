@@ -68,7 +68,7 @@ import {
   setWidgetProject,
   transferCoordinator,
   type WidgetRow,
-} from '@aico/session-engine/catalog'
+} from './lifecycle/catalog'
 import {
   autoName,
   badge,
@@ -76,7 +76,7 @@ import {
   displayTitle,
   rememberProjects,
   taskName,
-} from '@aico/session-engine/display'
+} from './lifecycle/display'
 import {
   agentExitOf,
   cachedSessionStatus,
@@ -107,10 +107,10 @@ import {
   tmuxTargetForWidget,
   verifySessionStatus,
   whenReady,
-} from '@aico/session-engine/engine'
-import { claimTmuxViewSize, type ResizeClaimResult } from '@aico/session-engine/interactive-tmux'
-import { isNeverAllocatedWidget } from '@aico/session-engine/lifecycle-guard'
-import { ForegroundPaneMemory, systemdPaneMemoryHost } from '@aico/session-engine/pane-memory'
+} from './lifecycle/engine'
+import { claimTmuxViewSize, type ResizeClaimResult } from './lifecycle/interactive-tmux'
+import { isNeverAllocatedWidget } from './lifecycle/lifecycle-guard'
+import { ForegroundPaneMemory, systemdPaneMemoryHost } from './lifecycle/pane-memory'
 import {
   createRootHandler,
   isProjectRootPath,
@@ -119,9 +119,9 @@ import {
   type RootControlOperations,
   type RootHandlerState,
   type WidgetMutation,
-} from '@aico/session-engine/root-control'
-import { sessionSpec, withRootPrompt } from '@aico/session-engine/root-launch'
-import { readScrollbackPage } from '@aico/session-engine/scrollback-page'
+} from './lifecycle/root-control'
+import { sessionSpec, withRootPrompt } from './lifecycle/root-launch'
+import { readScrollbackPage } from './lifecycle/scrollback-page'
 import {
   bracketedPasteTargetArgs,
   captureVisibleTargetArgs,
@@ -130,14 +130,14 @@ import {
   sendTextTargetArgs,
   sessionName,
   type TmuxTarget,
-} from '@aico/session-engine/tmux'
+} from './lifecycle/tmux'
 import type { ModelSwitch, ModelWatch } from './model-switch'
 import { paneModeArgs, parsePaneMode } from './pane-mode'
 import type { Project, ProjectProvider } from './projects'
 import { type Continuity, registerRebootRoutes } from './reboot'
 import { type Recovery, registerRecoveryRoutes } from './recovery'
 import { RewindRefused, rewindClaude } from './rewind'
-import { generationOf, runTmux, TMUX_BIN, withRunningSession } from '@aico/session-engine/running-session'
+import { generationOf, runTmux, TMUX_BIN, withRunningSession } from './running-session'
 import type { History } from './sessions/history'
 import { parseViewerLabel, recordSizeHolder, sizeHolderOf } from './size-holder'
 import { registerWaitRoutes, type WaitService } from './waits'

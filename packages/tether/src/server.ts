@@ -27,9 +27,9 @@ import { registerFileRoutes } from './files/api'
 import { HttpError, Router, readJsonObject, sendError, sendJson } from './http'
 import { registerHostAdminRoutes } from './hub/host-routes'
 import { tetherHubPorts } from './hub/ports'
-import { getWidget } from '@aico/session-engine/catalog'
-import { lifecycleStatus } from '@aico/session-engine/engine'
-import { createRootHandlerState, type RootHandlerState } from '@aico/session-engine/root-control'
+import { getWidget } from './lifecycle/catalog'
+import { lifecycleStatus } from './lifecycle/engine'
+import { createRootHandlerState, type RootHandlerState } from './lifecycle/root-control'
 import { learnProjects, registerLifecycleRoutes } from './lifecycle-api'
 import type { MemoryPolicyService } from './memory-guard'
 import {
@@ -37,7 +37,7 @@ import {
   KILL_ORDERS,
   MEMORY_POLICY_BOUNDS,
   MemoryPolicyError,
-} from '@aico/session-engine/memory-policy'
+} from './memory-policy'
 import {
   type ProjectProvider,
   ProjectRegistrationError,

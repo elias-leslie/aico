@@ -30,12 +30,12 @@ import {
   type TetherPaths,
 } from './config'
 import { CoordinationDocs } from './coordination/docs'
-import { DeadShells } from '@aico/session-engine/dead-shells'
+import { DeadShells } from './dead-shells'
 import { listenPrivateSocket } from './http'
 import { LOCAL_HOST, localRootFate, Placement } from './hub/placement'
 import { tetherHubPorts } from './hub/ports'
 import { LaneReporter, LaneReportStore, laneView } from './lane-reports'
-import { hostAdmissionPath, hostAdmissionRed } from '@aico/session-engine/agent-admission'
+import { hostAdmissionPath, hostAdmissionRed } from './lifecycle/agent-admission'
 import {
   bindCatalog,
   claimLauncher,
@@ -45,13 +45,13 @@ import {
   isRetiredSessionId,
   listSessions,
   listWidgets,
-} from '@aico/session-engine/catalog'
+} from './lifecycle/catalog'
 import {
   displayTitle,
   leadName,
   setPersonalWorkspaceRoot,
   useConversationNames,
-} from '@aico/session-engine/display'
+} from './lifecycle/display'
 import {
   agentExitOf,
   cachedSessionStatus,
@@ -67,10 +67,10 @@ import {
   stopLifecycle,
   verifiedCurrentManagedPane,
   verifySessionStatus,
-} from '@aico/session-engine/engine'
-import { ENTRY_MISSING_EXIT, ENTRY_RETRY_EXIT } from '@aico/session-engine/entries'
-import { setLifecycleInstance } from '@aico/session-engine/ownership'
-import { configureTmuxPaths } from '@aico/session-engine/tmux'
+} from './lifecycle/engine'
+import { ENTRY_MISSING_EXIT, ENTRY_RETRY_EXIT } from './lifecycle/entries'
+import { setLifecycleInstance } from './lifecycle/ownership'
+import { configureTmuxPaths } from './lifecycle/tmux'
 import {
   bindModelWatch,
   foregroundPaneScope,
@@ -83,7 +83,7 @@ import { ModelWatch, readAlternates, readWatchEntries, worktreeFacts } from './m
 import { activeProjectFileFromEnv, ProjectProvider } from './projects'
 import { Continuity } from './reboot'
 import { Recovery, runProcess } from './recovery'
-import { generationOf, pressKeysInRunningSession } from '@aico/session-engine/running-session'
+import { generationOf, pressKeysInRunningSession } from './running-session'
 import { createTetherServer } from './server'
 import { type History, historyFromEnv, startHistoryScan } from './sessions/history'
 import { persistSizeHolders } from './size-holder'
