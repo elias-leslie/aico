@@ -122,6 +122,60 @@ export interface ProjectSettings {
   active_mode: string
 }
 
+// SQLite file plumbing shared with notes-db.ts: opening a private file, the `meta`
+// key/value table, and one flat transaction.
+
+/** Opens (creating 0600 in a 0700 directory) in WAL mode; `':memory:'` for tests. */
+export function openPrivateDb(
+  path: string,
+  options?: ConstructorParameters<typeof DatabaseSync>[1],
+): DatabaseSync {
+  const fresh = path !== ':memory:' && !existsSync(path)
+  if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
+  const db = options === undefined ? new DatabaseSync(path) : new DatabaseSync(path, options)
+  try {
+    if (fresh) chmodSync(path, 0o600)
+    db.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 10000;')
+  } catch (error) {
+    db.close()
+    throw error
+  }
+  return db
+}
+
+export function readMeta(db: DatabaseSync, key: string): string | null {
+  const row = db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as
+    | Record<string, unknown>
+    | undefined
+  return row ? String(row.value) : null
+}
+
+export function writeMeta(db: DatabaseSync, key: string, value: string): void {
+  db.prepare(
+    'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value',
+  ).run(key, value)
+}
+
+/** One transaction; a call made inside another joins it (and rolls back with it). */
+export function transactor(db: DatabaseSync): <T>(work: () => T) => T {
+  let depth = 0
+  return (work) => {
+    if (depth > 0) return work()
+    depth += 1
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      const result = work()
+      db.exec('COMMIT')
+      return result
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    } finally {
+      depth -= 1
+    }
+  }
+}
+
 type Row = Record<string, unknown>
 
 const now = () => new Date().toISOString()
@@ -155,20 +209,17 @@ export class WebStore {
   private readonly db: DatabaseSync
   private readonly clock: HybridClock
   private readonly wall: () => number
-  private depth = 0
+  private readonly run: <T>(work: () => T) => T
   readonly hostName: string
 
   /** Opens (creating 0600 in a 0700 directory) and migrates; `':memory:'` for tests. */
   constructor(path: string, options: WebStoreOptions = {}) {
     this.hostName = options.hostName ?? hostNameFrom(process.env)
     this.wall = options.now ?? Date.now
-    const fresh = path !== ':memory:' && !existsSync(path)
-    if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
     // No foreign keys: synced rows can arrive in any order, and the app keeps the links.
-    this.db = new DatabaseSync(path, { enableForeignKeyConstraints: false })
+    this.db = openPrivateDb(path, { enableForeignKeyConstraints: false })
+    this.run = transactor(this.db)
     try {
-      if (fresh) chmodSync(path, 0o600)
-      this.db.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 10000;')
       this.db.exec(SCHEMA)
       const version = this.meta('schema_version')
       if (version !== null && Number(version) > SCHEMA_VERSION)
@@ -196,33 +247,16 @@ export class WebStore {
   }
 
   meta(key: string): string | null {
-    const row = this.db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as Row | undefined
-    return row ? String(row.value) : null
+    return readMeta(this.db, key)
   }
 
   private setMeta(key: string, value: string): void {
-    this.db
-      .prepare(
-        'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value',
-      )
-      .run(key, value)
+    writeMeta(this.db, key, value)
   }
 
   /** One transaction; a call made inside another joins it (and rolls back with it). */
   private transaction<T>(work: () => T): T {
-    if (this.depth > 0) return work()
-    this.depth += 1
-    this.db.exec('BEGIN IMMEDIATE')
-    try {
-      const result = work()
-      this.db.exec('COMMIT')
-      return result
-    } catch (error) {
-      this.db.exec('ROLLBACK')
-      throw error
-    } finally {
-      this.depth -= 1
-    }
+    return this.run(work)
   }
 
   /**

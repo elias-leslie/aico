@@ -5,11 +5,10 @@
 // per-database change counter), and a delete is a tombstone.
 
 import { randomBytes, randomUUID } from 'node:crypto'
-import { chmodSync, existsSync, mkdirSync } from 'node:fs'
-import { dirname } from 'node:path'
-import { DatabaseSync } from 'node:sqlite'
+import type { DatabaseSync } from 'node:sqlite'
 import type { CaptureKind } from '@aico/notes/capture-files'
 import { HybridClock } from '@aico/shared/hlc'
+import { openPrivateDb, readMeta, transactor, writeMeta } from './db'
 import { NoteStore } from './notes-data'
 import { baseOf, type SyncHandle } from './sync/engine'
 import { NOTES_SYNC_TABLES } from './sync/registry'
@@ -257,7 +256,7 @@ export class NotesStore {
   private readonly db: DatabaseSync
   private readonly clock: HybridClock
   private readonly now: () => number
-  private depth = 0
+  private readonly run: <T>(work: () => T) => T
   readonly hostName: string
   /** Notes, items, labels, attachments and revisions. */
   readonly notes: NoteStore
@@ -266,12 +265,9 @@ export class NotesStore {
   constructor(path: string, options: NotesStoreOptions) {
     this.hostName = options.hostName
     this.now = options.now ?? Date.now
-    const fresh = path !== ':memory:' && !existsSync(path)
-    if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
-    this.db = new DatabaseSync(path)
+    this.db = openPrivateDb(path)
+    this.run = transactor(this.db)
     try {
-      if (fresh) chmodSync(path, 0o600)
-      this.db.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 10000;')
       this.db.exec(SCHEMA)
       const version = this.meta('schema_version')
       if (version !== null && Number(version) > SCHEMA_VERSION)
@@ -310,33 +306,16 @@ export class NotesStore {
   }
 
   meta(key: string): string | null {
-    const row = this.db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as Row | undefined
-    return row ? String(row.value) : null
+    return readMeta(this.db, key)
   }
 
   private setMeta(key: string, value: string): void {
-    this.db
-      .prepare(
-        'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value',
-      )
-      .run(key, value)
+    writeMeta(this.db, key, value)
   }
 
   /** One transaction; a call made inside another joins it (and rolls back with it). */
   private transaction<T>(work: () => T): T {
-    if (this.depth > 0) return work()
-    this.depth += 1
-    this.db.exec('BEGIN IMMEDIATE')
-    try {
-      const result = work()
-      this.db.exec('COMMIT')
-      return result
-    } catch (error) {
-      this.db.exec('ROLLBACK')
-      throw error
-    } finally {
-      this.depth -= 1
-    }
+    return this.run(work)
   }
 
   /**
