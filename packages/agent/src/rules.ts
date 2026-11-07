@@ -8,12 +8,14 @@ import { existsSync } from 'node:fs'
 import { resolve, sep } from 'node:path'
 import {
   Catalog,
+  contextDbPath,
   type Facts,
   type LaunchPolicy,
   loadPolicy,
   modelUsage,
   openContext,
   route,
+  routeFacts,
 } from '@aico/context'
 import harnessData from '../data/harness.json' with { type: 'json' }
 import type { Contain } from './tools'
@@ -406,4 +408,26 @@ export function loadRoleRules(
   } catch (error) {
     return refused('rules_unreadable', (error as Error).message)
   }
+}
+
+/**
+ * `loadRoleRules` with Aico's usage facts attached, so models whose subscription reads used up
+ * drop out of the chain. The CLI and web chat both start runs through this. No facts (usage not
+ * collected, unreadable) drops nothing. `load` and `facts` are test seams.
+ */
+export function loadRoutedRules(
+  dataDir: string,
+  request: RulesRequest,
+  deps: {
+    load?: (dbPath: string, request: RulesRequest) => RoleRules | Refused
+    facts?: typeof routeFacts
+    now?: string
+  } = {},
+): RoleRules | Refused {
+  const now = deps.now ?? new Date().toISOString()
+  const found = (deps.facts ?? routeFacts)(dataDir, now)
+  return (deps.load ?? loadRoleRules)(contextDbPath(dataDir), {
+    ...request,
+    ...('facts' in found && { usage: { facts: found.facts, now } }),
+  })
 }

@@ -4,11 +4,17 @@
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
-import { contextDbPath, routeFacts } from '@aico/context'
+import { contextDbPath } from '@aico/context'
 import type { Database } from '@aico/store'
 import type { Models } from '@earendil-works/pi-ai'
 import { type NextPrompt, promptReader } from './prompt'
-import { loadRoleRules, type Refused, type RoleRules, type RulesRequest, resetText } from './rules'
+import {
+  loadRoutedRules,
+  type Refused,
+  type RoleRules,
+  type RulesRequest,
+  resetText,
+} from './rules'
 import { type RunOptions, type RunResult, runAgent } from './run'
 import { type PushRun, tetherPush } from './tether'
 import { agentDbPath, findRun, openAgentDb, runReport, type StoredRun } from './transcript'
@@ -108,15 +114,15 @@ export async function main(
       process.stderr.write(`aico agent run: ${error.message}\n${USAGE}\n`)
       return 2
     }
-    // Usage facts only drop used-up models from the chain; none (not collected, unreadable) drops nothing.
-    const now = new Date().toISOString()
-    const found = routeFacts(dir, now)
-    const rules = (deps.rules ?? loadRoleRules)(contextDbPath(dir), {
-      role: request.role,
-      cwd: request.cwd,
-      ...(values.model && { model: values.model }),
-      ...('facts' in found && { usage: { facts: found.facts, now } }),
-    })
+    const rules = loadRoutedRules(
+      dir,
+      {
+        role: request.role,
+        cwd: request.cwd,
+        ...(values.model && { model: values.model }),
+      },
+      { ...(deps.rules && { load: deps.rules }) },
+    )
     if ('kind' in rules) {
       process.stdout.write(values.json ? `${JSON.stringify({ outcome: rules })}\n` : '')
       process.stderr.write(`aico agent: refused (${rules.reason}): ${rules.detail}\n`)

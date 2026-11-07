@@ -1,12 +1,14 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { Catalog, type Facts, type LaunchPolicy } from '@aico/context'
 import { openDatabase } from '@aico/store'
 import { createModels, fauxAssistantMessage, fauxProvider } from '@earendil-works/pi-ai'
 import { describe, expect, it } from 'vitest'
 import { ChatSessions } from './chats'
 import { contextMessages } from './compaction'
-import type { RoleRules } from './rules'
+import policyData from './fixtures/policy.json' with { type: 'json' }
+import { HARNESS, loadRoutedRules, type RoleRules, roleRules } from './rules'
 import { MIGRATIONS, openAgentDb, Transcript } from './transcript'
 
 const rules: RoleRules = {
@@ -98,5 +100,59 @@ describe('queued messages after a reply that did not finish', () => {
     expect(chats.get(id)).toMatchObject({ state: 'failed', queued: [], draft: 'queued follow-up' })
     db.close()
     rmSync(cwd, { recursive: true, force: true })
+  })
+})
+
+describe('chat model choice and used-up subscriptions', () => {
+  const policy = policyData as unknown as LaunchPolicy
+  const reading = (provider: string, usedPercent: number) => ({
+    provider,
+    window_minutes: 10080,
+    observed_at: '2026-11-06T19:55:00.000Z',
+    used_percent: usedPercent,
+    resets_at: '2026-11-11T10:00:00.000Z',
+    source: 'test',
+  })
+  const chatChain = (used: Record<string, number>) => {
+    const facts: Facts = {
+      readings: Object.entries(used).map(([provider, percent]) => reading(provider, percent)),
+      credits: {},
+      refusals: [],
+    }
+    const chats = new ChatSessions(openAgentDb(':memory:'), {
+      dataDir: '/scratch',
+      push: async () => {},
+      rules: (_db, request) => roleRules(policy, new Catalog(), HARNESS, request),
+      facts: () => ({ facts, collectedAt: '2026-11-06T19:55:00.000Z' }),
+    })
+    return chats
+      .choices('/scratch')
+      .find((choice) => choice.role === 'implementation')
+      ?.chain.map((entry) => entry.id)
+  }
+  it('the web chat skips a used-up provider and falls back to the next, as aico agent does', () => {
+    expect(chatChain({})).toEqual([
+      'codex/gpt-6.1-sol',
+      'opencode-go/deepseek-v4.1-flash',
+      'opencode-go/glm-5.3',
+    ])
+    expect(chatChain({ codex: 100 })).toEqual([
+      'opencode-go/deepseek-v4.1-flash',
+      'opencode-go/glm-5.3',
+    ])
+    expect(chatChain({ codex: 100, 'opencode-go': 100 })).toEqual([])
+  })
+  it('chat and CLI route through the same function', () => {
+    const facts: Facts = { readings: [reading('codex', 100)], credits: {}, refusals: [] }
+    const direct = loadRoutedRules(
+      '/scratch',
+      { role: 'implementation', cwd: '/scratch' },
+      {
+        load: (_db, request) => roleRules(policy, new Catalog(), HARNESS, request),
+        facts: () => ({ facts, collectedAt: '' }),
+        now: '2026-11-06T20:00:00.000Z',
+      },
+    ) as RoleRules
+    expect(direct.skipped?.map((entry) => entry.id)).toEqual(['codex/gpt-6.1-sol'])
   })
 })

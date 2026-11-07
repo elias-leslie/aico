@@ -2,11 +2,11 @@
 // Tether receives pushed state/totals and never opens this database.
 import { randomBytes } from 'node:crypto'
 import { statSync } from 'node:fs'
-import { Catalog, contextDbPath } from '@aico/context'
+import { Catalog, contextDbPath, type routeFacts } from '@aico/context'
 import type { Database } from '@aico/store'
 import type { AgentEvent } from '@earendil-works/pi-agent-core'
 import type { ImageContent, Models } from '@earendil-works/pi-ai'
-import { HARNESS, loadRoleRules, type Refused, type RoleRules } from './rules'
+import { HARNESS, loadRoutedRules, type Refused, type RoleRules, type RulesRequest } from './rules'
 import { type RunOptions, runAgent } from './run'
 import type { PushRun } from './tether'
 import { findRun, runReport, Transcript } from './transcript'
@@ -73,7 +73,8 @@ export class ChatSessions {
       dataDir: string
       push: PushRun
       models?: Models
-      rules?: (role: string, cwd: string) => RoleRules | Refused
+      rules?: (dbPath: string, request: RulesRequest) => RoleRules | Refused
+      facts?: typeof routeFacts
       contextFiles?: RunOptions['contextFiles']
       attachments?: (ids: string[]) => Promise<{ text: string; images: ImageContent[] }>
     },
@@ -104,9 +105,14 @@ export class ChatSessions {
     ).run()
   }
   private rules(role: string, cwd: string): RoleRules {
-    const result =
-      this.options.rules?.(role, cwd) ??
-      loadRoleRules(contextDbPath(this.options.dataDir), { role, cwd })
+    const result = loadRoutedRules(
+      this.options.dataDir,
+      { role, cwd },
+      {
+        ...(this.options.rules && { load: this.options.rules }),
+        ...(this.options.facts && { facts: this.options.facts }),
+      },
+    )
     if ('kind' in result) throw new ChatError(409, `Can’t start this chat. ${result.detail}`)
     return result
   }
