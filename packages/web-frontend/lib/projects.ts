@@ -200,6 +200,35 @@ export function splitProjects(projects: ProjectSummary[], search: string) {
 const plural = (n: number, one: string, many: string) =>
   `${n} ${n === 1 ? one : many}`
 
+/** The one short word beside a problem badge's count; the full sentence stays in its tooltip. */
+export const PROBLEM_WORD: Record<ProblemKind, string> = {
+  fail: 'failed',
+  warn: 'warn',
+  quiet: 'quiet',
+  publish: 'publish',
+  backup: 'backup',
+}
+
+/** Only Status's failed state is ember; warnings and quiet checks are amber. */
+export const problemTone = (
+  kind: ProblemKind,
+  worst?: ProblemWorst,
+): 'warn' | 'fail' =>
+  kind === 'quiet' || kind === 'warn' || worst === 'warn' ? 'warn' : 'fail'
+
+/** What a project is up to in one line: the top roadmap item, a question waiting, agents, the first problem. Empty when it has nothing to say. */
+export function projectLine(project: ProjectSummary): string {
+  const problem = project.problems[0]
+  return [
+    project.top ? `Now: ${project.top}` : null,
+    project.waiting ? '1 question waiting' : null,
+    project.agents ? agentsText(project.agents) : null,
+    problem ? problemText(problem.kind, problem.count, problem.worst) : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+}
+
 /** The badge's tooltip and label. Failed is Status's failed state only; a
  * warning is never worded as a failure (`worst` says which a backup or a
  * publish is). */

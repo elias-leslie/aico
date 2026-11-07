@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   ageByTarget,
   type BackupEntry,
-  backupGlance,
   backupSummary,
   groupBySource,
+  spanText,
 } from './backups'
 
 const entry = (over: Partial<BackupEntry>): BackupEntry => ({
@@ -117,16 +117,11 @@ describe('ageByTarget', () => {
   })
 })
 
-describe('backupGlance', () => {
-  it('says the worst thing first and that all is current otherwise', () => {
-    expect(backupGlance([])).toBeUndefined()
-    expect(backupGlance([entry({})])).toEqual({ text: 'all current' })
-    expect(
-      backupGlance([entry({}), entry({ source: 'b', state: 'failed' })]),
-    ).toEqual({ text: '1 failed', warn: true })
-    expect(backupGlance([entry({ state: 'warn' })])).toEqual({
-      text: '1 late',
-      warn: true,
-    })
+describe('spanText', () => {
+  it('says an age in the fewest words', () => {
+    expect(spanText(30_000)).toBe('1 min')
+    expect(spanText(55 * 60_000)).toBe('55 min')
+    expect(spanText(38 * 3_600_000)).toBe('38 h')
+    expect(spanText(72 * 3_600_000)).toBe('3 days')
   })
 })

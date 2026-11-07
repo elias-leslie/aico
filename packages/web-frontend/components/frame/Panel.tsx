@@ -1,112 +1,54 @@
-'use client'
-
 import { useQueryClient } from '@tanstack/react-query'
-import {
-  Activity,
-  BookOpen,
-  Clock,
-  Database,
-  Folder,
-  Gauge,
-  KeyRound,
-  Server,
-  Smartphone,
-  Undo2,
-  UserRound,
-} from 'lucide-react'
+import { BookOpen, KeyRound, Smartphone, Undo2, UserRound } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import type { ComponentType, ReactNode } from 'react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { apiFetch } from '@/lib/api-fetch'
-import { type BackupEntry, backupGlance } from '@/lib/backups'
-import type { QuotaGlance } from '@/lib/frame/quota'
 import { useApprovals } from '@/lib/hooks/use-asks'
 import { useHosts } from '@/lib/hooks/use-hosts'
+import { useLocalStorageState } from '@/lib/hooks/use-local-storage-state'
+import { useMediaQuery } from '@/lib/hooks/use-media-query'
 import { useSessionAttention } from '@/lib/hooks/use-session-attention'
 import { useStatus } from '@/lib/hooks/use-status'
 import {
   RECOVERY_QUERY_KEY,
   useStatusSessions,
 } from '@/lib/hooks/use-status-sessions'
-import { plural, rowButtons, type StatusRow } from '@/lib/status'
+import { rowButtons, type StatusRow } from '@/lib/status'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
 import { NeedsYouSection } from '../asks/NeedsYou'
 import { CaptureLauncher } from '../capture/CaptureLauncher'
 import { SessionList } from '../SessionList'
 import { type Frame, useFrame } from './FrameContext'
+import { Disclosure } from './glance/Disclosure'
+import { GlanceBackups, useBackupsGlance } from './glance/GlanceBackups'
+import { GlanceMachines, useMachinesGlance } from './glance/GlanceMachines'
+import { GlanceProjects, useProjectsGlance } from './glance/GlanceProjects'
+import { GlanceQuota, useQuotaGlance } from './glance/GlanceQuota'
+import { GlanceRecent, useRecentGlance } from './glance/GlanceRecent'
+import { GlanceStatus, useStatusGlance } from './glance/GlanceStatus'
 import styles from './Panel.module.css'
-
-/** Where each place opens: Wide beside the session for the daily ones, Full for the rest. */
-type Where = 'wide' | 'full'
 
 interface Place {
   label: string
   href: string
-  where: Where
   icon: ComponentType<{ className?: string; strokeWidth?: number }>
 }
 
 const PLACES: readonly Place[] = [
-  { label: 'Status', href: '/status', where: 'wide', icon: Activity },
-  { label: 'Projects', href: '/projects', where: 'wide', icon: Folder },
-  { label: 'Recent', href: '/history', where: 'wide', icon: Clock },
-  { label: 'Quota', href: '/quota', where: 'wide', icon: Gauge },
-  { label: 'Backups', href: '/backups', where: 'full', icon: Database },
-  { label: 'Grants', href: '/grants', where: 'full', icon: KeyRound },
-  {
-    label: 'Machines',
-    href: '/machines',
-    where: 'full',
-    icon: Server,
-  },
-  { label: 'Recovery', href: '/recovery', where: 'full', icon: Undo2 },
-  { label: 'Logins', href: '/logins', where: 'full', icon: UserRound },
-  { label: 'Context', href: '/agents', where: 'full', icon: BookOpen },
-  { label: 'Phone app', href: '/app', where: 'full', icon: Smartphone },
+  { label: 'Grants', href: '/grants', icon: KeyRound },
+  { label: 'Recovery', href: '/recovery', icon: Undo2 },
+  { label: 'Logins', href: '/logins', icon: UserRound },
+  { label: 'Context', href: '/agents', icon: BookOpen },
+  { label: 'Phone app', href: '/app', icon: Smartphone },
 ]
 
-function SectionHead({
-  title,
-  count,
-  more,
-}: {
-  title: string
-  count?: number | string
-  more?: ReactNode
-}) {
+function SectionHead({ title }: { title: string }) {
   return (
     <div className="lantern-sec">
       <h2>{title}</h2>
-      {count !== undefined && <span className="n">{count}</span>}
-      {more && <span className={styles.more}>{more}</span>}
     </div>
-  )
-}
-
-function MoreLink({
-  frame,
-  href,
-  where = 'wide',
-  children,
-}: {
-  frame: Frame | null
-  href: string
-  where?: Where
-  children: ReactNode
-}) {
-  return (
-    <Link
-      href={href}
-      className={styles.moreLink}
-      onClick={(event) => {
-        if (!frame) return
-        event.preventDefault()
-        frame.open(href, where)
-      }}
-    >
-      {children}
-    </Link>
   )
 }
 
@@ -165,59 +107,13 @@ export function useRowSessionAction(top: StatusRow | undefined) {
   return { session, sessionName, note, act, title, names: sessions.names }
 }
 
-/** The one problem that matters most: a failure first, then Status's own ranking. */
-export function QuotaBar({ glance }: { glance: QuotaGlance }) {
-  const unknown = glance.left === null
-  return (
-    <li className={styles.quota} title={glance.meaning}>
-      <div className={styles.quotaLine}>
-        <b>{glance.name}</b>
-        <span>{glance.line}</span>
-      </div>
-      <div
-        className={styles.bar}
-        data-unknown={unknown ? 'true' : undefined}
-        role="img"
-        aria-label={
-          glance.state !== 'left'
-            ? `${glance.name}: ${glance.answer}`
-            : `${glance.name}: ${glance.left}% left${glance.gone === null ? '' : `, ${glance.gone}% of the way through the window`}`
-        }
-      >
-        {!unknown && <span style={{ width: `${glance.left}%` }} />}
-        {!unknown && glance.gone !== null && (
-          <i className={styles.tick} style={{ left: `${glance.gone}%` }} />
-        )}
-      </div>
-    </li>
-  )
-}
+export { QuotaBar } from './glance/GlanceQuota'
 
 /** Every other place, one quiet list; a value only where it is read live. */
 function Everything({ frame }: { frame: Frame | null }) {
-  const { view } = useStatus()
   const { approvals } = useApprovals()
-  const [backups, setBackups] = useState<BackupEntry[] | null>(null)
-  useEffect(() => {
-    let live = true
-    fetch('/api/backups')
-      .then((res) => (res.ok ? res.json() : null))
-      .then((body) => live && setBackups(body?.entries ?? null))
-      .catch(() => live && setBackups(null))
-    return () => {
-      live = false
-    }
-  }, [])
-  const problems = view?.summary.problems
   const waiting = approvals?.state === 'ok' ? approvals.taps.length : undefined
   const glance: Record<string, { text: string; warn?: boolean } | undefined> = {
-    Status:
-      problems === undefined
-        ? undefined
-        : problems
-          ? { text: plural(problems, 'problem'), warn: true }
-          : { text: 'all healthy' },
-    Backups: backups ? backupGlance(backups) : undefined,
     Grants: waiting ? { text: `${waiting} waiting`, warn: true } : undefined,
   }
   return (
@@ -235,7 +131,7 @@ function Everything({ frame }: { frame: Frame | null }) {
               onClick={(event) => {
                 if (!frame) return
                 event.preventDefault()
-                frame.open(place.href, place.where)
+                frame.open(place.href, 'full')
               }}
             >
               <Icon className="h-4 w-4" strokeWidth={1.7} />
@@ -261,8 +157,111 @@ function Everything({ frame }: { frame: Frame | null }) {
   )
 }
 
+/** Folds are kept per device, by section; a section nobody folded or opened follows its default. */
+const FOLDS_KEY = 'aico-panel-folds'
+
+/** Status, Quota, Backups, Recent, Machines and Projects: what to glance at, folded or open. */
+function Glances() {
+  const [stored, setStored] = useLocalStorageState<Record<string, boolean>>(
+    FOLDS_KEY,
+    {},
+  )
+  const folds = stored && typeof stored === 'object' ? stored : {}
+  const phone = useMediaQuery('(max-width: 1023px)')
+  const status = useStatusGlance()
+  const quota = useQuotaGlance()
+  const backups = useBackupsGlance()
+  const recent = useRecentGlance()
+  const machines = useMachinesGlance()
+  const projects = useProjectsGlance()
+  const sections: {
+    id: string
+    href: string
+    where: 'wide' | 'full'
+    head: { count: string | null; line: string | null }
+    open: boolean
+    body: ReactNode
+  }[] = [
+    {
+      id: 'Status',
+      href: '/status',
+      where: 'wide',
+      head: status,
+      // On a phone Status stays open only when something is wrong (or not known yet).
+      open: !phone || status.problems !== 0,
+      body: <GlanceStatus />,
+    },
+    {
+      id: 'Quota',
+      href: '/quota',
+      where: 'wide',
+      head: quota,
+      open: !phone,
+      body: <GlanceQuota />,
+    },
+    {
+      id: 'Backups',
+      href: '/backups',
+      where: 'full',
+      head: backups,
+      open: !phone,
+      body: <GlanceBackups />,
+    },
+    {
+      id: 'Recent',
+      href: '/history',
+      where: 'wide',
+      head: recent,
+      open: !phone,
+      body: <GlanceRecent />,
+    },
+    {
+      id: 'Machines',
+      href: '/machines',
+      where: 'full',
+      head: machines,
+      open: false,
+      body: <GlanceMachines />,
+    },
+    {
+      id: 'Projects',
+      href: '/projects',
+      where: 'wide',
+      head: projects,
+      open: false,
+      body: <GlanceProjects />,
+    },
+  ]
+  return (
+    <>
+      {sections.map((section) => {
+        const open = folds[section.id] ?? section.open
+        return (
+          <Disclosure
+            key={section.id}
+            title={section.id}
+            head={section.head}
+            href={section.href}
+            where={section.where}
+            open={open}
+            onToggle={() =>
+              setStored((current) => ({
+                ...(current && typeof current === 'object' ? current : {}),
+                [section.id]: !open,
+              }))
+            }
+          >
+            {section.body}
+          </Disclosure>
+        )
+      })}
+    </>
+  )
+}
+
 /** The left side's Panel: the triage view. What waits on you, every session
- * by state (each state group carries its own count), then everything else. */
+ * by state (each state group carries its own count), the glance sections,
+ * then the places for setup. */
 export function Panel({
   slots,
   currentId,
@@ -297,6 +296,7 @@ export function Panel({
           )}
         </nav>
       </section>
+      <Glances />
       <Everything frame={frame} />
     </div>
   )

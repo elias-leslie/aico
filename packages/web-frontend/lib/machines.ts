@@ -377,3 +377,15 @@ export function machinesLine(list: Machines): string {
         : `${on} of those ${on === 1 ? 'is' : 'are'} on`
   return `${all} Sessions can run on ${hosts.length} of them; ${state}.`
 }
+
+/** The Panel's one-line count: "4 up, 4 off", plus "1 not answering" for the rest. Null when
+ * Status couldn't be read, since a count made from the session hosts alone would be a wrong total. */
+export function machinesGlance(list: Machines): string | null {
+  if (list.partial) return null
+  const up = list.machines.filter((m) => m.up === 'on').length
+  const off = list.machines.filter((m) => m.up === 'off').length
+  const other = list.machines.length - up - off
+  return [`${up} up`, `${off} off`, other ? `${other} not answering` : '']
+    .filter(Boolean)
+    .join(', ')
+}

@@ -102,15 +102,12 @@ export function backupSummary(entries: readonly BackupEntry[]): string {
   return `${parts.join(', ')}.`
 }
 
-/** The short form for a glance: the worst thing first, or that all is current. */
-export function backupGlance(
-  entries: readonly BackupEntry[],
-): { text: string; warn?: boolean } | undefined {
-  if (!entries.length) return undefined
-  const { current, late, failed } = countBackups(groupBySource(entries))
-  if (failed) return { text: `${failed} failed`, warn: true }
-  if (late) return { text: `${late} late`, warn: true }
-  return current ? { text: 'all current' } : undefined
+/** "36 h", "55 min", "3 days": an age or a limit in the fewest words. */
+export function spanText(ms: number): string {
+  const minutes = Math.max(1, Math.round(ms / 60_000))
+  if (minutes < 90) return `${minutes} min`
+  const hours = Math.round(minutes / 60)
+  return hours < 48 ? `${hours} h` : `${Math.round(hours / 24)} days`
 }
 
 /** Sources with their copies: problems first, then by name; archived sources last. */

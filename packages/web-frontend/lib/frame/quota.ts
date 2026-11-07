@@ -5,7 +5,7 @@
 // report's one plain answer to "can I use it now?".
 
 import type { UsageProvider, UsageReport, UsageWindow } from '../quota-usage'
-import { sentence, windowGone } from '../quota-usage'
+import { compact, sentence, windowGone } from '../quota-usage'
 
 export type QuotaState = 'left' | 'credits' | 'used_up' | 'unknown'
 
@@ -22,6 +22,8 @@ export interface QuotaGlance {
   answer: string
   /** The day it is usable again when used up or on credits ("Nov 8"), or null. */
   back: string | null
+  /** The glance's one short line: "73% left · resets Fri", "credits · 4.5K left, to Nov 11", "used up · back Nov 8". */
+  short: string
   /** What a row shows: the window in words while there is room ("Weekly 79% left, resets Nov 13, 5:00 AM"), else the answer. */
   line: string
   /** Everything about it, for a tooltip. */
@@ -75,7 +77,41 @@ function tightest(windows: readonly UsageWindow[]): UsageWindow | null {
   return best
 }
 
-function glanceOf(provider: UsageProvider): QuotaGlance {
+/** "Fri" for a reset within the week, else "Nov 13". */
+function resetDay(iso: string, now: number): string {
+  const at = Date.parse(iso)
+  if (Number.isNaN(at)) return ''
+  return at - now < 6 * 86_400_000 && at > now
+    ? new Date(at).toLocaleDateString('en-US', { weekday: 'short' })
+    : shortDay(iso)
+}
+
+function shortLine(
+  state: QuotaState,
+  left: number | null,
+  window: UsageWindow | null,
+  back: string | null,
+  credits: UsageProvider['credits'],
+  now: number,
+): string {
+  if (state === 'left') {
+    const reset = window?.resets_at ? resetDay(window.resets_at, now) : ''
+    return `${left}% left${reset ? ` · resets ${reset}` : ''}`
+  }
+  if (state === 'credits') {
+    const balance = credits ? `${compact(credits.balance)} left` : ''
+    return [
+      'credits',
+      [balance, back ? `to ${back}` : ''].filter(Boolean).join(', '),
+    ]
+      .filter(Boolean)
+      .join(' · ')
+  }
+  if (state === 'used_up') return back ? `used up · back ${back}` : 'used up'
+  return 'not reported'
+}
+
+function glanceOf(provider: UsageProvider, now: number): QuotaGlance {
   const window = tightest(provider.windows)
   const left = window ? leftOf(window) : null
   const gone = window ? windowGone(window) : null
@@ -86,6 +122,8 @@ function glanceOf(provider: UsageProvider): QuotaGlance {
   else state = 'left'
   const line =
     state === 'left' && window ? sentence(window.text) : provider.answer
+  const back =
+    state === 'credits' || state === 'used_up' ? backOn(provider.windows) : null
   const meaning = [
     provider.answer,
     provider.windows.length
@@ -101,10 +139,8 @@ function glanceOf(provider: UsageProvider): QuotaGlance {
     left,
     gone: gone === null ? null : Math.round(gone * 100),
     answer: provider.answer,
-    back:
-      state === 'credits' || state === 'used_up'
-        ? backOn(provider.windows)
-        : null,
+    back,
+    short: shortLine(state, left, window, back, provider.credits, now),
     line,
     meaning: meaning || line,
     warn: state === 'used_up' || state === 'unknown',
@@ -112,10 +148,13 @@ function glanceOf(provider: UsageProvider): QuotaGlance {
 }
 
 /** Every subscription's glance, in the order the report lists them. */
-export function quotaGlances(report: UsageReport | null): QuotaGlance[] {
+export function quotaGlances(
+  report: UsageReport | null,
+  now = Date.now(),
+): QuotaGlance[] {
   return (report?.providers ?? [])
     .filter((provider) => provider.status !== 'untracked')
-    .map(glanceOf)
+    .map((provider) => glanceOf(provider, now))
 }
 
 /** "Claude 76% left · Codex on credits until Nov 11 · OpenCode Go used up until Nov 8": each one's answer, short. */

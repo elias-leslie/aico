@@ -1,26 +1,15 @@
 import {
   agentsText,
+  PROBLEM_WORD,
   type ProblemKind,
   type ProblemWorst,
   problemText,
+  problemTone,
   type RunState,
   runStateText,
 } from '@/lib/projects'
 import { PersonIcon, ProblemIcon } from './icons'
 import styles from './ProjectsPage.module.css'
-
-/** Only Status's failed state is ember; warnings and quiet checks are amber. */
-/** The one short word beside a badge's count; the full sentence stays in its tooltip. */
-const PROBLEM_WORD: Record<ProblemKind, string> = {
-  fail: 'failed',
-  warn: 'warn',
-  quiet: 'quiet',
-  publish: 'publish',
-  backup: 'backup',
-}
-
-const tone = (kind: ProblemKind, worst?: ProblemWorst) =>
-  kind === 'quiet' || kind === 'warn' || worst === 'warn' ? 'warn' : 'fail'
 
 interface BadgeProps {
   onClick: () => void
@@ -39,7 +28,7 @@ export function ProblemBadge({
     <button
       type="button"
       className={styles.badge}
-      data-tone={tone(kind, worst)}
+      data-tone={problemTone(kind, worst)}
       aria-label={text}
       aria-haspopup="dialog"
       aria-expanded={expanded}

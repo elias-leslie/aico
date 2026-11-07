@@ -38,6 +38,67 @@ const report = (...providers: UsageProvider[]): UsageReport => ({
   providers,
 })
 
+describe('quota glance short line', () => {
+  const now = Date.parse('2026-11-04T12:00:00Z')
+  it('says what is left and the day it resets, a weekday within the week', () => {
+    const [glance] = quotaGlances(
+      report(
+        provider({
+          windows: [
+            win({ left_percent: 73, resets_at: '2026-11-06T18:00:00Z' }),
+          ],
+        }),
+      ),
+      now,
+    )
+    expect(glance?.short).toMatch(/^73% left · resets (Thu|Fri)$/)
+    const [far] = quotaGlances(
+      report(
+        provider({ windows: [win({ resets_at: '2026-11-13T18:00:00Z' })] }),
+      ),
+      now,
+    )
+    expect(far?.short).toBe('80% left · resets Nov 13')
+  })
+
+  it('says credits with the balance and the day, and used up with when it is back', () => {
+    const used = win({
+      state: 'used_up',
+      left_percent: 0,
+      resets_at: '2026-11-11T18:00:00Z',
+    })
+    const [credits] = quotaGlances(
+      report(
+        provider({
+          status: 'on_credits',
+          windows: [used],
+          credits: { balance: 4500, lasts_days: 7, text: '' },
+        }),
+      ),
+      now,
+    )
+    expect(credits?.short).toBe('credits · 4.5K left, to Nov 11')
+    const [out] = quotaGlances(
+      report(provider({ status: 'used_up', windows: [used] })),
+      now,
+    )
+    expect(out?.short).toBe('used up · back Nov 11')
+  })
+
+  it('says not reported when no window can be read', () => {
+    const [glance] = quotaGlances(
+      report(
+        provider({
+          status: 'unknown',
+          windows: [win({ state: 'unknown', left_percent: null })],
+        }),
+      ),
+      now,
+    )
+    expect(glance?.short).toBe('not reported')
+  })
+})
+
 describe('quota glance', () => {
   it('reads the share left in the tightest window, with how much of its time is gone', () => {
     const [claude] = quotaGlances(

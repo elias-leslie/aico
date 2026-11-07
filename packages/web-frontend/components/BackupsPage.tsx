@@ -8,6 +8,7 @@ import {
   type BackupTarget,
   backupSummary,
   groupBySource,
+  spanText,
   targetLabel,
 } from '@/lib/backups'
 import { useServerReach } from '@/lib/frame/server-reach'
@@ -34,12 +35,6 @@ interface FileNode {
   size?: number
 }
 const title = targetLabel
-function span(ms: number) {
-  const minutes = Math.max(1, Math.round(ms / 60_000))
-  if (minutes < 90) return `${minutes} min`
-  const hours = Math.round(minutes / 60)
-  return hours < 48 ? `${hours} h` : `${Math.round(hours / 24)} days`
-}
 const when = shortWhen
 async function api<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(
@@ -156,7 +151,7 @@ function AgeChart({ entries }: { entries: Entry[] }) {
       <ul>
         {ages.map((age) => {
           const late = age.ageMs > age.limitMs
-          const text = `${span(age.ageMs)} old, late after ${span(age.limitMs)}`
+          const text = `${spanText(age.ageMs)} old, late after ${spanText(age.limitMs)}`
           return (
             <li key={age.target} data-late={late ? 'true' : undefined}>
               <span className={styles.agesName}>{title(age.target)}</span>

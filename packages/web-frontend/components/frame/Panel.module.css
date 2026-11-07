@@ -14,57 +14,12 @@
   gap: 8px;
   min-width: 0;
 }
-.more {
-  margin-left: auto;
-  text-transform: none;
-  letter-spacing: 0;
-  font-size: 11.5px;
-}
-.moreLink,
-.moreLink:hover,
 .note {
   color: var(--mist);
   font-size: 13px;
 }
 .sessions {
   margin: 0 -8px;
-}
-.quotaLine {
-  display: flex;
-  gap: 8px;
-  font-size: 12.5px;
-  color: var(--mist);
-}
-.quotaLine b {
-  color: var(--bone);
-  font-weight: 600;
-}
-.bar {
-  position: relative;
-  height: 5px;
-  margin-top: 5px;
-  border-radius: 3px;
-  background: var(--wash-2);
-}
-.bar[data-unknown] {
-  background: none;
-  border: 1px dashed var(--line-2);
-}
-.bar span {
-  position: absolute;
-  inset: 0 auto 0 0;
-  border-radius: 3px;
-  background: var(--lantern);
-}
-.tick {
-  position: absolute;
-  top: -3px;
-  bottom: -3px;
-  width: 2px;
-  margin-left: -1px;
-  border-radius: 1px;
-  background: var(--bone);
-  opacity: 0.7;
 }
 .else {
   display: grid;
@@ -116,14 +71,9 @@
   padding: 0 2px;
 }
 
-/* Phone and tablet: text links and link buttons are 44px touch targets. */
+/* Phone and tablet: the places are 44px touch targets. */
 @media (max-width: 1023px) {
   .place {
-    min-height: 44px;
-  }
-  .moreLink {
-    display: inline-flex;
-    align-items: center;
     min-height: 44px;
   }
 }
