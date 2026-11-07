@@ -276,6 +276,45 @@ describe('Codex rollout', () => {
     expect(turn.signal().state).toBe('working')
   })
 
+  it.each(['function_call', 'custom_tool_call'])(
+    'an asynchronous question the hook refuses (%s) is not an open question',
+    (callType) => {
+      const turn = new CodexTurn(CODEX)
+      turn.apply(line('event_msg', { type: 'task_started' }))
+      turn.apply(
+        line('response_item', { type: callType, name: 'request_user_input_async', call_id: 'a1' }),
+      )
+      expect(turn.signal().state).toBe('blocked')
+      turn.apply(
+        line('response_item', {
+          type: `${callType}_output`,
+          call_id: 'a1',
+          output: 'Tool call blocked by PreToolUse hook: request_user_input_async is off in Aico',
+        }),
+      )
+      expect(turn.signal().state).toBe('working')
+      turn.apply(line('event_msg', { type: 'task_complete' }))
+      expect(turn.signal().state).toBe('idle')
+    },
+  )
+
+  it('a refused plain question is not open either', () => {
+    const turn = new CodexTurn(CODEX)
+    turn.apply(line('event_msg', { type: 'task_started' }))
+    turn.apply(
+      line('response_item', { type: 'function_call', name: 'request_user_input', call_id: 'q1' }),
+    )
+    turn.apply(
+      line('response_item', {
+        type: 'function_call_output',
+        call_id: 'q1',
+        output: 'Tool call blocked by PreToolUse hook: request_user_input is off in Aico',
+      }),
+    )
+    turn.apply(line('event_msg', { type: 'task_complete' }))
+    expect(turn.signal().state).toBe('idle')
+  })
+
   it('an asynchronous question asked mid-turn is answered by a user message', () => {
     const turn = new CodexTurn(CODEX)
     turn.apply(line('event_msg', { type: 'task_started' }))

@@ -163,6 +163,16 @@ export function findCodexRollout(fs: ProcFs, pids: number[]): CodexRolloutFile |
   return fallback
 }
 
+/** The output of an accepted `request_user_input_async` call: `{"accepted":true}`. */
+function asyncAccepted(output: unknown): boolean {
+  try {
+    const value = typeof output === 'string' ? JSON.parse(output) : output
+    return (value as { accepted?: unknown } | null)?.accepted === true
+  } catch {
+    return false
+  }
+}
+
 /** Folds rollout lines into the thread's turn state. */
 export class CodexTurn {
   private active = false
@@ -252,6 +262,16 @@ export class CodexTurn {
     ) {
       this.escalations.add(callId)
       stamp()
+    } else if (
+      (kind === 'function_call_output' || kind === 'custom_tool_call_output') &&
+      callId &&
+      this.asyncQuestions.has(callId)
+    ) {
+      // Only the accepted form leaves the question open; a refusal (a hook's block, an error) closes it.
+      if (!asyncAccepted(payload.output)) {
+        this.asyncQuestions.delete(callId)
+        stamp()
+      }
     } else if (
       (kind === 'function_call_output' || kind === 'custom_tool_call_output') &&
       callId &&
