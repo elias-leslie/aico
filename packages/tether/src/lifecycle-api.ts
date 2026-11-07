@@ -7,6 +7,7 @@ import { hostname } from 'node:os'
 import { agentSessionIdOf, agentStateOf, type HookReport, reportAgentState } from './agent-state'
 import { type AskDelivery, AskStore, sessionAsks, transferAskNotices } from './asks'
 import type { TetherPaths } from './config'
+import { ContinuationError, continuation } from './continue-from'
 import type { EventBus } from './events'
 import { type Handler, HttpError, type Router, readJsonObject, sendError, sendJson } from './http'
 import type { Hub } from './hub/hub'
@@ -126,6 +127,7 @@ import { type Continuity, registerRebootRoutes } from './reboot'
 import { type Recovery, registerRecoveryRoutes } from './recovery'
 import { RewindRefused, rewindClaude } from './rewind'
 import { generationOf, runTmux, TMUX_BIN, withRunningSession } from './running-session'
+import type { History } from './sessions/history'
 import { parseViewerLabel, recordSizeHolder, sizeHolderOf } from './size-holder'
 import type { Store } from './store'
 import { registerWaitRoutes, type WaitService } from './waits'
@@ -140,6 +142,7 @@ const RUNNING_SETTLE_MS = 3_000
 const RUNNING_POLL_MS = 100
 const GENERATION_RE = /^[0-9a-f]{64}$/
 const UUID_RE = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/
+const SESSION_ID_RE = /^[0-9a-f]{8}$/
 const ORIGINS: readonly SessionOrigin[] = ['aico', 'a-term', 'cli']
 
 let foregroundPaneMemory: ForegroundPaneMemory | null = null
@@ -187,6 +190,8 @@ export interface LifecycleApiContext {
   lanes?: LaneReporter
   /** General waits (src/waits.ts); absent where Tether does not observe sessions. */
   waits?: WaitService
+  /** The session history; `continueFrom` reads the old session's transcript from it. */
+  history?: History
 }
 
 const NEEDS_SHAPE =
@@ -659,8 +664,10 @@ function createSession(context: LifecycleApiContext): Handler {
       'aTermSessionId',
       'size',
       'host',
+      'continueFrom',
     ])
     if (body.host !== undefined && body.host !== null) {
+      if (body.continueFrom != null) throw new HttpError(400, 'continue_on_this_host_only')
       if (!context.hub) throw new HttpError(400, 'unknown_host', { host: body.host })
       await context.hub.create(res, '/v1/sessions', body)
       return
@@ -703,6 +710,33 @@ function createSession(context: LifecycleApiContext): Handler {
       projectRoot = await resolveProject(context, projectId)
       if (!projectRoot) throw new HttpError(400, 'unknown_project')
     }
+    // Continue another session: a recap of it is this one's first prompt, in the same checkout.
+    let recap: string | null = null
+    if (body.continueFrom !== undefined && body.continueFrom !== null) {
+      if (typeof body.continueFrom !== 'string' || !SESSION_ID_RE.test(body.continueFrom))
+        throw new HttpError(400, 'invalid_body', { field: 'continueFrom' })
+      if (body.tool === undefined) throw new HttpError(400, 'invalid_body', { field: 'tool' })
+      if (body.blankSlate === true)
+        throw new HttpError(400, 'invalid_body', { field: 'blankSlate' })
+      try {
+        const old = getWidget(body.continueFrom)
+        const found = await continuation({
+          history: context.history,
+          from: body.continueFrom,
+          source: old,
+          tool: tool.slug,
+        })
+        recap = found.prompt
+        if (!projectId && !projectRoot) {
+          projectId = found.projectId
+          projectRoot = found.projectRoot
+        }
+        name ??= parseLabel(found.name)
+      } catch (error) {
+        if (error instanceof ContinuationError) throw new HttpError(error.status, error.code)
+        throw error
+      }
+    }
     // Blank Slate: a fresh empty workspace instead of a project (blank-slate.ts).
     if (body.blankSlate !== undefined && body.blankSlate !== false) {
       if (body.blankSlate !== true || projectId || projectRoot)
@@ -727,7 +761,9 @@ function createSession(context: LifecycleApiContext): Handler {
     if (projectId || projectRoot) setWidgetProject(id, projectId, projectRoot)
     if (name) setWidgetName(id, name)
     if (instructions) saveInstructions(id, instructions)
-    const started = await ensureSessionSerialized(id, grid)
+    const started = await (recap === null
+      ? ensureSessionSerialized(id, grid)
+      : withRootPrompt(id, recap, () => ensureSessionSerialized(id, grid)))
     if (!started) {
       const failure = lastEnsureFailure(id)
       if (failure?.code === 'admission_denied' || failure?.code === 'linger_required') {

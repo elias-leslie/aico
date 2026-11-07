@@ -180,6 +180,7 @@ describe('main', () => {
     const { io, out } = capture()
     expect(await main(['sessions', 'create', '--help'], io)).toBe(0)
     expect(out.join('\n')).toContain('sessions create [--tool T]')
+    expect(out.join('\n')).toContain('--continue-from ID')
     expect(out.join('\n')).not.toContain('sessions end')
   })
 

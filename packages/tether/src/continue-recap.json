@@ -1,0 +1,12 @@
+{
+  "about": "Bounds of the recap a session started with --continue-from begins with (continue-from.ts). maxBytes must stay under the fresh launch prompt limit (root-control MAX_FRESH_PROMPT_BYTES, 14 KiB).",
+  "maxBytes": 12000,
+  "firstPromptChars": 1200,
+  "messageChars": 900,
+  "toolCallChars": 160,
+  "tailScanEvents": 160,
+  "maxMessages": 24,
+  "gitStatusLines": 40,
+  "gitLogCommits": 8,
+  "gitTimeoutMs": 3000
+}

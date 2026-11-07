@@ -25,8 +25,11 @@ Commands:
   version                       print the CLI and daemon versions
   sessions [list | get <id>]    live sessions, one per line (ID, STATUS, STATE, TOOL, PROJECT, NAME);
                                 get: one session (--json: the whole record)
-  sessions create [--tool T] [--project P] [--name N]   start a session (alias: new);
-                                one line about it; --json prints the whole record
+  sessions create [--tool T] [--project P] [--name N] [--continue-from ID]
+                                start a session (alias: new); one line about it; --json prints
+                                the whole record. --continue-from ID (with --tool): carry on from
+                                that session in another tool, in its checkout, starting from a
+                                recap (its first request, its last messages, git status)
   reboot prepare [--timeout SEC] [--no-notify]   ask agents to checkpoint; exit 0 ready, 3 not
   reboot status                 restore results since the last boot
   recovery status               crash recoveries: waiting, recovered or held
@@ -500,7 +503,7 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
           return child.status ?? 1
         }
         if (sub === 'new' || sub === 'create') {
-          const options = flags(rest, ['--tool', '--project', '--name'])
+          const options = flags(rest, ['--tool', '--project', '--name', '--continue-from'])
           const body: Record<string, unknown> = {
             origin: 'cli',
             size: { cols: process.stdout.columns || 120, rows: process.stdout.rows || 40 },
@@ -508,6 +511,7 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
           if (options['--tool']) body.tool = options['--tool']
           if (options['--project']) body.projectId = options['--project']
           if (options['--name']) body.name = options['--name']
+          if (options['--continue-from']) body.continueFrom = options['--continue-from']
           const created = await callSocket(paths.socket, 'POST', '/v1/sessions', body, 60_000)
           const session = created.body as Record<string, unknown> | null
           if (json || created.status >= 300 || typeof session?.id !== 'string')
