@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ago, count, standing, tokenLine, WORKING_MS } from './history'
+import { agoAt, count, standing, tokenLine, WORKING_MS } from './history'
 
 const base = {
   id: 'codex:a',
@@ -26,6 +26,14 @@ describe('recent sessions copy', () => {
     expect(standing(s({}), 1_000_000 + WORKING_MS)).toBe('quiet')
   })
 
+  it('never calls a conversation Finished while a running session owns it', () => {
+    const done = { ...base, outcome: 'completed' } as never
+    expect(standing(done, 9e9, { activity: 'working' })).toBe('working')
+    expect(standing(done, 9e9, { activity: 'idle' })).toBe('idle')
+    expect(standing(done, 9e9, { activity: 'blocked' })).toBe('waiting')
+    expect(standing(done, 9e9, { activity: 'unknown' })).toBe('idle')
+  })
+
   it('shortens big numbers and keeps small ones exact', () => {
     expect(count(999)).toBe('999')
     expect(count(12_345)).toBe('12k')
@@ -34,9 +42,9 @@ describe('recent sessions copy', () => {
   })
 
   it('ages in minutes and hours, and shows no age for an unknown time', () => {
-    expect(ago(null, 0)).toBe('—')
-    expect(ago(0, 30_000)).toBe('just now')
-    expect(ago(0, 5 * 60_000)).toBe('5 min ago')
-    expect(ago(0, 3 * 3_600_000)).toBe('3 h ago')
+    expect(agoAt(null, 0)).toBe('—')
+    expect(agoAt(0, 30_000)).toBe('just now')
+    expect(agoAt(0, 5 * 60_000)).toBe('5 min ago')
+    expect(agoAt(0, 3 * 3_600_000)).toBe('3 h ago')
   })
 })

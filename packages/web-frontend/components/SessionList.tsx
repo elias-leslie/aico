@@ -11,7 +11,17 @@ import { ChevronRight } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 import type { Attention } from '@/lib/attention'
 import { CHAT_STATE } from '@/lib/chat'
+import { useLiveSessions } from '@/lib/frame/live'
+import {
+  type AskCounts,
+  askText,
+  NO_ASKS,
+  type RowState,
+  rowState,
+  rowSummary,
+} from '@/lib/frame/triage'
 import { useAgentTools } from '@/lib/hooks/use-agent-tools'
+import { useClock } from '@/lib/hooks/use-clock'
 import { useLocalStorageState } from '@/lib/hooks/use-local-storage-state'
 import type { SessionAttention } from '@/lib/hooks/use-session-attention'
 import {
@@ -41,6 +51,7 @@ interface SessionListEntry {
   mode: string
   slot: TerminalSlot | PaneSlot
   state: Attention | null
+  asks: AskCounts
 }
 
 /** Sessions oldest first, so a state change never moves one (foldSessionEntries
@@ -69,6 +80,7 @@ function sortSessionEntries(
       mode: slotMode(slot),
       slot,
       state: attention?.forSlot(slot) ?? null,
+      asks: attention?.asksFor?.(slot) ?? NO_ASKS,
     }
   })
 }
@@ -114,7 +126,6 @@ function foldSessionEntries(
     }
   })
   const teams = foldTeams(sessions)
-  if (!entries.some((entry) => entry.slot.chat)) return teams
   const order = {
     'needs-you': 0,
     working: 1,
@@ -122,10 +133,14 @@ function foldSessionEntries(
     'no-status': 2,
     finished: 3,
   }
-  return teams.sort(
-    (a, b) =>
-      order[a.group] - order[b.group] || (b.item.at ?? 0) - (a.item.at ?? 0),
-  )
+  // Grouped by state; inside a group the order is stable (oldest first), so
+  // a session only moves when its own state changes.
+  return teams
+    .map((row, index) => ({ row, index }))
+    .sort(
+      (a, b) => order[a.row.group] - order[b.row.group] || a.index - b.index,
+    )
+    .map(({ row }) => row)
 }
 
 function rowFacts(item: TeamEntry) {
@@ -134,6 +149,7 @@ function rowFacts(item: TeamEntry) {
     mode: item.entry.mode,
     state: item.entry.state,
     slot: item.entry.slot,
+    asks: item.entry.asks,
   }
 }
 
@@ -169,16 +185,6 @@ export function sessionWhoWhere(
 ): string {
   const label = sessionLabel(slots, slot)
   return `“${label}” (${toolName(tools, slotMode(slot))} on ${slot.host ?? 'this computer'})`
-}
-
-/** What a row says under its name: its agent and what it is doing. The
- * list no longer groups by state, so the row says it. */
-function rowMeta(agent: string, state: Attention | null): string {
-  if (state?.group === 'needs-you') return `${agent} is waiting for you`
-  if (state?.group === 'finished') return `${agent} finished · not opened yet`
-  if (state?.group === 'working' || state?.group === 'idle')
-    return `${agent} · ${state.group}`
-  return agent
 }
 
 const TEAMS_OPEN_KEY = 'aico:teams-open'
@@ -228,11 +234,23 @@ export function SessionList({
     [slots, attention],
   )
   const folds = useTeamFolds(phone)
+  const live = useLiveSessions()
+  const now = useClock(30_000)
   const agentName = (mode: string) => toolName(agentTools, mode)
-  // Headings only while something needs you: Needs you, then the rest.
-  const hasChats = slots.some((slot) => slot.chat)
-  const waiting = teams.filter((row) => row.group === 'needs-you').length
-  const headings = hasChats || (waiting > 0 && waiting < teams.length)
+  /** What the row says about its session's state, with its questions. */
+  const stateOf = (
+    item: TeamEntry,
+  ): { state: RowState; asks: string | null } => {
+    const sessionId = getSlotSessionId(item.entry.slot)
+    return {
+      state: rowState(
+        item.entry.state,
+        sessionId ? live.bySession.get(sessionId) : undefined,
+        now,
+      ),
+      asks: askText(item.entry.asks),
+    }
+  }
 
   const renderRow = (
     row: TeamRow<TeamEntry>,
@@ -240,6 +258,7 @@ export function SessionList({
   ): React.ReactNode => {
     const { id } = row.item
     const { label, mode, state, slot } = rowFacts(row.item)
+    const shown = stateOf(row.item)
     const isTeam = row.children.length > 0
     const sessionKey = slot ? (getSlotSessionId(slot) ?? id) : id
     const teamOpen = isTeam && folds.isOpen(sessionKey)
@@ -260,10 +279,11 @@ export function SessionList({
     const meta = chat
       ? `${chat.role} · ${chat.model ?? '—'} · ${CHAT_STATE[chat.state] ?? chat.state} · ${chat.cwd.split('/').pop()}`
       : [
+          agentName(mode),
+          shown.state.text,
+          shown.asks,
           // A team row: the coordinator's own state, then its team summary.
-          isTeam
-            ? `${rowMeta(agentName(mode), state)} · ${row.summary}`
-            : rowMeta(agentName(mode), state),
+          isTeam ? row.summary : null,
           row.orphaned ? 'coordinator ended' : null,
         ]
           .filter(Boolean)
@@ -286,13 +306,11 @@ export function SessionList({
           </span>
           <span className="when">{state?.age ?? ''}</span>
           <span className="meta">
-            {(needs || group === 'finished') && (
+            {!chat && (
               <span
                 aria-hidden="true"
-                className="h-[7px] w-[7px] flex-none rounded-full"
-                style={{
-                  backgroundColor: needs ? 'var(--beacon)' : 'var(--jade)',
-                }}
+                className="lantern-mark"
+                data-tone={needs ? 'need' : shown.state.tone}
               />
             )}
             {/* A lane under its coordinator needs no "↳ coordinator" chip. */}
@@ -337,28 +355,24 @@ export function SessionList({
     )
   }
 
+  const labels = {
+    'needs-you': 'Needs you',
+    working: 'Working',
+    idle: 'Idle',
+    finished: 'Finished',
+    'no-status': 'Idle',
+  }
+  // The group each row sits in; no-status sessions read as idle.
+  const groupOf = (row: TeamRow<TeamEntry>) => labels[row.group]
+
   return (
     <>
       {teams.map((row, index) => {
-        const labels = {
-          'needs-you': 'Needs you',
-          working: 'Working',
-          idle: 'Idle',
-          finished: 'Finished',
-          'no-status': 'Idle',
-        }
-        const header = hasChats
-          ? index === 0 || teams[index - 1]?.group !== row.group
-            ? labels[row.group]
+        const header =
+          index === 0 ||
+          groupOf(teams[index - 1] as TeamRow<TeamEntry>) !== groupOf(row)
+            ? groupOf(row)
             : null
-          : !headings
-            ? null
-            : index === 0
-              ? 'Needs you'
-              : index === waiting
-                ? 'Other sessions'
-                : null
-
         return (
           <div key={row.item.id}>
             {header && (
@@ -368,11 +382,7 @@ export function SessionList({
               >
                 {header}
                 <span className="n">
-                  {hasChats
-                    ? teams.filter((item) => item.group === row.group).length
-                    : index === 0
-                      ? waiting
-                      : teams.length - waiting}
+                  {teams.filter((item) => groupOf(item) === header).length}
                 </span>
               </h3>
             )}
@@ -399,6 +409,8 @@ export function SessionRail({
     () => foldSessionEntries(sortSessionEntries(slots, attention)),
     [slots, attention],
   )
+  const live = useLiveSessions()
+  const now = useClock(30_000)
   return (
     <>
       {teams.map((row) => {
@@ -408,7 +420,16 @@ export function SessionRail({
         const agent = toolName(agentTools, mode)
         const needs = row.group === 'needs-you'
         const current = teamMembers(row).some((m) => m.id === currentId)
-        const name = [label, rowMeta(agent, state), row.summary]
+        const sessionId = getSlotSessionId(slot)
+        const shown = rowState(
+          state,
+          sessionId ? live.bySession.get(sessionId) : undefined,
+          now,
+        )
+        const name = [
+          rowSummary(label, agent, shown, row.item.entry.asks),
+          row.summary,
+        ]
           .filter(Boolean)
           .join(' · ')
         return (
@@ -426,15 +447,11 @@ export function SessionRail({
               size={18}
               color={getAgentColor(mode, tool?.color)}
             />
-            {(needs || state?.group === 'finished') && (
-              <span
-                aria-hidden="true"
-                className="dot"
-                style={{
-                  backgroundColor: needs ? 'var(--beacon)' : 'var(--jade)',
-                }}
-              />
-            )}
+            <span
+              aria-hidden="true"
+              className="dot lantern-mark"
+              data-tone={needs ? 'need' : shown.tone}
+            />
           </button>
         )
       })}

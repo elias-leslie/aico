@@ -1,0 +1,79 @@
+.overview {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 14px 16px 28px;
+}
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.head h2 {
+  font: 500 15px / 1.2 var(--font-display);
+}
+.sub {
+  min-width: 0;
+  font-size: 12px;
+  color: var(--mist);
+}
+.more {
+  margin-left: auto;
+  font-size: 12.5px;
+  color: var(--bone);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.more:hover {
+  color: var(--lantern);
+}
+.note {
+  font-size: 13px;
+  color: var(--mist);
+}
+.list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.list[data-stale] {
+  opacity: 0.7;
+}
+.list > li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+.list > li:first-child {
+  border-top: 0;
+}
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+a.main:hover .title {
+  color: var(--lantern);
+}
+.title {
+  font-size: 13.5px;
+  color: var(--bone);
+  overflow-wrap: anywhere;
+}
+.detail {
+  font-size: 12px;
+  color: var(--mist);
+  overflow-wrap: anywhere;
+}

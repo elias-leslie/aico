@@ -4,6 +4,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
 import { Menu, RefreshCw, StickyNote } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { useEffect } from 'react'
+import { openNeedsYou } from '@/lib/frame/needs-you-request'
 import { quotaGlances, quotaLine, quotaTitle } from '@/lib/frame/quota'
 import { useServerReach } from '@/lib/frame/server-reach'
 import { shownSessionLine, useShownSession } from '@/lib/frame/shown-session'
@@ -14,7 +16,7 @@ import { popOutNotes } from '@/lib/notes-window'
 import { PRODUCT_NAME } from '@/lib/project-branding'
 import { at, plural, summaryLine } from '@/lib/status'
 import { AgentIcon, getAgentColor } from '../AgentIcon'
-import { openNeedsYou } from '../asks/NeedsYou'
+import { takeAskFromUrl } from '../asks/NeedsYou'
 import styles from './Frame.module.css'
 import { useFrame } from './FrameContext'
 
@@ -74,20 +76,18 @@ export function TopBar() {
     } else frame.setSheetOpen(true)
     revealCurrentRow()
   }
-  const showNeedsYou = () => {
-    if (frame) {
-      if (frame.docked) {
-        if (frame.tier === 'rail' || frame.tier === 'full')
-          frame.setTier('panel')
-      } else frame.setSheetOpen(true)
-    }
-    openNeedsYou()
-  }
+  const showNeedsYou = () => openNeedsYou()
+  // A push link (?ask=ID) opens Needs you on that question, once.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: on load only
+  useEffect(() => {
+    const id = takeAskFromUrl()
+    if (id) openNeedsYou(id)
+  }, [])
   const retry = () => {
     void queryClient.refetchQueries({ type: 'active' })
   }
   const openNotes = () => {
-    if (!popOutNotes(NEW_NOTE_HREF)) router.push(NEW_NOTE_HREF)
+    if (!docked || !popOutNotes(NEW_NOTE_HREF)) router.push(NEW_NOTE_HREF)
   }
 
   // Health: the worst state's dot and the problem count; unknown when it couldn't be read.
@@ -278,22 +278,21 @@ export function TopBar() {
         </button>
       )}
 
-      {docked && (
-        <button
-          type="button"
-          className={styles.tbBtn}
-          onClick={openNotes}
-          title="Notes: opens in its own window, ready to type"
-          data-testid="top-bar-notes"
-        >
-          <StickyNote
-            className="h-4 w-4"
-            strokeWidth={1.7}
-            aria-hidden="true"
-          />
-          Notes
-        </button>
-      )}
+      <button
+        type="button"
+        className={styles.tbBtn}
+        onClick={openNotes}
+        aria-label="Notes"
+        title={
+          docked
+            ? 'Notes: opens in its own window, ready to type'
+            : 'Notes: a new note, ready to type'
+        }
+        data-testid="top-bar-notes"
+      >
+        <StickyNote className="h-4 w-4" strokeWidth={1.7} aria-hidden="true" />
+        <span className={styles.wideOnly}>Notes</span>
+      </button>
     </header>
   )
 }

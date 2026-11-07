@@ -1,0 +1,103 @@
+.note {
+  color: var(--mist);
+  font-size: 13px;
+}
+.link {
+  color: var(--lantern);
+  text-decoration: underline;
+}
+.chart {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.chart[data-stale] {
+  opacity: 0.7;
+}
+.axis {
+  position: relative;
+  height: 14px;
+  margin-left: 110px;
+  font-size: 10.5px;
+  color: var(--mist);
+}
+.axis span {
+  position: absolute;
+  transform: translateX(-2px);
+}
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 22px;
+  color: var(--bone);
+  font-size: 12.5px;
+}
+a.row:hover .label {
+  color: var(--lantern);
+}
+.label {
+  flex: none;
+  width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--mist);
+}
+.track {
+  position: relative;
+  flex: 1;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--wash);
+}
+.bar {
+  position: absolute;
+  top: 5px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--mist);
+}
+.bar[data-state="working"] {
+  background: var(--lantern);
+}
+.bar[data-state="failed"] {
+  background: var(--ember);
+}
+.bar[data-state="waiting"] {
+  background: var(--lantern);
+  opacity: 0.6;
+}
+.mark {
+  position: absolute;
+  top: 7px;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  border-radius: 50%;
+  background: var(--lantern);
+}
+.legend {
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  color: var(--mist);
+}
+.key {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: var(--mist);
+  vertical-align: -1px;
+}
+.key[data-state="failed"] {
+  background: var(--ember);
+}

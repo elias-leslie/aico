@@ -86,6 +86,16 @@ const sizeHolderHooks = vi.hoisted(() => ({
   claimSize: vi.fn(),
 }))
 
+vi.mock('@/lib/frame/live', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/frame/live')>()),
+  useLiveSessions: () => ({
+    items: [],
+    bySession: new Map(),
+    conversations: new Set(),
+    failed: false,
+    stale: false,
+  }),
+}))
 vi.mock('@/components/Terminal', async () => {
   const { forwardRef, useImperativeHandle } = await import('react')
   return {

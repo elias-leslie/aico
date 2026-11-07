@@ -5,6 +5,16 @@ import { type AdHocSlot, getSlotPanelId } from '@/lib/utils/slot'
 import { SLOT_BASE } from '@/test-stubs/session-fixtures'
 import { SessionList, SessionRail, sessionsHeading } from './SessionList'
 
+vi.mock('@/lib/frame/live', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/frame/live')>()),
+  useLiveSessions: () => ({
+    items: [],
+    bySession: new Map(),
+    conversations: new Set(),
+    failed: false,
+    stale: false,
+  }),
+}))
 vi.mock('./KeptCheckIns', () => ({ KeptCheckIns: () => null }))
 vi.mock('@/lib/hooks/use-agent-tools', () => ({
   useAgentTools: () => ({ agentTools: [] }),
@@ -68,6 +78,7 @@ const states: Record<string, Attention> = {
 const attention = {
   forSlot: (s: unknown) => states[(s as AdHocSlot).sessionId] ?? null,
   needsYouCount: 1,
+  asksFor: () => ({ blocking: 0, other: 0 }),
 }
 const slots = [lead, ask, busy, done, left, solo]
 
@@ -93,12 +104,12 @@ describe('SessionList teams', () => {
       [
         ...container.querySelectorAll('[data-testid="session-group-header"]'),
       ].map((el) => el.textContent),
-    ).toEqual(['Needs you1', 'Other sessions2'])
-    // The rest keep the order they started in, whatever their state.
+    ).toEqual(['Needs you1', 'Working1', 'Idle1'])
+    // Grouped by state: the waiting team first, then working, then idle.
     expect(rowNames(container)).toEqual([
       'Neri — Daybreak lead',
-      'Docs — Notes',
       'Aico — Tray',
+      'Docs — Notes',
     ])
     const team = container.querySelector('.lantern-row.lead') as HTMLElement
     expect(team.className).toContain('needs')
@@ -147,48 +158,43 @@ describe('SessionList teams', () => {
     expect(onSelect).toHaveBeenCalledWith(busy)
   })
 
-  it('moves nothing for working and idle changes, and has no headings then', () => {
+  it('groups by state with a heading and count each, and moves a row when its state changes', () => {
     const quiet: Record<string, Attention> = {
       ...states,
       ask: state('working', 2),
     }
-    const { container, rerender } = render(
+    const view = (map: Record<string, Attention>) => (
       <SessionList
         slots={slots}
         attention={{
-          forSlot: (s: unknown) => quiet[(s as AdHocSlot).sessionId] ?? null,
+          forSlot: (s: unknown) => map[(s as AdHocSlot).sessionId] ?? null,
           needsYouCount: 0,
+          asksFor: () => ({ blocking: 0, other: 0 }),
         }}
         onSelect={vi.fn()}
         phone
-      />,
+      />
     )
-    const before = rowNames(container)
-    expect(before).toEqual([
+    const headers = (root: HTMLElement) =>
+      [...root.querySelectorAll('[data-testid="session-group-header"]')].map(
+        (el) => el.textContent,
+      )
+    const { container, rerender } = render(view(quiet))
+    expect(headers(container)).toEqual(['Working2', 'Idle1'])
+    expect(rowNames(container)).toEqual([
+      'Neri — Daybreak lead',
+      'Aico — Tray',
+      'Docs — Notes',
+    ])
+    rerender(
+      view({ ...quiet, left: state('working', 7), solo: state('idle', 8) }),
+    )
+    // Same state, same order: Docs now works beside the lead; Tray went idle.
+    expect(rowNames(container)).toEqual([
       'Neri — Daybreak lead',
       'Docs — Notes',
       'Aico — Tray',
     ])
-    expect(
-      container.querySelector('[data-testid="session-group-header"]'),
-    ).toBeNull()
-    const flipped: Record<string, Attention> = {
-      ...quiet,
-      left: state('working', 7),
-      solo: state('idle', 8),
-    }
-    rerender(
-      <SessionList
-        slots={slots}
-        attention={{
-          forSlot: (s: unknown) => flipped[(s as AdHocSlot).sessionId] ?? null,
-          needsYouCount: 0,
-        }}
-        onSelect={vi.fn()}
-        phone
-      />,
-    )
-    expect(rowNames(container)).toEqual(before)
     expect(
       screen.getByRole('button', { name: /Aico — Tray/ }).textContent,
     ).toContain('codex · idle')
@@ -272,15 +278,15 @@ describe('SessionRail', () => {
     const items = [...container.querySelectorAll('.lantern-rail-item')]
     expect(items.map((el) => el.getAttribute('aria-label'))).toEqual([
       'Neri — Daybreak lead · codex · working · 1 working, 1 needs you, 1 idle',
-      'Docs — Notes · codex · idle',
       'Aico — Tray · codex · working',
+      expect.stringMatching(/^Docs — Notes · codex · idle since /),
     ])
     const team = items[0] as HTMLElement
     expect(team.className).toContain('needs')
     expect(team.getAttribute('aria-current')).toBe('true')
     expect(team.querySelector('.dot')).not.toBeNull()
-    expect(items[2].getAttribute('aria-current')).toBeNull()
-    fireEvent.click(items[2])
+    expect(items[1]?.getAttribute('aria-current')).toBeNull()
+    fireEvent.click(items[1] as HTMLElement)
     expect(onSelect).toHaveBeenCalledWith(solo)
   })
 })

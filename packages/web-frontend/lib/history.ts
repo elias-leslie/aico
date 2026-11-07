@@ -25,6 +25,8 @@ export interface HistorySession {
   tokens: HistoryTokens
   toolCalls: number
   filesWritten: number
+  /** A smoke or scratch run (the server's rule); Recent leaves it out until asked. */
+  test?: boolean
 }
 
 export interface HistoryDetail extends HistorySession {
@@ -65,10 +67,32 @@ export function toolName(tool: string): string {
 /** A turn that last wrote this recently is taken to be still running. */
 export const WORKING_MS = 2 * 60_000
 
-export type Standing = 'working' | 'finished' | 'stopped' | 'failed' | 'quiet'
+export type Standing =
+  | 'working'
+  | 'waiting'
+  | 'idle'
+  | 'finished'
+  | 'stopped'
+  | 'failed'
+  | 'quiet'
 
-/** Where a session stands. `quiet`: it has no final reply and has been still a while. */
-export function standing(session: HistorySession, now: number): Standing {
+/** The running session that owns this conversation, as `/api/history/live` says. */
+export type LiveState = { activity: 'working' | 'idle' | 'blocked' | 'unknown' }
+
+/** Where a session stands. A conversation a running session still owns is
+ * Working, Waiting for you or Idle, never Finished: its last turn ending is
+ * not the session ending. `quiet`: no final reply and still for a while. */
+export function standing(
+  session: HistorySession,
+  now: number,
+  live?: LiveState,
+): Standing {
+  if (live)
+    return live.activity === 'working'
+      ? 'working'
+      : live.activity === 'blocked'
+        ? 'waiting'
+        : 'idle'
   if (session.outcome === 'completed') return 'finished'
   if (session.outcome === 'aborted') return 'stopped'
   if (session.outcome === 'error') return 'failed'
@@ -79,6 +103,8 @@ export function standing(session: HistorySession, now: number): Standing {
 
 export const STANDING_TEXT: Record<Standing, string> = {
   working: 'Working',
+  waiting: 'Waiting for you',
+  idle: 'Idle',
   finished: 'Finished',
   stopped: 'Stopped',
   failed: 'Failed',
@@ -88,6 +114,8 @@ export const STANDING_TEXT: Record<Standing, string> = {
 /** The status chip class each standing wears (status chips are shape and colour). */
 export const STANDING_CHIP: Record<Standing, string> = {
   working: 'running',
+  waiting: 'warn',
+  idle: 'unknown',
   finished: 'ok',
   stopped: 'warn',
   failed: 'failed',
@@ -105,12 +133,12 @@ export function tokenLine(tokens: HistoryTokens): string {
   return `${count(tokens.input)} in · ${count(tokens.cacheRead)} cached · ${count(tokens.output)} out`
 }
 
-export function plural(n: number, one: string, many = `${one}s`): string {
+export function countOf(n: number, one: string, many = `${one}s`): string {
   return `${n.toLocaleString('en-US')} ${n === 1 ? one : many}`
 }
 
 /** "4 min ago", "2 h ago", or the date for older ones. */
-export function ago(ms: number | null, now: number): string {
+export function agoAt(ms: number | null, now: number): string {
   if (ms === null) return '—'
   const minutes = Math.floor(Math.max(0, now - ms) / 60_000)
   if (minutes < 1) return 'just now'

@@ -6,14 +6,18 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Capture, CaptureUpload } from '@/lib/api/captures'
 import { dropAskCaptureQueue, setCaptureLimits } from '@/lib/capture-queue'
+import { useNeedsYouRequests } from '@/lib/frame/needs-you-request'
 import type { OwnerAsk } from '@/lib/hooks/use-asks'
-import {
-  closeNeedsYou,
-  NeedsYouLauncher,
-  openNeedsYou,
-  useNeedsYouState,
-} from './NeedsYou'
 import { SessionAsk } from './SessionAsk'
+
+const frame = vi.hoisted(() => ({
+  current: null as null | {
+    docked: boolean
+    tier: string
+    page: unknown
+  },
+}))
+vi.mock('../frame/FrameContext', () => ({ useFrame: () => frame.current }))
 
 const state = vi.hoisted(() => ({
   asks: [] as OwnerAsk[],
@@ -104,7 +108,7 @@ beforeEach(() => {
   setCaptureLimits({ max_bytes: 1000, max_files: 3 })
   URL.createObjectURL = vi.fn(() => 'blob:x')
   URL.revokeObjectURL = vi.fn()
-  act(() => closeNeedsYou())
+  frame.current = null
 })
 
 describe('SessionAsk', () => {
@@ -204,20 +208,23 @@ describe('SessionAsk', () => {
     expect(screen.getByTestId('ask-card')).toBeVisible()
   })
 
-  it('steps aside on a desktop while Needs you is open beside it', () => {
+  it('steps aside on a desktop while the side lists the questions', () => {
     state.asks = [ask()]
-    render(<SessionAsk sessionId="0123abcd" />)
+    frame.current = { docked: true, tier: 'rail', page: null }
+    const { rerender } = render(<SessionAsk sessionId="0123abcd" />)
     expect(screen.getByTestId('session-ask')).toBeVisible()
-    act(() => openNeedsYou())
+    frame.current = { docked: true, tier: 'panel', page: null }
+    rerender(<SessionAsk sessionId="0123abcd" />)
     expect(screen.queryByTestId('session-ask')).toBeNull()
   })
 
-  it('hands the phone to the Needs you sheet on that question', () => {
+  it('hands the phone to Needs you in the side, on that question', () => {
     state.phone = true
     state.asks = [ask()]
+    const heard = vi.fn()
     function Probe() {
-      const { open, focus } = useNeedsYouState()
-      return <p data-testid="probe">{open ? `open ${focus}` : 'closed'}</p>
+      useNeedsYouRequests(heard, { replay: false })
+      return null
     }
     render(
       <>
@@ -231,40 +238,6 @@ describe('SessionAsk', () => {
         name: 'Waiting on you: Finish the single Linux partition?. Answer',
       }),
     )
-    expect(screen.getByTestId('probe')).toHaveTextContent('open abcdefabcdef')
-    expect(screen.getByTestId('needs-you-drawer')).toBeInTheDocument()
-  })
-
-  it('keeps the same sheet when the session’s question is answered in it', async () => {
-    state.phone = true
-    state.asks = [ask()]
-    const tree = () => (
-      <>
-        <BarLauncher />
-        <SessionAsk sessionId="0123abcd" />
-      </>
-    )
-    const { rerender } = render(tree())
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: 'Waiting on you: Finish the single Linux partition?. Answer',
-      }),
-    )
-    const sheet = screen.getByTestId('needs-you-drawer')
-    const card = within(sheet).getByTestId('ask-card')
-    fireEvent.click(within(card).getAllByRole('radio')[0] as HTMLElement)
-    fireEvent.click(within(card).getByRole('button', { name: 'Send' }))
-    await act(async () => {})
-    state.asks = [{ ...ask(), state: 'answered' }]
-    rerender(tree())
-    expect(screen.getByTestId('needs-you-drawer')).toBe(sheet)
-    expect(within(sheet).getByRole('status')).toHaveTextContent(
-      'Sent to “Disk merge”: Finish it now.',
-    )
+    expect(heard).toHaveBeenCalledWith({ focus: 'abcdefabcdef' })
   })
 })
-
-/** The phone session bar's own launcher, mounted before the strip. */
-function BarLauncher() {
-  return <NeedsYouLauncher variant="compact" />
-}

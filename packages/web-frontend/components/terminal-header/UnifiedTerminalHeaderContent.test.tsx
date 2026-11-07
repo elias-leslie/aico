@@ -9,6 +9,16 @@ const { renamePane, updateSession } = vi.hoisted(() => ({
   updateSession: vi.fn(),
 }))
 
+vi.mock('@/lib/frame/live', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/frame/live')>()),
+  useLiveSessions: () => ({
+    items: [],
+    bySession: new Map(),
+    conversations: new Set(),
+    failed: false,
+    stale: false,
+  }),
+}))
 vi.mock('../HostsButton', () => ({ HostsButton: () => null }))
 vi.mock('../status/StatusLauncher', () => ({ StatusLauncher: () => null }))
 vi.mock('../asks/NeedsYou', () => ({

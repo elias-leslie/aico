@@ -3,12 +3,14 @@
 import { ArrowLeft, RefreshCw } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
+import { PlainMarkdown } from '@/components/PlainMarkdown'
 import { TranscriptFold } from '@/components/TranscriptFold'
 import { ApiError } from '@/lib/api-fetch'
+import { useLiveSessions } from '@/lib/frame/live'
 import {
   clock,
+  countOf,
   type HistoryEvent,
-  plural,
   STANDING_CHIP,
   STANDING_TEXT,
   standing,
@@ -116,7 +118,15 @@ export function HistoryTranscript({ id }: { id: string }) {
   }
 
   const events = [...older, ...(newest.data?.items ?? [])]
-  const state = session ? standing(session, now) : null
+  const live = useLiveSessions()
+  const liveHere = [...live.bySession.values()].find(
+    (item) => item.conversation === id,
+  )
+  const state = session ? standing(session, now, liveHere) : null
+  // The session's last word: the newest thing the assistant said as text.
+  const finalReply = [...(newest.data?.items ?? [])]
+    .reverse()
+    .find((event) => event.role === 'assistant' && event.kind === 'text')
 
   return (
     <>
@@ -199,10 +209,10 @@ export function HistoryTranscript({ id }: { id: string }) {
           <div>
             <dt>Work</dt>
             <dd>
-              {plural(session.toolCalls, 'tool call')} ·{' '}
-              {plural(session.files.length, 'file')} written
+              {countOf(session.toolCalls, 'tool call')} ·{' '}
+              {countOf(session.files.length, 'file')} written
               {session.subagents.count > 0 &&
-                ` · ${plural(session.subagents.count, 'subagent')} (${plural(session.subagents.toolCalls, 'tool call')}, ${tokenLine(session.subagents.tokens)})`}
+                ` · ${countOf(session.subagents.count, 'subagent')} (${countOf(session.subagents.toolCalls, 'tool call')}, ${tokenLine(session.subagents.tokens)})`}
             </dd>
           </div>
           {session.files.length > 0 && (
@@ -210,7 +220,9 @@ export function HistoryTranscript({ id }: { id: string }) {
               <dt>Files</dt>
               <dd>
                 <details>
-                  <summary>Show {plural(session.files.length, 'file')}</summary>
+                  <summary>
+                    Show {countOf(session.files.length, 'file')}
+                  </summary>
                   <ul className="mono">
                     {session.files.map((file) => (
                       <li key={file.path}>
@@ -224,6 +236,22 @@ export function HistoryTranscript({ id }: { id: string }) {
             </div>
           )}
         </dl>
+      )}
+
+      {finalReply && (
+        <section
+          aria-label={liveHere ? 'Latest reply' : 'Final reply'}
+          className="history-final"
+          data-testid="history-final"
+        >
+          <h2 className="lantern-sec">
+            {liveHere ? 'Latest reply' : 'Final reply'}
+            {finalReply.at !== null && (
+              <span className="n">{clock(finalReply.at)}</span>
+            )}
+          </h2>
+          <PlainMarkdown text={finalReply.text} className="lantern-ask-body" />
+        </section>
       )}
 
       <section aria-label="Transcript" className="history-events">

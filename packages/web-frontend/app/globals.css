@@ -474,6 +474,51 @@ select {
   transform: rotate(90deg);
 }
 
+/* A session's state as a dot: amber is the only accent; only a session
+   waiting on the owner moves. */
+.lantern-mark {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--mist);
+  box-sizing: border-box;
+}
+
+.lantern-mark[data-tone="need"] {
+  background: var(--beacon);
+  animation: lantern-wait 2.4s ease-in-out infinite;
+}
+
+.lantern-mark[data-tone="work"] {
+  background: var(--jade);
+}
+
+.lantern-mark[data-tone="quiet"] {
+  background: var(--lantern);
+}
+
+.lantern-mark[data-tone="idle"] {
+  background: var(--mist);
+}
+
+.lantern-mark[data-tone="done"] {
+  background: transparent;
+  border: 1.5px solid var(--jade);
+}
+
+@keyframes lantern-wait {
+  50% {
+    box-shadow: 0 0 0 4px rgb(var(--lantern-rgb) / 0.18);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lantern-mark[data-tone="need"] {
+    animation: none;
+  }
+}
+
 /* A note above the list when the workflow runs may be out of date. */
 .lantern-run-notice {
   margin: 0 10px 6px;
@@ -524,9 +569,6 @@ select {
   position: absolute;
   top: 6px;
   right: 6px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
 }
 
 .lantern-rail-count {
@@ -1238,7 +1280,85 @@ div.xterm .xterm-viewport {
 }
 
 .lantern-ask-note {
-  height: 32px;
+  height: 36px;
+}
+
+.lantern-ask-form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lantern-ask-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+/* "Not now" sits apart on the right, quiet: it is the decline, not a step. */
+.lantern-ask-later {
+  margin-left: auto;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  color: var(--mist);
+}
+
+.lantern-ask-later:hover:not(:disabled) {
+  color: var(--bone);
+  background: var(--paper-veil);
+}
+
+.lantern-ask-later:disabled {
+  opacity: 0.5;
+}
+
+.lantern-ask-body > p,
+.lantern-ask-body > ul {
+  margin: 0 0 6px;
+}
+
+.lantern-ask-body > ul {
+  padding-left: 18px;
+  list-style: disc;
+}
+
+.lantern-ask-body code {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--bone);
+}
+
+.lantern-ask-body.folded {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.lantern-ask-more {
+  font-size: 12px;
+  color: var(--lantern);
+}
+
+/* A small status chip: tone wait is the amber one. */
+.lantern-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  padding: 1px 8px;
+  border: 1px solid var(--paper-veil);
+  border-radius: 999px;
+  font-size: 11.5px;
+  color: var(--mist);
+}
+
+.lantern-chip[data-tone="wait"] {
+  border-color: rgb(var(--lantern-rgb) / 0.4);
+  background: rgb(var(--lantern-rgb) / 0.1);
+  color: var(--lantern);
 }
 
 /* Files the agent attached to its question: a chip each, opened in place. */
@@ -1343,24 +1463,24 @@ a.lantern-ask-attached {
 /* On the phone every control in the drawer and the session sheet's tool row is
    a full 44px touch target. */
 @media (max-width: 767px) {
-  [data-testid="needs-you-drawer"] .lantern-btn,
-  [data-testid="needs-you-drawer"] .lantern-icon-btn,
+  .lantern-ask .lantern-btn,
+  .lantern-ask .lantern-icon-btn,
   .lantern-sheet-tools .lantern-btn {
     min-height: 44px;
   }
 
-  [data-testid="needs-you-drawer"] .lantern-ask-option,
-  [data-testid="needs-you-drawer"] .lantern-ask-note,
+  .lantern-ask .lantern-ask-option,
+  .lantern-ask .lantern-ask-note,
   .lantern-session-ask-head {
     min-height: 44px;
   }
 
-  [data-testid="needs-you-drawer"] .lantern-ask-option {
+  .lantern-ask .lantern-ask-option {
     align-items: center;
   }
 
   /* 16px or the phone zooms the page when the note field takes focus. */
-  [data-testid="needs-you-drawer"] .lantern-ask-note input {
+  .lantern-ask .lantern-ask-note input {
     font-size: 16px;
   }
 }
@@ -2333,6 +2453,20 @@ a.lantern-ask-attached {
   color: var(--term-text-dim);
 }
 
+.history-final {
+  margin: 12px 0 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--paper-veil);
+  border-radius: 10px;
+  background: var(--paper);
+  font-size: 13.5px;
+  overflow-wrap: anywhere;
+}
+
+.history-final .lantern-sec {
+  margin-bottom: 6px;
+}
+
 .history-events {
   display: flex;
   flex-direction: column;
@@ -2424,4 +2558,9 @@ a.lantern-ask-attached {
     grid-template-columns: minmax(0, 1fr);
     gap: 0;
   }
+}
+
+.lantern-chip[data-tone="bad"] {
+  border-color: color-mix(in srgb, var(--ember) 50%, transparent);
+  color: var(--ember);
 }

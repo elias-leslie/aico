@@ -89,7 +89,14 @@ export const UnifiedTerminalHeaderContent = memo(
           />
         )}
 
-        <div className="flex min-w-0 flex-[0_1_auto] items-center">
+        {/* The phone's top bar already names the session; without the list
+            beside it (allSlots), the switcher in this name carries the list. */}
+        <div
+          className={clsx(
+            'flex min-w-0 flex-[0_1_auto] items-center',
+            isMobile && !allSlots && !isRenaming && 'hidden',
+          )}
+        >
           <HeaderNameDisplay
             slot={slot}
             isActive={isActive}

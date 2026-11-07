@@ -11,6 +11,7 @@ import {
   shareSeen,
   subscribeSeen,
 } from '../attention'
+import { type AskCounts, NO_ASKS } from '../frame/triage'
 import type { PaneSlot, TerminalSlot } from '../utils/slot'
 import { getSlotSessionId, isPaneSlot } from '../utils/slot'
 import {
@@ -47,6 +48,8 @@ function slotSessions(
 export interface SessionAttention {
   /** A slot's most urgent session state, or null when unknown. */
   forSlot(slot: TerminalSlot | PaneSlot): Attention | null
+  /** The open questions on a slot's sessions, split by whether they stop it. */
+  asksFor(slot: TerminalSlot | PaneSlot): AskCounts
   needsYouCount: number
 }
 
@@ -75,6 +78,14 @@ export function useSessionAttention(): SessionAttention {
             return item ? [item] : []
           }),
         ),
+      asksFor: (slot) => {
+        const counts = { ...NO_ASKS }
+        for (const session of slotSessions(slot, sessions))
+          for (const ask of session.asks ?? [])
+            if (ask.blocking) counts.blocking++
+            else counts.other++
+        return counts
+      },
       needsYouCount: [...byId.values()].filter((a) => a.group === 'needs-you')
         .length,
     }

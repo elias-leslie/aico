@@ -3,11 +3,12 @@
 import { RefreshCw } from 'lucide-react'
 import Link from 'next/link'
 import { useState } from 'react'
+import { useLiveSessions } from '@/lib/frame/live'
 import {
-  ago,
+  agoAt,
   clock,
   count,
-  plural,
+  countOf,
   STANDING_CHIP,
   STANDING_TEXT,
   sessionHref,
@@ -35,6 +36,13 @@ export function HistoryList() {
     refreshing,
   } = useHistory(tool)
   const now = useClock(30_000)
+  const live = useLiveSessions()
+  // A session a running session owns takes that session's state.
+  const liveOf = (id: string) =>
+    [...live.bySession.values()].find((item) => item.conversation === id)
+  const [showTests, setShowTests] = useState(false)
+  const tests = items?.filter((session) => session.test).length ?? 0
+  const shown = showTests ? items : items?.filter((session) => !session.test)
 
   const sub = loading
     ? 'Loading…'
@@ -42,8 +50,8 @@ export function HistoryList() {
       ? 'Not loaded'
       : stale
         ? `As of ${clock(readAt)} · couldn’t refresh`
-        : items?.length
-          ? `${plural(items.length, 'session')} · updated ${ago(readAt, now)}`
+        : shown?.length
+          ? `${countOf(shown.length, 'session')} · updated ${agoAt(readAt, now)}`
           : 'None yet'
 
   return (
@@ -66,6 +74,18 @@ export function HistoryList() {
             </option>
           ))}
         </select>
+        {tests > 0 && (
+          <button
+            type="button"
+            className="lantern-btn ghost small"
+            aria-pressed={showTests}
+            onClick={() => setShowTests(!showTests)}
+          >
+            {showTests
+              ? `Hide ${countOf(tests, 'test run')}`
+              : `${countOf(tests, 'test run')} hidden · Show`}
+          </button>
+        )}
       </div>
 
       {failed && (
@@ -143,22 +163,23 @@ export function HistoryList() {
           </div>
         </div>
       )}
-      {items && items.length === 0 && (
+      {shown && shown.length === 0 && (
         <div className="status-rows">
           <div className="status-empty">
             <h3>
               {tool ? `No ${toolName(tool)} sessions yet` : 'No sessions yet'}
             </h3>
+            {tests > 0 && `${countOf(tests, 'test run')} hidden. `}
             Aico reads the sessions Claude Code, Codex and Pi keep on this host
             about every 15 seconds. None has turned up in the recent days it
             looks back over.
           </div>
         </div>
       )}
-      {items && items.length > 0 && (
+      {shown && shown.length > 0 && (
         <div className="status-rows" data-testid="history-rows">
-          {items.map((session) => {
-            const state = standing(session, now)
+          {shown.map((session) => {
+            const state = standing(session, now, liveOf(session.id))
             return (
               <Link
                 key={session.id}
@@ -186,22 +207,22 @@ export function HistoryList() {
                     )}
                   </div>
                   <div className="meta-m">
-                    {plural(session.toolCalls, 'tool call')} ·{' '}
+                    {countOf(session.toolCalls, 'tool call')} ·{' '}
                     {tokenLine(session.tokens)}
                   </div>
                 </div>
                 <div className="when">
-                  <b>{ago(session.endedAt, now)}</b>
+                  <b>{agoAt(session.endedAt, now)}</b>
                   <span className="sec">
                     started {clock(session.startedAt)}
                   </span>
                 </div>
                 <div className="where">
-                  <b>{plural(session.toolCalls, 'tool call')}</b>
+                  <b>{countOf(session.toolCalls, 'tool call')}</b>
                   <span className="sec">
                     {tokenLine(session.tokens)}
                     {session.filesWritten > 0 &&
-                      ` · ${plural(session.filesWritten, 'file')} written`}
+                      ` · ${countOf(session.filesWritten, 'file')} written`}
                   </span>
                 </div>
               </Link>

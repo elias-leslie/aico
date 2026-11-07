@@ -22,21 +22,32 @@ vi.mock('./frame/LeftSide', () => ({
 }))
 vi.mock('./frame/WideOverview', () => ({ WideOverview: () => null }))
 vi.mock('@/lib/hooks/use-session-attention', () => ({
-  useSessionAttention: () => ({ forSlot: () => null, needsYouCount: 0 }),
+  useSessionAttention: () => ({
+    forSlot: () => null,
+    asksFor: () => ({ blocking: 0, other: 0 }),
+    needsYouCount: 0,
+  }),
 }))
 vi.mock('@/lib/hooks/use-agent-tools', () => ({
   useAgentTools: () => ({ agentTools: [] }),
 }))
-vi.mock('./SessionSidebar', () => ({
-  SessionSidebar: ({
-    variant = 'panel',
-    onSelect,
-  }: {
-    variant?: string
-    onSelect: (slot: unknown) => void
-  }) => (
+vi.mock('./frame/Panel', () => ({
+  Panel: ({ onSelect }: { onSelect: (slot: unknown) => void }) => (
     <nav aria-label="Session list">
-      <p>{variant === 'rail' ? 'Rail' : 'List'}</p>
+      <p>List</p>
+      <button
+        type="button"
+        onClick={() => onSelect({ type: 'terminal', sessionId: 'session-b' })}
+      >
+        Pick session b
+      </button>
+    </nav>
+  ),
+}))
+vi.mock('./frame/Rail', () => ({
+  Rail: ({ onSelect }: { onSelect: (slot: unknown) => void }) => (
+    <nav aria-label="Session list">
+      <p>Rail</p>
       <button
         type="button"
         onClick={() => onSelect({ type: 'terminal', sessionId: 'session-b' })}

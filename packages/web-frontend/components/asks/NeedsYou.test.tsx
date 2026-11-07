@@ -15,16 +15,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Capture, CaptureUpload } from '@/lib/api/captures'
 import { ApiError } from '@/lib/api-fetch'
 import { dropAskCaptureQueue, setCaptureLimits } from '@/lib/capture-queue'
+import { useNeedsYouRequests } from '@/lib/frame/needs-you-request'
 import type { Approvals, OwnerAsk } from '@/lib/hooks/use-asks'
-import {
-  closeNeedsYou,
-  NeedsYouDrawer,
-  NeedsYouLauncher,
-  NeedsYouPanel,
-  openNeedsYou,
-  useHostNeedsYou,
-  useNeedsYouState,
-} from './NeedsYou'
+import { NeedsYouLauncher, NeedsYouPage, NeedsYouSection } from './NeedsYou'
 
 const state = vi.hoisted(() => ({
   asks: [] as OwnerAsk[],
@@ -178,7 +171,6 @@ beforeEach(() => {
   URL.createObjectURL = vi.fn(() => 'blob:x')
   URL.revokeObjectURL = vi.fn()
   push.mockReset()
-  act(() => closeNeedsYou())
 })
 
 describe('NeedsYouLauncher', () => {
@@ -195,7 +187,7 @@ describe('NeedsYouLauncher', () => {
         },
       ],
     }
-    render(<NeedsYouLauncher />)
+    render(<NeedsYouLauncher variant="pill" />)
     const pill = screen.getByTestId('needs-you-pill')
     expect(pill).toHaveTextContent('2 need you')
     expect(pill).toHaveAccessibleName(
@@ -203,9 +195,9 @@ describe('NeedsYouLauncher', () => {
     )
   })
 
-  it('is a labelled tool with its count in the session list', () => {
+  it('is a labelled row with its count in the session sheet', () => {
     state.asks = [ask()]
-    render(<NeedsYouLauncher variant="tool" />)
+    render(<NeedsYouLauncher variant="row" />)
     const pill = screen.getByTestId('needs-you-pill')
     expect(pill).toHaveTextContent(/^Needs you1$/)
     expect(pill).toHaveAccessibleName('Needs you: 1 agent question waiting')
@@ -221,118 +213,101 @@ describe('NeedsYouLauncher', () => {
     expect(screen.queryByTestId('needs-you-pill')).toBeNull()
   })
 
-  it('opens on the push link, drops it from the address and survives the bar giving way to the list', () => {
+  it('asks the frame to show Needs you, one request per click', () => {
     state.asks = [ask()]
-    window.history.replaceState(null, '', '/?session=0123abcd&ask=abcdefabcdef')
-    const { rerender } = render(
-      <NeedsYouLauncher key="bar" variant="compact" />,
-    )
-    expect(screen.getByTestId('needs-you-drawer')).toBeInTheDocument()
-    expect(window.location.search).toBe('?session=0123abcd')
-    // A wide window: the session list mounts its own launcher, the bar's goes.
-    rerender(<NeedsYouLauncher key="list" />)
-    expect(screen.getAllByTestId('needs-you-drawer')).toHaveLength(1)
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
-    expect(screen.queryByTestId('needs-you-drawer')).toBeNull()
-  })
-})
-
-describe('Needs you beside the session list', () => {
-  function ListHost({ children }: { children: ReactNode }) {
-    useHostNeedsYou()
-    return <>{children}</>
-  }
-  function OpenProbe() {
-    const { open } = useNeedsYouState()
-    return <p data-testid="open-probe">{open ? 'open' : 'closed'}</p>
-  }
-
-  it('opens no drawer while a session list is on screen to hold it', () => {
-    state.asks = [ask()]
+    const heard = vi.fn()
+    function Probe() {
+      useNeedsYouRequests(heard, { replay: false })
+      return null
+    }
     render(
-      <ListHost>
-        <NeedsYouLauncher variant="tool" />
-      </ListHost>,
+      <>
+        <Probe />
+        <NeedsYouLauncher variant="pill" />
+      </>,
     )
     fireEvent.click(screen.getByTestId('needs-you-pill'))
-    expect(screen.queryByTestId('needs-you-drawer')).toBeNull()
-  })
-
-  it('goes back from its arrow or Esc, and offers the way back once nothing is left', async () => {
-    state.asks = [ask()]
-    act(() => openNeedsYou())
-    const { rerender } = render(<NeedsYouPanel />)
-    const panel = screen.getByTestId('needs-you-panel')
-    expect(
-      within(panel).getByRole('heading', { name: 'Needs you' }),
-    ).toBeVisible()
-    const backButton = screen.getByRole('button', { name: 'Back to sessions' })
-    expect(backButton).toHaveFocus()
-
-    const card = screen.getByTestId('ask-card')
-    fireEvent.click(within(card).getAllByRole('radio')[0] as HTMLElement)
-    fireEvent.click(within(card).getByRole('button', { name: 'Send' }))
-    await screen.findByRole('status')
-    state.asks = [{ ...ask(), state: 'answered' }]
-    rerender(<NeedsYouPanel />)
-    expect(panel).toHaveTextContent('Nothing else waiting.')
-    expect(
-      screen.getAllByRole('button', { name: 'Back to sessions' }),
-    ).toHaveLength(2)
-
-    // Esc from inside it goes back; the session never sees the key.
-    const outer = vi.fn()
-    document.addEventListener('keydown', outer)
-    render(<OpenProbe />)
-    act(() => openNeedsYou())
-    expect(screen.getByTestId('open-probe')).toHaveTextContent('open')
-    fireEvent.keyDown(backButton, { key: 'Escape' })
-    expect(outer).not.toHaveBeenCalled()
-    expect(screen.getByTestId('open-probe')).toHaveTextContent('closed')
-    document.removeEventListener('keydown', outer)
-  })
-
-  it('leaves the keyboard with the session when a push link opens it, and Esc keeps a half-typed reply', () => {
-    state.asks = [ask()]
-    window.history.replaceState(null, '', '/?ask=abcdefabcdef')
-    render(
-      <ListHost>
-        <NeedsYouLauncher variant="tool" />
-        <OpenProbe />
-      </ListHost>,
-    )
-    render(<NeedsYouPanel />)
-    expect(screen.getByTestId('open-probe')).toHaveTextContent('open')
-    expect(
-      screen.getByRole('button', { name: 'Back to sessions' }),
-    ).not.toHaveFocus()
-    const note = screen.getByLabelText('Note to the agent')
-    fireEvent.change(note, { target: { value: 'after the' } })
-    fireEvent.keyDown(note, { key: 'Escape' })
-    expect(screen.getByTestId('open-probe')).toHaveTextContent('open')
-    fireEvent.change(note, { target: { value: '' } })
-    fireEvent.keyDown(note, { key: 'Escape' })
-    expect(screen.getByTestId('open-probe')).toHaveTextContent('closed')
-  })
-
-  it('toggles the bar dropdown from its button', () => {
-    state.asks = [ask()]
-    render(<NeedsYouLauncher />)
-    const pill = screen.getByTestId('needs-you-pill')
-    fireEvent.click(pill)
-    expect(screen.getByTestId('needs-you-drawer')).toBeInTheDocument()
-    fireEvent.click(pill)
-    expect(screen.queryByTestId('needs-you-drawer')).toBeNull()
+    expect(heard).toHaveBeenCalledWith({ focus: null })
   })
 })
 
-describe('NeedsYouDrawer', () => {
+describe('Needs you in the side', () => {
+  it('shows the question as a card with plain meta, and its markdown formatted', () => {
+    state.asks = [ask({ body: 'Swap becomes **a file**.\n\n- one\n- two' })]
+    render(<NeedsYouSection />)
+    const card = screen.getByTestId('ask-card')
+    expect(card).toHaveTextContent('Waiting on this')
+    expect(card).toHaveTextContent('Disk merge · asked 2 min ago')
+    expect(within(card).getByText('a file').tagName).toBe('STRONG')
+    expect(within(card).getAllByRole('listitem')).toHaveLength(2)
+    expect(card.textContent).not.toContain('**')
+  })
+
+  it('says a question that does not stop the agent is no rush', () => {
+    state.asks = [ask({ blocking: false })]
+    render(<NeedsYouSection />)
+    expect(screen.getByTestId('ask-urgency')).toHaveTextContent('No rush')
+  })
+
+  it('keeps Not now apart from Open session, and Open session opens it', () => {
+    state.asks = [ask({ options: [], recommended: null, command: null })]
+    render(<NeedsYouSection />)
+    const later = screen.getByRole('button', { name: 'Not now' })
+    expect(later).toHaveClass('lantern-ask-later')
+    fireEvent.click(screen.getByRole('button', { name: 'Open session' }))
+    expect(push).toHaveBeenCalled()
+  })
+
+  it('shows three cards and offers the rest', () => {
+    state.asks = ['a', 'b', 'c', 'd'].map((c) =>
+      ask({ id: c.repeat(12), question: `Question ${c}` }),
+    )
+    render(<NeedsYouSection />)
+    expect(screen.getAllByTestId('ask-card')).toHaveLength(3)
+    fireEvent.click(screen.getByRole('button', { name: 'Show 1 more' }))
+    expect(screen.getAllByTestId('ask-card')).toHaveLength(4)
+  })
+
+  it('has its own loading, failed and empty copy', () => {
+    state.isLoading = true
+    const { rerender } = render(<NeedsYouSection />)
+    expect(screen.getByText('Loading questions…')).toBeInTheDocument()
+    state.isLoading = false
+    state.isError = true
+    rerender(<NeedsYouSection />)
+    expect(screen.getByText(/Couldn’t load questions/)).toBeInTheDocument()
+    state.isError = false
+    rerender(<NeedsYouSection />)
+    expect(screen.getByText('Nothing is waiting for you.')).toBeInTheDocument()
+  })
+
+  it('lists access requests as cards with Review and approve', () => {
+    state.approvals = {
+      state: 'ok',
+      taps: [
+        {
+          id: 'n1',
+          title: 'GitHub admin for 15 min',
+          url: 'https://aico.example/grants?request=n1',
+          expiresInS: 840,
+        },
+      ],
+    }
+    render(<NeedsYouSection />)
+    expect(
+      screen.getByRole('link', { name: 'Review and approve' }),
+    ).toHaveAttribute('href', 'https://aico.example/grants?request=n1')
+    expect(screen.getByText(/expires in 14m/)).toBeInTheDocument()
+  })
+})
+
+describe('Needs you page', () => {
   it('marks the recommendation and sends the pick with the note', async () => {
     state.asks = [ask()]
-    render(<NeedsYouDrawer open onOpenChange={() => {}} />)
+    render(<NeedsYouPage />)
     const card = screen.getByTestId('ask-card')
     expect(card).toHaveTextContent('Disk merge')
-    expect(card).toHaveTextContent('agent is waiting')
+    expect(card).toHaveTextContent('Waiting on this')
     const choices = within(card).getAllByRole('radio')
     expect(choices[0]).toHaveAttribute('data-recommended', 'true')
     expect(choices[0]).toHaveTextContent('recommended')
@@ -368,7 +343,7 @@ describe('NeedsYouDrawer', () => {
         peer: { state: 'offline', since: 1, listedAt: 1 },
       }),
     ]
-    render(<NeedsYouDrawer open onOpenChange={() => {}} />)
+    render(<NeedsYouPage />)
     const [live, away] = screen.getAllByTestId('ask-card')
     expect(live).toHaveTextContent('on gem')
     expect(within(live as HTMLElement).queryByTestId('ask-away')).toBeNull()
@@ -380,18 +355,19 @@ describe('NeedsYouDrawer', () => {
     ).toBeDisabled()
     expect(
       within(away as HTMLElement).getByRole('button', {
-        name: 'Reply “Not now”',
+        name: 'Not now',
       }),
     ).toBeDisabled()
   })
 
   it('replies Done for a question without choices, and opens the session', () => {
     state.asks = [ask({ options: [], recommended: null, command: null })]
-    render(<NeedsYouDrawer open onOpenChange={() => {}} />)
+    render(<NeedsYouPage />)
     fireEvent.click(screen.getByRole('button', { name: 'Reply “Done”' }))
-    expect(
-      screen.getByRole('button', { name: 'Reply “Not now”' }),
-    ).toHaveAttribute('title', 'Tells the agent: Not now')
+    expect(screen.getByRole('button', { name: 'Not now' })).toHaveAttribute(
+      'title',
+      'Tells the agent: Not now',
+    )
     expect(state.sent).toEqual([
       { id: 'abcdefabcdef', reply: { kind: 'answer', text: 'Done' } },
     ])
@@ -416,9 +392,9 @@ describe('NeedsYouDrawer', () => {
         },
       ],
     }
-    render(<NeedsYouDrawer open onOpenChange={() => {}} />)
+    render(<NeedsYouPage />)
     fireEvent.click(screen.getByRole('tab', { name: /Approvals/ }))
-    const link = screen.getByRole('link', { name: 'Review and approve →' })
+    const link = screen.getByRole('link', { name: 'Review and approve' })
     expect(link).toHaveAttribute(
       'href',
       'https://aico.example/grants?request=n1',
@@ -429,30 +405,28 @@ describe('NeedsYouDrawer', () => {
 
   it('says when access requests cannot be read instead of showing nothing waiting', () => {
     state.approvals = { state: 'unavailable', taps: [] }
-    render(<NeedsYouDrawer open onOpenChange={() => {}} />)
+    render(<NeedsYouPage />)
     fireEvent.click(screen.getByRole('tab', { name: /Approvals/ }))
     expect(screen.getByText(/Can’t read access requests/)).toBeInTheDocument()
   })
 
   it('has its own loading, failed and empty copy', () => {
     state.isLoading = true
-    const { rerender } = render(<NeedsYouDrawer open onOpenChange={() => {}} />)
+    const { rerender } = render(<NeedsYouPage />)
     expect(screen.getByText('Loading questions…')).toBeInTheDocument()
     state.isLoading = false
     state.isError = true
-    rerender(<NeedsYouDrawer open onOpenChange={() => {}} />)
+    rerender(<NeedsYouPage />)
     expect(screen.getByText(/Couldn’t load questions/)).toBeInTheDocument()
     state.isError = false
-    rerender(<NeedsYouDrawer open onOpenChange={() => {}} />)
+    rerender(<NeedsYouPage />)
     expect(screen.getByText(/No agent questions waiting/)).toBeInTheDocument()
   })
 
   it('says which session gets the answer, and nothing on an older Tether', () => {
     const routeOf = (patch: Partial<OwnerAsk>) => {
       state.asks = [ask(patch)]
-      const { unmount } = render(
-        <NeedsYouDrawer open onOpenChange={() => {}} />,
-      )
+      const { unmount } = render(<NeedsYouPage />)
       const line = screen.queryByTestId('answer-route')
       const seen = line && {
         text: line.textContent,
@@ -500,7 +474,7 @@ describe('NeedsYouDrawer', () => {
         answerTo: null,
       }),
     ]
-    render(<NeedsYouDrawer open onOpenChange={() => {}} />)
+    render(<NeedsYouPage />)
     const card = screen.getByTestId('ask-card')
     expect(within(card).getByText('Follow-ups due')).toBeInTheDocument()
     expect(card).not.toHaveTextContent('#a7234c')
@@ -533,7 +507,7 @@ describe('NeedsYouDrawer', () => {
         answerTo: null,
       }),
     ]
-    render(<NeedsYouDrawer open onOpenChange={() => {}} />)
+    render(<NeedsYouPage />)
     expect(screen.getAllByTestId('answer-route')).toHaveLength(1)
     expect(screen.queryByRole('link', { name: 'Open' })).toBeNull()
   })
@@ -552,7 +526,7 @@ describe('NeedsYouDrawer', () => {
         answerTo: null,
       }),
     ]
-    render(<NeedsYouDrawer open onOpenChange={() => {}} />)
+    render(<NeedsYouPage />)
     const card = screen.getByTestId('ask-card')
     expect(within(card).getByText('aico jobs run backup')).toBeInTheDocument()
     expect(
@@ -565,7 +539,7 @@ describe('NeedsYouDrawer', () => {
 
   it('names the launcher when the answer went there', async () => {
     state.asks = [ask({ launcher: '89abcdef', answerTo: '89abcdef' })]
-    render(<NeedsYouDrawer open onOpenChange={() => {}} />)
+    render(<NeedsYouPage />)
     const card = screen.getByTestId('ask-card')
     fireEvent.click(within(card).getAllByRole('radio')[0] as HTMLElement)
     fireEvent.click(within(card).getByRole('button', { name: 'Send' }))
@@ -591,7 +565,7 @@ describe('NeedsYouDrawer', () => {
         delivery: 'pull',
       }),
     ]
-    render(<NeedsYouDrawer open onOpenChange={() => {}} focus="222222222222" />)
+    render(<NeedsYouPage focus="222222222222" />)
     const cards = screen.getAllByTestId('answered-card')
     expect(cards[0]).toHaveTextContent('can’t be messaged')
     expect(cards[1]).toHaveTextContent(
@@ -642,7 +616,7 @@ describe('a card that asks for files', () => {
   const card = () => screen.getByTestId('ask-card')
   const open = (patch = wants(1, 3, 'any photo or PDF')) => {
     state.asks = [patch]
-    return render(<NeedsYouDrawer open onOpenChange={() => {}} />)
+    return render(<NeedsYouPage />)
   }
   const send = () =>
     within(card()).getByRole('button', { name: /^(Send|Waiting|Add \d+ more)/ })
@@ -683,9 +657,7 @@ describe('a card that asks for files', () => {
 
   it('Reply "Not now" is the one answer a files ask takes without its files', () => {
     open(wants(2, 3))
-    fireEvent.click(
-      within(card()).getByRole('button', { name: 'Reply “Not now”' }),
-    )
+    fireEvent.click(within(card()).getByRole('button', { name: 'Not now' }))
     expect(state.sent).toEqual([
       {
         id: 'abcdefabcdef',
@@ -955,7 +927,7 @@ describe('a card that asks for files', () => {
         ],
       }),
     ]
-    render(<NeedsYouDrawer open onOpenChange={() => {}} focus="abcdefabcdef" />)
+    render(<NeedsYouPage focus="abcdefabcdef" />)
     const answered = screen.getByTestId('answered-card')
     expect(answered).toHaveTextContent('You sent 2 files')
     const files = within(answered).getAllByTestId('answered-file')
@@ -987,7 +959,7 @@ describe('attached files', () => {
 
   it('shows a chip per file, says when one is gone, and opens one in place with a way back', () => {
     state.asks = [ask({ share: '0123456789ab', attached })]
-    render(<NeedsYouDrawer open onOpenChange={() => {}} />)
+    render(<NeedsYouPage />)
     const card = screen.getByTestId('ask-card')
     const chips = within(card).getAllByTestId('ask-attached')
     expect(chips).toHaveLength(2)
@@ -1033,7 +1005,7 @@ describe('attached files', () => {
         ],
       }),
     ]
-    render(<NeedsYouDrawer open onOpenChange={() => {}} />)
+    render(<NeedsYouPage />)
     const card = screen.getByTestId('ask-card')
     const chip = within(card).getByTestId('ask-attached')
     expect(chip.tagName).toBe('A')
@@ -1055,7 +1027,7 @@ describe('attached files', () => {
 
   it('keeps the share button for a share with no files to list', () => {
     state.asks = [ask({ share: '0123456789ab' })]
-    render(<NeedsYouDrawer open onOpenChange={() => {}} />)
+    render(<NeedsYouPage />)
     expect(screen.queryByTestId('ask-attached')).toBeNull()
     expect(screen.getByText('Open what it shared')).toBeInTheDocument()
   })

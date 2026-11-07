@@ -4,6 +4,7 @@ import { clsx } from 'clsx'
 import {
   Activity,
   BookOpen,
+  CalendarDays,
   Clock,
   Database,
   Folder,
@@ -50,6 +51,12 @@ const PLACES: readonly (readonly Place[])[] = [
       href: '/projects',
       icon: Folder,
       match: (path) => path === '/projects',
+    },
+    {
+      label: 'Today',
+      href: '/today',
+      icon: CalendarDays,
+      match: (path) => path === '/today',
     },
     {
       label: 'Recent',

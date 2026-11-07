@@ -14,9 +14,10 @@ const state = vi.hoisted(() => ({
   refetch: vi.fn(),
   popOut: vi.fn(() => true),
   openNeedsYou: vi.fn(),
+  push: vi.fn(),
 }))
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: state.push }),
 }))
 vi.mock('./FrameContext', () => ({ useFrame: () => state.frame }))
 vi.mock('@tanstack/react-query', async (real) => ({
@@ -52,7 +53,10 @@ vi.mock('@/lib/status', async (real) => ({
   summaryLine: () => '2 problems',
 }))
 vi.mock('@/lib/notes-window', () => ({ popOutNotes: state.popOut }))
-vi.mock('../asks/NeedsYou', () => ({ openNeedsYou: state.openNeedsYou }))
+vi.mock('../asks/NeedsYou', () => ({ takeAskFromUrl: () => null }))
+vi.mock('@/lib/frame/needs-you-request', () => ({
+  openNeedsYou: state.openNeedsYou,
+}))
 vi.mock('../AgentIcon', () => ({
   AgentIcon: () => null,
   getAgentColor: () => '',
@@ -94,12 +98,11 @@ describe('TopBar', () => {
     expect(state.frame?.setTier).toHaveBeenCalledWith('panel')
   })
 
-  it('counts questions and approvals in Needs you and opens it in the panel', () => {
+  it('counts questions and approvals in Needs you and asks the frame to show it', () => {
     render(<TopBar />)
     const needs = screen.getByTestId('top-bar-needs-you')
     expect(needs).toHaveAttribute('data-count', '3')
     fireEvent.click(needs)
-    expect(state.frame?.setTier).toHaveBeenCalledWith('panel')
     expect(state.openNeedsYou).toHaveBeenCalled()
   })
 
@@ -131,7 +134,7 @@ describe('TopBar', () => {
     expect(state.refetch).toHaveBeenCalledWith({ type: 'active' })
   })
 
-  it('on a phone, keeps the menu with the Needs you count and leaves quota and Notes to the sheet', () => {
+  it('on a phone, keeps the menu with the Needs you count, drops quota, and keeps Notes one tap away', () => {
     state.frame = frame({ docked: false })
     render(<TopBar />)
     const menu = screen.getByTestId('frame-menu')
@@ -139,6 +142,10 @@ describe('TopBar', () => {
     fireEvent.click(menu)
     expect(state.frame?.setSheetOpen).toHaveBeenCalledWith(true)
     expect(screen.queryByTestId('top-bar-quota')).toBeNull()
-    expect(screen.queryByTestId('top-bar-notes')).toBeNull()
+    // Notes is a button on the phone too, as a new note in the page itself.
+    fireEvent.click(screen.getByTestId('top-bar-notes'))
+    expect(screen.getByTestId('top-bar-notes')).toHaveAccessibleName('Notes')
+    expect(state.popOut).not.toHaveBeenCalled()
+    expect(state.push).toHaveBeenCalledWith('/notes?new=note')
   })
 })

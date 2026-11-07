@@ -3,14 +3,11 @@
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { formatAge } from '@/lib/attention'
+import { openNeedsYou } from '@/lib/frame/needs-you-request'
 import { openAsks, useOwnerAsks } from '@/lib/hooks/use-asks'
 import { useMediaQuery } from '@/lib/hooks/use-media-query'
-import {
-  AskCard,
-  NeedsYouLauncher,
-  openNeedsYou,
-  useNeedsYouState,
-} from './NeedsYou'
+import { useFrame } from '../frame/FrameContext'
+import { AskCard } from './NeedsYou'
 
 /** Ask ids are a session's short id; slots carry the full one. */
 const sameSession = (a: string, b: string) => a.startsWith(b) || b.startsWith(a)
@@ -49,16 +46,17 @@ export function SessionAsk({
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset on switch
   useEffect(() => setSent(null), [sessionId])
 
-  // The phone's drawer, when no bar button is on screen to hold it; mounted
-  // whether or not a question shows, so answering one keeps the sheet open.
-  const host = isPhone && <NeedsYouLauncher variant="none" />
-  // A desktop with Needs you open already shows this question there.
-  const needsYouOpen = useNeedsYouState().open
-  if (!isPhone && needsYouOpen) return null
+  // A desktop whose side already lists the questions (Panel, or Wide at home)
+  // does not show this one twice.
+  const frame = useFrame()
+  const listed =
+    !isPhone &&
+    !!frame?.docked &&
+    (frame.tier === 'panel' || (frame.tier === 'wide' && !frame.page))
+  if (listed) return null
   if (!ask)
     return (
       <>
-        {host}
         {sent && (
           <p
             role="status"
@@ -93,11 +91,8 @@ export function SessionAsk({
     </>
   )
 
-  // `host` keeps the same place as in the branch above, so a question
-  // leaving does not rebuild the sheet it holds.
   return (
     <>
-      {host}
       <section
         aria-label="This session’s question"
         data-testid="session-ask"

@@ -1,8 +1,7 @@
 'use client'
 
-import * as Dialog from '@radix-ui/react-dialog'
 import { clsx } from 'clsx'
-import { ArrowLeft, Check, Copy, Inbox, X } from 'lucide-react'
+import { Check, Copy, Inbox } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import {
   type ReactNode,
@@ -18,6 +17,10 @@ import { formatAge } from '@/lib/attention'
 import { dropAskCaptureQueue } from '@/lib/capture-queue'
 import { openFiles } from '@/lib/files-opener'
 import {
+  openNeedsYou,
+  useNeedsYouRequests,
+} from '@/lib/frame/needs-you-request'
+import {
   type Approval,
   type AskReply,
   type AttachedFile,
@@ -28,8 +31,9 @@ import {
   useAskReply,
   useOwnerAsks,
 } from '@/lib/hooks/use-asks'
-import { useMediaQuery } from '@/lib/hooks/use-media-query'
 import { useTerminalSessions } from '@/lib/hooks/use-terminal-sessions'
+import { useFrame } from '../frame/FrameContext'
+import { PlainMarkdown } from '../PlainMarkdown'
 import { AttachedFiles, AttachedFileView } from './AskAttached'
 import {
   AnsweredFiles,
@@ -44,8 +48,8 @@ const plural = (count: number, one: string) =>
   `${count} ${one}${count === 1 ? '' : 's'}`
 
 /** The push link (`?ask=<id>`): read once on load, then dropped from the URL
- * so a reload does not reopen the drawer. */
-function takeAskFromUrl(): string | null {
+ * so a reload does not reopen it. */
+export function takeAskFromUrl(): string | null {
   if (typeof window === 'undefined') return null
   const url = new URL(window.location.href)
   const id = url.searchParams.get('ask')
@@ -55,119 +59,48 @@ function takeAskFromUrl(): string | null {
   return /^[0-9a-f]{12}$/.test(id) ? id : null
 }
 
-/** One drawer for the whole page: the launcher that opened it shows it, and
- * when that one leaves the screen (the session bar giving way to the list, the
- * session sheet closing) another launcher still on screen takes it over. */
-interface DrawerState {
-  open: boolean
-  focus: string | null
-  owner: string | null
-  /** Session lists on screen: while one is, Needs you takes its place
-   * instead of opening a drawer over the session. */
-  hosts: number
-  /** Opened by a click (focus moves into it), not by a push link or the
-   * window widening while it was open. */
-  byHand: boolean
-}
-let drawerState: DrawerState = {
-  open: false,
-  focus: null,
-  owner: null,
-  hosts: 0,
-  byHand: false,
-}
-const drawerListeners = new Set<() => void>()
-function setDrawer(next: Partial<DrawerState>): void {
-  drawerState = { ...drawerState, ...next }
-  for (const listener of drawerListeners) listener()
-}
-function subscribeDrawer(listener: () => void): () => void {
-  drawerListeners.add(listener)
-  return () => drawerListeners.delete(listener)
-}
-const readDrawer = () => drawerState
-
-/** Open Needs you, with one question first (a push link, the session's own
- * question on the phone). */
-export function openNeedsYou(focus: string | null = null): void {
-  setDrawer({ open: true, focus, byHand: true })
-}
-
-export function closeNeedsYou(): void {
-  setDrawer({ open: false, focus: null, owner: null })
-}
-
-export function useNeedsYouState(): DrawerState {
-  return useSyncExternalStore(subscribeDrawer, readDrawer, readDrawer)
-}
-
-/** The session list calls this while it is on screen, so Needs you opens in
- * its place. */
-export function useHostNeedsYou(): void {
-  useEffect(() => {
-    setDrawer({ hosts: drawerState.hosts + 1 })
-    return () => setDrawer({ hosts: drawerState.hosts - 1 })
-  }, [])
-}
-
-/** Where the launcher sits: the session bar on a desktop (`pill`), the
- * session list's tool row beside Status and Hosts (`tool`: labelled), its
- * folded rail (`icon`), the phone's session bar (`compact`: the count alone,
- * nothing when nothing waits), the session sheet (`row`: labelled, mounted
- * only while the sheet is open) or no button at all (`none`: a session's own
- * question opening the drawer). */
-type Variant = 'pill' | 'tool' | 'icon' | 'compact' | 'row' | 'none'
-
-/** The "N need you" pill and its drawer: questions agents asked, access
- * requests waiting for your security key (links only) and what was answered. */
-export function NeedsYouLauncher({ variant = 'pill' }: { variant?: Variant }) {
+/** What the count and the label say, in the owner's words. */
+function useNeedsYouCounts(): {
+  questions: number
+  approvals: number
+  count: number
+  summary: string
+} {
   const { asks } = useOwnerAsks()
   const { approvals } = useApprovals()
-  const me = useId()
-  const drawer = useNeedsYouState()
-  const waiting = openAsks(asks).length
+  const questions = openAsks(asks).length
   const taps = approvals?.taps.length ?? 0
-  const count = waiting + taps
+  const count = questions + taps
+  return {
+    questions,
+    approvals: taps,
+    count,
+    summary:
+      count === 0
+        ? 'Needs you: no agent questions or approvals waiting'
+        : `Needs you: ${[
+            questions ? plural(questions, 'agent question') : null,
+            taps ? plural(taps, 'approval') : null,
+          ]
+            .filter(Boolean)
+            .join(' and ')} waiting`,
+  }
+}
 
-  // The sheet row mounts only while the sheet is open; the bar or the list
-  // that is always on screen takes the push link and an orphaned drawer.
-  useEffect(() => {
-    if (variant === 'row') return
-    const id = takeAskFromUrl()
-    if (id) setDrawer({ open: true, focus: id, owner: null, byHand: false })
-  }, [variant])
-  useEffect(() => {
-    if (variant !== 'row' && drawer.open && drawer.owner === null)
-      setDrawer({ owner: me })
-  }, [variant, drawer.open, drawer.owner, me])
-  useEffect(
-    () => () => {
-      if (drawerState.owner === me) setDrawer({ owner: null })
-    },
-    [me],
-  )
+/** Where the launcher sits: the session bar on a desktop (`pill`), its
+ * folded rail (`icon`), the phone's session bar (`compact`: the count alone,
+ * nothing when nothing waits), the session sheet (`row`: labelled) or no
+ * button at all (`none`). */
+type Variant = 'pill' | 'icon' | 'compact' | 'row' | 'none'
 
-  // Agents' questions and access requests only; check results
-  // count under Status.
-  const summary =
-    count === 0
-      ? 'Needs you: no agent questions or approvals waiting'
-      : `Needs you: ${[
-          waiting ? plural(waiting, 'agent question') : null,
-          taps ? plural(taps, 'approval') : null,
-        ]
-          .filter(Boolean)
-          .join(' and ')} waiting`
-  // The bar's button toggles its dropdown.
-  const show = () =>
-    drawer.open && drawer.owner === me && drawer.hosts === 0
-      ? closeNeedsYou()
-      : setDrawer({ open: true, focus: null, owner: me, byHand: true })
+/** The "N need you" button: it shows Needs you in the side. */
+export function NeedsYouLauncher({ variant = 'pill' }: { variant?: Variant }) {
+  const { count, summary } = useNeedsYouCounts()
+  const show = () => openNeedsYou()
 
-  let button: ReactNode
-  if (variant === 'none') button = null
-  else if (variant === 'row' || variant === 'tool')
-    button = (
+  if (variant === 'none') return null
+  if (variant === 'row')
+    return (
       <button
         type="button"
         className="lantern-btn ghost small"
@@ -186,8 +119,8 @@ export function NeedsYouLauncher({ variant = 'pill' }: { variant?: Variant }) {
         )}
       </button>
     )
-  else if (variant === 'icon' || (variant !== 'compact' && count === 0))
-    button = (
+  if (variant === 'icon' || (variant !== 'compact' && count === 0))
+    return (
       <button
         type="button"
         className="lantern-icon-btn compact relative"
@@ -205,171 +138,48 @@ export function NeedsYouLauncher({ variant = 'pill' }: { variant?: Variant }) {
         )}
       </button>
     )
-  else if (count > 0)
-    button = (
-      <button
-        type="button"
-        className="lantern-need-pill"
-        onClick={show}
-        aria-label={summary}
-        title={summary}
-        data-testid="needs-you-pill"
-        data-count={count}
-      >
-        <span aria-hidden="true" className="dot" />
-        {variant === 'pill' ? `${count} need you` : count}
-      </button>
-    )
-
+  if (count === 0) return null
   return (
-    <>
-      {button}
-      {drawer.open && drawer.owner === me && drawer.hosts === 0 && (
-        <NeedsYouDrawer
-          open
-          onOpenChange={(next) => {
-            if (!next) closeNeedsYou()
-          }}
-          focus={drawer.focus}
-        />
-      )}
-    </>
+    <button
+      type="button"
+      className="lantern-need-pill"
+      onClick={show}
+      aria-label={summary}
+      title={summary}
+      data-testid="needs-you-pill"
+      data-count={count}
+    >
+      <span aria-hidden="true" className="dot" />
+      {variant === 'pill' ? `${count} need you` : count}
+    </button>
   )
 }
 
-/** Phones: a sheet over most of the screen. A desktop without the session
- * list beside the session: a dropdown under the bar's button. */
-export function NeedsYouDrawer({
-  open,
-  onOpenChange,
-  focus = null,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  /** An ask to show first (a push link). */
-  focus?: string | null
-}) {
-  const isMobile = useMediaQuery('(max-width: 767px)')
-  return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange} modal={isMobile}>
-      <Dialog.Portal>
-        {isMobile && (
-          <Dialog.Overlay
-            className="fixed inset-0 z-[10000]"
-            style={{ backgroundColor: 'var(--scrim)' }}
-          />
-        )}
-        <Dialog.Content
-          data-testid="needs-you-drawer"
-          aria-describedby={undefined}
-          // The bar's button toggles it; a click there is not a dismissal.
-          onInteractOutside={(event) => {
-            const target = event.target as Element | null
-            if (target?.closest?.('[data-testid="needs-you-pill"]'))
-              event.preventDefault()
-          }}
-          className={clsx(
-            'lantern-sheet fixed z-[10001] flex flex-col overflow-hidden outline-none',
-            isMobile
-              ? 'lantern-rise inset-x-0 bottom-0 h-[84dvh] rounded-t-[14px]'
-              : 'lantern-enter top-12 right-2 max-h-[min(680px,calc(100dvh-64px))] w-[380px] max-w-[calc(100vw-16px)] rounded-[10px]',
-          )}
-          style={{
-            color: 'var(--bone)',
-            border: isMobile ? undefined : '1px solid var(--paper-veil)',
-          }}
-        >
-          {isMobile && (
-            <div
-              aria-hidden="true"
-              className="mx-auto mt-2 h-1 w-9 rounded-full"
-              style={{ backgroundColor: 'var(--paper-veil)' }}
-            />
-          )}
-          <NeedsYouBody
-            focus={focus}
-            onOpenSession={isMobile ? () => onOpenChange(false) : undefined}
-            header={(summary) => (
-              <>
-                <Dialog.Title
-                  className="min-w-0 flex-1"
-                  style={{ font: '500 18px/1.2 var(--font-display)' }}
-                >
-                  Needs you
-                </Dialog.Title>
-                <span className="text-[12px]" style={{ color: 'var(--mist)' }}>
-                  {summary}
-                </span>
-                <Dialog.Close aria-label="Close" className="lantern-icon-btn">
-                  <X className="h-[18px] w-[18px]" strokeWidth={1.7} />
-                </Dialog.Close>
-              </>
-            )}
-          />
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
-  )
-}
-
-/** A desktop with the session list: Needs you in the list's place, under the
- * button that opened it, beside the session instead of over it. Back, or Esc
- * from inside it, brings the list back. */
-export function NeedsYouPanel() {
-  const { focus, byHand } = useNeedsYouState()
-  const backRef = useRef<HTMLButtonElement>(null)
-  // Only when clicked open; else the session keeps the keyboard.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: on mount only
-  useEffect(() => {
-    if (byHand) backRef.current?.focus({ preventScroll: true })
-  }, [])
-  const back = () => {
-    closeNeedsYou()
-    // Back on the button that opened it, once the list is back.
-    window.requestAnimationFrame(() =>
-      document
-        .querySelector<HTMLElement>(
-          '[data-testid="session-sidebar"] [data-testid="needs-you-pill"]',
-        )
-        ?.focus(),
-    )
-  }
+/** Needs you as a page in the main area (Wide, Full or the phone's sheet):
+ * every question, the access requests, and what was answered. The side's own
+ * Needs you section shows the same cards on top of the list. */
+export function NeedsYouPage({ focus = null }: { focus?: string | null }) {
+  const frame = useFrame()
   return (
     <section
-      aria-labelledby="needs-you-panel-title"
+      aria-labelledby="needs-you-page-title"
       data-testid="needs-you-panel"
-      className="flex min-h-0 flex-1 flex-col"
-      onKeyDown={(event) => {
-        if (event.key !== 'Escape') return
-        // Esc in a half-typed reply keeps the reply.
-        const target = event.target as HTMLInputElement
-        if (target.tagName === 'INPUT' && target.value) return
-        event.stopPropagation()
-        back()
-      }}
+      className="flex h-full min-h-0 flex-col"
     >
       <NeedsYouBody
         focus={focus}
-        onBack={back}
+        onOpenSession={() => {
+          if (frame && !frame.docked) frame.close()
+        }}
         header={(summary) => (
           <>
-            <button
-              ref={backRef}
-              type="button"
-              className="lantern-icon-btn compact -ml-1.5"
-              onClick={back}
-              aria-label="Back to sessions"
-              title="Back to sessions"
-            >
-              <ArrowLeft className="h-[18px] w-[18px]" strokeWidth={1.7} />
-            </button>
-            <h2
-              id="needs-you-panel-title"
+            <h1
+              id="needs-you-page-title"
               className="min-w-0 flex-1 truncate"
-              style={{ font: '500 17px/1.2 var(--font-display)' }}
+              style={{ font: '500 18px/1.2 var(--font-display)' }}
             >
               Needs you
-            </h2>
+            </h1>
             <span
               className="truncate text-[12px]"
               style={{ color: 'var(--mist)' }}
@@ -388,15 +198,12 @@ function NeedsYouBody({
   focus,
   header,
   onOpenSession,
-  onBack,
 }: {
   focus: string | null
   /** The title row, given the "N agent questions" line. */
   header: (summary: string) => ReactNode
   /** Called after a card opens its session (the phone closes the sheet). */
   onOpenSession?: () => void
-  /** In the session list's place: a way back once nothing is left. */
-  onBack?: () => void
 }) {
   const { asks, isLoading, isError, refetch } = useOwnerAsks()
   const { approvals, isLoading: approvalsLoading } = useApprovals()
@@ -531,22 +338,11 @@ function NeedsYouBody({
               </p>
             )}
             {waiting.length === 0 ? (
-              <>
-                <Note>
-                  {sent
-                    ? 'Nothing else waiting.'
-                    : 'No agent questions waiting. Check results are under Status.'}
-                </Note>
-                {onBack && (
-                  <button
-                    type="button"
-                    className="lantern-btn small mt-1"
-                    onClick={onBack}
-                  >
-                    Back to sessions
-                  </button>
-                )}
-              </>
+              <Note>
+                {sent
+                  ? 'Nothing else waiting.'
+                  : 'No agent questions waiting. Check results are under Status.'}
+              </Note>
             ) : (
               <ul className="flex flex-col gap-2.5" aria-label="Questions">
                 {orderFocused(waiting, focus).map((ask) => (
@@ -697,6 +493,43 @@ function awayText(state: string | undefined): string {
       : 'not reachable'
 }
 
+/** "48 min ago": how long ago, in words. */
+function agoWords(ms: number): string {
+  const minutes = Math.max(0, Math.round(ms / 60_000))
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes} min ago`
+  if (minutes < 48 * 60) return `${Math.round(minutes / 60)} h ago`
+  return `${Math.floor(minutes / 1440)} days ago`
+}
+
+/** The question's text as the agent wrote it (markdown shown formatted); in
+ * the side's list it folds to a few lines, with the rest one click away. */
+function AskBody({ text, clamp }: { text: string; clamp: boolean }) {
+  const [open, setOpen] = useState(false)
+  const long = clamp && (text.length > 220 || text.split('\n').length > 4)
+  return (
+    <div className="mb-2">
+      <PlainMarkdown
+        text={text}
+        className={clsx(
+          'lantern-ask-body text-[13.5px]',
+          long && !open && 'folded',
+        )}
+      />
+      {long && (
+        <button
+          type="button"
+          className="lantern-ask-more"
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+        >
+          {open ? 'Show less' : 'Show more'}
+        </button>
+      )}
+    </div>
+  )
+}
+
 function Meta({ children }: { children: ReactNode }) {
   return (
     <div
@@ -720,7 +553,7 @@ function OpenSession({
   return (
     <button
       type="button"
-      className="lantern-btn ghost small ml-auto"
+      className="lantern-btn small"
       onClick={() => {
         const params = new URLSearchParams(window.location.search)
         params.delete('ask')
@@ -741,6 +574,7 @@ export function AskCard({
   onOpenSession,
   onOpenFile,
   inSession = false,
+  compact = false,
 }: {
   ask: OwnerAsk
   now: number
@@ -751,6 +585,8 @@ export function AskCard({
   onOpenFile?: (file: AttachedFile) => void
   /** Shown in the session that asked: no asker line, no Open session. */
   inSession?: boolean
+  /** In the side's list: the question's text folds to a few lines. */
+  compact?: boolean
 }) {
   const asker = useAsker(ask)
   const nameOf = useSessionName()
@@ -808,13 +644,18 @@ export function AskCard({
     >
       {!inSession && (
         <Meta>
-          <span className="min-w-0 truncate" style={{ color: 'var(--bone)' }}>
-            {asker.name}
+          <span
+            className="lantern-chip"
+            data-tone={ask.blocking ? 'wait' : undefined}
+            data-testid="ask-urgency"
+          >
+            {ask.blocking && <span className="lantern-mark" data-tone="need" />}
+            {ask.blocking ? 'Waiting on this' : 'No rush'}
           </span>
-          <span aria-hidden="true">·</span>
-          <span className="whitespace-nowrap">
-            {ask.blocking ? 'agent is waiting' : 'whenever'} ·{' '}
-            {formatAge(now - ask.createdAt)}
+          <span className="min-w-0 truncate" style={{ color: 'var(--mist)' }}>
+            <span style={{ color: 'var(--bone)' }}>{asker.name}</span>
+            {' · asked '}
+            {agoWords(now - ask.createdAt)}
             {ask.host ? ` · on ${ask.host}` : ''}
           </span>
         </Meta>
@@ -832,17 +673,7 @@ export function AskCard({
       <p className="mb-1.5 font-semibold" style={{ overflowWrap: 'anywhere' }}>
         {askTitle(ask)}
       </p>
-      {ask.body && (
-        <p
-          className="mb-2 text-[13.5px] whitespace-pre-wrap"
-          style={{
-            color: 'rgb(var(--bone-rgb) / 0.72)',
-            overflowWrap: 'anywhere',
-          }}
-        >
-          {ask.body}
-        </p>
-      )}
+      {ask.body && <AskBody text={ask.body} clamp={compact} />}
       {ask.command && <CommandBox command={ask.command} />}
       <AttachedFiles
         ask={ask}
@@ -897,7 +728,7 @@ export function AskCard({
         </p>
       )}
       <form
-        className="flex flex-wrap items-center gap-1.5"
+        className="lantern-ask-form"
         onSubmit={(event) => {
           event.preventDefault()
           if (!canSend) return
@@ -947,6 +778,8 @@ export function AskCard({
             {sendLabel}
           </button>
         )}
+      </form>
+      <div className="lantern-ask-actions">
         {app && !hasOptions && (
           <button
             type="button"
@@ -967,23 +800,24 @@ export function AskCard({
             Open
           </a>
         )}
-      </form>
-      {!app && (
-        <div className="mt-2 flex flex-wrap items-center gap-1">
-          {!hasOptions && !wantsFiles && (
-            <button
-              type="button"
-              className="lantern-btn small"
-              disabled={reply.isPending || away}
-              onClick={() => send({ kind: 'answer', text: 'Done' }, 'Done')}
-              title="Tells the agent: Done"
-            >
-              Reply “Done”
-            </button>
-          )}
+        {!app && !inSession && (
+          <OpenSession sessionId={asker.sessionId} onOpen={onOpenSession} />
+        )}
+        {!app && !hasOptions && !wantsFiles && (
           <button
             type="button"
-            className="lantern-btn ghost small"
+            className="lantern-btn small"
+            disabled={reply.isPending || away}
+            onClick={() => send({ kind: 'answer', text: 'Done' }, 'Done')}
+            title="Tells the agent: Done"
+          >
+            Reply “Done”
+          </button>
+        )}
+        {!app && (
+          <button
+            type="button"
+            className="lantern-ask-later"
             disabled={reply.isPending || away}
             onClick={() =>
               send(
@@ -998,13 +832,10 @@ export function AskCard({
             }
             title="Tells the agent: Not now"
           >
-            Reply “Not now”
+            Not now
           </button>
-          {!inSession && (
-            <OpenSession sessionId={asker.sessionId} onOpen={onOpenSession} />
-          )}
-        </div>
-      )}
+        )}
+      </div>
       {reply.isError && (
         <p
           role="alert"
@@ -1115,29 +946,144 @@ function AnsweredCard({ ask, now }: { ask: OwnerAsk; now: number }) {
 function ApprovalCard({ tap }: { tap: Approval }) {
   const minutes = Math.max(1, Math.round(tap.expiresInS / 60))
   return (
-    <li className="lantern-ask">
+    <li className="lantern-ask" data-blocking="true">
       <Meta>
-        <span>Access request · security key</span>
-        <span aria-hidden="true">·</span>
-        <span>
-          expires in{' '}
+        <span className="lantern-chip" data-tone="wait">
+          Access request
+        </span>
+        <span className="min-w-0 truncate" style={{ color: 'var(--mist)' }}>
+          security key · expires in{' '}
           {minutes >= 60
             ? `${Math.floor(minutes / 60)}h ${minutes % 60}m`
             : `${minutes}m`}
         </span>
       </Meta>
-      <p className="mb-1.5 font-semibold" style={{ overflowWrap: 'anywhere' }}>
+      <p className="mb-2 font-semibold" style={{ overflowWrap: 'anywhere' }}>
         {tap.title}
       </p>
-      <a
-        href={tap.url}
-        target="_blank"
-        rel="noreferrer noopener"
-        className="text-[13.5px]"
-        style={{ color: 'var(--lantern)' }}
-      >
-        Review and approve →
-      </a>
+      <div className="lantern-ask-actions" style={{ marginTop: 0 }}>
+        <a
+          href={tap.url}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="lantern-btn primary small"
+        >
+          Review and approve
+        </a>
+        <a href="/grants" className="lantern-btn small">
+          All grants
+        </a>
+      </div>
     </li>
+  )
+}
+
+/** Needs you at the top of the side's list: the first few questions as full
+ * cards (a push link or a session's own question puts one first), the rest
+ * and the answered ones on the Needs you page. */
+export function NeedsYouSection() {
+  const { asks, isLoading, isError, refetch } = useOwnerAsks()
+  const { approvals } = useApprovals()
+  const router = useRouter()
+  const frame = useFrame()
+  const ref = useRef<HTMLElement>(null)
+  const [focus, setFocus] = useState<string | null>(null)
+  const [showAll, setShowAll] = useState(false)
+  const [sent, setSent] = useState<string | null>(null)
+  const now = Date.now()
+  const waiting = orderFocused(openAsks(asks), focus)
+  const taps = approvals?.taps ?? []
+  useNeedsYouRequests((request) => {
+    setFocus(request.focus)
+    window.requestAnimationFrame(() =>
+      ref.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }),
+    )
+  })
+  useEffect(() => {
+    if (!sent) return
+    const timer = window.setTimeout(() => setSent(null), 8000)
+    return () => window.clearTimeout(timer)
+  }, [sent])
+  const shown = showAll ? waiting : waiting.slice(0, 3)
+  const total = waiting.length + taps.length
+  const openPage = () => {
+    router.push('/needs-you')
+    if (frame && !frame.docked) frame.close()
+  }
+  return (
+    <section
+      ref={ref}
+      aria-label="Needs you"
+      data-testid="needs-you-section"
+      className="flex flex-col gap-2"
+    >
+      <div className="lantern-sec">
+        <h2>Needs you</h2>
+        {total > 0 && <span className="n">{total}</span>}
+        <button
+          type="button"
+          className="ml-auto text-[11px] normal-case tracking-normal"
+          style={{ color: 'var(--lantern)' }}
+          onClick={openPage}
+        >
+          All and answered
+        </button>
+      </div>
+      {sent && (
+        <p
+          role="status"
+          className="rounded-md px-2.5 py-2 text-[13px]"
+          style={{ backgroundColor: 'rgb(var(--lantern-rgb) / 0.12)' }}
+        >
+          {sent}
+        </p>
+      )}
+      {isLoading ? (
+        <Note>Loading questions…</Note>
+      ) : isError ? (
+        <Note>
+          Couldn’t load questions.{' '}
+          <button
+            type="button"
+            className="underline"
+            style={{ color: 'var(--lantern)' }}
+            onClick={() => void refetch()}
+          >
+            Try again
+          </button>
+        </Note>
+      ) : total === 0 ? (
+        <Note>
+          {sent ? 'Nothing else waiting.' : 'Nothing is waiting for you.'}
+        </Note>
+      ) : (
+        <ul className="flex flex-col gap-2" aria-label="Questions">
+          {taps.map((tap) => (
+            <ApprovalCard key={tap.id} tap={tap} />
+          ))}
+          {shown.map((ask) => (
+            <AskCard
+              key={ask.id}
+              ask={ask}
+              now={now}
+              compact
+              onSent={setSent}
+              onOpenSession={() => {
+                if (frame && !frame.docked) frame.close()
+              }}
+            />
+          ))}
+        </ul>
+      )}
+      {!showAll && waiting.length > shown.length && (
+        <button
+          type="button"
+          className="lantern-btn ghost small self-start"
+          onClick={() => setShowAll(true)}
+        >
+          Show {waiting.length - shown.length} more
+        </button>
+      )}
+    </section>
   )
 }

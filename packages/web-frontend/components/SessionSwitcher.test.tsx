@@ -5,6 +5,16 @@ import type { PaneSlot } from '@/lib/utils/slot'
 import { SLOT_BASE } from '@/test-stubs/session-fixtures'
 import { SessionSwitcher } from './SessionSwitcher'
 
+vi.mock('@/lib/frame/live', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/frame/live')>()),
+  useLiveSessions: () => ({
+    items: [],
+    bySession: new Map(),
+    conversations: new Set(),
+    failed: false,
+    stale: false,
+  }),
+}))
 vi.mock('./HostsButton', () => ({
   HostsButton: ({ onClick }: { onClick: () => void }) => (
     <button type="button" onClick={onClick}>
@@ -193,6 +203,7 @@ describe('SessionSwitcher attention', () => {
         attention={{
           forSlot: (slot) => states[(slot as PaneSlot).paneId] ?? null,
           needsYouCount: 1,
+          asksFor: () => ({ blocking: 0, other: 0 }),
         }}
       />,
     )
@@ -203,15 +214,15 @@ describe('SessionSwitcher attention', () => {
       [...sheet.querySelectorAll('[data-testid="session-group-header"]')].map(
         (el) => el.textContent,
       ),
-    ).toEqual(['Needs you1', 'Other sessions3'])
+    ).toEqual(['Needs you1', 'Working1', 'Idle1', 'Finished1'])
     const rows = [...sheet.querySelectorAll('button[type="button"]')]
       .map((el) => el.textContent ?? '')
       .filter((text) => /Alpha|Beta|Gamma|Delta/.test(text))
     expect(rows).toEqual([
-      'Gamma3mShell is waiting for you',
-      'Alpha2hShell · idle',
+      'Gamma3mShell · waiting for you',
       'Beta4mShell · working',
-      'Delta1mShell finished · not opened yet',
+      expect.stringMatching(/^Alpha2hShell · idle since /),
+      expect.stringMatching(/^Delta1mShell · finished /),
     ])
     expect(
       screen

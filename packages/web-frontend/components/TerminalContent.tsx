@@ -15,10 +15,11 @@ import { AgentShows } from './AgentShowToast'
 import { SessionAsk } from './asks/SessionAsk'
 import { useFrame } from './frame/FrameContext'
 import { LeftSide } from './frame/LeftSide'
+import { Panel } from './frame/Panel'
+import { Rail } from './frame/Rail'
 import { WideOverview } from './frame/WideOverview'
 import { NativeKeyboardInput } from './keyboard/NativeKeyboardInput'
 import { sessionLabel, slotMode, toolName } from './SessionList'
-import { SessionSidebar } from './SessionSidebar'
 import { getShownSlot } from './SessionView'
 import { TerminalFileSection } from './terminal-content/TerminalFileSection'
 import { TerminalMobileSection } from './terminal-content/TerminalMobileSection'
@@ -122,16 +123,16 @@ function TerminalContentBody({
       <LeftSide
         onNewSession={handleOpenTerminalManager}
         rail={
-          <SessionSidebar
-            variant="rail"
+          <Rail
             slots={terminalSlots}
             currentId={currentId}
             onSelect={select}
             onOpenPanel={openPanel}
+            onNewSession={handleOpenTerminalManager}
           />
         }
         panel={
-          <SessionSidebar
+          <Panel
             slots={terminalSlots}
             currentId={currentId}
             onSelect={select}

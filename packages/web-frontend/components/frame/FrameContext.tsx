@@ -11,6 +11,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { useNeedsYouRequests } from '@/lib/frame/needs-you-request'
 import { homeHref } from '@/lib/frame/shown-session'
 import {
   DEFAULT_TIER,
@@ -149,6 +150,20 @@ export function FrameProvider({
   const home = useCallback(() => {
     if (onPage) router.push(homeHref())
   }, [onPage, router])
+
+  // Needs you was asked for (a count, a push link, a session's own question):
+  // bring the side's list to the front, wide enough to show it.
+  useNeedsYouRequests(
+    () => {
+      if (onPage) router.push(homeHref())
+      if (!docked) setSheetOpen(true)
+      else {
+        setFull(false)
+        if (kept === 'rail') setStored('panel')
+      }
+    },
+    { replay: false },
+  )
 
   // The keys: Alt+1..4 and Alt+[ / Alt+] anywhere, even while typing in a
   // session (caught before the session sees them); Esc back to Panel from

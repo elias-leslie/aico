@@ -8,6 +8,7 @@ const api = vi.hoisted(() => ({
   detail: null as unknown,
   events: {} as Record<string, unknown>,
   calls: [] as string[],
+  live: { items: [] } as unknown,
 }))
 vi.mock('@/lib/api-fetch', async () => {
   const actual =
@@ -17,6 +18,7 @@ vi.mock('@/lib/api-fetch', async () => {
     ...actual,
     apiFetch: vi.fn(async (url: string) => {
       api.calls.push(url)
+      if (url === '/api/history/live') return api.live
       if (url.startsWith('/api/history?')) {
         if (!api.list) throw new ApiError('Tether is not reachable', 503)
         return api.list
@@ -81,6 +83,7 @@ beforeEach(() => {
   api.detail = null
   api.events = {}
   api.calls = []
+  api.live = { items: [] }
 })
 
 describe('recent sessions list', () => {
@@ -130,7 +133,84 @@ describe('recent sessions list', () => {
   })
 })
 
+describe('Recent and the running sessions', () => {
+  it('never lists a conversation a running session still owns as Finished', async () => {
+    api.list = {
+      items: [
+        session({ id: 'codex:live', project: 'coordinator' }),
+        session({ id: 'codex:done', project: 'old job' }),
+      ],
+    }
+    api.live = {
+      items: [
+        {
+          session: 'abcd1234',
+          conversation: 'codex:live',
+          activity: 'working',
+          lastWriteAt: Date.now(),
+        },
+      ],
+    }
+    renderPage()
+    await screen.findByText('coordinator')
+    await waitFor(() => expect(screen.getByText('Working')).toBeTruthy())
+    expect(screen.getAllByText('Finished')).toHaveLength(1)
+  })
+
+  it('leaves smoke and scratch runs out until asked, and says how many are hidden', async () => {
+    api.list = {
+      items: [
+        session({ id: 'codex:real', project: 'aico' }),
+        session({ id: 'codex:t1', project: 'aico-m10d2-live', test: true }),
+        session({ id: 'codex:t2', project: 'commit-try', test: true }),
+      ],
+    }
+    renderPage()
+    await screen.findByText('aico')
+    expect(screen.queryByText('commit-try')).toBeNull()
+    fireEvent.click(
+      screen.getByRole('button', { name: '2 test runs hidden · Show' }),
+    )
+    expect(screen.getByText('commit-try')).toBeTruthy()
+    expect(screen.getByText('aico-m10d2-live')).toBeTruthy()
+  })
+})
+
 describe('transcript', () => {
+  it('leads with the session’s final reply, formatted', async () => {
+    api.detail = {
+      ...session(),
+      path: '/x',
+      files: [],
+      subagents: {
+        count: 0,
+        toolCalls: 0,
+        tokens: { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 },
+      },
+    }
+    api.events = {
+      newest: {
+        items: [
+          { offset: 1, at: null, role: 'user', kind: 'text', text: 'go' },
+          {
+            offset: 2,
+            at: null,
+            role: 'assistant',
+            kind: 'text',
+            text: 'All **done**.',
+          },
+        ],
+        older: null,
+        newer: null,
+        size: 3,
+      },
+    }
+    renderPage('codex:abc')
+    const final = await screen.findByTestId('history-final')
+    expect(final).toHaveTextContent('Final reply')
+    expect(final.querySelector('strong')?.textContent).toBe('done')
+  })
+
   const detail = () => ({
     ...session(),
     path: '/x',
