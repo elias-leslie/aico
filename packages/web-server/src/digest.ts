@@ -31,6 +31,7 @@ export interface Digest {
   finished: number
   failed: number
   stuck: { quiet: number; waiting: number }
+  /** Questions asked since and still waiting on the owner: what Needs you holds, not every ask a lane filed and closed. */
   asks: number
   problems: { count: number; failed: number }
   spend: { sinceDay: string; items: { provider: string; credits: number }[] } | null
@@ -40,7 +41,7 @@ export interface Digest {
 export interface DigestDeps {
   dataDir: string
   tether: Pick<TetherClient, 'listSessions' | 'history'>
-  asks: { list(): Promise<Pick<Ask, 'createdAt'>[]> }
+  asks: { list(): Promise<Pick<Ask, 'createdAt' | 'state'>[]> }
   status: Pick<StatusStore, 'read'>
 }
 
@@ -101,7 +102,8 @@ export async function buildDigest(deps: DigestDeps, since: number, now: number):
     }
   } else unavailable.push('history')
 
-  if (asks) digest.asks = asks.filter((ask) => ask.createdAt >= since).length
+  if (asks)
+    digest.asks = asks.filter((ask) => ask.state === 'open' && ask.createdAt >= since).length
   else unavailable.push('asks')
 
   try {

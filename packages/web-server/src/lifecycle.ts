@@ -207,6 +207,8 @@ export function createLifecycle(deps: LifecycleDeps) {
     agentMode: string | null
     /** A remote host for its sessions; null for this computer. */
     host?: string | null
+    /** The owner's name for the session that opens (the agent, else the shell). */
+    sessionName?: string | null
   }): Promise<PaneView> {
     const { paneType, paneName, projectId, workingDir } = input
     const modes = [SHELL_MODE]
@@ -221,14 +223,16 @@ export function createLifecycle(deps: LifecycleDeps) {
     })
     const created: WebSession[] = []
     try {
-      for (const mode of modes)
+      for (const [index, mode] of modes.entries())
         created.push(
           await newSession({
             paneId: pane.id,
             mode,
             projectId,
             workingDir,
-            name: projectId ? null : paneName,
+            name:
+              (index === modes.length - 1 ? input.sessionName?.trim() : null) ||
+              (projectId ? null : paneName),
             host: input.host,
           }),
         )

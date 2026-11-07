@@ -94,13 +94,17 @@ describe('problems', () => {
     ]
     expect(problemsOf(rows, 'p').map(({ kind, count, worst }) => ({ kind, count, worst }))).toEqual(
       [
-        { kind: 'fail', count: 2, worst: 'failed' },
+        { kind: 'fail', count: 1, worst: 'failed' },
         { kind: 'publish', count: 1, worst: 'failed' },
         { kind: 'backup', count: 1, worst: 'failed' },
         { kind: 'quiet', count: 1, worst: 'unknown' },
+        { kind: 'warn', count: 1, worst: 'warn' },
       ],
     )
     expect(problemKind({ kind: 'job', id: 'publish:x', shown: 'failed' })).toBe('publish')
+    // Failed means Status's failed state; warnings are counted apart.
+    expect(problemKind({ kind: 'check', id: 'c', shown: 'warn' })).toBe('warn')
+    expect(problemKind({ kind: 'job', id: 'j', shown: 'failed' })).toBe('fail')
   })
 })
 

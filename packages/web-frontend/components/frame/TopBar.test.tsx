@@ -113,7 +113,7 @@ describe('TopBar', () => {
     expect(state.frame?.open).toHaveBeenCalledWith('/status', 'wide')
     expect(screen.getByTestId('top-bar-quota')).toHaveTextContent('Claude 82%')
     fireEvent.click(screen.getByTestId('top-bar-quota'))
-    expect(state.frame?.open).toHaveBeenCalledWith('/status?q=usage', 'wide')
+    expect(state.frame?.open).toHaveBeenCalledWith('/quota', 'wide')
     fireEvent.click(screen.getByTestId('top-bar-notes'))
     expect(state.popOut).toHaveBeenCalledWith('/notes?new=note')
   })

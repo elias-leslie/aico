@@ -137,7 +137,13 @@ function ProjectsSection() {
                       project.top ? `Now: ${project.top}` : null,
                       project.waiting ? '1 question waiting' : null,
                       project.agents ? agentsText(project.agents) : null,
-                      problem ? problemText(problem.kind, problem.count) : null,
+                      problem
+                        ? problemText(
+                            problem.kind,
+                            problem.count,
+                            problem.worst,
+                          )
+                        : null,
                     ]
                       .filter(Boolean)
                       .join(' · ') || 'Quiet'}
@@ -216,7 +222,7 @@ export function WideOverview() {
       <RecentSection />
       <Section
         title="Quota and spend"
-        href="/status?q=usage"
+        href="/quota"
         more="Open Quota and spend"
       >
         <p className={styles.note}>

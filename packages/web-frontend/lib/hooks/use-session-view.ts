@@ -390,10 +390,12 @@ export function useSessionView({
       workingDir?: string,
       agentToolSlug?: string,
       host?: string,
+      sessionName?: string,
     ) =>
       createProjectPane(paneName, targetProjectId, workingDir, agentToolSlug, {
         detached: true,
         host,
+        sessionName,
       }),
     [createProjectPane],
   )
@@ -455,6 +457,7 @@ export function useSessionView({
       mode?: string,
       rootPath?: string | null,
       host?: string,
+      name?: string,
     ): Promise<void> => {
       let workingDir = rootPath
       if (workingDir === undefined) {
@@ -471,6 +474,7 @@ export function useSessionView({
         workingDir ?? undefined,
         mode,
         host,
+        name,
       )
       try {
         const targetMode = mode ?? pane.active_mode

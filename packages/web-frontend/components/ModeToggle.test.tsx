@@ -23,22 +23,74 @@ const mockTool = (overrides: Partial<AgentTool>): AgentTool => ({
 })
 
 describe('ModeToggle', () => {
-  it('renders in shell mode with correct aria-label', () => {
-    const onChange = vi.fn()
+  it('is a labelled control saying what runs and that switching restarts it', () => {
+    render(
+      <ModeToggle
+        value="claude-code"
+        onChange={vi.fn()}
+        agentTools={[mockTool({ name: 'Claude Code' })]}
+      />,
+    )
+    const button = screen.getByTestId('mode-toggle')
+    expect(button).toHaveTextContent('RunsClaude Code')
+    expect(button).toHaveAttribute(
+      'aria-label',
+      'Runs Claude Code. Change what runs here: switching restarts the process.',
+    )
+  })
+
+  it('shows the label alone on a phone', () => {
     render(
       <ModeToggle
         value="shell"
-        onChange={onChange}
+        isMobile
+        onChange={vi.fn()}
         agentTools={[mockTool({})]}
       />,
     )
+    expect(screen.getByTestId('mode-toggle')).toHaveTextContent(/^Shell$/)
+  })
 
-    const button = screen.getByTestId('mode-toggle')
-    expect(button).toBeInTheDocument()
-    expect(button).toHaveAttribute(
-      'aria-label',
-      'Shell mode — click for Claude',
+  it('opens an explanation and each option with what it does, never switching on the first click', () => {
+    const onChange = vi.fn()
+    render(
+      <ModeToggle
+        value="claude-code"
+        onChange={onChange}
+        agentTools={[
+          mockTool({ name: 'Claude Code' }),
+          mockTool({ id: 'agy', name: 'Antigravity', slug: 'agy' }),
+        ]}
+      />,
     )
+    fireEvent.click(screen.getByTestId('mode-toggle'))
+    expect(onChange).not.toHaveBeenCalled()
+    expect(screen.getByTestId('mode-explainer')).toHaveTextContent(
+      'stops Claude Code and starts the new one',
+    )
+    expect(
+      screen.getByRole('menuitem', { name: /Claude Code.*Running now/ }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('menuitem', { name: /Antigravity.*restarts it/ }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('menuitem', { name: /Shell.*opens the shell/ }),
+    ).toBeInTheDocument()
+  })
+
+  it('from a shell, an agent row says it starts it', () => {
+    render(
+      <ModeToggle
+        value="shell"
+        onChange={vi.fn()}
+        agentTools={[mockTool({ name: 'Claude Code' })]}
+      />,
+    )
+    fireEvent.click(screen.getByTestId('mode-toggle'))
+    expect(
+      screen.getByRole('menuitem', { name: /Claude Code.*starts it/ }),
+    ).toBeInTheDocument()
   })
 
   it('shows each option with its tinted mark next to the label', () => {
@@ -69,24 +121,7 @@ describe('ModeToggle', () => {
     }
   })
 
-  it('renders in agent mode with tool name in aria-label', () => {
-    const onChange = vi.fn()
-    render(
-      <ModeToggle
-        value="claude-code"
-        onChange={onChange}
-        agentTools={[mockTool({})]}
-      />,
-    )
-
-    const button = screen.getByTestId('mode-toggle')
-    expect(button).toHaveAttribute(
-      'aria-label',
-      'Claude mode — click for Shell',
-    )
-  })
-
-  it('calls onChange with opposite mode when clicked in shell mode', async () => {
+  it('switches only when an option is picked', async () => {
     const onChange = vi.fn().mockResolvedValue(undefined)
     render(
       <ModeToggle
@@ -95,31 +130,23 @@ describe('ModeToggle', () => {
         agentTools={[mockTool({})]}
       />,
     )
-
-    const button = screen.getByTestId('mode-toggle')
-    fireEvent.click(button)
-
-    await waitFor(() => {
-      expect(onChange).toHaveBeenCalledWith('claude-code')
-    })
+    fireEvent.click(screen.getByTestId('mode-toggle'))
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Claude/ }))
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith('claude-code'))
   })
 
-  it('calls onChange with opposite mode when clicked in claude mode', async () => {
-    const onChange = vi.fn().mockResolvedValue(undefined)
+  it('picking the running mode changes nothing', () => {
+    const onChange = vi.fn()
     render(
       <ModeToggle
-        value="claude-code"
+        value="shell"
         onChange={onChange}
         agentTools={[mockTool({})]}
       />,
     )
-
-    const button = screen.getByTestId('mode-toggle')
-    fireEvent.click(button)
-
-    await waitFor(() => {
-      expect(onChange).toHaveBeenCalledWith('shell')
-    })
+    fireEvent.click(screen.getByTestId('mode-toggle'))
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Shell/ }))
+    expect(onChange).not.toHaveBeenCalled()
   })
 
   it('closes the mode menu on Escape and returns focus to the toggle', async () => {
@@ -141,53 +168,42 @@ describe('ModeToggle', () => {
     expect(document.activeElement).toBe(button)
   })
 
-  it('disables agent entry when no agent tools are loaded yet', () => {
-    const onChange = vi.fn()
-    render(<ModeToggle value="shell" onChange={onChange} />)
-
+  it('is disabled and says why when no agent tools are loaded', () => {
+    render(<ModeToggle value="shell" onChange={vi.fn()} />)
     const button = screen.getByTestId('mode-toggle')
+    expect(button).toBeDisabled()
     expect(button).toHaveAttribute(
       'aria-label',
-      'Shell mode — no agent tools configured',
+      'This session runs a shell. No agents are set up to switch to.',
     )
-    expect(button).toBeDisabled()
   })
 
   it('shows loading state via aria-busy when isLoading is true', () => {
-    const onChange = vi.fn()
-    render(<ModeToggle value="shell" onChange={onChange} isLoading />)
-
+    render(
+      <ModeToggle
+        value="shell"
+        onChange={vi.fn()}
+        isLoading
+        agentTools={[mockTool({})]}
+      />,
+    )
     const button = screen.getByTestId('mode-toggle')
     expect(button).toHaveAttribute('aria-busy', 'true')
-    expect(button).toHaveAttribute('aria-label', 'Switching mode...')
-  })
-
-  it('disables the button when disabled prop is true', () => {
-    const onChange = vi.fn()
-    render(<ModeToggle value="shell" onChange={onChange} disabled />)
-
-    const button = screen.getByTestId('mode-toggle')
     expect(button).toBeDisabled()
+    expect(button).toHaveAttribute('aria-label', 'Switching what runs here…')
   })
 
-  it('does not call onChange when disabled', () => {
-    const onChange = vi.fn()
-    render(<ModeToggle value="shell" onChange={onChange} disabled />)
-
-    const button = screen.getByTestId('mode-toggle')
-    fireEvent.click(button)
-
-    expect(onChange).not.toHaveBeenCalled()
-  })
-
-  it('does not call onChange when isLoading', () => {
-    const onChange = vi.fn()
-    render(<ModeToggle value="shell" onChange={onChange} isLoading />)
-
-    const button = screen.getByTestId('mode-toggle')
-    fireEvent.click(button)
-
-    expect(onChange).not.toHaveBeenCalled()
+  it('does not open when disabled', () => {
+    render(
+      <ModeToggle
+        value="shell"
+        onChange={vi.fn()}
+        disabled
+        agentTools={[mockTool({})]}
+      />,
+    )
+    fireEvent.click(screen.getByTestId('mode-toggle'))
+    expect(screen.queryByRole('menu')).toBeNull()
   })
 
   it('resets loading state after onChange rejects', async () => {
@@ -199,24 +215,11 @@ describe('ModeToggle', () => {
         agentTools={[mockTool({})]}
       />,
     )
-
     fireEvent.click(screen.getByTestId('mode-toggle'))
-
-    await waitFor(() => {
-      expect(onChange).toHaveBeenCalled()
-    })
-
-    // Button should not remain in loading state
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Claude/ }))
+    await waitFor(() => expect(onChange).toHaveBeenCalled())
     await waitFor(() => {
       expect(screen.getByTestId('mode-toggle')).not.toBeDisabled()
     })
-  })
-
-  it('applies reduced opacity when disabled', () => {
-    const onChange = vi.fn()
-    render(<ModeToggle value="shell" onChange={onChange} disabled />)
-
-    const button = screen.getByTestId('mode-toggle')
-    expect(button.style.opacity).toBe('0.5')
   })
 })

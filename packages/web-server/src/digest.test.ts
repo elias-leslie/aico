@@ -140,7 +140,7 @@ describe('buildDigest', () => {
   const status = (problems = 2, failed = 1) =>
     ({ read: () => ({ summary: { problems, counts: { failed } } }) }) as never
   const asks = (...createdAt: number[]) => ({
-    list: async () => createdAt.map((c) => ({ createdAt: c })),
+    list: async () => createdAt.map((c) => ({ createdAt: c, state: 'open' as const })),
   })
 
   function deps(over: Partial<DigestDeps> & { tether?: DigestDeps['tether'] } = {}): DigestDeps {
@@ -209,6 +209,30 @@ describe('buildDigest', () => {
     expect(d.problems).toEqual({ count: 2, failed: 1 })
     expect(d.spend).toEqual({ sinceDay: '2026-11-06', items: [{ provider: 'codex', credits: 15 }] })
     expect(d.unavailable).toEqual([])
+  })
+
+  it('counts only questions still waiting, not ones asked and already closed', async () => {
+    const since = NOW - 3_600_000
+    const ask = (state: 'open' | 'answered' | 'done' | 'withdrawn', createdAt = NOW) => ({
+      state,
+      createdAt,
+    })
+    const d = await buildDigest(
+      deps({
+        asks: {
+          list: async () => [
+            ask('open'),
+            ask('open', since - 1),
+            ask('answered'),
+            ask('done'),
+            ask('withdrawn'),
+          ],
+        },
+      }),
+      since,
+      NOW,
+    )
+    expect(d.asks).toBe(1)
   })
 
   it('names each source it cannot read and keeps the rest', async () => {

@@ -205,6 +205,51 @@ select {
   height: 34px;
 }
 
+/* What runs in the session: a labelled control, "Runs  Claude Code  v". */
+.lantern-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  max-width: 100%;
+  height: 34px;
+  padding: 0 9px;
+  border: 1px solid var(--paper-veil);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--mist);
+  font-size: 12px;
+  white-space: nowrap;
+  transition:
+    background 0.15s var(--ease-arrival),
+    color 0.15s var(--ease-arrival);
+}
+
+.lantern-mode .v {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--bone);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.lantern-mode.phone {
+  height: 44px;
+  gap: 6px;
+  padding: 0 8px;
+}
+
+.lantern-mode:hover:not(:disabled),
+.lantern-mode[aria-expanded="true"] {
+  background: var(--paper-veil);
+}
+
+.lantern-mode:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .lantern-field {
   display: flex;
   align-items: center;
@@ -1315,13 +1360,28 @@ div.xterm .xterm-viewport {
 }
 
 .lantern-ask-body > p,
-.lantern-ask-body > ul {
+.lantern-ask-body > ul,
+.lantern-ask-body > ol,
+.lantern-ask-body > pre {
   margin: 0 0 6px;
 }
 
-.lantern-ask-body > ul {
+.lantern-ask-body > ul,
+.lantern-ask-body > ol {
   padding-left: 18px;
   list-style: disc;
+}
+
+.lantern-ask-body > ol {
+  list-style: decimal;
+}
+
+.lantern-ask-body > pre {
+  padding: 8px 10px;
+  border: 1px solid var(--paper-veil);
+  border-radius: 8px;
+  overflow-x: auto;
+  white-space: pre;
 }
 
 .lantern-ask-body code {
@@ -2563,4 +2623,14 @@ a.lantern-ask-attached {
 .lantern-chip[data-tone="bad"] {
   border-color: color-mix(in srgb, var(--ember) 50%, transparent);
   color: var(--ember);
+}
+
+/* A menu row that exists but can't be used now: dimmed, still readable. */
+.lantern-menu-item.unavailable {
+  color: var(--mist);
+  cursor: not-allowed;
+}
+
+.lantern-menu-item.unavailable:hover {
+  background: transparent;
 }

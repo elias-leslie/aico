@@ -36,6 +36,8 @@ interface CreatePaneRequest {
   detached?: boolean
   /** A Tether peer to start the session on; absent for this computer. */
   host?: string
+  /** The owner's name for the session that opens; absent: the project's. */
+  session_name?: string
 }
 
 interface UpdatePaneRequest {
@@ -46,6 +48,7 @@ interface UpdatePaneRequest {
 interface PanePlacementOptions {
   detached?: boolean
   host?: string
+  sessionName?: string
 }
 
 const api = {
@@ -307,6 +310,7 @@ export function useTerminalPanes() {
         agent_tool_slug: agentToolSlug,
         detached: options?.detached,
         host: options?.host,
+        session_name: options?.sessionName,
       }),
     [createMutation],
   )

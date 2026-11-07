@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Panel } from './Panel'
 
@@ -17,13 +17,14 @@ const state = vi.hoisted(() => ({
     stale: false,
   },
   open: vi.fn(),
+  lastLook: null as number | null,
 }))
 vi.mock('./FrameContext', () => ({
   useFrame: () => ({ open: state.open }),
 }))
 vi.mock('@/lib/frame/digest', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/frame/digest')>()),
-  useLastLook: () => Date.now() - 3_600_000,
+  useLastLook: () => state.lastLook,
   useDigest: () => state.digest,
 }))
 vi.mock('@/lib/hooks/use-status', () => ({ useStatus: () => state.status }))
@@ -88,6 +89,7 @@ beforeEach(() => {
     stale: false,
   }
   state.open.mockClear()
+  state.lastLook = Date.now() - 3_600_000
 })
 
 const slots = [] as never[]
@@ -97,7 +99,7 @@ describe('Panel', () => {
     render(<Panel slots={slots} onSelect={vi.fn()} />)
     const since = screen.getByTestId('since-line')
     expect(since).toHaveTextContent(
-      /Since .*3 finished, 1 of them failed, 1 quiet \(stuck\), 2 new questions/,
+      /Since .*3 finished, 1 of them failed, 1 quiet \(stuck\), 2 new questions waiting/,
     )
     expect(
       screen
@@ -106,6 +108,26 @@ describe('Panel', () => {
     ).toEqual(['Sessions', 'Worst problem', 'Quota', 'Everything else'])
     fireEvent.click(screen.getByRole('link', { name: 'See the day' }))
     expect(state.open).toHaveBeenCalledWith('/today', 'wide')
+  })
+
+  it('says how far back it counts when this device never looked, not a time it never had', () => {
+    state.lastLook = null
+    render(<Panel slots={slots} onSelect={vi.fn()} />)
+    const since = screen.getByTestId('since-line')
+    expect(since).toHaveTextContent(/^Past 12 hours/)
+    expect(since).not.toHaveTextContent(/Since/)
+  })
+
+  it('lists every place to open, Quota and Recovery included, at their own addresses', () => {
+    render(<Panel slots={slots} onSelect={vi.fn()} />)
+    const places = screen.getByRole('region', { name: 'Everything else' })
+    const href = (name: RegExp | string) =>
+      within(places).getByRole('link', { name }).getAttribute('href')
+    expect(href('Quota')).toBe('/quota')
+    expect(href('Recovery')).toBe('/recovery')
+    expect(href('Machines')).toBe('/machines')
+    fireEvent.click(within(places).getByRole('link', { name: 'Quota' }))
+    expect(state.open).toHaveBeenCalledWith('/quota', 'wide')
   })
 
   it('names the worst problem and opens Status', () => {

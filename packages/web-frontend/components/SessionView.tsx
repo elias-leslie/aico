@@ -11,6 +11,7 @@ import {
   HostNotice,
   ModelSwitchNotice,
   SignInLinkNotice,
+  SizeClaimedNotice,
   SizeHolderNotice,
 } from '@/components/TerminalNotice'
 import type { ConnectionStatus, HostAway } from '@/components/terminal.types'
@@ -32,6 +33,9 @@ import {
   getSlotWorkingDir,
   isPaneSlot,
 } from '@/lib/utils/slot'
+
+/** How long "Now sized for this window" stays after Use here. */
+const SIZE_CLAIMED_MS = 6000
 
 /** The link bar for a sign-in session; mounted only for one, so the query runs only then. */
 function SignInLink({ sessionId, tool }: { sessionId: string; tool: string }) {
@@ -159,6 +163,13 @@ export function SessionView({
       setSizeHolder(name === null ? null : { key: termKey, name }),
     [termKey],
   )
+  // Use here was pressed on this terminal: the bar confirms it for a while.
+  const [claimedKey, setClaimedKey] = useState<string | null>(null)
+  useEffect(() => {
+    if (!claimedKey) return
+    const timer = setTimeout(() => setClaimedKey(null), SIZE_CLAIMED_MS)
+    return () => clearTimeout(timer)
+  }, [claimedKey])
   // A remote session's host can't be reached right now.
   const [hostAway, setHostAway] = useState<(HostAway & { key: string }) | null>(
     null,
@@ -208,16 +219,25 @@ export function SessionView({
       ? hostAway
       : null
 
-  const sizeNotice = !chat &&
-    !awayHere &&
-    sizeHolder?.key === termKey &&
-    status === 'connected' && (
-      <SizeHolderNotice
-        holder={sizeHolder.name}
-        onUseHere={() => handleRef.current?.claimSize()}
-        isMobile={isMobile}
-      />
-    )
+  const holderShown =
+    !chat && !awayHere && sizeHolder?.key === termKey && status === 'connected'
+  // Use here was pressed on this terminal and the size is this view's now.
+  const claimedShown = !holderShown && claimedKey === termKey
+  const sizeNotice = holderShown ? (
+    <SizeHolderNotice
+      holder={sizeHolder.name}
+      onUseHere={() => {
+        handleRef.current?.claimSize()
+        setClaimedKey(termKey)
+      }}
+      isMobile={isMobile}
+    />
+  ) : claimedShown ? (
+    <SizeClaimedNotice
+      onDismiss={() => setClaimedKey(null)}
+      isMobile={isMobile}
+    />
+  ) : null
 
   return (
     <div className="h-full w-full" style={{ backgroundColor: 'var(--rim)' }}>

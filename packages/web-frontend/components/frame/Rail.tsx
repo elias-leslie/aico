@@ -140,7 +140,7 @@ export function Rail({
       <RailButton
         icon={Gauge}
         label={glances.length ? `Quota: ${quotaLine(glances)}` : 'Quota'}
-        onClick={() => frame?.open('/status?q=usage', 'wide')}
+        onClick={() => frame?.open('/quota', 'wide')}
       />
       <RailButton
         icon={Folder}

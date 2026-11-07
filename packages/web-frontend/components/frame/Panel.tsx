@@ -6,6 +6,7 @@ import {
   Clock,
   Database,
   Folder,
+  Gauge,
   KeyRound,
   Server,
   Smartphone,
@@ -52,11 +53,12 @@ const PLACES: readonly Place[] = [
   { label: 'Status', href: '/status', where: 'wide', icon: Activity },
   { label: 'Projects', href: '/projects', where: 'wide', icon: Folder },
   { label: 'Recent', href: '/history', where: 'wide', icon: Clock },
+  { label: 'Quota', href: '/quota', where: 'wide', icon: Gauge },
   { label: 'Backups', href: '/backups', where: 'full', icon: Database },
   { label: 'Grants', href: '/grants', where: 'full', icon: KeyRound },
   {
     label: 'Machines',
-    href: '/status?kind=machine',
+    href: '/machines',
     where: 'full',
     icon: Server,
   },
@@ -117,7 +119,7 @@ function SinceLine({ frame }: { frame: Frame | null }) {
   // The start is fixed for the visit; the clock only words it.
   const start = useMemo(() => digestStart(lastLook, Date.now()), [lastLook])
   const { digest, loading, failed, stale, refetch } = useDigest(start)
-  const head = sinceText(start, now)
+  const head = sinceText(start, now, lastLook === null)
   if (loading)
     return (
       <p className={styles.since} role="status">
@@ -255,7 +257,7 @@ function Quota({ frame }: { frame: Frame | null }) {
       <SectionHead
         title="Quota"
         more={
-          <MoreLink frame={frame} href="/status?q=usage">
+          <MoreLink frame={frame} href="/quota">
             Spend by day
           </MoreLink>
         }

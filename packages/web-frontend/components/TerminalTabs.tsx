@@ -154,6 +154,16 @@ export function TerminalTabs({
     )
   }
 
+  // The agent of the newest session that has one, for a device that hasn't
+  // started a session here yet.
+  const recentAgentSlug =
+    sessions
+      .filter((session) => session.mode && session.mode !== 'shell')
+      .sort(
+        (a, b) =>
+          Date.parse(b.created_at ?? '') - Date.parse(a.created_at ?? ''),
+      )[0]?.mode ?? null
+
   return (
     <>
       <TerminalContent
@@ -224,9 +234,10 @@ export function TerminalTabs({
           sessions.find((session) => session.id === activeSessionId)
             ?.project_id ?? projectId
         }
-        onStart={(projectId, rootPath, mode, host) =>
-          handleNewTerminalForProject(projectId, mode, rootPath, host)
+        onStart={(projectId, rootPath, mode, host, name) =>
+          handleNewTerminalForProject(projectId, mode, rootPath, host, name)
         }
+        recentAgentSlug={recentAgentSlug}
         isMobile={isMobile}
       />
     </>

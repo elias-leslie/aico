@@ -162,6 +162,7 @@ export function ProjectDetail({
                   key={problem.kind}
                   kind={problem.kind}
                   count={problem.count}
+                  worst={problem.worst}
                   expanded={
                     open?.type === 'problem' && open.kind === problem.kind
                   }
@@ -188,7 +189,11 @@ export function ProjectDetail({
                     Math.max(problem.count, problem.rows.length) - rows.length
                   return (
                     <Popover
-                      label={problemText(problem.kind, problem.count)}
+                      label={problemText(
+                        problem.kind,
+                        problem.count,
+                        problem.worst,
+                      )}
                       onClose={close}
                     >
                       <ul>

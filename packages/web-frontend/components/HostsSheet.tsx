@@ -220,7 +220,7 @@ export function HostsSheet({
           >
             Where sessions can run. Every machine is on{' '}
             <Link
-              href="/status?kind=machine"
+              href="/machines"
               onClick={() => onOpenChange(false)}
               style={{ color: 'var(--lantern)' }}
             >

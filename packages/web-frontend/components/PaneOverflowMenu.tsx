@@ -27,6 +27,9 @@ export interface PaneOverflowMenuProps {
   onRename?: () => void
   /** The session "Check in later" sets check-ins on; hidden without it. */
   checkInSessionId?: string | null
+  /** Set for a shell: it can't report back, so Check in later stays listed
+   * but unavailable, with this as its tooltip. */
+  checkInUnavailable?: string
   /** Text size, the one type setting; shown as a stepper when given. */
   fontSize?: TerminalFontSize
   onFontSizeChange?: (size: TerminalFontSize) => void
@@ -46,6 +49,7 @@ export function PaneOverflowMenu({
   onUpload,
   onRename,
   checkInSessionId,
+  checkInUnavailable,
   fontSize,
   onFontSizeChange,
   isMobile = false,
@@ -186,7 +190,13 @@ export function PaneOverflowMenu({
                   label="Check in later"
                   onClick={() => setView('check-in')}
                   isMobile={isMobile}
-                  title="Have the agent report back at a time you pick"
+                  title={
+                    checkInUnavailable ??
+                    'Have the agent report back at a time you pick'
+                  }
+                  unavailable={
+                    checkInUnavailable ? 'Agent sessions only' : undefined
+                  }
                 />
               )}
               {onReset && (

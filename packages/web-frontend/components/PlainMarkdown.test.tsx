@@ -20,3 +20,16 @@ it('never turns text into HTML', () => {
   expect(container.querySelector('img')).toBeNull()
   expect(container.querySelector('code')?.textContent).toBe('<b>')
 })
+
+it('shows fenced code as a block and numbers an ordered list', () => {
+  const { container } = render(
+    <PlainMarkdown
+      text={'Run:\n\n```sh\nst check --quick\nst commit\n```\n\n1. one\n2. two'}
+    />,
+  )
+  expect(container.textContent).not.toContain('```')
+  expect(container.querySelector('pre code')?.textContent).toBe(
+    'st check --quick\nst commit',
+  )
+  expect(container.querySelectorAll('ol li')).toHaveLength(2)
+})

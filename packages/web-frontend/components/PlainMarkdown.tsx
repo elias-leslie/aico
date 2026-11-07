@@ -21,11 +21,14 @@ function inline(text: string, key: string): ReactNode[] {
 }
 
 const BULLET = /^\s*[-*]\s+(.*)$/
+const NUMBERED = /^\s*\d+[.)]\s+(.*)$/
+const FENCE = /^\s*(```|~~~)/
 const HEADING = /^#{1,6}\s+(.*)$/
 
 /** Memory and prompt text is written in markdown; this shows it as plain
- * formatted text: paragraphs, bullet lists, headings as bold lines, **bold**,
- * *italic* and `code`. No HTML, no links. */
+ * formatted text: paragraphs, bullet and numbered lists, headings as bold
+ * lines, fenced code blocks, **bold**, *italic* and `code`. No HTML, no
+ * links. */
 export function PlainMarkdown({
   text,
   className,
@@ -35,17 +38,18 @@ export function PlainMarkdown({
 }) {
   const blocks: ReactNode[] = []
   let list: string[] = []
+  let ordered = false
+  let fence: string[] | null = null
   let paragraph: string[] = []
   const flushList = () => {
     if (!list.length) return
     const key = `l${blocks.length}`
+    const items = list.map((item, i) => (
+      // biome-ignore lint/suspicious/noArrayIndexKey: static text, never reordered
+      <li key={i}>{inline(item, `${key}-${i}`)}</li>
+    ))
     blocks.push(
-      <ul key={key}>
-        {list.map((item, i) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: static text, never reordered
-          <li key={i}>{inline(item, `${key}-${i}`)}</li>
-        ))}
-      </ul>,
+      ordered ? <ol key={key}>{items}</ol> : <ul key={key}>{items}</ul>,
     )
     list = []
   }
@@ -55,15 +59,43 @@ export function PlainMarkdown({
     blocks.push(<p key={key}>{inline(paragraph.join('\n'), key)}</p>)
     paragraph = []
   }
+  const flushFence = () => {
+    if (fence === null) return
+    blocks.push(
+      <pre key={`c${blocks.length}`}>
+        <code>{fence.join('\n')}</code>
+      </pre>,
+    )
+    fence = null
+  }
   for (const line of text.split('\n')) {
+    if (fence !== null) {
+      if (FENCE.test(line)) flushFence()
+      else fence.push(line)
+      continue
+    }
+    if (FENCE.test(line)) {
+      flushList()
+      flushParagraph()
+      fence = []
+      continue
+    }
     const bullet = BULLET.exec(line)
+    const number = NUMBERED.exec(line)
     const heading = HEADING.exec(line)
     if (!line.trim()) {
       flushList()
       flushParagraph()
     } else if (bullet && !/^\s*\*\*/.test(line)) {
       flushParagraph()
+      if (list.length && ordered) flushList()
+      ordered = false
       list.push(bullet[1])
+    } else if (number) {
+      flushParagraph()
+      if (list.length && !ordered) flushList()
+      ordered = true
+      list.push(number[1])
     } else if (heading) {
       flushList()
       flushParagraph()
@@ -78,6 +110,7 @@ export function PlainMarkdown({
       paragraph.push(line)
     }
   }
+  flushFence()
   flushList()
   flushParagraph()
   return <div className={className}>{blocks}</div>

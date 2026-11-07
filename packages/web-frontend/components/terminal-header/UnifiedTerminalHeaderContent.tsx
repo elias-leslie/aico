@@ -20,6 +20,9 @@ import { PaneSearchControl } from './PaneSearchControl'
 import { PaneStatusBadge } from './PaneStatusBadge'
 import type { UnifiedTerminalHeaderProps } from './types'
 
+const CHECK_IN_SHELL_NOTE =
+  'Only agent sessions can check in later. A shell can’t report back on its own.'
+
 export const UnifiedTerminalHeaderContent = memo(
   function UnifiedTerminalHeaderContent({
     slot,
@@ -183,6 +186,13 @@ export const UnifiedTerminalHeaderContent = memo(
             <PaneOverflowMenu
               onRename={canRename ? () => setIsRenaming(true) : undefined}
               checkInSessionId={getSlotSessionId(slot)}
+              checkInUnavailable={
+                (slot.type === 'project'
+                  ? slot.activeMode
+                  : slot.sessionMode) === 'shell'
+                  ? CHECK_IN_SHELL_NOTE
+                  : undefined
+              }
               onCloseSession={onCloseSession}
               onRefresh={onRefresh}
               onReset={onReset}

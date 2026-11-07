@@ -119,6 +119,27 @@ describe('PaneOverflowMenu', () => {
       ).not.toBeInTheDocument()
     })
 
+    it('stays listed but unavailable for a shell, with why', () => {
+      render(
+        <PaneOverflowMenu
+          checkInSessionId="s1"
+          checkInUnavailable="Only agent sessions can check in later."
+        />,
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Session menu' }))
+      const row = screen.getByRole('menuitem', { name: /Check in later/ })
+      expect(row).toHaveAttribute('aria-disabled', 'true')
+      expect(row).toHaveAttribute(
+        'title',
+        'Only agent sessions can check in later.',
+      )
+      expect(row).toHaveTextContent('Agent sessions only')
+      fireEvent.click(row)
+      expect(
+        screen.queryByRole('menuitem', { name: 'In 1 hour6:30 PM' }),
+      ).not.toBeInTheDocument()
+    })
+
     it('lists the quick times with when they land', () => {
       open()
       expect(

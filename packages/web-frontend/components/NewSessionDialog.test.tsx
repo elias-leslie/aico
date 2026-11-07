@@ -293,14 +293,68 @@ describe('NewSessionDialog', () => {
     expect(onStart).toHaveBeenCalledWith('aico', '/srv/aico', 'shell')
   })
 
-  it('opens New chat from the picker', () => {
-    const open = vi.fn()
-    window.addEventListener('aico:new-chat', open)
-    const { onStart } = renderDialog()
-    fireEvent.click(screen.getByRole('button', { name: 'New chat' }))
-    expect(open).toHaveBeenCalledOnce()
-    expect(onStart).not.toHaveBeenCalled()
-    window.removeEventListener('aico:new-chat', open)
+  it('has no New chat button: a chat starts from its own place', () => {
+    renderDialog()
+    expect(screen.queryByRole('button', { name: 'New chat' })).toBeNull()
+  })
+
+  it('starts with the name the owner typed, trimmed, and without one when blank', () => {
+    const { onStart } = renderDialog('neri')
+    fireEvent.change(screen.getByTestId('new-session-name'), {
+      target: { value: '  Fix login  ' },
+    })
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Start Claude Code in Neri' }),
+    )
+    expect(onStart).toHaveBeenCalledWith(
+      'neri',
+      '/srv/neri',
+      'claude-code',
+      undefined,
+      'Fix login',
+    )
+  })
+
+  it('preselects the agent last started on this device and says so', () => {
+    localStorage.setItem('aico:new-session-agent', JSON.stringify('codex'))
+    const { onStart } = renderDialog('neri')
+    expect(screen.getByTestId('last-used-agent')).toHaveTextContent(
+      'Codex was the last one you used.',
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Start Codex in Neri' }))
+    expect(onStart).toHaveBeenCalledWith('neri', '/srv/neri', 'codex')
+    expect(
+      JSON.parse(localStorage.getItem('aico:new-session-agent') ?? ''),
+    ).toBe('codex')
+  })
+
+  it('without a remembered agent, follows the newest session, then the registry default', () => {
+    render(
+      <NewSessionDialog
+        isOpen
+        onClose={vi.fn()}
+        onStart={vi.fn()}
+        recentAgentSlug="codex"
+      />,
+    )
+    expect(
+      screen.getByRole('button', { name: /^Start Codex in/ }),
+    ).toBeInTheDocument()
+    cleanup()
+    renderDialog()
+    expect(
+      screen.getByRole('button', { name: /^Start Claude Code in/ }),
+    ).toBeInTheDocument()
+    expect(screen.queryByTestId('last-used-agent')).toBeNull()
+  })
+
+  it('remembers the agent that was started', () => {
+    renderDialog('neri')
+    fireEvent.click(screen.getByRole('button', { name: 'Codex' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start Codex in Neri' }))
+    expect(
+      JSON.parse(localStorage.getItem('aico:new-session-agent') ?? ''),
+    ).toBe('codex')
   })
 
   it('filters projects by name or path', () => {

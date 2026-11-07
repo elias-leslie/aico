@@ -63,7 +63,10 @@ describe('orderProjects', () => {
 describe('words', () => {
   it('names problems with their count', () => {
     expect(problemText('quiet', 21)).toBe('21 checks quiet')
-    expect(problemText('fail', 1)).toBe('1 job failed')
+    expect(problemText('fail', 2)).toBe('2 failed')
+    expect(problemText('warn', 1)).toBe('1 warning')
+    expect(problemText('warn', 3)).toBe('3 warnings')
+    expect(problemText('backup', 1, 'warn')).toBe('1 backup warning')
     expect(problemText('publish', 1)).toBe('Publish to GitHub failed')
     expect(problemText('backup', 2)).toBe('2 backups failed')
   })

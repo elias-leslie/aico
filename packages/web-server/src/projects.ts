@@ -29,7 +29,7 @@ const exec = promisify(execFile)
 
 // -- Problems -----------------------------------------------------------------------------
 
-const PROBLEM_KINDS = ['fail', 'quiet', 'publish', 'backup'] as const
+const PROBLEM_KINDS = ['fail', 'warn', 'quiet', 'publish', 'backup'] as const
 export type ProblemKind = (typeof PROBLEM_KINDS)[number]
 export type Worst = 'failed' | 'late' | 'unknown' | 'warn'
 
@@ -38,7 +38,8 @@ export function problemKind(row: Pick<ShownRow, 'kind' | 'id' | 'shown'>): Probl
   if (row.kind === 'backup') return 'backup'
   if (/publish/i.test(row.id)) return 'publish'
   if (row.shown === 'unknown' || row.shown === 'late') return 'quiet'
-  return 'fail'
+  // Only Status's own failed state counts as failed; a warning is a warning.
+  return row.shown === 'failed' ? 'fail' : 'warn'
 }
 
 export interface ProblemGroup {

@@ -469,6 +469,24 @@ describe('panes', () => {
     expect((await call('GET', '/api/panes/detached')).body).toMatchObject({ total: 0 })
   })
 
+  it('names the session that opens (the agent) when the owner gives a name', async () => {
+    const { status } = await call('POST', '/api/panes', {
+      pane_type: 'project',
+      pane_name: 'Aico',
+      project_id: 'aico',
+      working_dir: '/srv/workspaces/projects/aico/',
+      session_name: '  Fix login  ',
+    })
+    expect(status).toBe(200)
+    const creates = tether
+      .callsOf('request')
+      .filter(([method, path]) => method === 'POST' && path === '/v1/sessions')
+      .map(([, , input]) => input)
+    expect(creates[0]).toMatchObject({ tool: 'shell' })
+    expect((creates[0] as { name?: string }).name).toBeFalsy()
+    expect(creates[1]).toMatchObject({ tool: 'claude', name: 'Fix login' })
+  })
+
   it('ends what it created and drops the tab when Tether refuses a session', async () => {
     tether.failTool = 'claude'
     const { status } = await call('POST', '/api/panes', {

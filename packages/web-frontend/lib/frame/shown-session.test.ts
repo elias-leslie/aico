@@ -23,4 +23,8 @@ describe('the top bar session line', () => {
       /sized for phone$/,
     )
   })
+
+  it('leaves the size to the bar above the session when asked (phone)', () => {
+    expect(shownSessionLine(session({ holder: 'phone' }), false)).toBe('Live')
+  })
 })

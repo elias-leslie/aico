@@ -133,7 +133,7 @@ export function useDigest(since: number) {
 export interface DigestParts {
   /** "3 finished, 1 of them failed", "nothing finished": the line that leads. */
   finished: string
-  /** Plain pieces after it: stuck sessions, new questions. */
+  /** Plain pieces after it: stuck sessions, new questions still waiting. */
   rest: string[]
   /** What it could not read, in words, or null. */
   unread: string | null
@@ -163,15 +163,15 @@ export function digestParts(digest: Digest): DigestParts {
   const stuck = digest.stuck.quiet + digest.stuck.waiting
   if (!skipped('sessions') && stuck > 0)
     rest.push(
-      [
+      `${[
         digest.stuck.waiting ? `${digest.stuck.waiting} waiting` : null,
         digest.stuck.quiet ? `${digest.stuck.quiet} quiet` : null,
       ]
         .filter(Boolean)
-        .join(', ') + ' (stuck)',
+        .join(', ')} (stuck)`,
     )
   if (!skipped('asks') && digest.asks > 0)
-    rest.push(plural(digest.asks, 'new question'))
+    rest.push(`${plural(digest.asks, 'new question')} waiting`)
   const unread = digest.unavailable.length
     ? `Couldn’t read ${digest.unavailable.map((name) => UNREAD_WORD[name] ?? name).join(', ')}.`
     : null
@@ -183,9 +183,16 @@ export function digestParts(digest: Digest): DigestParts {
   return { finished, rest, unread, quiet }
 }
 
-/** "Since 11:40 PM", "Since yesterday 11:40 PM". */
-export function sinceText(since: number, now: number): string {
-  return `Since ${at(since, now)}`
+/** "Since 11:40 PM", "Since yesterday 11:40 PM"; for a device that never
+ * looked there is no moment to name, so it says how far back it counts. */
+export function sinceText(
+  since: number,
+  now: number,
+  neverLooked = false,
+): string {
+  return neverLooked
+    ? `Past ${Math.round(FIRST_LOOK_MS / 3_600_000)} hours`
+    : `Since ${at(since, now)}`
 }
 
 /** The credits line: "Codex 1.5K credits". Null when none were spent or it wasn't read. */

@@ -1,6 +1,7 @@
 import {
   agentsText,
   type ProblemKind,
+  type ProblemWorst,
   problemText,
   type RunState,
   runStateText,
@@ -8,8 +9,9 @@ import {
 import { PersonIcon, ProblemIcon } from './icons'
 import styles from './ProjectsPage.module.css'
 
-/** Quiet checks are a warning; everything else failed. */
-const tone = (kind: ProblemKind) => (kind === 'quiet' ? 'warn' : 'fail')
+/** Only Status's failed state is ember; warnings and quiet checks are amber. */
+const tone = (kind: ProblemKind, worst?: ProblemWorst) =>
+  kind === 'quiet' || kind === 'warn' || worst === 'warn' ? 'warn' : 'fail'
 
 interface BadgeProps {
   onClick: () => void
@@ -19,15 +21,16 @@ interface BadgeProps {
 export function ProblemBadge({
   kind,
   count,
+  worst,
   onClick,
   expanded,
-}: BadgeProps & { kind: ProblemKind; count: number }) {
-  const text = problemText(kind, count)
+}: BadgeProps & { kind: ProblemKind; count: number; worst?: ProblemWorst }) {
+  const text = problemText(kind, count, worst)
   return (
     <button
       type="button"
       className={styles.badge}
-      data-tone={tone(kind)}
+      data-tone={tone(kind, worst)}
       aria-label={text}
       aria-haspopup="dialog"
       aria-expanded={expanded}

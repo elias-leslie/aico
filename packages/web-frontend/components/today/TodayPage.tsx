@@ -51,7 +51,7 @@ export function TodayPage() {
           ) : (
             <p style={{ fontSize: 13.5 }}>
               <span style={{ color: 'var(--mist)', marginRight: 8 }}>
-                {sinceText(start, now)}
+                {sinceText(start, now, lastLook === null)}
               </span>
               {parts.finished}
               {parts.rest.length > 0 && `, ${parts.rest.join(', ')}`}

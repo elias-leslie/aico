@@ -22,7 +22,7 @@ import { useFrame } from './FrameContext'
 
 /** Notes opens on a new note, ready to type; nothing is saved until something is typed. */
 const NEW_NOTE_HREF = '/notes?new=note'
-const QUOTA_HREF = '/status?q=usage'
+const QUOTA_HREF = '/quota'
 
 /** Bring the open session's row into view once the list is on screen. */
 function revealCurrentRow() {
@@ -118,7 +118,7 @@ export function TopBar() {
       ? `Status as of ${at(view ? Date.parse(view.generated_at) : null, now)}: ${summaryLine(summary)}`
       : `Status: ${summaryLine(summary)}`
 
-  const sessionLine = session ? shownSessionLine(session) : ''
+  const sessionLine = session ? shownSessionLine(session, docked) : ''
 
   return (
     <header

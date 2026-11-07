@@ -18,7 +18,7 @@ function Glyph({ children }: { children: ReactNode }) {
   )
 }
 
-/** One glyph per problem kind: a failed job, a quiet check, a failed publish, a failed backup. */
+/** One glyph per problem kind: a failed job, a warning, a quiet check, a failed publish, a failed backup. */
 export function ProblemIcon({ kind }: { kind: ProblemKind }) {
   switch (kind) {
     case 'fail':
@@ -27,6 +27,13 @@ export function ProblemIcon({ kind }: { kind: ProblemKind }) {
           <circle cx="8" cy="8" r="6" />
           <path d="M8 4.5V8l2.3 1.5" />
           <path d="M12 12l2.5 2.5" />
+        </Glyph>
+      )
+    case 'warn':
+      return (
+        <Glyph>
+          <path d="M8 2.5l6 10.5H2z" />
+          <path d="M8 6.5v3M8 11.3v.2" />
         </Glyph>
       )
     case 'quiet':

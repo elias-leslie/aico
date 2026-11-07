@@ -4,12 +4,15 @@
 import { apiFetch } from './api-fetch'
 
 export type RunState = 'running' | 'stopped' | 'down' | 'starting' | 'unknown'
-export type ProblemKind = 'fail' | 'quiet' | 'publish' | 'backup'
+export type ProblemKind = 'fail' | 'warn' | 'quiet' | 'publish' | 'backup'
+/** Status's own state for the worst row in a group. */
+export type ProblemWorst = 'failed' | 'late' | 'unknown' | 'warn'
 export type PowerAction = 'start' | 'shutdown' | 'restart'
 
 interface Problem {
   kind: ProblemKind
   count: number
+  worst?: ProblemWorst
 }
 
 export interface ProjectSummary {
@@ -52,6 +55,7 @@ export interface Place {
 export interface ProblemRows {
   kind: ProblemKind
   count: number
+  worst?: ProblemWorst
   rows: { name: string; detail: string }[]
 }
 
@@ -196,19 +200,32 @@ export function splitProjects(projects: ProjectSummary[], search: string) {
 const plural = (n: number, one: string, many: string) =>
   `${n} ${n === 1 ? one : many}`
 
-/** The badge's tooltip and label. */
-export function problemText(kind: ProblemKind, count: number): string {
+/** The badge's tooltip and label. Failed is Status's failed state only; a
+ * warning is never worded as a failure (`worst` says which a backup or a
+ * publish is). */
+export function problemText(
+  kind: ProblemKind,
+  count: number,
+  worst?: ProblemWorst,
+): string {
+  const warning = worst === 'warn'
   switch (kind) {
     case 'fail':
-      return `${plural(count, 'job', 'jobs')} failed`
+      return `${count} failed`
+    case 'warn':
+      return plural(count, 'warning', 'warnings')
     case 'quiet':
       return `${plural(count, 'check', 'checks')} quiet`
     case 'publish':
-      return count === 1
-        ? 'Publish to GitHub failed'
-        : `${count} GitHub publishes failed`
+      return warning
+        ? plural(count, 'GitHub publish warning', 'GitHub publish warnings')
+        : count === 1
+          ? 'Publish to GitHub failed'
+          : `${count} GitHub publishes failed`
     case 'backup':
-      return `${plural(count, 'backup', 'backups')} failed`
+      return warning
+        ? plural(count, 'backup warning', 'backup warnings')
+        : `${plural(count, 'backup', 'backups')} failed`
   }
 }
 

@@ -23,7 +23,7 @@ import { popOutNotes } from '@/lib/notes-window'
 import { plural } from '@/lib/status'
 import styles from './Frame.module.css'
 
-const MACHINES_HREF = '/status?kind=machine'
+const MACHINES_HREF = '/machines'
 const RECOVERY_HREF = '/recovery'
 
 interface Place {
@@ -66,9 +66,11 @@ const PLACES: readonly (readonly Place[])[] = [
     },
     {
       label: 'Quota',
-      href: '/status?q=usage',
+      href: '/quota',
       icon: Gauge,
-      match: (path, query) => path === '/status' && query.get('q') === 'usage',
+      // The old address (/status?q=usage) still opens it.
+      match: (path, query) =>
+        path === '/quota' || (path === '/status' && query.get('q') === 'usage'),
     },
   ],
   [
@@ -95,7 +97,8 @@ const PLACES: readonly (readonly Place[])[] = [
       href: MACHINES_HREF,
       icon: Server,
       match: (path, query) =>
-        path === '/status' && query.get('kind') === 'machine',
+        path === '/machines' ||
+        (path === '/status' && query.get('kind') === 'machine'),
     },
     {
       label: 'Recovery',

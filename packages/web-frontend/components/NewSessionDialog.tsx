@@ -4,7 +4,6 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { clsx } from 'clsx'
 import { Search, X } from 'lucide-react'
 import { type ReactNode, useMemo, useState } from 'react'
-import { newChat } from '@/lib/chat'
 import { useAgentTools } from '@/lib/hooks/use-agent-tools'
 import {
   HOST_STATE_LABELS,
@@ -22,6 +21,8 @@ import { AgentIcon, getAgentColor } from './AgentIcon'
 
 const SHELL_MODE = 'shell'
 const LAST_PROJECT_KEY = 'aico:new-session-project'
+const LAST_AGENT_KEY = 'aico:new-session-agent'
+const MAX_NAME = 160
 
 interface NewSessionDialogProps {
   isOpen: boolean
@@ -29,14 +30,17 @@ interface NewSessionDialogProps {
   /** Preselected project: the open session's, else the project link's. */
   defaultProjectId?: string | null
   /** `mode` is an agent tool's slug, or `shell`; `host` a Tether peer, or
-   * absent for this computer. A rejection keeps the dialog open with its
-   * reason. */
+   * absent for this computer; `name` is the owner's own, when given. A
+   * rejection keeps the dialog open with its reason. */
   onStart: (
     projectId: string,
     rootPath: string | null,
     mode: string,
     host?: string,
+    name?: string,
   ) => void | Promise<void>
+  /** The agent of the newest session, for a device that hasn't started one. */
+  recentAgentSlug?: string | null
   isMobile?: boolean
 }
 
@@ -49,14 +53,16 @@ function matchesProject(project: ProjectSetting, query: string): boolean {
 }
 
 /**
- * Start a session: pick an agent or a shell, then a project. The picker
- * stays put above the project list, which scrolls on its own.
+ * Start a session: pick an agent or a shell (the last one used is preselected),
+ * then a project, and optionally name it. The picker stays put above the
+ * project list, which scrolls on its own.
  */
 export function NewSessionDialog({
   isOpen,
   onClose,
   defaultProjectId,
   onStart,
+  recentAgentSlug,
   isMobile = false,
 }: NewSessionDialogProps) {
   const local = useProjectSettings()
@@ -66,6 +72,11 @@ export function NewSessionDialog({
   const [kind, setKind] = useState<'agent' | 'shell'>('agent')
   const [pickedToolSlug, setPickedToolSlug] = useState<string | null>(null)
   const [pickedHost, setPickedHost] = useState<string | null>(null)
+  const [name, setName] = useState('')
+  const [lastToolSlug, setLastToolSlug] = useLocalStorageState<string | null>(
+    LAST_AGENT_KEY,
+    null,
+  )
   const [lastProjectId, setLastProjectId] = useLocalStorageState<string | null>(
     LAST_PROJECT_KEY,
     null,
@@ -78,10 +89,18 @@ export function NewSessionDialog({
     isError: hostsError,
   } = useHosts(isOpen, starting && !!pickedHost)
 
+  // The pick, else the agent this device started last, else the newest
+  // session's, else the registry's default.
+  const enabledTool = (slug: string | null | undefined) =>
+    enabledTools.find((t) => t.slug === slug)
+  const rememberedTool =
+    enabledTool(lastToolSlug) ?? enabledTool(recentAgentSlug)
   const tool =
     kind === 'agent'
-      ? (enabledTools.find((t) => t.slug === pickedToolSlug) ?? defaultTool)
+      ? (enabledTool(pickedToolSlug) ?? rememberedTool ?? defaultTool)
       : undefined
+  const toolIsLastUsed =
+    !!tool && !pickedToolSlug && tool.slug === rememberedTool?.slug
   const host = hosts.some((h) => h.name === pickedHost)
     ? (pickedHost ?? undefined)
     : undefined
@@ -120,6 +139,7 @@ export function NewSessionDialog({
     setKind('agent')
     setPickedToolSlug(null)
     setPickedHost(null)
+    setName('')
     setStartError(null)
     setStarting(false)
     onClose()
@@ -127,11 +147,15 @@ export function NewSessionDialog({
   const start = async () => {
     if (!project || starting) return
     const mode = tool ? tool.slug : SHELL_MODE
-    const started = host
-      ? onStart(project.id, project.root_path, mode, host)
-      : onStart(project.id, project.root_path, mode)
-    if (!(started instanceof Promise)) {
+    const named = name.trim()
+    const extra: [string?, string?] = named ? [host, named] : host ? [host] : []
+    const started = onStart(project.id, project.root_path, mode, ...extra)
+    const remember = () => {
       setLastProjectId(project.id)
+      if (tool) setLastToolSlug(tool.slug)
+    }
+    if (!(started instanceof Promise)) {
+      remember()
       close()
       return
     }
@@ -139,7 +163,7 @@ export function NewSessionDialog({
     setStartError(null)
     try {
       await started
-      setLastProjectId(project.id)
+      remember()
       close()
     } catch (error) {
       setStarting(false)
@@ -207,16 +231,6 @@ export function NewSessionDialog({
           <div className="flex-none pb-1">
             <SectionTitle>Start</SectionTitle>
             <div className="px-[18px]">
-              <button
-                className="lantern-btn"
-                type="button"
-                onClick={() => {
-                  close()
-                  newChat()
-                }}
-              >
-                New chat
-              </button>
               {enabledTools.length > 0 && (
                 <fieldset aria-label="Session kind" className="lantern-seg">
                   {(['agent', 'shell'] as const).map((value) => (
@@ -249,6 +263,15 @@ export function NewSessionDialog({
                     </button>
                   ))}
                 </fieldset>
+              )}
+              {toolIsLastUsed && (
+                <p
+                  className="mt-1.5 text-xs"
+                  style={{ color: 'var(--mist)' }}
+                  data-testid="last-used-agent"
+                >
+                  {tool.name} was the last one you used.
+                </p>
               )}
             </div>
           </div>
@@ -386,6 +409,32 @@ export function NewSessionDialog({
                 {startError}
               </p>
             )}
+            <label className="mb-2.5 flex flex-col gap-1.5 text-xs">
+              <span style={{ color: 'var(--mist)' }}>
+                Name <span className="font-normal">(optional)</span>
+              </span>
+              <span className="lantern-field">
+                <input
+                  type="text"
+                  value={name}
+                  maxLength={MAX_NAME}
+                  onChange={(event) => setName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault()
+                      void start()
+                    }
+                  }}
+                  placeholder={
+                    project ? `Leave blank to use “${project.name}”` : ''
+                  }
+                  aria-label="Name (optional)"
+                  autoComplete="off"
+                  className="text-sm"
+                  data-testid="new-session-name"
+                />
+              </span>
+            </label>
             <button
               type="button"
               onClick={() => void start()}

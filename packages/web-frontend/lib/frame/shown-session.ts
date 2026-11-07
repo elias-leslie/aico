@@ -75,8 +75,13 @@ export function useShownSession(): ShownSession | null {
   )
 }
 
-/** The top bar's line under the name: state first, then the agent's activity, then the size. */
-export function shownSessionLine(session: ShownSession): string {
+/** The top bar's line under the name: state first, then the agent's activity,
+ * then the size. A phone leaves the size to the bar above the session, which
+ * says it with Use here beside it (`withSize` false). */
+export function shownSessionLine(
+  session: ShownSession,
+  withSize = true,
+): string {
   const parts: string[] = []
   const status = session.status
   if (status === 'connected') parts.push('Live')
@@ -93,7 +98,7 @@ export function shownSessionLine(session: ShownSession): string {
         session.attention?.age ? `idle ${session.attention.age}` : 'idle',
       )
   }
-  if (session.holder && status === 'connected')
+  if (withSize && session.holder && status === 'connected')
     parts.push(`sized for ${session.holder}`)
   return parts.join(' · ')
 }

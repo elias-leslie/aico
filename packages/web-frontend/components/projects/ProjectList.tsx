@@ -49,6 +49,7 @@ function Row({
             key={problem.kind}
             kind={problem.kind}
             count={problem.count}
+            worst={problem.worst}
             onClick={() => onPick(project.id, problem.kind)}
           />
         ))}

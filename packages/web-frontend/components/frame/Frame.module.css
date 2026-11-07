@@ -109,6 +109,10 @@
 .topbar[data-docked] .spacer {
   min-width: 8px;
 }
+/* Phone: the session's name takes all the free width, none goes to a gap. */
+.topbar:not([data-docked]) .spacer {
+  display: none;
+}
 .tbBtn,
 .tbIcon {
   flex: none;

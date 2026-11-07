@@ -110,6 +110,7 @@ export function buildApi(deps: ApiDeps): Router {
     const workingDir = optionalString(body, 'working_dir', { max: 4096 }) || null
     const toolRef = optionalString(body, 'agent_tool_slug', { max: 100, pattern: SLUG })
     const host = optionalString(body, 'host', { max: 64, pattern: HOST_NAME }) || null
+    const sessionName = optionalString(body, 'session_name', { max: MAX_SESSION_NAME }) || null
     if (paneType === 'project' && !projectId)
       throw new HttpError(400, 'project_id required for project panes')
     if (paneType === 'adhoc' && projectId)
@@ -124,6 +125,7 @@ export function buildApi(deps: ApiDeps): Router {
       workingDir,
       agentMode,
       host,
+      sessionName,
     })
     const { pane: view, order } = await paneById(created.id, false)
     return paneResponse(view, order)

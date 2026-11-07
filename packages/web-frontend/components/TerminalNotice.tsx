@@ -132,6 +132,44 @@ export function SizeHolderNotice({
   )
 }
 
+interface SizeClaimedNoticeProps {
+  onDismiss: () => void
+  isMobile?: boolean
+}
+
+/** What Use here changed, in the bar's own place: this view sets the size
+ * now, and other devices show the session at it until they use it. Goes by
+ * itself, or with Got it. */
+export function SizeClaimedNotice({
+  onDismiss,
+  isMobile = false,
+}: SizeClaimedNoticeProps) {
+  return (
+    <div
+      className={isMobile ? 'lantern-size-bar docked' : 'lantern-size-bar'}
+      role="status"
+      aria-live="polite"
+      data-testid="size-claimed-notice"
+    >
+      <p>
+        Now sized for {isMobile ? 'this phone' : 'this window'}
+        {!isMobile && (
+          <span className="d">
+            . Other devices show it at this size until they use it.
+          </span>
+        )}
+      </p>
+      <button
+        type="button"
+        className="lantern-btn small ghost"
+        onClick={onDismiss}
+      >
+        Got it
+      </button>
+    </div>
+  )
+}
+
 interface HostNoticeProps {
   away: HostAway
   onReconnect: () => void

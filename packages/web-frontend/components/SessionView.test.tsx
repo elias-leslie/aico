@@ -225,6 +225,35 @@ describe('SessionView', () => {
     expect(screen.queryByTestId('size-holder-notice')).toBeNull()
   })
 
+  it('Use here says what changed, then Got it clears it', () => {
+    const statuses = new Map([['session-1', 'connected' as const]])
+    renderView({ slots: [ownSlot('1')], terminalStatuses: statuses })
+    act(() => sizeHolderHooks.change?.('Chrome on Android'))
+    fireEvent.click(screen.getByRole('button', { name: 'Use here' }))
+    // The terminal reports it holds the size now.
+    act(() => sizeHolderHooks.change?.(null))
+    expect(screen.getByTestId('size-claimed-notice')).toHaveTextContent(
+      'Now sized for this window',
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Got it' }))
+    expect(screen.queryByTestId('size-claimed-notice')).toBeNull()
+  })
+
+  it('on a phone, the confirmation names the phone', () => {
+    const statuses = new Map([['session-1', 'connected' as const]])
+    renderView({
+      slots: [ownSlot('1')],
+      terminalStatuses: statuses,
+      isMobile: true,
+    })
+    act(() => sizeHolderHooks.change?.('Chrome on Linux'))
+    fireEvent.click(screen.getByRole('button', { name: 'Use here' }))
+    act(() => sizeHolderHooks.change?.(null))
+    expect(screen.getByTestId('size-claimed-notice')).toHaveTextContent(
+      'Now sized for this phone',
+    )
+  })
+
   it('on a phone, docks the size bar above the session, clear of its prompt', () => {
     const statuses = new Map([['session-1', 'connected' as const]])
     renderView({
