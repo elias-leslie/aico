@@ -1,0 +1,7 @@
+/* What a problem costs, said once beside the row's name (lost work, security, service, speed and space). */
+.tier {
+  margin-left: 8px;
+  color: var(--mist);
+  font-size: 12px;
+  white-space: nowrap;
+}

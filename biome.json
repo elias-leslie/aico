@@ -643,8 +643,6 @@
                       "@aico/notify/**",
                       "@aico/ops",
                       "@aico/ops/**",
-                      "@aico/shared",
-                      "@aico/shared/**",
                       "@aico/tasks",
                       "@aico/tasks/**",
                       "@aico/tether",
@@ -662,7 +660,7 @@
                       "@aico/webtools",
                       "@aico/webtools/**"
                     ],
-                    "message": "@aico/status (layer 2): import only @aico/store (package.json aico.imports; depcruise is the gate)"
+                    "message": "@aico/status (layer 2): import only @aico/shared, @aico/store (package.json aico.imports; depcruise is the gate)"
                   }
                 ]
               }

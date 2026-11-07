@@ -11,7 +11,8 @@
   "type": "module",
   "exports": {
     "./hlc": "./src/hlc.ts",
-    "./secrets": "./src/secrets.ts"
+    "./secrets": "./src/secrets.ts",
+    "./status-order": "./src/status-order.ts"
   },
   "scripts": {
     "test": "vitest run"

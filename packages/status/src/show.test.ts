@@ -129,4 +129,30 @@ describe('view', () => {
     // The summary covers every row, whatever the filter.
     expect(view(rows, NOW, { machine: ['a'] }).summary.problems).toBe(3)
   })
+
+  it('lists problems by what they cost, then by state, with healthy rows after', () => {
+    const rows = [
+      stored({ id: 'a/check-perf', kind: 'check', what: 'Workstation performance', state: 'warn' }),
+      stored({ id: 'a/aico-web', kind: 'service', what: 'Aico web', state: 'failed' }),
+      stored({ id: 'a/check-sudo', kind: 'check', what: 'Sudo use', state: 'warn' }),
+      stored({ id: 'a/check-memory', kind: 'check', what: 'Memory', state: 'warn' }),
+      stored({ id: 'a/job-fine', kind: 'job', what: 'A fine job', state: 'ok' }),
+      machine('a'),
+    ]
+    const result = view(rows, NOW)
+    expect(result.rows.map((row) => row.id).slice(0, 5)).toEqual([
+      'a/check-memory',
+      'a/check-sudo',
+      'a/aico-web',
+      'a/check-perf',
+      'a/job-fine',
+    ])
+    // The badge's worst state is still the worst state, not the first row's.
+    expect(result.summary.worst).toBe('failed')
+    expect(result.summary.top.map((row) => row.id)).toEqual([
+      'a/check-memory',
+      'a/check-sudo',
+      'a/aico-web',
+    ])
+  })
 })

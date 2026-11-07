@@ -19,7 +19,7 @@ export type Kind = (typeof KINDS)[number]
 export const STATES = ['ok', 'warn', 'failed', 'off'] as const
 export type State = (typeof STATES)[number]
 
-export const ACTION_KINDS = ['run', 'log', 'detail', 'look'] as const
+export const ACTION_KINDS = ['run', 'log', 'detail', 'look', 'session'] as const
 export type ActionKind = (typeof ACTION_KINDS)[number]
 
 export interface Action {
@@ -50,7 +50,7 @@ export const LIMITS = {
   what: { max: 120 },
   machine: { pattern: /^[a-z0-9][a-z0-9._-]*$/, max: 100 },
   project: { pattern: /^[a-z0-9][a-z0-9_-]*$/, max: 100 },
-  meaning: { max: 300 },
+  meaning: { max: 800 },
   actions: { max: 4, ref: 500 },
 } as const
 

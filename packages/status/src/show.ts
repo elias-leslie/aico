@@ -18,6 +18,7 @@
 // waiting after their machine's return show unknown but are left out of the badge too: nothing is
 // known wrong yet.
 
+import { byTier } from '@aico/shared/status-order'
 import type { Kind, StatusRow } from './row'
 
 /** A row as stored: what the writer posted and when the server took it. */
@@ -196,8 +197,17 @@ const rank = (row: ShownRow) => SHOWN.indexOf(row.shown)
 const nextOf = (row: ShownRow) =>
   row.next_run ? Date.parse(row.next_run) : Number.POSITIVE_INFINITY
 
+const isProblem = (row: ShownRow) => PROBLEMS.includes(row.shown)
+
+/** Problems first, by what each costs (lost work, security, service, resource pressure), then by state. */
+const byConsequence = (a: ShownRow, b: ShownRow) =>
+  Number(!isProblem(a)) - Number(!isProblem(b)) ||
+  (isProblem(a) && isProblem(b) ? byTier(a, b) : 0) ||
+  rank(a) - rank(b) ||
+  byWhat(a, b)
+
 const ORDER: Record<Sort, (a: ShownRow, b: ShownRow) => number> = {
-  problems: (a, b) => rank(a) - rank(b) || byWhat(a, b),
+  problems: byConsequence,
   what: byWhat,
   updated: (a, b) => byCodeUnit(b.updated_at, a.updated_at) || byWhat(a, b),
   next: (a, b) => nextOf(a) - nextOf(b) || byWhat(a, b),
@@ -245,7 +255,7 @@ export function summary(rows: readonly ShownRow[]): Summary {
   ).length
   return {
     problems: problems.length,
-    worst: problems[0]?.shown ?? null,
+    worst: (PROBLEMS as readonly Problem[]).find((state) => counts[state] > 0) ?? null,
     counts,
     quiet,
     healthy: rows.filter((row) => !PROBLEMS.includes(row.shown)).length,

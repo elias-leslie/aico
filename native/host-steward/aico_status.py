@@ -34,13 +34,13 @@ from typing import Any
 
 KINDS = ("check", "job", "backup", "service", "vm", "machine", "link", "grant", "repo")
 STATES = ("ok", "warn", "failed", "off")
-ACTION_KINDS = ("run", "log", "detail", "look")
+ACTION_KINDS = ("run", "log", "detail", "look", "session")
 TEXT_LIMITS: dict[str, tuple[int, re.Pattern[str] | None]] = {
     "id": (200, re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@-]*$")),
     "what": (120, None),
     "machine": (100, re.compile(r"^[a-z0-9][a-z0-9._-]*$")),
     "project": (100, re.compile(r"^[a-z0-9][a-z0-9_-]*$")),
-    "meaning": (300, None),
+    "meaning": (800, None),
 }
 REQUIRED = ("id", "what", "kind", "machine", "state", "meaning")
 FIELDS = frozenset(REQUIRED + ("project", "last_run", "next_run", "actions"))

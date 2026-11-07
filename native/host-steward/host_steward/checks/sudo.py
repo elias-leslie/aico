@@ -31,6 +31,7 @@ from host_steward.core import Ctx, Signal
 
 ID = "sudo"
 
+MAX_ACTORS = 3  # names kept per command family (the latest callers)
 COPY_VERBS = {"cp", "mv", "install", "rsync", "ln"}  # write their last argument
 ARG_VERBS = {
     "tee",
@@ -319,8 +320,10 @@ def ingest_sudo(
     (attribution.py); such events are recorded as theirs (acknowledged, "recorded") and never ask."""
     hours: dict[str, dict[str, int]] = state.setdefault("hours", {})
     callers: dict[str, dict[str, dict[str, int]]] = state.setdefault("callers", {})
+    actors: dict[str, dict[str, float]] = state.setdefault("actors", {})
     events: list[dict] = []
     traced: dict[tuple[str, float], dict[str, Any] | None] = {}
+    seen_by: set[tuple[str, str]] = set()
 
     def mark(e: dict[str, Any], cgroup: str) -> dict[str, Any]:
         if who is None or not cgroup:
@@ -355,6 +358,19 @@ def ingest_sudo(
         fam = command_family(p["command"], rule.subcommand_tools)
         bucket = hours.setdefault(_hour(ts), {})
         bucket[fam] = bucket.get(fam, 0) + 1
+        if who is not None and cgroup and (fam, cgroup) not in seen_by:
+            # who ran this family: the agent session or service in the caller's cgroup, named once per family and
+            # cgroup in a pass (a label only, never the command line)
+            seen_by.add((fam, cgroup))
+            try:
+                actor = who(cgroup, float(ts))
+            except Exception:  # noqa: BLE001 - attribution only ever adds a name
+                actor = None
+            if actor and actor.get("label"):
+                labels = actors.setdefault(fam, {})
+                labels[str(actor["label"])[:80]] = float(ts)
+                for stale in sorted(labels, key=labels.__getitem__)[:-MAX_ACTORS]:
+                    del labels[stale]
         if re.fullmatch(r"[\w@.:-]{1,120}\.service", unit):
             byfam = callers.setdefault(_hour(ts), {}).setdefault(fam, {})
             if unit in byfam or len(byfam) < 8:
@@ -375,6 +391,8 @@ def ingest_sudo(
     if cutoff:
         state["hours"] = {h: hours[h] for h in cutoff}
         state["callers"] = {h: callers[h] for h in cutoff if h in callers}
+        known = {fam for bucket in state["hours"].values() for fam in bucket}
+        state["actors"] = {fam: labels for fam, labels in actors.items() if fam in known}
     return events
 
 
@@ -526,6 +544,14 @@ def _hour_name(at: float) -> str:
     return datetime.fromtimestamp(at, UTC).astimezone().strftime("%a %H:00")
 
 
+def _with_actor(family: str, state: dict[str, Any]) -> str:
+    """"userdel (Agent in session 8e2f1c0a)": the command family and who ran it, newest caller first; the bare
+    family when no caller was traced (never the command's arguments)."""
+    labels = (state.get("actors") or {}).get(family) or {}
+    names = sorted(labels, key=lambda name: -float(labels[name]))[:2]
+    return f"{family} ({' or '.join(names)})" if names else family
+
+
 def evaluate(
     state: dict[str, Any], now: float, ctx: Ctx, rule: Rules, host: str, cap: int
 ) -> list[Signal]:
@@ -576,7 +602,7 @@ def evaluate(
                         {
                             "n": len(manual),
                             "plural": "" if len(manual) == 1 else "s",
-                            "families": manual,
+                            "families": [_with_actor(f, state) for f in manual],
                         },
                     )
                 )

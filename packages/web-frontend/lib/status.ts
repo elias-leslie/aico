@@ -2,6 +2,10 @@
 // rules applied (packages/status show.ts); the page filters, sorts and counts them here the same
 // way, so the rollup chips can count every state while one is picked.
 
+import { byTier, tierLabel, tierOf } from '@aico/shared/status-order'
+
+export { tierLabel, tierOf }
+
 export const SHOWN = ['failed', 'late', 'unknown', 'warn', 'ok', 'off'] as const
 export type Shown = (typeof SHOWN)[number]
 export const PROBLEMS = ['failed', 'late', 'unknown', 'warn'] as const
@@ -17,7 +21,7 @@ export const KINDS = [
   'grant',
   'repo',
 ] as const
-export type ActionKind = 'run' | 'log' | 'detail' | 'look'
+export type ActionKind = 'run' | 'log' | 'detail' | 'look' | 'session'
 
 export interface StatusAction {
   kind: ActionKind
@@ -107,8 +111,14 @@ const byText = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 const byWhat = (a: StatusRow, b: StatusRow) =>
   byText(a.what, b.what) || byText(a.id, b.id)
 const rank = (row: StatusRow) => SHOWN.indexOf(row.shown)
+/** Problems first, by what each costs (lost work, security, service, resource pressure), then by state. */
+const byConsequence = (a: StatusRow, b: StatusRow) =>
+  Number(!isProblem(a.shown)) - Number(!isProblem(b.shown)) ||
+  (isProblem(a.shown) && isProblem(b.shown) ? byTier(a, b) : 0) ||
+  rank(a) - rank(b) ||
+  byWhat(a, b)
 const ORDER: Record<Sort, (a: StatusRow, b: StatusRow) => number> = {
-  problems: (a, b) => rank(a) - rank(b) || byWhat(a, b),
+  problems: byConsequence,
   what: byWhat,
   updated: (a, b) => byText(b.updated_at, a.updated_at) || byWhat(a, b),
   next: (a, b) =>
@@ -282,17 +292,66 @@ export function when(row: StatusRow, now: number): When {
   }
 }
 
+// -- Sessions a row names
+
+/** What the page knows about sessions: their names, and which ones Aico can resume. */
+export interface SessionInfo {
+  /** Session id to its name; null while the list is loading or couldn’t be read (then an id is not known to be gone). */
+  names: ReadonlyMap<string, string> | null
+  /** Sessions that stopped and wait on the owner’s Resume. */
+  resumable: ReadonlySet<string>
+}
+
+const NO_SESSIONS: SessionInfo = { names: null, resumable: new Set() }
+
+/** "Session fa41c0c8" or "Agent in session fa41c0c8" in a row’s text: how checks name a session they only know by id. */
+const SESSION_MENTION = /\b([Ss])ession ([0-9a-f]{8,64})\b/g
+
+/**
+ * A row’s text with each session id swapped for its name (“Session “Restore drill”: …”). A session the list
+ * doesn’t have has ended: “A session that has ended”. While the list is not known, “a session”, since the id
+ * is neither shown nor known to be gone.
+ */
+export function withSessionNames(
+  text: string,
+  names: SessionInfo['names'],
+): string {
+  return text.replace(
+    SESSION_MENTION,
+    (_whole, initial: string, id: string) => {
+      const name = names?.get(id)
+      if (name) return `${initial}ession “${name}”`
+      const a = initial === 'S' ? 'A' : 'a'
+      return names ? `${a} session that has ended` : `${a} session`
+    },
+  )
+}
+
 // -- Actions
 
-export type ButtonKind = ActionKind | 'hosts'
+export type ButtonKind =
+  | Exclude<ActionKind, 'session'>
+  | 'hosts'
+  | 'resume'
+  | 'open'
 export const ACTION_LABEL: Record<ButtonKind, string> = {
   look: 'Look into it',
   run: 'Run now',
   log: 'Log',
   detail: 'Detail',
   hosts: 'Hosts',
+  resume: 'Resume',
+  open: 'Open',
 }
-const ACTION_ORDER: ButtonKind[] = ['hosts', 'look', 'run', 'log', 'detail']
+const ACTION_ORDER: ButtonKind[] = [
+  'hosts',
+  'resume',
+  'open',
+  'look',
+  'run',
+  'log',
+  'detail',
+]
 
 export interface RowButton {
   kind: ButtonKind
@@ -306,6 +365,8 @@ export interface ActionContext {
   here: string | undefined
   /** Machines the Hosts sheet lists. */
   hosts: ReadonlySet<string>
+  /** Sessions the page knows; rows that name one offer Resume or Open. */
+  sessions?: SessionInfo
 }
 
 /** A detail ref the page can open: a page of its own (`/status/...`). None exists yet. */
@@ -314,7 +375,8 @@ const DETAIL_PAGES: readonly string[] = []
 /**
  * The buttons a row offers, in order, and the one that helps most. An action with nothing behind
  * it is left out: run and log only for rows of this machine (and not the OmniNull hub's), detail
- * only where its page exists, Hosts only for a machine the Hosts sheet knows.
+ * only where its page exists, Hosts only for a machine the Hosts sheet knows, and a session the
+ * row names only as Resume (it stopped and waits) or Open (it is in the list).
  */
 export function rowButtons(
   row: StatusRow,
@@ -325,8 +387,18 @@ export function rowButtons(
   const silent =
     row.machine_off === true ||
     (row.shown === 'unknown' && row.unknown_why !== 'back')
+  const sessions = context.sessions ?? NO_SESSIONS
   const buttons: RowButton[] = []
   for (const action of row.actions ?? []) {
+    if (action.kind === 'session') {
+      const kind = sessions.resumable.has(action.ref)
+        ? 'resume'
+        : sessions.names?.has(action.ref)
+          ? 'open'
+          : null
+      if (kind) buttons.push({ kind, ref: action.ref, disabled: null })
+      continue
+    }
     if ((action.kind === 'run' || action.kind === 'log') && !local) continue
     if (action.kind === 'detail' && !DETAIL_PAGES.includes(action.ref)) continue
     if (action.kind === 'look') continue
@@ -355,19 +427,21 @@ export function rowButtons(
     buttons.some((button) => button.kind === kind && !button.disabled)
   const primary: ButtonKind | null = row.machine_off
     ? null
-    : row.shown === 'unknown'
-      ? has('hosts')
-        ? 'hosts'
-        : !silent && has('run')
-          ? 'run'
-          : null
-      : row.shown === 'late'
-        ? has('run')
-          ? 'run'
-          : 'look'
-        : row.shown === 'failed' || row.shown === 'warn'
-          ? 'look'
-          : null
+    : has('resume')
+      ? 'resume'
+      : row.shown === 'unknown'
+        ? has('hosts')
+          ? 'hosts'
+          : !silent && has('run')
+            ? 'run'
+            : null
+        : row.shown === 'late'
+          ? has('run')
+            ? 'run'
+            : 'look'
+          : row.shown === 'failed' || row.shown === 'warn'
+            ? 'look'
+            : null
   return { buttons, primary }
 }
 

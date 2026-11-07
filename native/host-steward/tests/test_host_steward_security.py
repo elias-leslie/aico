@@ -462,6 +462,42 @@ def test_traced_events_are_recorded_and_acknowledged():
     assert events[0]["recorded"] and events[0]["ack"] and events[0]["actor"] == actor
 
 
+def test_a_new_family_names_who_ran_it_and_never_the_command_line(tmp_path):
+    """The sudo row says which agent ran what: the family (userdel), not its arguments, and the traced caller."""
+    state = hours_state(5)
+    secret = "TOKEN=hunter2"
+    entries = [
+        entry(NOW, f" u : PWD=/ ; USER=root ; COMMAND=/usr/sbin/userdel {secret} olduser", "", SCOPE),
+        entry(NOW, " u : PWD=/ ; USER=root ; COMMAND=/usr/bin/lsof -i", "", SCOPE),
+        entry(NOW, " u : PWD=/ ; USER=root ; COMMAND=/usr/bin/whoami", "", ""),
+    ]
+    calls = []
+
+    def who(cgroup, at):
+        calls.append(cgroup)
+        return {"kind": "agent", "label": "Agent in session abcd1234"}
+
+    sudo.ingest_sudo(state, entries, RULES, who=who)
+    assert len(calls) == 2  # once per family and cgroup, none for a caller with no cgroup
+    sig = next(s for s in evaluate(state, tmp_path) if s.code == "sudo.new_family")
+    assert "userdel (Agent in session abcd1234)" in sig.fields["families"]
+    assert "whoami" in sig.fields["families"]  # not traced: the bare name
+    text = core.explain(sig.code, sig.fields, DATA["meanings"], True, sig.state)
+    assert "userdel (Agent in session abcd1234)" in text and "hunter2" not in text
+
+
+def test_traced_names_per_family_stay_few_and_leave_with_the_family():
+    state: dict = {}
+    for n in range(5):
+        entries = [entry(NOW + n, " u : PWD=/ ; USER=root ; COMMAND=/usr/bin/lsof -i", "", SCOPE)]
+        sudo.ingest_sudo(state, entries, RULES, who=lambda cg, at, n=n: {"label": f"Agent in session aaaa000{n}"})
+    assert sorted(state["actors"]["lsof"]) == [f"Agent in session aaaa000{n}" for n in (2, 3, 4)]
+    # when the family's hours age out of the kept window, its names go with it
+    old = {"hours": {"2026-01-01T00": {"gone": 1}}, "actors": {"gone": {"Agent in session aaaa0000": 1.0}}}
+    sudo.ingest_sudo(old, [entry(NOW, " u : PWD=/ ; USER=root ; COMMAND=/usr/bin/stat /x")], RULES, keep_hours=1)
+    assert old["actors"] == {}
+
+
 def test_sudo_open_groups_per_user_hour_and_skips_acked_and_bootstrap():
     def ev(**k):
         return {

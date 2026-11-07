@@ -80,6 +80,22 @@ def test_the_row_is_a_valid_status_row_with_slack_and_run_and_log_actions():
     assert aico_status.check_row(row)["kind"] == "check"
 
 
+def test_a_memory_row_keeps_its_full_text_and_offers_the_sessions_it_names():
+    long_list = "; ".join(f"chrome ({n} MiB) killed in Session fa41c0c{n % 10}" for n in range(10, 24))
+    fields = {"n": 6, "plural": "s", "hours": "24", "list": long_list, "sessions": ["fa41c0c8", "fa41c0c9", "fa41c0c1"]}
+    signals = [core.Signal("memory.kills", "warn", fields)]
+    row = core.make_row("memory", signals, cfg(), DATA["meanings"], "davion-sidarli", NOW, DATA["caps"])
+    assert len(row["meaning"]) > 300 and "Resume the session if it was not resumed" in row["meaning"]
+    assert not row["meaning"].endswith("\u2026")
+    # run and log first, then at most two sessions: the page offers Resume or Open for each
+    assert [(a["kind"], a["ref"]) for a in row["actions"][2:]] == [("session", "fa41c0c8"), ("session", "fa41c0c9")]
+    assert aico_status.check_row(row)["kind"] == "check"
+    # an ok signal naming a session adds no action (nothing to resume)
+    quiet = [core.Signal("memory.kills", "ok", fields, note=True)]
+    ok_row = core.make_row("memory", quiet, cfg(), DATA["meanings"], "m", NOW, {})
+    assert [a["kind"] for a in ok_row["actions"]] == ["run", "log"]
+
+
 def test_a_check_that_returns_nothing_is_a_failed_row_not_a_missing_one():
     row = core.make_row("gates", [], cfg(), DATA["meanings"], "m", NOW, {})
     assert row["state"] == "failed"
@@ -87,7 +103,7 @@ def test_a_check_that_returns_nothing_is_a_failed_row_not_a_missing_one():
 
 
 def test_a_long_meaning_is_cut_to_the_row_limit():
-    signals = [core.Signal("check.probe", "warn", {"probe": "x" * 400, "why": "y"})]
+    signals = [core.Signal("check.probe", "warn", {"probe": "x" * 900, "why": "y"})]
     assert len(core.meaning("workstation", signals, DATA["meanings"])) <= aico_status.TEXT_LIMITS["meaning"][0]
 
 

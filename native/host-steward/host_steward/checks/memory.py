@@ -229,6 +229,8 @@ def kills(ctx: Ctx) -> list[Signal]:
         "plural": "" if n == 1 else "s",
         "hours": f"{float(cfg['window_h']):g}",
         "list": "; ".join(memalerts.line(i) for i in shown[:4]),
+        # the sessions the listed incidents hit: the row offers Resume (when Tether holds one) or Open for each
+        "sessions": list(dict.fromkeys(str(i["widget"]) for i in shown[:4] if i.get("widget")))[:2],
         "unread": ", ".join(unread),
     }
     out = [

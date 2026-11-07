@@ -10,6 +10,7 @@ import {
   Server,
 } from 'lucide-react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { HostsSheet } from '@/components/HostsSheet'
 import { ApiError, apiFetch } from '@/lib/api-fetch'
@@ -18,6 +19,10 @@ import { useHosts } from '@/lib/hooks/use-hosts'
 import { useMediaQuery } from '@/lib/hooks/use-media-query'
 import { useProjectSettings } from '@/lib/hooks/use-project-settings'
 import { STATUS_QUERY_KEY, useStatus } from '@/lib/hooks/use-status'
+import {
+  RECOVERY_QUERY_KEY,
+  useStatusSessions,
+} from '@/lib/hooks/use-status-sessions'
 import {
   type ActionContext,
   at,
@@ -46,6 +51,8 @@ import { LogSheet, LookSheet, StatusSheet } from './StatusSheets'
 /** Status lives in the aico project: a row with no project of its own is looked into there. */
 const HOME_PROJECT = 'aico'
 const TOAST_MS = 2_600
+/** The page width at which rows fold as on a phone (the frame's narrow-column rule in globals.css). */
+const NARROW_PX = 760
 
 type Mode = 'loading' | 'failed' | 'empty' | 'live'
 type Sheet =
@@ -116,7 +123,9 @@ export function StatusPage({
   } = useStatus()
   const now = useClock(30_000)
   const phone = useMediaQuery('(max-width: 767px)')
+  const router = useRouter()
   const queryClient = useQueryClient()
+  const sessions = useStatusSessions()
   const { hosts } = useHosts()
   const { projects } = useProjectSettings()
   const [filter, setFilter] = useState<StatusFilter>({
@@ -135,9 +144,24 @@ export function StatusPage({
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   )
+  // A row folds as on a phone when the page is narrow: in Wide's second column too, where a row opens
+  // its detail sheet for the text and the actions.
+  const pageRef = useRef<HTMLElement>(null)
+  const [narrowColumn, setNarrowColumn] = useState(false)
+  const narrow = phone || narrowColumn
 
   useEffect(() => setFilter((current) => ({ ...current, project })), [project])
   useEffect(() => () => clearTimeout(toastTimer.current), [])
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the page element changes when the phone's search opens
+  useEffect(() => {
+    const page = pageRef.current
+    if (!page || typeof ResizeObserver === 'undefined') return
+    const watch = new ResizeObserver(([entry]) =>
+      setNarrowColumn(entry.contentRect.width <= NARROW_PX),
+    )
+    watch.observe(page)
+    return () => watch.disconnect()
+  }, [searching])
 
   const all = view?.rows ?? []
   const running = new Set([...starting, ...(view?.running ?? [])])
@@ -152,8 +176,9 @@ export function StatusPage({
     () => ({
       here: view?.machine,
       hosts: new Set(hosts.map((host) => host.name)),
+      sessions,
     }),
-    [view?.machine, hosts],
+    [view?.machine, hosts, sessions],
   )
   const scope = all.filter((row) => matches(row, filter, false))
   const shown = sortRows(
@@ -216,13 +241,44 @@ export function StatusPage({
       })
     }
   }
-  const act = (kind: ButtonKind, row: StatusRow) => {
+  const resume = async (id: string) => {
+    const name = sessions.names?.get(id) ?? 'The session'
+    try {
+      const answer = await apiFetch<{
+        results: { ok: boolean; reason: string | null }[]
+      }>(
+        '/api/recovery/resume',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id }),
+        },
+        'Couldn’t resume it',
+      )
+      const failed = answer.results.find((result) => !result.ok)
+      say({
+        text: failed
+          ? `“${name}” didn’t resume: ${failed.reason ?? 'Tether refused it.'}`
+          : `Resuming “${name}”. It’s back in your session list in a moment.`,
+        href: failed ? undefined : `/?session=${encodeURIComponent(id)}`,
+      })
+    } catch (error) {
+      say({ text: `“${name}” didn’t resume: ${(error as Error).message}` })
+    } finally {
+      await queryClient.invalidateQueries({ queryKey: RECOVERY_QUERY_KEY })
+      await queryClient.invalidateQueries({ queryKey: ['terminal-sessions'] })
+    }
+  }
+  const act = (kind: ButtonKind, row: StatusRow, ref: string) => {
     if (kind === 'run') return void run(row)
     if (kind === 'hosts') return setSheet({ kind: 'hosts' })
+    if (kind === 'resume') return void resume(ref)
+    if (kind === 'open')
+      return router.push(`/?session=${encodeURIComponent(ref)}`)
     if (kind === 'log' || kind === 'look') return setSheet({ kind, id: row.id })
   }
   const toggle = (row: StatusRow) => {
-    if (phone) return setSheet({ kind: 'row', id: row.id })
+    if (narrow) return setSheet({ kind: 'row', id: row.id })
     setOpenId((current) => (current === row.id ? null : row.id))
   }
 
@@ -566,7 +622,7 @@ export function StatusPage({
           open
           onOpenChange={(open) => !open && closeSheet()}
           title={sheetRow.what}
-          place="bottom"
+          place={phone ? 'bottom' : 'center'}
           testId="status-row-sheet"
         >
           <div className="status-sheet-meta">
@@ -579,7 +635,7 @@ export function StatusPage({
             </span>
           </div>
           <p className="status-sheet-lead">
-            <Meaning row={sheetRow} />
+            <Meaning row={sheetRow} names={sessions.names} />
           </p>
           <p className="status-sheet-note">
             {when(sheetRow, now).lead}
@@ -713,7 +769,7 @@ export function StatusPage({
   // The phone with search open: the header gives way to the field and a count.
   if (phone && searching)
     return (
-      <main className="status-page">
+      <main className="status-page" ref={pageRef}>
         <div className="status-kb-head">
           {searchField(true)}
           <button
@@ -737,7 +793,7 @@ export function StatusPage({
     )
 
   return (
-    <main className="status-page">
+    <main className="status-page" ref={pageRef}>
       <div className="status">
         <header className="status-head">
           {project ? (

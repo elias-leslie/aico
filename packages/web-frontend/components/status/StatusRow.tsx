@@ -5,6 +5,7 @@ import {
   FileText,
   MessageSquare,
   Play,
+  RotateCcw,
   Server,
 } from 'lucide-react'
 import Link from 'next/link'
@@ -19,10 +20,15 @@ import {
   type StatusRow as Row,
   reason,
   rowButtons,
+  type SessionInfo,
   type Shown,
+  tierLabel,
+  tierOf,
   WORD,
   when,
+  withSessionNames,
 } from '@/lib/status'
+import styles from './StatusRow.module.css'
 
 const ICONS = {
   look: MessageSquare,
@@ -30,20 +36,32 @@ const ICONS = {
   log: FileText,
   detail: ArrowUpRight,
   hosts: Server,
+  resume: RotateCcw,
+  open: ArrowUpRight,
 } as const
 
 export function StateChip({ state }: { state: Shown | 'running' }) {
   return <span className={`status-chip ${state}`}>{WORD[state]}</span>
 }
 
-/** The meaning, led by why a late, unknown or machine-off row is so. */
-export function Meaning({ row }: { row: Row }) {
+/**
+ * The meaning, led by why a late, unknown or machine-off row is so. A session the text names by id
+ * reads as its name (or “a session that has ended”).
+ */
+export function Meaning({
+  row,
+  names = null,
+}: {
+  row: Row
+  names?: SessionInfo['names']
+}) {
   const why = reason(row)
-  if (!why) return <>{row.meaning}</>
+  const meaning = withSessionNames(row.meaning, names)
+  if (!why) return <>{meaning}</>
   return (
     <>
       <span className="why">{why}</span>{' '}
-      {row.machine_off ? row.meaning : `Last report: ${row.meaning}`}
+      {row.machine_off ? meaning : `Last report: ${meaning}`}
     </>
   )
 }
@@ -59,15 +77,29 @@ export function ActionButtons({
   context: ActionContext
   big?: boolean
   running?: boolean
-  onAction: (kind: ButtonKind, row: Row) => void
+  onAction: (kind: ButtonKind, row: Row, ref: string) => void
 }) {
   const { buttons, primary } = rowButtons(row, context)
+  const names = context.sessions?.names
+  const several =
+    buttons.filter(
+      (button) => button.kind === 'resume' || button.kind === 'open',
+    ).length > 1
   return (
     <>
       {buttons.map((button) => {
         const Icon = ICONS[button.kind]
         const going = button.kind === 'run' && running
-        const label = going ? 'Running…' : ACTION_LABEL[button.kind]
+        const session =
+          button.kind === 'resume' || button.kind === 'open'
+            ? (names?.get(button.ref) ?? 'the session')
+            : ''
+        // Two sessions on one row: the label says which.
+        const label = going
+          ? 'Running…'
+          : session && several
+            ? `${ACTION_LABEL[button.kind]} ${session.length > 16 ? `${session.slice(0, 15)}…` : session}`
+            : ACTION_LABEL[button.kind]
         const title =
           button.disabled ??
           (going
@@ -76,18 +108,22 @@ export function ActionButtons({
               ? `Open ${row.machine} in Hosts`
               : button.kind === 'look'
                 ? 'Start a session to look into it'
-                : button.ref)
+                : button.kind === 'resume'
+                  ? `Resume “${session}”, which stopped`
+                  : button.kind === 'open'
+                    ? `Open “${session}”`
+                    : button.ref)
         return (
           <button
-            key={button.kind}
+            key={`${button.kind}:${button.ref}`}
             type="button"
             className={`lantern-btn${big ? '' : ' small'}${button.kind === primary ? ' primary' : big ? '' : ' ghost'}`}
             title={title}
-            aria-label={label}
+            aria-label={session && !several ? `${label} ${session}` : label}
             disabled={!!button.disabled || going}
             onClick={(event: MouseEvent) => {
               event.stopPropagation()
-              onAction(button.kind, row)
+              onAction(button.kind, row, button.ref)
             }}
           >
             <Icon
@@ -118,12 +154,14 @@ export function StatusRowItem({
   running: boolean
   context: ActionContext
   onToggle: (row: Row) => void
-  onAction: (kind: ButtonKind, row: Row) => void
+  onAction: (kind: ButtonKind, row: Row, ref: string) => void
 }) {
   const time = when(row, now)
   const updated = Date.parse(row.updated_at)
-  const refs = (row.actions ?? []).filter(
-    (action) => action.kind === 'run' || action.kind === 'log',
+  const refs = (row.actions ?? []).flatMap((action) =>
+    action.kind === 'run' || action.kind === 'log'
+      ? [{ kind: action.kind, ref: action.ref }]
+      : [],
   )
   const project = row.project && (
     <Link
@@ -156,8 +194,11 @@ export function StatusRowItem({
         >
           {row.what}
         </button>
+        {isProblem(row.shown) && (
+          <span className={styles.tier}>{tierLabel(tierOf(row))}</span>
+        )}
         <div className="meaning">
-          <Meaning row={row} />
+          <Meaning row={row} names={context.sessions?.names} />
         </div>
         <span className="meta-m">
           {row.kind} · {row.machine}

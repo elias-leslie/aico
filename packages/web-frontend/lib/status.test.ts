@@ -7,11 +7,13 @@ import {
   reason,
   rollup,
   rowButtons,
+  type SessionInfo,
   type StatusRow,
   silentMachines,
   sortRows,
   summaryLine,
   when,
+  withSessionNames,
 } from './status'
 
 const NOW = Date.parse('2026-11-03T12:00:00')
@@ -217,6 +219,130 @@ describe('filters and words', () => {
     ]
     expect(silentMachines(list)).toEqual([
       { machine: 'davion-gem', since: 'x', rows: 1 },
+    ])
+  })
+})
+
+describe('what a problem costs', () => {
+  const warn = (id: string, kind = 'check', over: Partial<StatusRow> = {}) =>
+    row({
+      id,
+      what: id,
+      kind,
+      state: 'warn',
+      shown: 'warn',
+      actions: [],
+      ...over,
+    })
+
+  it('lists lost work and security before service trouble, and swap and disk last', () => {
+    const mixed = [
+      warn('davion-sidarli/check-perf'),
+      warn('usage/opencode-go'),
+      warn('ominull.maintenance'),
+      warn('davion-sidarli/check-sudo'),
+      warn('portfolio-ai/worker', 'service', {
+        state: 'failed',
+        shown: 'failed',
+      }),
+      warn('davion-sidarli/check-memory'),
+      warn('davion-sidarli/check-storage', 'check', {
+        state: 'failed',
+        shown: 'failed',
+      }),
+      row({ id: 'davion-sidarli/aico-web', what: 'aico-web' }),
+      warn('davion-sidarli/backup/drive/aico', 'backup', {
+        state: 'failed',
+        shown: 'failed',
+      }),
+    ]
+    expect(sortRows(mixed, 'problems').map((r) => r.id)).toEqual([
+      'davion-sidarli/backup/drive/aico',
+      'davion-sidarli/check-memory',
+      'davion-sidarli/check-sudo',
+      'portfolio-ai/worker',
+      'ominull.maintenance',
+      'davion-sidarli/check-storage',
+      'davion-sidarli/check-perf',
+      'usage/opencode-go',
+      'davion-sidarli/aico-web',
+    ])
+  })
+
+  it('keeps the other sorts as they were', () => {
+    const rows = [warn('b-check-perf'), warn('a-check-sudo')]
+    expect(sortRows(rows, 'what').map((r) => r.id)).toEqual([
+      'a-check-sudo',
+      'b-check-perf',
+    ])
+  })
+})
+
+describe('sessions a row names', () => {
+  const names: SessionInfo['names'] = new Map([
+    ['fa41c0c8', 'Aico: Status page'],
+  ])
+
+  it('swaps an id for the session’s name, and a session that is gone for “has ended”', () => {
+    expect(
+      withSessionNames('Session fa41c0c8: jobs killed again and again', names),
+    ).toBe('Session “Aico: Status page”: jobs killed again and again')
+    expect(
+      withSessionNames('chrome (18 MiB) killed in Session 0badc0de', names),
+    ).toBe('chrome (18 MiB) killed in A session that has ended')
+    expect(withSessionNames('userdel (Agent in session 0badc0de)', names)).toBe(
+      'userdel (Agent in a session that has ended)',
+    )
+    expect(withSessionNames('userdel (Agent in session fa41c0c8)', names)).toBe(
+      'userdel (Agent in session “Aico: Status page”)',
+    )
+  })
+
+  it('does not call a session gone while the list is not known', () => {
+    expect(withSessionNames('Session fa41c0c8: killed', null)).toBe(
+      'A session: killed',
+    )
+    expect(withSessionNames('The session ended well', names)).toBe(
+      'The session ended well',
+    )
+    expect(withSessionNames('session decade', names)).toBe('session decade')
+  })
+
+  it('offers Resume for a stopped session and Open for a listed one, and nothing for an unknown id', () => {
+    const memory = row({
+      id: 'davion-sidarli/check-memory',
+      kind: 'check',
+      state: 'warn',
+      shown: 'warn',
+      actions: [
+        {
+          kind: 'run',
+          ref: 'sudo -n systemctl start host-steward-check.service',
+        },
+        { kind: 'session', ref: 'fa41c0c8' },
+        { kind: 'session', ref: '0badc0de' },
+        { kind: 'session', ref: 'deadbeef' },
+      ],
+    })
+    const sessions: SessionInfo = {
+      names: new Map([
+        ['fa41c0c8', 'Restore drill'],
+        ['0badc0de', 'Skill sync'],
+      ]),
+      resumable: new Set(['fa41c0c8']),
+    }
+    const { buttons, primary } = rowButtons(memory, { ...here, sessions })
+    expect(buttons.map((b) => [b.kind, b.ref])).toEqual([
+      ['resume', 'fa41c0c8'],
+      ['open', '0badc0de'],
+      ['look', ''],
+      ['run', 'sudo -n systemctl start host-steward-check.service'],
+    ])
+    expect(primary).toBe('resume')
+    // Before the session list is read, nothing is offered for the ids (and no click can miss).
+    expect(rowButtons(memory, here).buttons.map((b) => b.kind)).toEqual([
+      'look',
+      'run',
     ])
   })
 })

@@ -6,6 +6,11 @@ import { StatusPage } from './StatusPage'
 
 const api = vi.hoisted(() => ({
   view: null as StatusView | null,
+  sessions: [] as { id: string; name: string }[],
+  recovery: { items: [] } as unknown,
+  resume: { results: [{ ok: true, reason: null }] } as unknown,
+  push: vi.fn(),
+  narrow: false,
   fail: false,
   calls: [] as { url: string; method: string; body?: string }[],
   /** The answer to POST /api/status/run: an object, or an HTTP status to refuse with. */
@@ -33,11 +38,21 @@ vi.mock('@/lib/api-fetch', async () => {
         return api.run
       }
       if (url === '/api/status/log') return api.log
+      if (url === '/api/recovery') return api.recovery
+      if (url === '/api/recovery/resume') return api.resume
       throw new Error(`unexpected ${url}`)
     }),
   }
 })
 vi.mock('@/lib/hooks/use-media-query', () => ({ useMediaQuery: () => false }))
+vi.mock('@/lib/hooks/use-terminal-sessions', () => ({
+  useTerminalSessions: () => ({
+    sessions: api.sessions,
+    isLoading: false,
+    isError: false,
+  }),
+}))
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: api.push }) }))
 vi.mock('@/lib/hooks/use-hosts', () => ({ useHosts: () => ({ hosts: [] }) }))
 vi.mock('@/lib/hooks/use-project-settings', () => ({
   useProjectSettings: () => ({ projects: [] }),
@@ -99,6 +114,10 @@ const urls = () => api.calls.map((call) => call.url)
 
 beforeEach(() => {
   api.fail = false
+  api.sessions = []
+  api.recovery = { items: [] }
+  api.resume = { results: [{ ok: true, reason: null }] }
+  api.push.mockClear()
   api.calls = []
   api.run = { state: 'done', lines: [] }
   api.log = null
@@ -266,5 +285,115 @@ describe('StatusPage', () => {
       screen.getByRole('heading', { level: 1, name: 'aico' }),
     ).toBeVisible()
     expect(screen.queryByRole('button', { name: /healthy/ })).toBeNull()
+  })
+
+  describe('a memory row', () => {
+    const memoryText =
+      '6 memory kills in the last 24 hours: Session fa41c0c8: jobs killed again and again; chrome (18 MiB) killed in Session fa41c0c8; chrome (73 MiB) killed in Session 0badc0de. A session or its work was lost or cut short. Resume the session if it was not resumed, and see what held the memory.'
+    beforeEach(() => {
+      api.view = view([
+        row({
+          id: 'davion-sidarli/check-perf',
+          what: 'Workstation performance',
+          state: 'warn',
+          shown: 'warn',
+          meaning: 'Swap is 96% full while 23 GiB of memory is free.',
+        }),
+        row({
+          id: 'davion-sidarli/check-memory',
+          what: 'Memory',
+          state: 'warn',
+          shown: 'warn',
+          meaning: memoryText,
+          actions: [
+            {
+              kind: 'run',
+              ref: 'sudo -n systemctl start host-steward-check.service',
+            },
+            { kind: 'session', ref: 'fa41c0c8' },
+            { kind: 'session', ref: '0badc0de' },
+          ],
+        }),
+        row({
+          id: 'davion-sidarli/check-sudo',
+          what: 'Sudo use',
+          state: 'warn',
+          shown: 'warn',
+          meaning:
+            '2 new sudo commands: userdel (Agent in session fa41c0c8), ominull-release-signer.',
+        }),
+      ])
+      api.sessions = [{ id: 'fa41c0c8', name: 'Restore drill' }]
+      api.recovery = { items: [{ id: 'fa41c0c8', resumable: true }] }
+    })
+
+    it('lists lost work and security before swap, and says what each costs', async () => {
+      show()
+      const problems = await screen.findByRole('region', { name: 'Problems' })
+      const names = within(problems)
+        .getAllByRole('button', {
+          name: /^(Memory|Sudo use|Workstation performance)$/,
+        })
+        .map((button) => button.textContent)
+      expect(names).toEqual(['Memory', 'Sudo use', 'Workstation performance'])
+      expect(within(problems).getByText('Lost work')).toBeVisible()
+      expect(within(problems).getByText('Security')).toBeVisible()
+      expect(within(problems).getByText('Speed and space')).toBeVisible()
+    })
+
+    it('shows the whole text with session names, not ids', async () => {
+      show()
+      await screen.findByText('Memory')
+      expect(
+        await screen.findByText(
+          /Session “Restore drill”: jobs killed again and again; chrome \(18 MiB\) killed in Session “Restore drill”; chrome \(73 MiB\) killed in A session that has ended\. .*see what held the memory\./,
+        ),
+      ).toBeVisible()
+      expect(
+        screen.getByText(
+          /userdel \(Agent in session “Restore drill”\), ominull/,
+        ),
+      ).toBeVisible()
+      expect(screen.queryByText(/fa41c0c8/)).toBeNull()
+    })
+
+    it('resumes a stopped session from the row', async () => {
+      show()
+      await screen.findByText('Memory')
+      const button = await screen.findByRole('button', { name: /Resume/ })
+      expect(button).toHaveAttribute(
+        'title',
+        'Resume “Restore drill”, which stopped',
+      )
+      fireEvent.click(button)
+      expect(await screen.findByText(/Resuming “Restore drill”/)).toBeVisible()
+      expect(
+        api.calls.find((call) => call.url === '/api/recovery/resume'),
+      ).toEqual({
+        url: '/api/recovery/resume',
+        method: 'POST',
+        body: JSON.stringify({ id: 'fa41c0c8' }),
+      })
+    })
+
+    it('says why a session did not resume', async () => {
+      api.resume = {
+        results: [{ ok: false, reason: 'not enough memory right now' }],
+      }
+      show()
+      await screen.findByText('Memory')
+      fireEvent.click(await screen.findByRole('button', { name: /Resume/ }))
+      expect(
+        await screen.findByText(/didn’t resume: not enough memory right now/),
+      ).toBeVisible()
+    })
+
+    it('offers Open for a live session that is not waiting to be resumed', async () => {
+      api.recovery = { items: [] }
+      show()
+      await screen.findByText('Memory')
+      fireEvent.click(await screen.findByRole('button', { name: /Open/ }))
+      expect(api.push).toHaveBeenCalledWith('/?session=fa41c0c8')
+    })
   })
 })

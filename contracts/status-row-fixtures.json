@@ -1,5 +1,5 @@
 {
-  "description": "Replay fixtures for contracts/status-row.schema.json. valid: rows every validator accepts. invalid: rows every validator refuses, naming `field`. Lengths are counted in code points (a character outside the BMP counts once) and patterns match the whole value (a trailing newline does not pass). replay: rows as stored (row plus the updated_at the server stamped), read at `now`; `expect` is each row's shown state and shown_since (null when none), in the default order (problems first: failed, late, unknown, warn; then ok and off; ties by what (compared by code unit, so capitals first), then id), and `rollup` the problem and healthy counts.",
+  "description": "Replay fixtures for contracts/status-row.schema.json. valid: rows every validator accepts. invalid: rows every validator refuses, naming `field`. Lengths are counted in code points (a character outside the BMP counts once) and patterns match the whole value (a trailing newline does not pass). replay: rows as stored (row plus the updated_at the server stamped), read at `now`; `expect` is each row's shown state and shown_since (null when none), in the default order (problems first, by what each costs: lost work such as backups, then security, then service trouble, then resource pressure (packages/shared status-order); within that failed, late, unknown, warn; then ok and off; ties by what (compared by code unit, so capitals first), then id), and `rollup` the problem and healthy counts.",
   "version": 1,
   "valid": [
     {
@@ -489,14 +489,14 @@
       ],
       "expect": [
         {
-          "id": "a/export",
-          "shown": "failed",
-          "shown_since": null
-        },
-        {
           "id": "a/backup",
           "shown": "late",
           "shown_since": "2026-11-03T11:30:00.000Z"
+        },
+        {
+          "id": "a/export",
+          "shown": "failed",
+          "shown_since": null
         },
         {
           "id": "b/machine",

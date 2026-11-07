@@ -54,7 +54,7 @@
       "description": "What the state means, in plain words ('Copied 412 notes to Drive.').",
       "type": "string",
       "minLength": 1,
-      "maxLength": 300
+      "maxLength": 800
     },
     "last_run": {
       "description": "When it last ran or was last checked (RFC 3339).",
@@ -67,7 +67,7 @@
       "format": "date-time"
     },
     "actions": {
-      "description": "What a person or agent can do about it, as data; the screen and CLI decide how to offer each. run: the command that runs it now. log: the command or path that shows its log; a command should print its last lines and end (for journalctl, -n 200 --no-pager), since Aico stops it after 10 seconds and shows what it printed by then as cut off. detail: an Aico app path with more. look: where a session looking into it should start (a path, project or hint).",
+      "description": "What a person or agent can do about it, as data; the screen and CLI decide how to offer each. run: the command that runs it now. log: the command or path that shows its log; a command should print its last lines and end (for journalctl, -n 200 --no-pager), since Aico stops it after 10 seconds and shows what it printed by then as cut off. detail: an Aico app path with more. look: where a session looking into it should start (a path, project or hint). session: the id of a session the row is about; the screen offers Resume when Aico holds it after a crash, else Open.",
       "type": "array",
       "maxItems": 4,
       "items": {
@@ -76,7 +76,7 @@
         "required": ["kind", "ref"],
         "properties": {
           "kind": {
-            "enum": ["run", "log", "detail", "look"]
+            "enum": ["run", "log", "detail", "look", "session"]
           },
           "ref": {
             "type": "string",

@@ -279,8 +279,19 @@ def make_row(
             # sudoers allows starting the unit, which runs every check that is due (no unit takes --only)
             {"kind": "run", "ref": "sudo -n systemctl start host-steward-check.service"},
             {"kind": "log", "ref": "journalctl -u host-steward-check.service -n 200 --no-pager"},
+            *_session_actions(signals),
         ],
     }
+
+
+def _session_actions(signals: Sequence[Signal]) -> list[dict[str, str]]:
+    """One "session" action per session a problem signal names in its `sessions` field (the page offers Resume or
+    Open for it), at most two for the row."""
+    ids: list[str] = []
+    for signal in signals:
+        if RANK[signal.state] > 0:
+            ids += [str(i) for i in signal.fields.get("sessions") or () if str(i) not in ids]
+    return [{"kind": "session", "ref": i} for i in ids[:2]]
 
 
 def acting(data: Mapping[str, Any], name: str) -> bool:

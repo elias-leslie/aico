@@ -42,6 +42,7 @@
       "tether@default.service": [
         "packages/context",
         "packages/fleet",
+        "packages/shared",
         "packages/status",
         "packages/store",
         "packages/tasks",
