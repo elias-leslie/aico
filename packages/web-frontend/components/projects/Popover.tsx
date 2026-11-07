@@ -8,10 +8,13 @@ export function Popover({
   label,
   onClose,
   children,
+  sheet,
 }: {
   label: string
   onClose: () => void
   children: ReactNode
+  /** A reading sheet (centred on a desktop, bottom sheet on the phone) with a Close button, not a small popover under a badge. */
+  sheet?: boolean
 }) {
   const ref = useRef<HTMLDivElement>(null)
 
@@ -33,12 +36,25 @@ export function Popover({
       <div className={styles.scrim} aria-hidden="true" onClick={onClose} />
       <div
         ref={ref}
-        className={styles.pop}
+        className={sheet ? `${styles.pop} ${styles.sheet}` : styles.pop}
         role="dialog"
         aria-label={label}
         tabIndex={-1}
       >
-        <h3>{label}</h3>
+        {sheet ? (
+          <div className={styles.sheetHead}>
+            <h3>{label}</h3>
+            <button
+              type="button"
+              className="lantern-btn small"
+              onClick={onClose}
+            >
+              Close
+            </button>
+          </div>
+        ) : (
+          <h3>{label}</h3>
+        )}
         {children}
       </div>
     </>

@@ -1,74 +1,12 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { useProjectTimeline } from '@/lib/hooks/use-projects'
-import {
-  blockedReason,
-  clip,
-  dayLabel,
-  joinDays,
-  type ProjectDetail,
-  type RoadmapItem,
-} from '@/lib/projects'
+import { clip, dayLabel, joinDays, type ProjectDetail } from '@/lib/projects'
 import styles from './ProjectsPage.module.css'
+import { Roadmap } from './Roadmap'
 
-/** Items with a key of their text, counted when two lines read the same. */
-function keyed(items: RoadmapItem[]): [string, RoadmapItem][] {
-  const seen = new Map<string, number>()
-  return items.map((item) => {
-    const n = (seen.get(item.text) ?? 0) + 1
-    seen.set(item.text, n)
-    return [`${item.text}#${n}`, item]
-  })
-}
-
-function PlanLink({ path }: { path: string }) {
-  const [copied, setCopied] = useState(false)
-  return (
-    <button
-      type="button"
-      title={copied ? `Copied ${path}` : `Copy the plan’s path: ${path}`}
-      onClick={() => {
-        void navigator.clipboard?.writeText(path).then(
-          () => {
-            setCopied(true)
-            setTimeout(() => setCopied(false), 1500)
-          },
-          () => undefined,
-        )
-      }}
-    >
-      {copied ? 'copied' : 'plan'}
-    </button>
-  )
-}
-
-function RoadmapLine({
-  item,
-  lane,
-}: {
-  item: RoadmapItem
-  lane: 'now' | 'next' | 'later'
-}) {
-  const blocked = !!item.blocked
-  return (
-    <li
-      className={`${styles[lane]} ${blocked ? styles.blocked : ''} ${item.raw ? styles.raw : ''}`}
-      title={blocked ? blockedReason(item) : undefined}
-    >
-      <span className={styles.dot} aria-hidden="true" />
-      <span className={styles.tx}>{item.text}</span>
-      <span className={styles.meta}>
-        {item.session && (
-          <a href={`/?session=${encodeURIComponent(item.session)}`}>session</a>
-        )}
-        {item.plan && <PlanLink path={item.plan} />}
-      </span>
-    </li>
-  )
-}
-
-/** Now, Next and Later from the roadmap, then the git days, newest first, earlier ones as the reader reaches them. */
+/** The roadmap, then the git days under "Done", newest first, earlier ones as the reader reaches them. */
 export function Timeline({
   project,
   now,
@@ -96,33 +34,17 @@ export function Timeline({
     return () => watcher.disconnect()
   }, [idle, fetchNextPage])
 
-  const other = project.other ?? []
-  const noRoadmap = project.roadmap
-    ? !project.roadmap.found
-    : project.now.length +
-        project.next.length +
-        project.later.length +
-        other.length ===
-      0
   const days = joinDays(timeline.data?.pages ?? [])
   const oldest = days.at(-1)?.date
 
   return (
     <>
-      {noRoadmap && <p className={styles.empty}>No roadmap yet.</p>}
-      <ul className={styles.tl} aria-label="Timeline">
-        {keyed(project.now).map(([key, item]) => (
-          <RoadmapLine key={`now-${key}`} item={item} lane="now" />
-        ))}
-        {keyed(project.next).map(([key, item]) => (
-          <RoadmapLine key={`next-${key}`} item={item} lane="next" />
-        ))}
-        {keyed(project.later).map(([key, item]) => (
-          <RoadmapLine key={`later-${key}`} item={item} lane="later" />
-        ))}
-        {keyed(other).map(([key, item]) => (
-          <RoadmapLine key={`other-${key}`} item={item} lane="later" />
-        ))}
+      <Roadmap project={project} />
+      <h2 className={styles.laneHead}>
+        Done
+        <span className={styles.laneHint}>from the project’s git history</span>
+      </h2>
+      <ul className={styles.tl} aria-label="Done, newest first">
         {days.map((day) => (
           <DayBlock key={day.date} day={day} now={now} />
         ))}

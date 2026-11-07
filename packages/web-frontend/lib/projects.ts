@@ -68,10 +68,8 @@ export interface ProjectDetail {
   now: RoadmapItem[]
   next: RoadmapItem[]
   later: RoadmapItem[]
-  /** found is false when the project has no ROADMAP.md. */
-  roadmap?: { found: boolean }
-  /** Lines of sections other than Now, Next and Later, as written. */
-  other?: RoadmapItem[]
+  /** found is false when the project has no ROADMAP.md; other holds the lines of sections that are not Now, Next or Later, as written. */
+  roadmap?: { found: boolean; other?: string[] }
   places: Place[]
   problems: ProblemRows[]
   agents: ProjectAgent[]
@@ -89,6 +87,17 @@ export interface TimelinePage {
   end: boolean
   /** False when the project has no folder or it is not a git repository. */
   available?: boolean
+  /** The last commit this page read, shown or not: the next page starts before it. */
+  next?: string
+}
+
+/** A plan document the roadmap links, as the server hands it over (secrets already hidden). */
+interface PlanDocument {
+  path: string
+  name: string
+  content: string | null
+  truncated: boolean
+  binary: boolean
 }
 
 /** The pages' days in order, one block per date: a page can end partway through a day, and the next
@@ -127,6 +136,13 @@ export const fetchTimeline = (id: string, before?: string, limit = 40) => {
     'Couldn’t load earlier changes',
   )
 }
+
+export const fetchPlan = (id: string, path: string) =>
+  apiFetch<PlanDocument>(
+    `/api/projects/${encodeURIComponent(id)}/plan?${new URLSearchParams({ path })}`,
+    undefined,
+    'Couldn’t open this plan',
+  )
 
 export const postPower = (id: string, index: number, action: PowerAction) =>
   apiFetch<unknown>(
@@ -346,6 +362,58 @@ export function powerSummary(
     if (place.asOf) parts.push(`checked ${longAge(place.asOf, now)}`)
   }
   return parts.join(' · ')
+}
+
+/** The words for each roadmap lane, and what each means. */
+export const LANES = [
+  { key: 'now', label: 'Now', hint: 'being worked on' },
+  { key: 'next', label: 'Next', hint: 'up next' },
+  { key: 'later', label: 'Later', hint: 'not started' },
+] as const
+type Lane = (typeof LANES)[number]['key']
+
+/** What an empty roadmap says, and what would fill it. */
+export function emptyRoadmapText(found: boolean): string {
+  return found
+    ? 'The roadmap has nothing under Now, Next or Later yet. Add “- item” lines under those headings in ROADMAP.md.'
+    : 'No roadmap yet. Add a ROADMAP.md to the project folder with Now, Next and Later headings and “- item” lines under them; they show up here.'
+}
+
+/** A power button's words: what tapping it offers for this place. */
+export function powerButtonText(place: Place): { short: string; full: string } {
+  const name = placeName(place)
+  const actions = powerActions(place) ?? []
+  if (actions.includes('start'))
+    return {
+      short: 'Start',
+      full: `Start ${name} (it is ${runStateText[place.state].toLowerCase()})`,
+    }
+  return {
+    short: 'Shut down',
+    full: `Shut down or restart ${name} (it is ${runStateText[place.state].toLowerCase()})`,
+  }
+}
+
+/** A plan's text as blocks: code fences and tables stay as written, the rest is markdown. */
+export type PlanBlock = { kind: 'text' | 'code'; text: string }
+export function planBlocks(source: string): PlanBlock[] {
+  const blocks: PlanBlock[] = []
+  let fence = false
+  const add = (kind: PlanBlock['kind'], line: string) => {
+    const last = blocks.at(-1)
+    if (last?.kind === kind) last.text += `\n${line}`
+    else blocks.push({ kind, text: line })
+  }
+  for (const line of source.split('\n')) {
+    if (/^\s*```/.test(line)) {
+      fence = !fence
+      continue
+    }
+    if (fence) add('code', line)
+    else if (/^\s*\|/.test(line)) add('code', line)
+    else add('text', line)
+  }
+  return blocks.filter((block) => block.text.trim() !== '')
 }
 
 const MAX_SUBJECT = 100

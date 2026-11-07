@@ -6,8 +6,10 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
+import { isPermanentRefusal } from '../api-fetch'
 import {
   fetchOverview,
+  fetchPlan,
   fetchProject,
   fetchTimeline,
   type PowerAction,
@@ -45,10 +47,18 @@ export function useProjectTimeline(id: string) {
     initialPageParam: '',
     getNextPageParam: (page) => {
       if (page.end) return undefined
-      const last = page.days.at(-1)?.commits.at(-1)
-      return last?.sha
+      return page.next ?? page.days.at(-1)?.commits.at(-1)?.sha
     },
     retry: 1,
+  })
+}
+
+/** One plan document; read when its sheet opens. */
+export function usePlan(id: string, path: string) {
+  return useQuery({
+    queryKey: ['projects', 'plan', id, path],
+    queryFn: () => fetchPlan(id, path),
+    retry: (count, error) => count < 1 && !isPermanentRefusal(error),
   })
 }
 

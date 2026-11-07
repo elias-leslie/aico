@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
   ProjectDetail,
@@ -223,7 +229,7 @@ describe('detail', () => {
   it('opens the start sheet naming the target and cancels without a request', async () => {
     show('portfolio')
     const power = await screen.findByRole('button', {
-      name: 'VM 180: stopped. Open power options',
+      name: 'Start VM 180 (it is stopped)',
     })
     fireEvent.click(power)
     const sheet = await screen.findByTestId('confirm-dialog')
@@ -275,7 +281,9 @@ describe('detail', () => {
       '/?session=s1',
     )
     expect(
-      within(now).getByRole('button', { name: 'plan' }),
+      within(now).getByRole('button', {
+        name: 'Read the plan for “Close VM 180 backup gaps”',
+      }),
     ).toBeInTheDocument()
     expect(await screen.findByText('Wed · Nov 4')).toBeInTheDocument()
     expect(screen.getByText('v1.8.107')).toBeInTheDocument()
@@ -288,7 +296,7 @@ describe('detail', () => {
     routes['/api/projects/portfolio'] = () =>
       Response.json({ ...DETAIL, now: [], next: [], later: [] })
     show('portfolio')
-    expect(await screen.findByText('No roadmap yet.')).toBeInTheDocument()
+    expect(await screen.findByText(/^No roadmap yet\./)).toBeInTheDocument()
   })
 
   it('shows can’t reach Proxmox as an indicator with its time', async () => {
@@ -308,7 +316,7 @@ describe('detail', () => {
       await screen.findByText('can’t reach the Proxmox host · as of 10:02'),
     ).toBeInTheDocument()
     expect(
-      screen.queryByRole('button', { name: /Open power options/ }),
+      screen.queryByRole('button', { name: /(Start|Shut down or restart) / }),
     ).toBeNull()
   })
 
@@ -363,7 +371,7 @@ describe('detail', () => {
     show('portfolio')
     expect(await screen.findByText('shutting down')).toBeInTheDocument()
     expect(
-      screen.queryByRole('button', { name: /Open power options/ }),
+      screen.queryByRole('button', { name: /(Start|Shut down or restart) / }),
     ).toBeNull()
   })
 
@@ -377,7 +385,7 @@ describe('detail', () => {
         roadmap: { found: false },
       })
     show('portfolio')
-    expect(await screen.findByText('No roadmap yet.')).toBeInTheDocument()
+    expect(await screen.findByText(/^No roadmap yet\./)).toBeInTheDocument()
   })
 
   it('shows lines that did not follow the roadmap format as written', async () => {
@@ -391,7 +399,7 @@ describe('detail', () => {
     expect(
       await screen.findByText('free text without a dash'),
     ).toBeInTheDocument()
-    expect(screen.queryByText('No roadmap yet.')).toBeNull()
+    expect(screen.queryByText(/No roadmap yet/)).toBeNull()
   })
 
   it('says a project without a git folder has no history, and tolerates no activity time', async () => {
@@ -406,5 +414,138 @@ describe('detail', () => {
       await screen.findByText('No git history for this project'),
     ).toBeInTheDocument()
     expect(screen.getAllByText('Portfolio AI').length).toBeGreaterThan(0)
+  })
+
+  it('names Now, Next and Later in words, with the blocked reason on the item', async () => {
+    show('portfolio')
+    await screen.findByText('Close VM 180 backup gaps')
+    for (const name of ['Now', 'Next'])
+      expect(screen.getByRole('list', { name })).toBeInTheDocument()
+    expect(screen.queryByRole('list', { name: 'Later' })).toBeNull()
+    expect(screen.getByRole('heading', { name: /^Now/ })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /^Next/ })).toBeInTheDocument()
+    const now = screen.getByRole('list', { name: 'Now' })
+    expect(within(now).getByText('needs you')).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('list', { name: 'Next' })).getByText(
+        'Quiet polling',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('says what would fill a missing or empty roadmap', async () => {
+    routes['/api/projects/portfolio'] = () =>
+      Response.json({
+        ...DETAIL,
+        now: [],
+        next: [],
+        later: [],
+        roadmap: { found: false },
+      })
+    show('portfolio')
+    expect(
+      await screen.findByText(/Add a ROADMAP\.md to the project folder/),
+    ).toBeInTheDocument()
+    cleanup()
+    routes['/api/projects/portfolio'] = () =>
+      Response.json({
+        ...DETAIL,
+        now: [],
+        next: [],
+        later: [],
+        roadmap: { found: true },
+      })
+    show('portfolio')
+    expect(
+      await screen.findByText(/has nothing under Now, Next or Later/),
+    ).toBeInTheDocument()
+  })
+
+  it('opens the plan in a sheet, hides nothing it was given, and says when it fails', async () => {
+    let broken = true
+    routes['/api/projects/portfolio/plan'] = () => {
+      return broken
+        ? new Response(JSON.stringify({ detail: 'boom' }), { status: 500 })
+        : Response.json({
+            path: 'docs/plans/x/plan.md',
+            name: 'plan.md',
+            content: '# The plan\n- first step\n```\ncode here\n```\n',
+            truncated: true,
+            binary: false,
+          })
+    }
+    show('portfolio')
+    fireEvent.click(
+      await screen.findByRole('button', { name: /Read the plan for/ }),
+    )
+    const sheet = await screen.findByRole('dialog', { name: 'Plan' })
+    expect(
+      await within(sheet).findByText(
+        'Couldn’t open this plan',
+        {},
+        { timeout: 3000 },
+      ),
+    ).toBeInTheDocument()
+    broken = false
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Retry' }))
+    expect(await within(sheet).findByText('first step')).toBeInTheDocument()
+    expect(within(sheet).getByText('code here').tagName).toBe('PRE')
+    expect(within(sheet).getByText(/Showing the start/)).toBeInTheDocument()
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Close' }))
+    expect(screen.queryByRole('dialog', { name: 'plan.md' })).toBeNull()
+  })
+
+  it('says a plan the roadmap no longer links, and an empty plan file', async () => {
+    routes['/api/projects/portfolio/plan'] = () =>
+      new Response(
+        JSON.stringify({ detail: 'The roadmap does not link this plan' }),
+        { status: 404 },
+      )
+    show('portfolio')
+    fireEvent.click(
+      await screen.findByRole('button', { name: /Read the plan for/ }),
+    )
+    expect(
+      await screen.findByText(
+        'Can’t open this plan: The roadmap does not link this plan',
+      ),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    routes['/api/projects/portfolio/plan'] = () =>
+      Response.json({
+        path: 'p',
+        name: 'plan.md',
+        content: '  \n',
+        truncated: false,
+        binary: false,
+      })
+    fireEvent.click(
+      await screen.findByRole('button', { name: /Read the plan for/ }),
+    )
+    expect(
+      await screen.findByText('This plan file is empty.'),
+    ).toBeInTheDocument()
+  })
+
+  it('labels each power button with what it does', async () => {
+    routes['/api/projects/portfolio'] = () =>
+      Response.json({
+        ...DETAIL,
+        places: [
+          DETAIL.places[0],
+          { ...DETAIL.places[0], id: 150, kind: 'ct', state: 'running' },
+        ],
+      })
+    show('portfolio')
+    const start = await screen.findByRole('button', {
+      name: 'Start VM 180 (it is stopped)',
+    })
+    expect(start).toHaveTextContent('Start')
+    expect(start).toHaveAttribute('title', 'Start VM 180 (it is stopped)')
+    expect(
+      screen.getByRole('button', {
+        name: 'Shut down or restart CT 150 (it is running)',
+      }),
+    ).toHaveTextContent('Shut down')
   })
 })

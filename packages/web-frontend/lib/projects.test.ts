@@ -8,7 +8,9 @@ import {
   type ProjectSummary,
   placeLine,
   placeName,
+  planBlocks,
   powerActions,
+  powerButtonText,
   powerLabel,
   powerSummary,
   problemText,
@@ -182,5 +184,40 @@ describe('joinDays', () => {
       ['2026-10-27', ['b', 'c']],
       ['2026-10-26', ['d']],
     ])
+  })
+})
+
+describe('planBlocks', () => {
+  it('keeps code fences and tables as written and the rest as text', () => {
+    const blocks = planBlocks(
+      '# Plan\nWords.\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n```ts\nconst x = 1\n```\nAfter.',
+    )
+    expect(blocks.map((block) => block.kind)).toEqual([
+      'text',
+      'code',
+      'code',
+      'text',
+    ])
+    expect(blocks[1]?.text).toContain('| 1 | 2 |')
+    expect(blocks[2]?.text).toBe('const x = 1')
+  })
+})
+
+describe('powerButtonText', () => {
+  const base: Place = {
+    kind: 'vm',
+    id: 180,
+    label: 'X',
+    power: true,
+    state: 'stopped',
+  }
+  it('names the action and the target', () => {
+    expect(powerButtonText(base)).toEqual({
+      short: 'Start',
+      full: 'Start VM 180 (it is stopped)',
+    })
+    expect(powerButtonText({ ...base, state: 'running' }).full).toBe(
+      'Shut down or restart VM 180 (it is running)',
+    )
   })
 })

@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Guest } from '@aico/fleet/power'
@@ -16,6 +16,7 @@ import {
   problemsOf,
   readmeIntro,
   sortOverview,
+  stripTrailers,
   timeline,
 } from './projects'
 
@@ -116,6 +117,38 @@ describe('timeline', () => {
     const days = groupDays(parseLog(log(5)))
     expect(days.flatMap((day) => day.commits)).toHaveLength(5)
     expect(days[0]?.date).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+
+  it('never shows git trailers as changes', async () => {
+    const trailer = 'Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>'
+    // What `git log --format=%s` prints: a message folded to one line per paragraph.
+    expect(stripTrailers(trailer)).toBe('')
+    expect(stripTrailers(`Fix the Rail width ${trailer}`)).toBe('Fix the Rail width')
+    expect(stripTrailers(`Fix it Signed-off-by: A B <a@b.c> Co-Authored-By: C D <c@d.e>`)).toBe(
+      'Fix it',
+    )
+    expect(stripTrailers('Fix co-authored work in the roadmap')).toBe(
+      'Fix co-authored work in the roadmap',
+    )
+    const line = (sha: string, at: number, subject: string) =>
+      `${sha.padStart(40, 'a')}\x1f${at}\x1f${subject}`
+    const t = Math.floor(T0 / 1000)
+    const git = async () =>
+      [
+        line('1', t, 'Pages keep the session the owner had open'),
+        line('2', t - 60, trailer),
+        line('3', t - 120, `Quota glance reads used up ${trailer}`),
+        line('4', t - 180, 'Older change'),
+      ].join('\n')
+    const page = await timeline(git, '/r', undefined, 3)
+    const shown = page.days.flatMap((day) => day.commits.map((c) => c.subject))
+    expect(shown).toEqual([
+      'Pages keep the session the owner had open',
+      'Quota glance reads used up',
+    ])
+    // The hidden commit still counts as a row of the page: more follows, and `next` is the last row.
+    expect(page.end).toBe(false)
+    expect(page.next).toBe(line('3', 0, '').split('\x1f')[0])
   })
 
   it('pages: one more than the limit means more, fewer means the end', async () => {
@@ -457,5 +490,49 @@ describe('ProjectsService', () => {
     expect((await service.detail('two')).roadmap.found).toBe(false)
     await expect(service.detail('nope')).rejects.toMatchObject({ status: 404 })
     await expect(service.power('one', 5, 'start')).rejects.toMatchObject({ status: 404 })
+  })
+
+  it('opens only the plans the roadmap links, inside the project folder, with secrets hidden', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'plan-'))
+    mkdirSync(join(dir, 'docs'))
+    writeFileSync(
+      join(dir, 'ROADMAP.md'),
+      '# One\n## Now\n- Ship it (plan: ./docs/plan.md)\n- Link out (plan: /etc/hostname)\n- Escape (plan: ../outside.md)\n- Env (plan: .env)\n- Hop (plan: docs/hop.md)\n',
+    )
+    writeFileSync(
+      join(dir, 'docs', 'plan.md'),
+      `# Plan\nKey: ${['sk', 'ant', 'api03', 'abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGH'].join('-')}\n`,
+    )
+    writeFileSync(join(dir, 'docs', 'unlinked.md'), 'not advertised')
+    writeFileSync(join(dir, '.env'), 'SECRET=1')
+    writeFileSync(join(dir, '..', 'outside.md'), 'outside')
+    symlinkSync('/etc/hostname', join(dir, 'docs', 'hop.md'))
+    const registry = new Registry(openTasksDb(':memory:'))
+    registry.register({ id: 'one', root: dir, name: 'One' })
+    registry.register({ id: 'bare', root: mkdtempSync(join(tmpdir(), 'bare-')), name: 'Bare' })
+    const { p, status } = places(guests().source)
+    const service = new ProjectsService({
+      registry,
+      status,
+      tether: { listSessions: async () => [] },
+      asks: { list: async () => [] },
+      places: p,
+      git: async () => '',
+      activityMs: 1000,
+    })
+    const plan = await service.plan('one', 'docs/plan.md')
+    expect(plan).toMatchObject({ path: 'docs/plan.md', name: 'plan.md', binary: false })
+    expect(plan.content).toContain('# Plan')
+    expect(plan.content).not.toContain('sk-ant-api03')
+    // The advertised spelling works too.
+    expect((await service.plan('one', './docs/plan.md')).name).toBe('plan.md')
+    for (const path of ['docs/unlinked.md', 'ROADMAP.md', '/etc/hostname', '../outside.md', '.env'])
+      await expect(service.plan('one', path)).rejects.toMatchObject({ status: expect.any(Number) })
+    await expect(service.plan('one', 'docs/unlinked.md')).rejects.toMatchObject({ status: 404 })
+    await expect(service.plan('one', '/etc/hostname')).rejects.toMatchObject({ status: 404 })
+    // Linked but resolving outside the folder (a link out) is refused.
+    await expect(service.plan('one', 'docs/hop.md')).rejects.toMatchObject({ status: 403 })
+    await expect(service.plan('bare', 'docs/plan.md')).rejects.toMatchObject({ status: 404 })
+    await expect(service.plan('nope', 'x')).rejects.toMatchObject({ status: 404 })
   })
 })

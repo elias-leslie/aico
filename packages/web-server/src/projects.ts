@@ -3,6 +3,7 @@
 //   GET  /api/projects/overview                      one row per project, sorted
 //   GET  /api/projects/:id                           the detail: roadmap, places, problems, agents
 //   GET  /api/projects/:id/timeline?before=&limit=   git history of the project's root, paged
+//   GET  /api/projects/:id/plan?path=                a plan document its roadmap links, as text
 //   POST /api/projects/:id/places/:index/power       {action: start | shutdown | restart}
 //
 // Everything is read from the sources that own it: the registry (projects, where they run),
@@ -12,11 +13,14 @@ import { execFile } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
+import { maskSecrets } from '@aico/shared/secrets'
 import { counted, type ShownRow, type StatusStore } from '@aico/status'
 import { type Project, type Registry, type Roadmap, readRoadmap } from '@aico/tasks'
 import type { TetherClient } from '@aico/tether-client'
+import { readFile } from '@aico/tether-client/files'
 import type { Ask } from './asks'
 import { objectBody, type Router, requiredString } from './http'
+import { translate } from './pane-files'
 import { type Places, type PlaceView, POWER_ACTIONS, type PowerAction, runStateOf } from './places'
 import { SHELL_MODE } from './sessions'
 import { HttpError } from './tether'
@@ -133,6 +137,17 @@ const localDate = (ms: number) => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
+// Git trailers (Co-Authored-By, Signed-off-by ...) are not changes. `%s` folds a message's first
+// paragraph into one line, so a trailer written right under the subject (no blank line) comes
+// back glued to it, and a message that is only a trailer comes back as the whole subject.
+const TRAILER =
+  /(?:^|\s)(?:co-authored-by|signed-off-by|reviewed-by|acked-by|tested-by|reported-by|suggested-by|helped-by|generated-by|assisted-by|change-id|cc)\s*:.*$/is
+
+/** The subject without trailing trailer lines; empty when the message was only trailers. */
+export function stripTrailers(subject: string): string {
+  return subject.replace(TRAILER, '').trim()
+}
+
 /** `git log` lines (`sha US unix-seconds US subject`) as commits, newest first. */
 export function parseLog(out: string): Commit[] {
   return out
@@ -140,7 +155,7 @@ export function parseLog(out: string): Commit[] {
     .filter(Boolean)
     .map((line) => {
       const [sha, seconds, ...subject] = line.split('\x1f')
-      const text = subject.join('\x1f').trim()
+      const text = stripTrailers(subject.join('\x1f'))
       const release = /^Release v?(\d+(?:\.\d+)+)/i.exec(text)?.[1]
       return {
         sha: sha as string,
@@ -168,7 +183,7 @@ export async function timeline(
   root: string,
   before: string | undefined,
   limit: number,
-): Promise<{ days: Day[]; end: boolean; available: boolean }> {
+): Promise<{ days: Day[]; end: boolean; available: boolean; next?: string }> {
   const format = '--format=%H%x1f%ct%x1f%s'
   let rev = 'HEAD'
   try {
@@ -183,10 +198,14 @@ export async function timeline(
     }
     const out = await git(root, ['log', '-n', String(limit + 1), format, rev])
     const commits = parseLog(out)
+    const page = commits.slice(0, limit)
     return {
-      days: groupDays(commits.slice(0, limit)),
+      // A commit that was only trailers has no subject and is not shown, but still counts for
+      // paging: `next` is where the following page starts even if this page shows nothing.
+      days: groupDays(page.filter((commit) => commit.subject)),
       end: commits.length <= limit,
       available: true,
+      ...(page.length ? { next: (page[page.length - 1] as Commit).sha } : {}),
     }
   } catch {
     if (before) throw new HttpError(422, 'before must be a commit of this project')
@@ -364,6 +383,37 @@ export class ProjectsService {
     return timeline(this.git, project.root_path, before, limit)
   }
 
+  /**
+   * A plan document the project's roadmap links, as text with secrets hidden. Only the paths the
+   * roadmap itself advertises, read inside the project's folder; nothing else is readable here.
+   */
+  async plan(id: string, path: string) {
+    const project = this.project(id)
+    const roadmap = project.root_path ? readRoadmap(project.root_path) : null
+    const wanted = cleanPlanPath(path)
+    const linked = new Set(
+      roadmap
+        ? [...roadmap.now, ...roadmap.next, ...roadmap.later].flatMap((item) =>
+            item.plan ? [cleanPlanPath(item.plan)] : [],
+          )
+        : [],
+    )
+    if (!project.root_path || !wanted || !linked.has(wanted))
+      throw new HttpError(404, 'The roadmap does not link this plan')
+    try {
+      const file = readFile(project.root_path, wanted)
+      return {
+        path: wanted,
+        name: file.name,
+        content: file.is_binary || file.content === null ? null : maskSecrets(file.content),
+        truncated: file.truncated,
+        binary: file.is_binary,
+      }
+    } catch (error) {
+      throw translate(error)
+    }
+  }
+
   async power(id: string, index: number, action: PowerAction): Promise<PlaceView> {
     const project = this.project(id)
     if (project.retired_at !== null) throw new HttpError(409, `${project.name} is archived.`)
@@ -371,6 +421,12 @@ export class ProjectsService {
     if (!place) throw new HttpError(404, `${project.name} has no place ${index}`)
     return this.deps.places.power(place, action)
   }
+}
+
+/** A roadmap plan path as written ("./docs/x.md" and "docs/x.md" are one); '' when unusable. */
+function cleanPlanPath(path: string): string {
+  const clean = path.trim().replace(/^(\.\/)+/, '')
+  return clean.startsWith('/') || clean.includes('\0') ? '' : clean
 }
 
 async function roadmapEditedAt(
@@ -424,6 +480,11 @@ export function registerProjectRoutes(router: Router, service: ProjectsService):
     if (!Number.isInteger(limit) || limit < 1 || limit > MAX_TIMELINE)
       throw new HttpError(422, `limit must be 1 to ${MAX_TIMELINE}`)
     return service.timeline(ctx.params.id, before, limit)
+  })
+  router.on('GET', '/api/projects/:id/plan', (ctx) => {
+    const path = ctx.query.get('path')
+    if (!path) throw new HttpError(422, 'path is required')
+    return service.plan(ctx.params.id, path)
   })
   router.on('POST', '/api/projects/:id/places/:index/power', async (ctx) => {
     const body = objectBody(await ctx.body())

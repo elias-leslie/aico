@@ -12,6 +12,7 @@ import {
   placeLine,
   placeName,
   powerActions,
+  powerButtonText,
   problemText,
   runStateText,
   unknownReason,
@@ -47,13 +48,21 @@ function PlaceRow({
       {actions ? (
         <button
           type="button"
-          className={styles.power}
-          data-state={place.busy ? 'starting' : place.state}
-          aria-label={`${name}: ${state.toLowerCase()}. Open power options`}
-          title={state}
+          className={styles.powerBtn}
+          aria-label={powerButtonText(place).full}
+          title={powerButtonText(place).full}
           onClick={onOpen}
         >
-          <PowerIcon />
+          <span
+            className={styles.power}
+            data-state={place.busy ? 'starting' : place.state}
+            aria-hidden="true"
+          >
+            <PowerIcon />
+          </span>
+          <span className={styles.powerWord}>
+            {powerButtonText(place).short}
+          </span>
         </button>
       ) : (
         <span
