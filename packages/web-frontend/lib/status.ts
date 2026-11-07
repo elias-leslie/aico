@@ -157,6 +157,20 @@ export function sortRows(rows: readonly StatusRow[], sort: Sort): StatusRow[] {
   return [...rows].sort(ORDER[sort])
 }
 
+/**
+ * The one problem the Panel names: a failed row before any warning (something broke, not just
+ * looks off), then Status's own ranking by what each costs.
+ */
+export function worstProblem(
+  rows: readonly StatusRow[],
+): StatusRow | undefined {
+  const problems = sortRows(
+    rows.filter((row) => isProblem(row.shown)),
+    'problems',
+  )
+  return problems.find((row) => row.shown === 'failed') ?? problems[0]
+}
+
 export function rollup(rows: readonly StatusRow[]): Record<Shown, number> {
   const counts = Object.fromEntries(SHOWN.map((state) => [state, 0])) as Record<
     Shown,

@@ -1,5 +1,6 @@
 'use client'
 
+import { useQueryClient } from '@tanstack/react-query'
 import {
   Activity,
   BookOpen,
@@ -15,8 +16,10 @@ import {
   UserRound,
 } from 'lucide-react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import type { ComponentType, ReactNode } from 'react'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
+import { apiFetch } from '@/lib/api-fetch'
 import {
   digestParts,
   digestStart,
@@ -28,11 +31,27 @@ import {
 import { type QuotaGlance, quotaGlances, quotaTitle } from '@/lib/frame/quota'
 import { openAsks, useApprovals, useOwnerAsks } from '@/lib/hooks/use-asks'
 import { useClock } from '@/lib/hooks/use-clock'
+import { useHosts } from '@/lib/hooks/use-hosts'
 import { useSessionAttention } from '@/lib/hooks/use-session-attention'
 import { useStatus } from '@/lib/hooks/use-status'
+import {
+  RECOVERY_QUERY_KEY,
+  useStatusSessions,
+} from '@/lib/hooks/use-status-sessions'
 import { useUsage } from '@/lib/hooks/use-usage'
 import { popOutNotes } from '@/lib/notes-window'
-import { plural, reason, type StatusRow, WORD } from '@/lib/status'
+import {
+  ACTION_LABEL,
+  plural,
+  reason,
+  rowButtons,
+  type StatusRow,
+  tierLabel,
+  tierOf,
+  WORD,
+  withSessionNames,
+  worstProblem,
+} from '@/lib/status'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
 import { NeedsYouSection } from '../asks/NeedsYou'
 import { CaptureLauncher } from '../capture/CaptureLauncher'
@@ -183,11 +202,50 @@ function SinceLine({ frame }: { frame: Frame | null }) {
   )
 }
 
-/** The one problem that matters most, from Status's own ranking. */
+/** The one problem that matters most: a failure first, then Status's own ranking. */
 function WorstProblem({ frame }: { frame: Frame | null }) {
   const { view, loading, failed, stale } = useStatus()
+  const sessions = useStatusSessions()
+  const { hosts } = useHosts()
+  const router = useRouter()
+  const queryClient = useQueryClient()
+  const [note, setNote] = useState<string | null>(null)
   const problems = view?.summary.problems
-  const top: StatusRow | undefined = view?.summary.top[0]
+  const top: StatusRow | undefined =
+    (view && worstProblem(view.rows)) ?? view?.summary.top[0]
+  const session = top
+    ? rowButtons(top, {
+        here: view?.machine,
+        hosts: new Set(hosts.map((host) => host.name)),
+        sessions,
+      }).buttons.find(
+        (button) => button.kind === 'resume' || button.kind === 'open',
+      )
+    : undefined
+  const sessionName = session ? sessions.names?.get(session.ref) : undefined
+  const resume = async (id: string) => {
+    try {
+      const answer = await apiFetch<{
+        results: { ok: boolean; reason: string | null }[]
+      }>(
+        '/api/recovery/resume',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id }),
+        },
+        'Couldn’t resume it',
+      )
+      const refused = answer.results.find((result) => !result.ok)
+      if (refused) return setNote(refused.reason ?? 'Tether refused it.')
+      router.push(`/?session=${encodeURIComponent(id)}`)
+    } catch (error) {
+      setNote((error as Error).message)
+    } finally {
+      await queryClient.invalidateQueries({ queryKey: RECOVERY_QUERY_KEY })
+      await queryClient.invalidateQueries({ queryKey: ['terminal-sessions'] })
+    }
+  }
   return (
     <section className={styles.section} aria-label="Worst problem">
       <SectionHead
@@ -213,17 +271,51 @@ function WorstProblem({ frame }: { frame: Frame | null }) {
           <div className={styles.worstMeta}>
             <span
               className="lantern-chip"
-              data-tone={top.shown === 'failed' ? 'bad' : 'wait'}
+              data-tone={
+                top.shown === 'failed' || tierOf(top) === 'lost'
+                  ? 'bad'
+                  : 'wait'
+              }
             >
-              {WORD[top.shown]}
+              {tierLabel(tierOf(top))}
             </span>
-            <span>{top.machine}</span>
+            <span>
+              {WORD[top.shown]} · {top.machine}
+            </span>
           </div>
           <h3>{top.what}</h3>
-          <p>{reason(top) || top.meaning}</p>
-          <MoreLink frame={frame} href="/status">
-            Open Status
-          </MoreLink>
+          <p>{withSessionNames(reason(top) || top.meaning, sessions.names)}</p>
+          {note && (
+            <p className={styles.worstNote} role="alert">
+              {sessionName ? `“${sessionName}” didn’t resume: ` : ''}
+              {note}
+            </p>
+          )}
+          <div className={styles.worstActions}>
+            {session && (
+              <button
+                type="button"
+                className="lantern-btn small primary"
+                title={
+                  session.kind === 'resume'
+                    ? `Resume “${sessionName ?? 'the session'}”, which stopped`
+                    : `Open “${sessionName ?? 'the session'}”`
+                }
+                onClick={() =>
+                  session.kind === 'resume'
+                    ? void resume(session.ref)
+                    : router.push(
+                        `/?session=${encodeURIComponent(session.ref)}`,
+                      )
+                }
+              >
+                {ACTION_LABEL[session.kind]}
+              </button>
+            )}
+            <MoreLink frame={frame} href="/status">
+              Open Status
+            </MoreLink>
+          </div>
         </div>
       )}
     </section>

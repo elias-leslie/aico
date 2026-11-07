@@ -24,6 +24,14 @@ const state = vi.hoisted(() => ({
   },
   asks: { asks: [{ id: 'a' }, { id: 'b' }], isLoading: false, isError: false },
   open: vi.fn(),
+  push: vi.fn(),
+  sessions: {
+    names: new Map([['fa41c0c8', 'Aico']]) as ReadonlyMap<
+      string,
+      string
+    > | null,
+    resumable: new Set<string>(),
+  },
   lastLook: null as number | null,
 }))
 vi.mock('./FrameContext', () => ({
@@ -35,6 +43,16 @@ vi.mock('@/lib/frame/digest', async (importOriginal) => ({
   useDigest: () => state.digest,
 }))
 vi.mock('@/lib/hooks/use-status', () => ({ useStatus: () => state.status }))
+vi.mock('@tanstack/react-query', async (real) => ({
+  ...(await real<typeof import('@tanstack/react-query')>()),
+  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
+}))
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: state.push }) }))
+vi.mock('@/lib/hooks/use-hosts', () => ({ useHosts: () => ({ hosts: [] }) }))
+vi.mock('@/lib/hooks/use-status-sessions', () => ({
+  RECOVERY_QUERY_KEY: ['status-recovery'],
+  useStatusSessions: () => state.sessions,
+}))
 vi.mock('@/lib/hooks/use-usage', () => ({ useUsage: () => state.usage }))
 vi.mock('@/lib/hooks/use-asks', () => ({
   useOwnerAsks: () => state.asks,
@@ -178,6 +196,61 @@ describe('Panel', () => {
     expect(screen.getByText('Restore drill')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('link', { name: 'Open Status' }))
     expect(state.open).toHaveBeenCalledWith('/status', 'wide')
+  })
+
+  it('names the session and offers Open for the worst problem, a failure ahead of a warning', () => {
+    state.status = {
+      ...state.status,
+      view: {
+        summary: { problems: 2, top: [] },
+        rows: [
+          row({
+            id: 'check-memory',
+            kind: 'backup',
+            what: 'Memory',
+            meaning: 'Session fa41c0c8: jobs killed again and again.',
+            state: 'warn',
+            shown: 'warn',
+          }),
+          row({
+            id: 'job/restore',
+            kind: 'job',
+            what: 'Restore drill',
+            meaning: 'It failed.',
+            shown: 'failed',
+          }),
+        ],
+      },
+    }
+    const { rerender } = render(<Panel slots={slots} onSelect={vi.fn()} />)
+    expect(screen.getByText('Restore drill')).toBeInTheDocument()
+    expect(screen.queryByText('Memory')).toBeNull()
+    // Without the failure, the warning leads, by the tier Status shows it under.
+    state.status = {
+      ...state.status,
+      view: {
+        summary: { problems: 1, top: [] },
+        rows: [
+          row({
+            id: 'check-memory',
+            kind: 'backup',
+            what: 'Memory',
+            actions: [{ kind: 'session', ref: 'fa41c0c8' }],
+            meaning: 'Session fa41c0c8: jobs killed again and again.',
+            state: 'warn',
+            shown: 'warn',
+          }),
+        ],
+      },
+    }
+    rerender(<Panel slots={slots} onSelect={vi.fn()} />)
+    const worst = screen.getByRole('region', { name: 'Worst problem' })
+    expect(within(worst).getByText('Lost work')).toBeVisible()
+    expect(within(worst).getByText(/Warning/)).toBeVisible()
+    expect(worst).toHaveTextContent('Session “Aico”: jobs killed')
+    expect(worst).not.toHaveTextContent('fa41c0c8')
+    fireEvent.click(within(worst).getByRole('button', { name: 'Open' }))
+    expect(state.push).toHaveBeenCalledWith('/?session=fa41c0c8')
   })
 
   it('shows a quota bar with what is used, and glance values only where read', () => {

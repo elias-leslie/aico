@@ -92,6 +92,15 @@
   color: var(--mist);
   flex-wrap: wrap;
 }
+.worstActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.worstNote {
+  color: var(--ember);
+}
 .quotas {
   display: flex;
   flex-direction: column;
