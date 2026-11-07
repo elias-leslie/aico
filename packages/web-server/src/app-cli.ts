@@ -27,6 +27,10 @@ export interface AppCliIo {
 
 export function runAppCli(argv: string[], io: AppCliIo): number {
   const [command, ...rest] = argv
+  if (command === '--help' || command === '-h' || command === 'help' || rest.includes('--help')) {
+    io.out(APP_USAGE)
+    return 0
+  }
   if (command === 'publish-apk' && rest.length === 1) {
     try {
       const release = publishApk(io.dataDir, rest[0] as string)

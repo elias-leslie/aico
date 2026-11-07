@@ -1,4 +1,4 @@
-// `aico ask MODEL "question"`: one question to one model, no tools, an answer or a typed
+// `aico prompt-model MODEL "question"`: one question to one model, no tools, an answer or a typed
 // failure. The model goes through the same rules as a run (route() deny rows for the
 // role and project, the harness's provider allowlist). Claude runs only as `claude -p`
 // with tools off and never with an Anthropic API key; Gemini runs as `agy -p`; Codex and
@@ -34,9 +34,9 @@ import { compileSchema, jsonIn } from './schema'
 import { credentialMarkers } from './tools'
 import { type Egress, transportRefusal } from './transport'
 
-export const ASK_USAGE = `Usage: aico ask MODEL "question" [--schema FILE] [--files FILE...] [--role ROLE] [--effort LEVEL] [--json]
+export const ASK_USAGE = `Usage: aico prompt-model MODEL "question" [--schema FILE] [--files FILE...] [--role ROLE] [--effort LEVEL] [--json]
 Asks one model one question, with no tools. The answer goes to stdout.
-  MODEL           a model from aico models list (an alias works)
+  MODEL           a model id or alias (aico models route --role R names one)
   question        the question; "-" reads it from stdin
   --schema FILE   a JSON Schema file: the answer must be JSON that fits it, or the call fails
   --files FILE... text files put in front of the question (credential files are refused)
@@ -570,7 +570,7 @@ function resolveModel(
   if (!via)
     return refuse(
       'provider_not_allowed',
-      `${entry.id}: aico ask does not run ${entry.provider} models`,
+      `${entry.id}: aico prompt-model does not run ${entry.provider} models`,
     )
   const claude = policy.providers[harness.claude_provider]
   const names = [entry.id, model].map((name) => name.toLowerCase())
@@ -709,7 +709,7 @@ function readStdin(): Promise<string> {
   })
 }
 
-/** `aico ask ...`: parses the command line, asks, prints the answer (or the failure) and returns the exit code. */
+/** `aico prompt-model ...`: parses the command line, asks, prints the answer (or the failure) and returns the exit code. */
 export async function askMain(
   argv: string[],
   env: NodeJS.ProcessEnv = process.env,
@@ -728,12 +728,12 @@ export async function askMain(
   try {
     parsed = parse(args)
   } catch (error) {
-    process.stderr.write(`aico ask: ${(error as Error).message}\n${ASK_USAGE}\n`)
+    process.stderr.write(`aico prompt-model: ${(error as Error).message}\n${ASK_USAGE}\n`)
     return 2
   }
   const { values, positionals } = parsed
   if (values.help) {
-    process.stderr.write(`${ASK_USAGE}\n`)
+    process.stdout.write(`${ASK_USAGE}\n`)
     return 0
   }
   const cwd = deps.cwd ?? process.cwd()
@@ -741,7 +741,7 @@ export async function askMain(
   let question = words.join(' ').trim()
   if (question === '-') question = (await (deps.stdin ?? readStdin)()).trim()
   if (!model || !question) {
-    process.stderr.write(`aico ask: a model and a question are required\n${ASK_USAGE}\n`)
+    process.stderr.write(`aico prompt-model: a model and a question are required\n${ASK_USAGE}\n`)
     return 2
   }
   let schema: unknown
@@ -749,7 +749,9 @@ export async function askMain(
     try {
       schema = JSON.parse(readFileSync(resolve(cwd, values.schema), 'utf8'))
     } catch (error) {
-      process.stderr.write(`aico ask: --schema ${values.schema}: ${(error as Error).message}\n`)
+      process.stderr.write(
+        `aico prompt-model: --schema ${values.schema}: ${(error as Error).message}\n`,
+      )
       return 2
     }
   }
@@ -771,9 +773,10 @@ export async function askMain(
   else if (outcome.kind === 'done') process.stdout.write(`${outcome.text}\n`)
   const t = result.tokens
   process.stderr.write(
-    `aico ask: ${outcome.kind}${'model' in outcome ? ` on ${outcome.model}` : ''}; tokens in ${t.input} / out ${t.output}; ${(result.wallMs / 1000).toFixed(1)} s\n`,
+    `aico prompt-model: ${outcome.kind}${'model' in outcome ? ` on ${outcome.model}` : ''}; tokens in ${t.input} / out ${t.output}; ${(result.wallMs / 1000).toFixed(1)} s\n`,
   )
-  if (outcome.kind !== 'done') process.stderr.write(`aico ask: ${JSON.stringify(outcome)}\n`)
+  if (outcome.kind !== 'done')
+    process.stderr.write(`aico prompt-model: ${JSON.stringify(outcome)}\n`)
   return EXIT[outcome.kind] ?? 1
 }
 

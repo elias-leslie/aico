@@ -29,7 +29,7 @@
     "node": ">=22.13.0"
   },
   "scripts": {
-    "build": "esbuild src/main.ts --bundle --platform=node --format=esm --target=node22 --external:@earendil-works/* --outfile=dist/aico-web.mjs --banner:js=\"// Aico web server bundle. Built by npm run build; do not edit.\nimport { createRequire as __aicoRequire } from 'node:module'; const require = __aicoRequire(import.meta.url);\"",
+    "build": "esbuild src/main.ts --bundle --platform=node --format=esm --target=node22 --log-level=error --external:@earendil-works/* --outfile=dist/aico-web.mjs --banner:js=\"// Aico web server bundle. Built by npm run build; do not edit.\nimport { createRequire as __aicoRequire } from 'node:module'; const require = __aicoRequire(import.meta.url);\"",
     "start": "node dist/aico-web.mjs",
     "test": "vitest run"
   },

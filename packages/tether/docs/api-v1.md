@@ -1105,4 +1105,4 @@ A writer reads, changes the document and writes it back with the version it read
 - `GET /v1/history/:id` -> the summary plus `path`, `files: {path, writes}[]` and `subagents`. `:id` is `<tool>:<id>` or the start of the tool's own id (409 `ambiguous_session`, 404 `unknown_session`).
 - `GET /v1/history/:id/events?limit=&before=&from=` -> `{items, older, newer, size}`. No cursor: the last `limit` events. `before=<older>` pages back; `from=<offset>` reads forward (`newer`). 410 `transcript_gone` when the tool removed the file.
 
-`aico sessions list|show|events` is the CLI (`tether history`).
+`aico recent list|show|events` is the CLI (`tether history`).

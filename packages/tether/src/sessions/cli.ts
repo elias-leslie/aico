@@ -1,4 +1,4 @@
-// `tether history list|show|events` (also `aico sessions ...`): the session
+// `tether history list|show|events` (also `aico recent ...`): the session
 // history from the running Tether (src/sessions/history.ts). `events --json`
 // is the session-events dump used for debugging a reader.
 
@@ -8,13 +8,13 @@ import type { EventPage, SessionDetail, SessionSummary, Tokens } from './history
 import type { SessionEvent } from './types'
 
 export const HISTORY_USAGE = `Usage:
-  aico sessions list [--tool T] [--project P] [--limit N] [--json]
+  aico recent list [--tool T] [--project P] [--limit N] [--json]
       Recent sessions of Claude Code, Codex, Pi and the Aico agent, newest first.
-  aico sessions show <id> [--json]
+  aico recent show <id> [--json]
       One session: model, project, start and end, outcome, tokens, tool
       calls, files written and its subagents (an Aico agent run: the model of
       each turn). <id> is the id in the list or the start of the tool's own id.
-  aico sessions events <id> [--limit N] [--before OFFSET | --from OFFSET] [--json]
+  aico recent events <id> [--limit N] [--before OFFSET | --from OFFSET] [--json]
       What was said and done, read from the tool's transcript. The last N by
       default (50); --before OFFSET pages back, --from OFFSET reads forward.
       --json prints the page as Tether serves it (the session-events dump).
@@ -87,7 +87,7 @@ export async function runHistory(
     }
   } else if (sub === 'show' || sub === 'events') {
     if (!id) {
-      io.err(`aico sessions ${sub} needs a session id (aico sessions list shows them)`)
+      io.err(`aico recent ${sub} needs a session id (aico recent list shows them)`)
       return 2
     }
     path = `/v1/history/${encodeURIComponent(id)}${sub === 'events' ? '/events' : ''}`
@@ -100,7 +100,7 @@ export async function runHistory(
       }
     }
   } else {
-    io.err(`aico sessions: unknown command '${sub}'`)
+    io.err(`aico recent: unknown command '${sub}'`)
     io.out(HISTORY_USAGE)
     return 2
   }
@@ -173,7 +173,7 @@ function isFlagValue(args: string[], index: number): boolean {
 }
 
 const REFUSALS: Record<string, string> = {
-  unknown_session: 'No session with that id. aico sessions list shows the recent ones.',
+  unknown_session: 'No session with that id. aico recent list shows the recent ones.',
   ambiguous_session: 'More than one session starts with that. Use more of the id.',
   transcript_gone:
     "The tool's transcript file is gone, so its events cannot be read. The totals are still kept.",

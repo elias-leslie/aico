@@ -84,7 +84,22 @@ func importLegacy(dir string) int {
 
 // ---------------------------------------------------------------- leases
 
+const leaseUsage = `Usage: aico lease GLOB...            claim the files you are about to edit (other sessions see a warning)
+       aico lease --list [--all]        your project's leases and holds (--all: every project)
+       aico lease --check PATH          who else holds PATH
+       aico lease --hold PURPOSE        a whole-project don't-touch hold
+       aico lease --take PATH           take over a stale lease on PATH
+       aico lease --release GLOB | --release-all
+       aico lease --heartbeat           keep your leases alive
+aico commit releases your leases on the paths it commits.`
+
 func leaseMain(h *lease.Hook, args []string) int {
+	for _, a := range args {
+		if a == "--help" || a == "-h" {
+			fmt.Println(leaseUsage)
+			return 0
+		}
+	}
 	var (
 		globs                            []string
 		check, take, hold                string

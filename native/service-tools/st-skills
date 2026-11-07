@@ -3,7 +3,7 @@ set -euo pipefail
 service_root="$(cd -- "${BASH_SOURCE[0]%/*}" && pwd)"
 if [[ ! -x "$service_root/.venv/bin/python" ]]; then
   python3 "$service_root/../st-sdk/tools_run.py" --label 'Prepare project service tools' -- \
-    uv sync --locked --no-dev --directory "$service_root" >&2
+    uv sync --quiet --locked --no-dev --directory "$service_root" >&2
 fi
 export PYTHONPATH="$service_root${PYTHONPATH:+:$PYTHONPATH}"
 exec "$service_root/.venv/bin/python" -m aico_service.skills "$@"

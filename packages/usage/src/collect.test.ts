@@ -690,3 +690,41 @@ describe('Claude Code transcripts', () => {
     expect(stored).not.toContain('s3')
   })
 })
+
+describe('a used-up subscription', () => {
+  it('names the window that is used up and when it resets, before the others', () => {
+    const iso = (ms: number) => new Date(ms).toISOString()
+    const reading = (window_minutes: number, used_percent: number, resets: number) => ({
+      provider: 'opencode-go',
+      window_minutes,
+      observed_at: iso(NOW - 60_000),
+      used_percent,
+      resets_at: iso(resets),
+      source: 'test',
+      plan_type: null,
+    })
+    const input = {
+      facts: {
+        readings: [
+          reading(300, 0, NOW + 3 * HOUR),
+          reading(10080, 100, NOW + 30 * HOUR),
+          reading(43200, 95, NOW + 300 * HOUR),
+        ],
+        credits: {},
+      },
+      plans: { plans: [], lots: [] },
+      machine: 'm',
+      now: iso(NOW),
+      collectedAt: iso(NOW),
+      problems: {},
+    }
+    const [, , row] = spendRows(input)
+    expect(row?.meaning).toMatch(
+      /^Weekly used up until Nov \d+, .+\. 5h 100% left, resets .+; monthly 5% left, resets .+\.$/,
+    )
+    expect(row?.meaning).not.toContain('Used up.')
+    expect(brief({ id: 'opencode-go', name: 'OpenCode Go' }, input)).toMatch(
+      /^OpenCode Go weekly used up until Nov \d+/,
+    )
+  })
+})

@@ -10,7 +10,7 @@
     "agent": "agent.db"
   },
   "removed": {
-    "complete": "dropped; ask a model with aico ask MODEL \"question\", or use a native subagent for work with tools",
+    "complete": "dropped; ask a model with aico prompt-model MODEL \"question\", or use a native subagent for work with tools",
     "sync-progress": "dropped",
     "checkpoints": "dropped",
     "prune": "dropped",
@@ -53,7 +53,108 @@
     "automations": "dropped; use aico jobs",
     "ctx": "dropped; use aico context",
     "native-sessions": "dropped; use st sessions",
-    "note": "dropped; use Notes in Aico"
+    "note": "dropped; use Notes in Aico",
+    "ask": "renamed: aico prompt-model MODEL \"question\" asks a model; a question for the owner is tether ask create"
   },
-  "rootHelper": "native/host-steward/aico-root-watch.py"
+  "rootHelper": "native/host-steward/aico-root-watch.py",
+  "aicoHelp": [
+    {
+      "group": "Sessions and questions",
+      "commands": [
+        [
+          "tether",
+          "live sessions (create, list, attach, end) and questions for the owner (tether ask)"
+        ],
+        [
+          "recent",
+          "past sessions of Claude Code, Codex, Pi and the Aico agent: list, show, events"
+        ],
+        ["sessions", "messages between sessions: send, ack, confirm, inbox, wait"],
+        ["pulse", "live sessions per project, leases, handshakes and open problems"],
+        ["lease", "claim the files you are editing so other sessions see it"]
+      ]
+    },
+    {
+      "group": "Machines and status",
+      "commands": [
+        ["status", "every check, job, backup, service and machine, problems first"],
+        ["monitor", "this machine's load, memory, connections, processes and mounts"],
+        ["vm", "Proxmox guests: list, start, stop, snapshot"],
+        ["phones", "paired phones: list, remove"],
+        ["app", "the phone app's published version and outage drills"],
+        ["declare", "record a host change you made, so Status knows it was you"],
+        ["notify", "send the owner a notice (warning and critical reach the phone)"]
+      ]
+    },
+    {
+      "group": "Projects",
+      "commands": [
+        ["projects", "registered projects: list, show, register"],
+        ["check", "the repo's quality gate"],
+        ["commit", "commit only your paths, after the quick check"],
+        ["publish", "publish a checked main to GitHub"],
+        ["nightly", "the nightly full gate and live checks"],
+        ["snapshots", "Btrfs work points of a project: take, list, restore"]
+      ]
+    },
+    {
+      "group": "Backups",
+      "commands": [
+        ["backups", "backup health (list), runs, restores and drills (backup works too)"]
+      ]
+    },
+    {
+      "group": "Usage and models",
+      "commands": [
+        ["usage", "what each subscription has left and when it resets"],
+        ["models", "which model and effort a role runs on (models route)"],
+        ["prompt-model", "one question to one model, no tools"],
+        ["agent", "Aico's own agent harness: run, show"]
+      ]
+    },
+    {
+      "group": "Context, memory and prompts",
+      "commands": [
+        ["context", "what each session gets at launch: deliver, delivery"],
+        ["memory", "saved learnings and decisions: search, list, get, save"],
+        ["prompt", "reusable agent prompts: list, get, update, measure"]
+      ]
+    },
+    {
+      "group": "Logins and grants",
+      "commands": [
+        ["logins", "private logins: list, set, rotate, get"],
+        ["grants", "security-key grants for admin steps (elevate works too)"]
+      ]
+    },
+    {
+      "group": "Service and deploy",
+      "commands": [
+        ["service", "build, restart and check a project's services (service rebuild)"],
+        ["deploy", "put a commit live; deploy wait JOB follows one"],
+        ["logs", "a unit's or a project's logs"],
+        ["jobs", "Aico's scheduled jobs: list, run"]
+      ]
+    },
+    {
+      "group": "Tools",
+      "commands": [
+        ["web", "web search and fetch"],
+        ["db", "read-only queries on Aico's stores"],
+        ["tools", "the agent tool manifest; tools run for heavy work"],
+        ["skills", "agent skills: status, sync, audit"],
+        ["mockup", "save a UI mockup for the owner to review"]
+      ]
+    }
+  ],
+  "commandHelp": {
+    "sessions": "Usage: {cli} sessions send TARGET 'one line' [--fyi] [--source-key K]   message another session\n       {cli} sessions ack ID yes|no|eta:MIN [NOTE]   answer a handshake\n       {cli} sessions confirm ID [--withdraw]        close a handshake you sent\n       {cli} sessions inbox                          what other sessions sent you\n       {cli} sessions may-disrupt [TARGET] [--requests ID,ID]\n       {cli} sessions wait KIND ID                   wait for a session, job, reply, ask or host\nPast sessions and their transcripts: {cli} recent --help",
+    "mandates": "Usage: {cli} mandates [--project P] [--format text|json|claude|codex|pi] [--force]\nThis session's startup context ({cli} context deliver for the calling tool).",
+    "vcs": "Usage: {cli} vcs publish [--source ID] [--sha REV] [--now]   publish checked main ({cli} publish --help)\n       {cli} vcs deliver ...                                 checked-main delivery\nFor local inspection use git.",
+    "tools": "Usage: {cli} tools manifest [--surface ID|--discover WORD] [--density core|full] [--format json|inject]\n       {cli} tools extensions [--check]\n       {cli} tools run --label TEXT -- COMMAND ...",
+    "db": "Usage: {cli} db tables|schema TABLE|count TABLE|sample TABLE [N]|query SQL [--store NAME]\nRead-only Aico stores: {stores}. -t is the query text alias.",
+    "mockup": "Usage: {cli} mockup add FILE --project ID --title TITLE [--note TEXT] [--session ID]",
+    "monitor": "Usage: {cli} monitor status|system-info|connections|processes|mounts\nLocal /proc readings; service logs: {cli} logs UNIT.",
+    "aico": "Usage: {cli} aico create|wait|waits|roots|watch ...   agent coordination; each takes --help (e.g. {cli} aico wait --help)"
+  }
 }

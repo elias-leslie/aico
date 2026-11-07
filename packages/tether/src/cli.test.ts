@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { attachPlan, main, parseArgs, render, shareBody } from './cli'
+import { attachPlan, main, parseArgs, render, sessionLine, shareBody } from './cli'
 import { callSocket } from './client'
 import { resolvePaths } from './config'
 import { type RunningDaemon, startDaemon } from './daemon'
@@ -136,6 +136,70 @@ describe('main', () => {
     const { io, out } = capture()
     expect(await main(['help'], io)).toBe(0)
     expect(out.join('\n')).toContain('tether [--instance NAME]')
+  })
+
+  it.each([
+    ['serve'],
+    ['doctor'],
+    ['version'],
+    ['sessions'],
+    ['sessions', 'create'],
+    ['sessions', 'show'],
+    ['sessions', 'end'],
+    ['sessions', 'attach'],
+    ['reboot', 'prepare'],
+    ['recovery', 'status'],
+    ['import-aico'],
+    ['roots'],
+    ['share'],
+    ['ask', 'create'],
+    ['history', 'list'],
+    ['history', 'show'],
+    ['capture', 'list'],
+    ['note', 'add'],
+    ['tools'],
+    ['projects'],
+    ['hosts'],
+    ['fleet', 'identity'],
+  ])('%s %s --help prints that command and does nothing else', async (...words) => {
+    for (const flag of ['--help', '-h']) {
+      const { io, out, err } = capture()
+      expect(await main(['-i', 'clitest', ...words.filter(Boolean), flag], io)).toBe(0)
+      expect(err).toEqual([])
+      const text = out.join('\n')
+      expect(text).toMatch(/Usage/)
+      if (
+        ['sessions', 'reboot', 'recovery', 'roots', 'tools', 'share'].includes(words[0] as string)
+      )
+        expect(text).toContain(`  ${words[0]}`)
+      expect(text).not.toContain('Aico window')
+    }
+  })
+
+  it('narrows help to one subcommand', async () => {
+    const { io, out } = capture()
+    expect(await main(['sessions', 'create', '--help'], io)).toBe(0)
+    expect(out.join('\n')).toContain('sessions create [--tool T]')
+    expect(out.join('\n')).not.toContain('sessions end')
+  })
+
+  it('creates a session in one line; --json gives the record', () => {
+    expect(
+      sessionLine({
+        id: 'abcd1234',
+        label: 'Session 3',
+        tool: 'codex',
+        projectId: 'aico',
+        status: 'starting',
+        state: 'idle',
+      }),
+    ).toBe('abcd1234  Session 3  codex in aico, starting (idle)')
+  })
+
+  it('refuses the retired sessions show with what to do instead', async () => {
+    const { io, err } = capture()
+    expect(await main(['-i', 'clitest', 'sessions', 'show', 'abcd1234'], io)).toBe(2)
+    expect(err.join('\n')).toContain('tether sessions attach')
   })
 
   it('rejects an incomplete recovery booking before sending a resume', async () => {

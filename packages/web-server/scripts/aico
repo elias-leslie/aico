@@ -2,7 +2,7 @@
 # `aico memory | prompt | models | context`: context.db (memories, prompts, roles, launch options).
 # `aico usage`: usage.db (what each subscription has left; packages/usage).
 # `aico jobs`: the scheduler's jobs (packages/jobs, jobs.db).
-# `aico sessions`: the session history, from the running Tether (`tether history`).
+# `aico recent`: the session history, from the running Tether (`tether history`; `aico sessions list|show|events` still works).
 # `aico lease`, `aico sessions send|ack|confirm|inbox`: file leases and the agent handshakes (aico-hook).
 # `aico pulse`: live sessions, claims, leases, open handshakes and Status problems; --brief is the startup brief.
 # `aico projects`: the projects registry (tasks.db; packages/tasks).
@@ -11,7 +11,7 @@
 # `aico nightly`: the nightly deep lane (full gate on HEAD plus the live checks; packages/checks).
 # `aico deploy | logs | snapshots | vm`: deploys, unit logs, Btrfs points and Proxmox guests (packages/ops).
 # `aico web search|research|fetch|batch|refocus`: public web search and fetch with a call counter (packages/webtools).
-# `aico ask MODEL "question"`: one question to one model, no tools (packages/agent).
+# `aico prompt-model MODEL "question"`: one question to one model, no tools (packages/agent).
 # Only those commands: anything else (or nothing) prints the usage and exits 2, so this
 # never starts the web server.
 set -euo pipefail
@@ -32,7 +32,7 @@ aico_checks() {
     PATH="$(dirname "$node"):$PATH" npm --prefix "$checks_dir" run --silent build >&2
   fi
   case "$*" in
-    'check --help' | 'check -h' | 'commit --help' | 'commit -h')
+    'check --help' | 'check -h' | 'commit --help' | 'commit -h' | 'nightly --help' | 'nightly -h')
       exec "$node" --disable-warning=ExperimentalWarning "$checks_bundle" "$@" ;;
   esac
   # Publication selection and Status are light. The retained outgoing verifier
@@ -120,7 +120,7 @@ case "${1:-}" in
     fi
     exec "$node" --disable-warning=ExperimentalWarning "$tasks_bundle" "$@"
     ;;
-  agent | ask)
+  agent | prompt-model)
     [ "$1" = agent ] && shift
     agent_dir="$AICO_REPO_ROOT/packages/agent"
     agent_bundle="$agent_dir/dist/aico-agent.mjs"
@@ -143,10 +143,11 @@ case "${1:-}" in
       *) exec tether history "$@" ;;
     esac
     ;;
-  help | -h | --help) echo 'Logins: aico logins --help — private files, scoped command use and assigned lab logins.'; exec_aico_web memory --help ;;
+  recent) shift; exec tether history "$@" ;;
+  help | -h | --help) exec aico --help ;;
   *)
     [ $# -gt 0 ] && echo "aico: unknown command '$1'" >&2
-    echo "Usage: aico <memory|prompt|models|context|usage|logins|jobs|projects|pulse|lease|agent|sessions|check|commit|deploy|logs|snapshots|vm|backups|web|ask> ...  (aico help lists every command)" >&2
+    echo "Usage: aico <command> ...  (aico --help lists every command)" >&2
     exit 2
     ;;
 esac

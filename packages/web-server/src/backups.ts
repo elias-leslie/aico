@@ -37,7 +37,7 @@ const targetOf = (value: string | null) => {
   return value
 }
 export function registerBackupRoutes(router: Router, run: BackupCommand = backupCommand): void {
-  router.on('GET', '/api/backups', () => run(['list']))
+  router.on('GET', '/api/backups', () => run(['list', '--json']))
   router.on('POST', '/api/backups/run', async (ctx) => {
     const body = objectBody(await ctx.body()),
       target = requiredString(body, 'target')

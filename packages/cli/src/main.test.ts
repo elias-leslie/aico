@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { openTasksDb } from '@aico/tasks'
 import { afterEach, describe, expect, it } from 'vitest'
+import config from '../data/cli.json' with { type: 'json' }
 import { catalog, extensionEnvironment, parseBinding, passiveHelp } from './extensions'
 import { main } from './main'
 
@@ -775,4 +776,79 @@ it('leaves the jobs, neri and portfolio tools out of the startup block of other 
   expect(
     await named.go(['tools', 'manifest', '--surface', 'st.jobs.ready', '--format', 'json']),
   ).toBe(0)
+})
+
+describe('aico as the owner CLI', () => {
+  const aico = () => harness({ AICO_CLI_NAME: 'aico' })
+  const commands = config.aicoHelp.flatMap((g) => g.commands.map(([c]) => c as string))
+
+  it('has its own grouped help, one line per command, never st usage', async () => {
+    const h = aico()
+    expect(await h.go(['--help'])).toBe(0)
+    const text = h.output.join('\n')
+    expect(text).toMatch(/^Usage: aico <command>/)
+    expect(text).not.toContain('Usage: st')
+    for (const group of config.aicoHelp) expect(text).toContain(`\n${group.group}\n`)
+    for (const command of ['status', 'usage', 'agent', 'backups', 'grants', 'declare', 'tether'])
+      expect(text).toMatch(new RegExp(`\n {2}${command} +\\S`))
+    expect(h.calls).toEqual([])
+  })
+
+  it.each(commands)("aico %s --help exits 0 with that command's help", async (command) => {
+    for (const flag of ['--help', '-h']) {
+      const h = aico()
+      expect(await h.go([command, flag])).toBe(0)
+      expect(h.errors).toEqual([])
+      if (h.calls.length === 0) expect(h.output.join('\n')).toMatch(/Usage/)
+      else {
+        // Delegated: the owning tool gets the flag untouched, and nothing else runs first.
+        expect(h.calls).toHaveLength(1)
+        expect(h.calls[0]?.argv.at(-1)).toBe(flag)
+      }
+    }
+  })
+
+  it('aico help COMMAND is COMMAND --help', async () => {
+    const h = aico()
+    expect(await h.go(['help', 'sessions'])).toBe(0)
+    expect(h.output.join('\n')).toContain('aico sessions send TARGET')
+  })
+
+  it('names itself in errors and unknown commands', async () => {
+    const h = aico()
+    expect(await h.go(['nonsense'])).toBe(2)
+    expect(h.errors).toEqual(['aico: Unknown command nonsense; use aico --help'])
+    const st = harness()
+    expect(await st.go(['nonsense'])).toBe(2)
+    expect(st.errors).toEqual(['st: Unknown command nonsense; use st --help'])
+  })
+
+  it('takes backup and backups alike', async () => {
+    const h = aico()
+    await h.go(['backup', 'list'])
+    await h.go(['backups', 'list'])
+    expect(h.calls.map((c) => c.argv.slice(1))).toEqual([
+      ['backups', 'list'],
+      ['backups', 'list'],
+    ])
+  })
+
+  it('recent reads past sessions; sessions list|show still does for old scripts', async () => {
+    const h = aico()
+    await h.go(['recent', 'list', '--limit', '5'])
+    await h.go(['sessions', 'show', 'abc', '--json'])
+    expect(h.calls.map((c) => c.argv)).toEqual([
+      ['tether', 'history', 'list', '--limit', '5'],
+      ['tether', 'history', 'show', 'abc', '--json'],
+    ])
+  })
+
+  it('asks a model with prompt-model; ask points there and at tether ask', async () => {
+    const h = aico()
+    await h.go(['prompt-model', 'haiku', 'hi'])
+    expect(h.calls[0]?.argv.slice(1)).toEqual(['prompt-model', 'haiku', 'hi'])
+    expect(await h.go(['ask', 'haiku', 'hi'])).toBe(2)
+    expect(h.errors.join()).toMatch(/aico prompt-model MODEL.*tether ask create/)
+    expect(h.calls).toHaveLength(1)
+  })
 })

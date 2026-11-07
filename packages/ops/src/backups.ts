@@ -7,6 +7,7 @@ import { observeExternal } from './backup-external'
 import { nativeBackup } from './backup-native'
 import {
   type BackupConfig,
+  type BackupEntry,
   type BackupPoint,
   type BackupState,
   type BackupTarget,
@@ -332,7 +333,7 @@ export async function runBackup(
 /** Exit code for "another run of this backup holds the lock": the scheduler records it as busy, not failed. */
 const BUSY_EXIT = 75
 
-const USAGE = `Usage: aico backups list | request native|drive|append
+const USAGE = `Usage: aico backups list [--json] | request native|drive|append
   recover bootstrap --machine workstation|gem --to /srv/scratch/NEW_FOLDER [--plan]
   recover check|snapshots|restore|repair --repository REPO --password-file FILE [--to NEW_FOLDER] [--snapshot ID]
   drill [--plan] [--scheduled]                         monthly scratch restore and live Aico counts
@@ -466,14 +467,13 @@ export async function backups(argv: string[], env = process.env): Promise<number
   }
   const state = readState(cfg)
   if (verb === 'list') {
-    console.log(
-      JSON.stringify({
-        machine,
-        entries: await scheduledEntries(state, cfg, machine, rt.run),
-        runs: state.runs,
-        cutover: state.cutover,
-      }),
-    )
+    const list = {
+      machine,
+      entries: await scheduledEntries(state, cfg, machine, rt.run),
+      runs: state.runs,
+      cutover: state.cutover,
+    }
+    console.log(args.includes('--json') ? JSON.stringify(list) : listText(list, Date.now()))
     return 0
   }
   if (verb === 'run') {
@@ -597,6 +597,72 @@ export async function backups(argv: string[], env = process.env): Promise<number
     return 0
   }
   throw new Error(USAGE)
+}
+
+const TARGET_NAME: Record<string, string> = {
+  native: 'T7',
+  drive: 'Drive',
+  append: 'CT 160',
+  external: 'Owner backups',
+}
+
+function since(iso: string | null | undefined, now: number): string {
+  if (!iso) return 'never'
+  const minutes = Math.round((now - Date.parse(iso)) / 60000)
+  if (minutes < 2) return 'just now'
+  if (minutes < 90) return `${minutes} min ago`
+  if (minutes < 48 * 60) return `${Math.round(minutes / 60)} h ago`
+  return `${Math.round(minutes / 1440)} days ago`
+}
+
+/** `aico backups list` for a person: problems first, each target in one line, retired sources folded. */
+export function listText(
+  list: { machine: string; entries: BackupEntry[]; runs: BackupState['runs'] },
+  now: number,
+): string {
+  const lines: string[] = []
+  const gone = list.entries.filter((e) => e.gone)
+  const live = list.entries.filter((e) => !e.gone)
+  const problems = live.filter((e) => e.state !== 'ok')
+  lines.push(
+    `Backups on ${list.machine}: ${live.length - problems.length} ok, ${problems.length} need a look${gone.length ? `, ${new Set(gone.map((e) => e.source)).size} retired sources` : ''}.`,
+  )
+  if (problems.length) {
+    lines.push('', 'Need a look:')
+    for (const e of problems)
+      lines.push(
+        `  ${e.state.padEnd(6)} ${(TARGET_NAME[e.target] ?? e.target).padEnd(13)} ${e.name}: ${e.meaning}`,
+      )
+  }
+  lines.push('', 'By target:')
+  for (const target of ['native', 'drive', 'append', 'external']) {
+    const rows = live.filter((e) => e.target === target)
+    if (!rows.length) continue
+    const ok = rows.filter((e) => e.state === 'ok').length
+    const newest = rows
+      .map((e) => e.dataAt)
+      .filter((at): at is string => !!at)
+      .sort()
+      .at(-1)
+    const run = list.runs[target as BackupTarget]
+    const last = run
+      ? `; last run ${since(run.finished ?? run.started, now)}${run.finished ? (run.ok ? ', ok' : ', failed') : ', running'}`
+      : ''
+    const next = rows
+      .map((e) => e.nextRun)
+      .filter((at): at is string => !!at)
+      .sort()[0]
+    lines.push(
+      `  ${(TARGET_NAME[target] ?? target).padEnd(13)} ${ok}/${rows.length} ok; newest data ${since(newest, now)}${last}${next ? `; next ${new Date(next).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}`,
+    )
+  }
+  if (gone.length)
+    lines.push(
+      '',
+      `Retired (path gone; older copies still hold them): ${[...new Set(gone.map((e) => e.name))].join(', ')}.`,
+    )
+  lines.push('', 'Every entry with paths and snapshots: aico backups list --json')
+  return lines.join('\n')
 }
 
 export async function scheduledEntries(

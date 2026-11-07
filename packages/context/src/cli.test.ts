@@ -114,3 +114,23 @@ it('updates a prompt and a memory as new revisions, and measures prompts', async
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+it.each(['memory', 'prompt', 'models', 'context'])(
+  'aico %s --help shows that command only and touches no store',
+  async (command) => {
+    const lines: string[] = []
+    const io: ContextCliIo = {
+      dbPath: '/nonexistent/context.db',
+      now: () => new Date(),
+      out: (s) => lines.push(s),
+      err: (s) => lines.push(s),
+    }
+    for (const flag of ['--help', '-h']) {
+      expect(await runContextCli(command, [flag], io)).toBe(0)
+      const text = lines.pop() ?? ''
+      expect(text).toMatch(new RegExp(`^Usage: aico ${command} `))
+      for (const other of ['memory', 'prompt', 'models', 'context'].filter((c) => c !== command))
+        expect(text).not.toContain(`aico ${other} `)
+    }
+  },
+)

@@ -32,7 +32,7 @@ and the tools; nothing runs if they can't be read. A refused or failed turn goes
 model in the chain. RUN is a run id or its start (printed after every run).
   --role ROLE       a role from aico models route (implementation, review, hunting, ...);
                     default $ST_WORK_ROLE, or the stored run's role
-  --model MODEL     a model the role allows (aico models list)
+  --model MODEL     a model the role allows (aico models route --role ROLE)
   --effort LEVEL    thinking level for every model (default: the role's effort)
   --run-id UUID     the id of a new run (Tether picks one)
   --json            print the result as JSON instead of the final answer
@@ -87,7 +87,7 @@ export async function main(
   const { values, positionals } = parsed
   const verb = positionals[0]
   if (values.help || (verb !== 'run' && verb !== 'show')) {
-    process.stderr.write(`${USAGE}\n`)
+    ;(values.help ? process.stdout : process.stderr).write(`${USAGE}\n`)
     return values.help ? 0 : 2
   }
   const dir = dataDir(env)

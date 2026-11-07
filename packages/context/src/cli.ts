@@ -79,7 +79,8 @@ const USAGE = `Usage: aico <memory|prompt|models|context> ...
   aico memory save CONTENT [-S SUMMARY] [-t TIER] [-s SCOPE] [--scope-id ID] [--tags a,b] [--content-file F]
   aico memory update ID (CONTENT | --content-file F) [-S SUMMARY] [-t TIER] [--reason R]
   aico prompt list [--global|--no-global]
-  aico prompt get SLUG
+  aico prompt get SLUG [--json]
+  aico prompt revisions SLUG [--limit N] [--json]
   aico prompt update SLUG --content-file F [--reason R]
   aico prompt measure [SLUG...]   (none: the global prompts)
   aico models route --role R [--tool T] [--model M] [--project P] [--json]
@@ -87,6 +88,17 @@ const USAGE = `Usage: aico <memory|prompt|models|context> ...
                        [--event E] [--format text|json|claude|codex|pi] [--force]
   aico context delivery [TOOL on|off]
 `
+
+/** The usage lines of one command (`aico memory --help` shows memory's, not prompt's). */
+function commandUsage(command: string): string {
+  const lines: string[] = []
+  let mine = false
+  for (const line of USAGE.split('\n').slice(2)) {
+    if (/^ {2}aico \S/.test(line)) mine = line.startsWith(`  aico ${command} `)
+    if (mine && line.trim()) lines.push(line)
+  }
+  return lines.length ? `Usage: aico ${command} <command>\n\n${lines.join('\n')}\n` : USAGE
+}
 
 class UsageError extends Error {}
 
@@ -540,7 +552,7 @@ export async function runContextCli(
   io: ContextCliIo,
 ): Promise<number> {
   if (argv.length === 0 || argv[0] === '--help' || argv[0] === '-h' || argv.includes('--help')) {
-    io.out(USAGE)
+    io.out(commandUsage(command))
     return argv.length === 0 ? 2 : 0
   }
   let db: Database | null = null
@@ -564,7 +576,7 @@ export async function runContextCli(
     throw new UsageError(`unknown command ${command}`)
   } catch (error) {
     if (!(error instanceof UsageError)) throw error
-    io.err(`${error.message}\n\n${USAGE}`)
+    io.err(`${error.message}\n\n${commandUsage(command)}`)
     return 2
   } finally {
     ;(db as Database | null)?.close()

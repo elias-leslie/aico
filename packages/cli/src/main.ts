@@ -67,7 +67,8 @@ const NATIVE = new Set([
   'vm',
   'backups',
   'web',
-  'ask',
+  'prompt-model',
+  'nightly',
   'grants',
   'elevate',
 ])
@@ -78,6 +79,7 @@ const CORE = new Set([
   'notify',
   'aico',
   'sessions',
+  'recent',
   'tools',
   'db',
   'mockup',
@@ -108,6 +110,25 @@ export function apiBase(root: string, env: NodeJS.ProcessEnv): string {
   const identity = JSON.parse(readFileSync(join(root, 'project.identity.json'), 'utf8'))
   return `http://127.0.0.1:${env.AICO_WEB_PORT || identity.runtime.backend_port}/api`
 }
+/** `aico --help`: every owner command by group, one line each, and the standalone tools. */
+export function aicoHelp(data: string, state: string): string {
+  const width = Math.max(...config.aicoHelp.flatMap((g) => g.commands.map(([c]) => c.length))) + 2
+  const lines = ['Usage: aico <command> ...   aico <command> --help shows one command', '']
+  for (const group of config.aicoHelp) {
+    lines.push(group.group)
+    for (const [command, about] of group.commands) lines.push(`  ${command.padEnd(width)}${about}`)
+    lines.push('')
+  }
+  let tools: string[] = []
+  try {
+    tools = catalog(data, state, CORE)
+      .map((e) => e.binding.namespace)
+      .filter((n) => n !== 'jobs')
+  } catch {}
+  if (tools.length) lines.push(`Standalone tools (aico NAME --help): ${tools.sort().join(', ')}.`)
+  return lines.join('\n').trimEnd()
+}
+
 async function readStdin(): Promise<string> {
   const chunks: Buffer[] = []
   for await (const chunk of process.stdin) chunks.push(chunk as Buffer)
@@ -141,10 +162,13 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
   const state =
     env.SUMMITFLOW_SERVICE_STATE_ROOT || join(env.HOME || homedir(), '.summitflow/services')
   const data = join(root, 'packages/cli/data')
+  const name = env.AICO_CLI_NAME === 'aico' ? 'aico' : 'st'
   const help = () =>
-    out(
-      'Usage: st <projects|sessions|pulse|lease|check|commit|service|logs|backup|vm|memory|prompt|models|web|logins|declare|notify|tools|db|mockup|monitor> ...\nStandalone tools: browser, ui, neri, jobs, portfolio, bugout, ominull, uilint, wiki.\nUse st tools manifest --discover WORD for command details.',
-    )
+    name === 'aico'
+      ? out(aicoHelp(data, state))
+      : out(
+          'Usage: st <projects|sessions|recent|pulse|lease|check|commit|service|logs|backup|vm|memory|prompt|models|web|logins|declare|notify|tools|db|mockup|monitor> ...\nStandalone tools: browser, ui, neri, jobs, portfolio, bugout, ominull, uilint, wiki.\nUse st tools manifest --discover WORD for command details; aico --help for the grouped list.',
+        )
   try {
     const args = [...argv]
     let projectId: string | null = null
@@ -192,6 +216,7 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
       }
     }
     const [verb, ...rest] = args
+    if (verb === 'help' && rest[0]) return main([rest[0], '--help'], options)
     if (!verb || ['help', '--help', '-h'].includes(verb)) {
       help()
       return verb ? 0 : 2
@@ -200,8 +225,16 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
       verb in config.removed &&
       !(env.AICO_CLI_NAME === 'aico' && ['context', 'jobs', 'agent'].includes(verb))
     ) {
-      err(`st ${verb}: ${config.removed[verb as keyof typeof config.removed]}.`)
+      err(`${name} ${verb}: ${config.removed[verb as keyof typeof config.removed]}.`)
       return 2
+    }
+    // Commands whose help the dispatcher owns: their own code has none, or would act first.
+    const own = config.commandHelp[verb as keyof typeof config.commandHelp]
+    if (own && ['--help', '-h', 'help'].includes(rest[0] ?? '')) {
+      out(
+        own.replaceAll('{cli}', name).replaceAll('{stores}', Object.keys(config.stores).join(', ')),
+      )
+      return 0
     }
     if (verb === 'tools') {
       if (rest[0] === 'run')
@@ -243,9 +276,7 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
         return 0
       }
       if (rest[0] !== 'manifest') {
-        out(
-          'Usage: st tools manifest [--surface ID|--discover WORD] [--density core|full] [--format json|inject]\n       st tools extensions [--check]\n       st tools run --label TEXT -- COMMAND ...',
-        )
+        out(config.commandHelp.tools.replaceAll('{cli}', name))
         return rest.includes('--help') ? 0 : 2
       }
       const { values } = parseArgs({
@@ -322,7 +353,9 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
       })
       if (values.help || !positionals.length) {
         out(
-          `Usage: st db tables|schema TABLE|count TABLE|sample TABLE [N]|query SQL [--store NAME]\nRead-only Aico stores: ${Object.keys(config.stores).join(', ')}. -t is the query text alias.`,
+          config.commandHelp.db
+            .replaceAll('{cli}', name)
+            .replaceAll('{stores}', Object.keys(config.stores).join(', ')),
         )
         return 0
       }
@@ -377,7 +410,7 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
         },
       })
       if (rest[0] !== 'add' || values.help) {
-        out('Usage: st mockup add FILE --project ID --title TITLE [--note TEXT] [--session ID]')
+        out(config.commandHelp.mockup.replaceAll('{cli}', name))
         return values.help ? 0 : 2
       }
       if (!positionals[0] || !values.project || !values.title)
@@ -424,9 +457,7 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
       })
     if (verb === 'monitor') {
       if (!rest[0] || rest.includes('--help')) {
-        out(
-          'Usage: st monitor status|system-info|connections|processes|mounts\nLocal /proc readings; service logs: st logs UNIT.',
-        )
+        out(config.commandHelp.monitor.replaceAll('{cli}', name))
         return 0
       }
       if (rest[0] === 'status' || rest[0] === 'system-info')
@@ -459,8 +490,10 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
         return execute(['aico-hook', 'sessions', ...rest], env)
       if (rest[0] === 'wait')
         return execute(['python3', join(root, config.rootHelper), 'wait', ...rest.slice(1)], env)
+      // list|show|events: the old name of `recent`, kept for scripts that still call it.
       return execute(['tether', 'history', ...rest], env)
     }
+    if (verb === 'recent') return execute(['tether', 'history', ...rest], env)
     if (verb === 'tether')
       return execute([join(root, 'packages/tether/scripts/st-tether'), ...rest], env)
     if (verb === 'status')
@@ -476,7 +509,9 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
     if (verb === 'vcs') {
       if (rest[0] === 'publish') return delegate(['publish', ...rest.slice(1)])
       if (rest[0] === 'deliver') return main(['github-delivery', ...rest.slice(1)], options)
-      throw new Error('st vcs: use st publish for publication or git for local inspection')
+      throw new Error(
+        `${name} vcs: use ${name} publish for publication or git for local inspection`,
+      )
     }
     if (verb === 'git') return execute(['git', ...rest], env)
     if (verb === 'service') {
@@ -562,9 +597,9 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
         childEnv,
       )
     }
-    throw new Error(`Unknown command ${verb}; use st --help`)
+    throw new Error(`Unknown command ${verb}; use ${name} --help`)
   } catch (error) {
-    err(`st: ${(error as Error).message}`)
+    err(`${env.AICO_CLI_NAME === 'aico' ? 'aico' : 'st'}: ${(error as Error).message}`)
     return 2
   }
 }

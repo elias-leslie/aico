@@ -21,9 +21,9 @@ Commands:
   serve                         run the daemon (used by tether@<instance>.service)
   doctor                        check host prerequisites and the running daemon
   version                       print the CLI and daemon versions
-  sessions [list | get <id>]    session catalog
-  sessions create [--tool T] [--project P] [--name N] [--show]   (alias: new)
-  sessions show <id>            open or focus the session's Aico window
+  sessions [list | get <id>]    live sessions; get: one session (--json: the record)
+  sessions create [--tool T] [--project P] [--name N]   start a session (alias: new);
+                                one line about it; --json prints the whole record
   reboot prepare [--timeout SEC] [--no-notify]   ask agents to checkpoint; exit 0 ready, 3 not
   reboot status                 restore results since the last boot
   recovery status               crash recoveries: waiting, recovered or held
@@ -49,7 +49,7 @@ Commands:
                                 put a question to the owner in Aico and read
                                 the answer (tether ask --help)
   history list|show|events      recent sessions of Claude Code, Codex and Pi and what
-                                they said and did (aico sessions ...; tether history --help)
+                                they said and did (aico recent ...; tether history --help)
   capture list|get|file         read the owner's photos and files saved in Aico
                                 (tether capture --help)
   note list|get|add|item|groceries
@@ -71,7 +71,42 @@ Commands:
   fleet approve FILE ASK PINS    root: pin the exact identity approved in Needs you
   fleet exec SOCKET -- COMMAND  carry a command over an approved fleet connection
 
-The instance defaults to $TETHER_INSTANCE or "default".`
+The instance defaults to $TETHER_INSTANCE or "default". tether COMMAND --help shows one command.`
+
+/** The usage lines of one command, or of one command and subcommand ("sessions create"). */
+function commandUsage(command: string, sub?: string): string {
+  const pick = (prefix: string) => {
+    const lines: string[] = []
+    let mine = false
+    for (const line of USAGE.split('\n')) {
+      if (/^ {2}\S/.test(line)) mine = line.startsWith(prefix)
+      else if (!/^ {3,}/.test(line)) mine = false
+      if (mine) lines.push(line)
+    }
+    return lines
+  }
+  const one = sub ? pick(`  ${command} ${sub}`) : []
+  const found = one.length ? one : pick(`  ${command}`)
+  return found.length
+    ? `Usage: tether [--instance NAME] [--json] <command>\n\n${found.join('\n')}`
+    : USAGE
+}
+
+/** Commands with a usage text of their own. */
+const OWN_USAGE: Record<string, string> = {
+  ask: ASK_USAGE,
+  history: HISTORY_USAGE,
+  capture: CAPTURE_USAGE,
+  note: NOTE_USAGE,
+}
+
+/** The one-line account of a session for a person; --json gives the record. */
+export function sessionLine(session: Record<string, unknown>): string {
+  const where = session.projectId ? `in ${session.projectId}` : 'in no project'
+  const host = session.host ? ` on ${session.host}` : ''
+  const state = session.state && session.state !== session.status ? ` (${session.state})` : ''
+  return `${session.id}  ${session.label ?? session.name ?? ''}  ${session.tool} ${where}${host}, ${session.status}${state}`
+}
 
 export interface Io {
   out(text: string): void
@@ -322,25 +357,6 @@ export function attachPlan(
   }
 }
 
-/** Read the session's generation and ask the GUI to show it. A just-created
- * session can take a few seconds to reach running, so a 409 is retried. */
-async function showSession(
-  paths: TetherPaths,
-  id: string,
-): Promise<{ status: number; body: unknown }> {
-  const path = `/v1/sessions/${encodeURIComponent(id)}`
-  let last: { status: number; body: unknown } = { status: 409, body: null }
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    const current = await callSocket(paths.socket, 'GET', path, undefined, 15_000)
-    const generation = (current.body as Record<string, unknown> | null)?.generation
-    if (current.status !== 200 || typeof generation !== 'string') return current
-    last = await callSocket(paths.socket, 'POST', `${path}/show`, { generation }, 15_000)
-    if (last.status !== 409) return last
-    await new Promise((resolve) => setTimeout(resolve, 500))
-  }
-  return last
-}
-
 function slugPath(slug: string | undefined): string {
   if (!slug) throw new Error('a tool slug is required')
   return `/v1/tools/${encodeURIComponent(slug)}`
@@ -367,6 +383,14 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
     return 2
   }
   const { json } = parsed
+  const words = parsed.args.slice(1)
+  const end = words.indexOf('--')
+  if ((end < 0 ? words : words.slice(0, end)).some((w) => w === '--help' || w === '-h')) {
+    if (command === 'logins') return runLogins(['--help'])
+    if (command === 'fleet') return runFleet(['--help'], paths, io)
+    io.out(OWN_USAGE[command] ?? commandUsage(command, sub))
+    return 0
+  }
   try {
     switch (command) {
       case 'serve': {
@@ -391,7 +415,7 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
         return api(io, paths, json, 'GET', '/v1/version')
       case 'sessions':
         if (!sub || sub === 'list') return api(io, paths, json, 'GET', '/v1/sessions')
-        if (sub === 'get' && rest[0])
+        if (sub === 'get' && rest[0] && json)
           return api(io, paths, json, 'GET', `/v1/sessions/${encodeURIComponent(rest[0])}`)
         if (sub === 'diagnostics' && rest[0])
           return api(io, paths, json, 'GET', `/v1/sessions/${encodeURIComponent(rest[0])}/${sub}`)
@@ -411,11 +435,7 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
           return child.status ?? 1
         }
         if (sub === 'new' || sub === 'create') {
-          const show = rest.includes('--show')
-          const options = flags(
-            rest.filter((arg) => arg !== '--show'),
-            ['--tool', '--project', '--name'],
-          )
+          const options = flags(rest, ['--tool', '--project', '--name'])
           const body: Record<string, unknown> = {
             origin: 'cli',
             size: { cols: process.stdout.columns || 120, rows: process.stdout.rows || 40 },
@@ -423,18 +443,37 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
           if (options['--tool']) body.tool = options['--tool']
           if (options['--project']) body.projectId = options['--project']
           if (options['--name']) body.name = options['--name']
-          if (!show) return api(io, paths, json, 'POST', '/v1/sessions', body)
           const created = await callSocket(paths.socket, 'POST', '/v1/sessions', body, 60_000)
-          const id = (created.body as Record<string, unknown> | null)?.id
-          if (created.status >= 300 || typeof id !== 'string')
+          const session = created.body as Record<string, unknown> | null
+          if (json || created.status >= 300 || typeof session?.id !== 'string')
             return render(io, json, created.status, created.body)
-          const shown = await showSession(paths, id)
-          if (shown.status !== 200) io.err(`tether: created ${id} but could not show it`)
-          return render(io, json, created.status, created.body)
+          io.out(`Created ${sessionLine(session)}`)
+          io.out(
+            `Attach here: tether sessions attach ${session.id}   End it: tether sessions end ${session.id}`,
+          )
+          return 0
         }
-        if (sub === 'show' && rest[0]) {
-          const shown = await showSession(paths, rest[0])
-          return render(io, json, shown.status, shown.body)
+        if (sub === 'get' && rest[0] && !json) {
+          const found = await callSocket(
+            paths.socket,
+            'GET',
+            `/v1/sessions/${encodeURIComponent(rest[0])}`,
+          )
+          const session = found.body as Record<string, unknown> | null
+          if (found.status !== 200 || typeof session?.id !== 'string')
+            return render(io, json, found.status, found.body)
+          io.out(sessionLine(session))
+          io.out(
+            `  root ${session.projectRoot ?? '-'}; started ${new Date(Number(session.createdAt)).toLocaleString()}`,
+          )
+          io.out('  Every field: add --json')
+          return 0
+        }
+        if (sub === 'show') {
+          io.err(
+            'tether sessions show is gone: Aico has no windows. Open the session in Aico, or attach this terminal: tether sessions attach ID',
+          )
+          return 2
         }
         if (sub === 'end' && rest[0]) {
           const path = `/v1/sessions/${encodeURIComponent(rest[0])}`

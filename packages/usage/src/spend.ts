@@ -49,6 +49,8 @@ function creditText(credit: NonNullable<Usage['credits']>): string {
   return text
 }
 
+const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
+
 const LEAD: Partial<Record<Usage['status'], string>> = {
   on_credits: 'Running on credits. ',
   used_up: 'Used up. ',
@@ -73,10 +75,18 @@ export function spendRow(provider: { id: string; name: string }, input: SpendInp
     windowFacts(input.facts.readings, input.now),
     input.facts.credits,
   )
-  const parts = usage.windows.filter((w) => w.state !== 'not_reported').map(windowText)
+  const shown = usage.windows.filter((w) => w.state !== 'not_reported')
+  // Used up: lead with the window that is out and when it comes back, then the others; a bare
+  // "Used up." next to "5h 100% left" reads as a contradiction.
+  const out = usage.status === 'used_up' ? shown.filter((w) => w.state === 'used_up') : []
+  const lead = out.length
+    ? `${capital(out.map(windowText).join('; '))}. `
+    : (LEAD[usage.status] ?? '')
+  const parts = shown.filter((w) => !out.includes(w)).map(windowText)
   if (usage.credits) parts.push(creditText(usage.credits))
   const problem = input.problems[provider.id]
-  let meaning = `${LEAD[usage.status] ?? ''}${parts.length ? `${parts.join('; ')}.` : 'No usage readings yet.'}`
+  let meaning =
+    `${lead}${parts.length ? `${parts.join('; ')}.` : out.length ? '' : 'No usage readings yet.'}`.trim()
   if (problem) meaning += ` ${problem}.`
   const plan = currentPlan(input.plans.plans, provider.id, input.now)
   if (plan && meaning.length + plan.plan.length < 280) meaning += ` Plan: ${plan.plan}.`
@@ -112,7 +122,10 @@ export function brief(provider: { id: string; name: string }, input: SpendInput)
   )
   const problem = input.problems[provider.id]
   if (usage.status === 'on_credits') return `${provider.name} on credits`
-  if (usage.status === 'used_up') return `${provider.name} used up`
+  if (usage.status === 'used_up') {
+    const out = usage.windows.find((w) => w.state === 'used_up')
+    return `${provider.name} ${out ? `${out.label} ` : ''}used up${out?.resets_at ? ` until ${when(out.resets_at)}` : ''}`
+  }
   const open = usage.windows.filter((w) => w.state === 'ok')
   const tightest = open.sort((a, b) => (a.left_percent as number) - (b.left_percent as number))[0]
   if (tightest) return `${provider.name} ${tightest.left_percent}% ${tightest.label} left`

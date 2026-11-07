@@ -1067,4 +1067,4 @@ if __name__ == "__main__":
     from st_sdk import state
 
     state.set_compact_output(True)
-    app(prog_name="st skills")
+    app(prog_name=f"{os.environ.get('AICO_CLI_NAME') or 'st'} skills")

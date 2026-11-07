@@ -1,4 +1,4 @@
-// `aico ask`: the rules (deny rows, provider allowlist, Claude only as claude -p with no API
+// `aico prompt-model`: the rules (deny rows, provider allowlist, Claude only as claude -p with no API
 // key), the schema check, the files refusal, wire silence, and the typed failures, with fake
 // claude and agy commands and pi-ai's faux provider. Nothing here calls a real model.
 
@@ -117,7 +117,7 @@ describe('rules', () => {
     })
   })
 
-  it('refuses providers aico ask does not run', async () => {
+  it('refuses providers aico prompt-model does not run', async () => {
     expect((await ask(request('grok'), { context, bins })).outcome).toMatchObject({
       kind: 'refused',
       reason: 'provider_not_allowed',
@@ -547,6 +547,22 @@ describe('askMain', () => {
       process.stdout.write = out
     }
   }
+
+  it('prints its help on stdout under its own name, exit 0', async () => {
+    const write = process.stdout.write.bind(process.stdout)
+    const out: string[] = []
+    process.stdout.write = (chunk: string | Uint8Array) => {
+      out.push(String(chunk))
+      return true
+    }
+    try {
+      expect(await askMain(['--help'])).toBe(0)
+      expect(await askMain(['-h'])).toBe(0)
+    } finally {
+      process.stdout.write = write
+    }
+    expect(out.join('')).toMatch(/^Usage: aico prompt-model MODEL "question"/)
+  })
 
   it('exits 2 on usage mistakes, 0 on an answer and the typed code on a failure', async () => {
     expect((await quiet([])).code).toBe(2)

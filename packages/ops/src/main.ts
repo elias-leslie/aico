@@ -33,6 +33,19 @@ const USAGE = `Usage:
   aico vm observe ID... --storage NAME | reset ID --name NAME --snapshot SNAPSHOT
       Proxmox guests with Aico Logins' scoped API token (Proxmox enforces its pools)`
 
+/** One verb's part of USAGE (`aico logs --help` shows logs, not deploy). */
+export function verbUsage(verb: string): string {
+  const lines: string[] = []
+  let mine = false
+  for (const line of USAGE.split('\n').slice(1)) {
+    if (/^ {2}aico \S/.test(line)) mine = line.startsWith(`  aico ${verb} `)
+    if (mine) lines.push(line)
+  }
+  return lines.length ? `Usage:\n${lines.join('\n')}` : USAGE
+}
+
+const HELP = new Set(['--help', '-h', 'help'])
+
 /** The repo this launcher belongs to: AICO_REPO_ROOT, else the nearest project.identity.json above cwd. */
 export function repoRoot(env = process.env, cwd = process.cwd()): string {
   if (env.AICO_DEPLOY_ROOT) return env.AICO_DEPLOY_ROOT
@@ -49,6 +62,14 @@ export async function main(argv: string[], env = process.env): Promise<number> {
   const err = (line: string) => console.error(line)
   try {
     if (verb === 'backups') return await backups(rest, env)
+    // Help before anything reads the project, git or a host: `aico deploy --help` works anywhere.
+    if (
+      ['deploy', 'logs', 'snapshots', 'vm'].includes(verb as string) &&
+      (HELP.has(rest[0] ?? '') || rest.includes('--help'))
+    ) {
+      console.log(verbUsage(verb as string))
+      return 0
+    }
     if (verb === 'deploy') {
       const deps = defaultDeps(env)
       if (rest[0] === 'result' || rest[0] === 'wait') {
@@ -69,12 +90,12 @@ export async function main(argv: string[], env = process.env): Promise<number> {
     }
     if (verb === 'logs') {
       const req = parseLogsArgs(rest)
-      if (typeof req === 'string') throw new Refusal(`aico logs: ${req}`, 2)
+      if (typeof req === 'string') throw new Refusal(req, 2)
       const project = loadProject(repoRoot(env))
       const args = journalArgs(req, project, run)
       if (args) return run('journalctl', args, { inherit: true }).code
       if (env.AICO_OPS_CALLER === 'st') return NOT_HANDLED
-      throw new Refusal(`aico logs: no unit ${canonical(req.target)} (user or system)`, 2)
+      throw new Refusal(`no unit ${canonical(req.target)} (user or system)`, 2)
     }
     if (verb === 'snapshots')
       return snapshots(
