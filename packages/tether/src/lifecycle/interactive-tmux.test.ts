@@ -3,7 +3,6 @@ import {
   activateTmuxViewSize,
   claimTmuxViewSize,
   coalesceAsync,
-  coalesceTrailingAsync,
   refreshAttachedTmuxClients,
 } from './interactive-tmux'
 import {
@@ -19,28 +18,6 @@ import {
 const target: TmuxTarget = { socket: '/tmp/tmux-1000/aico', session: 'aico-widget' }
 
 describe('interactive tmux work', () => {
-  it('replays a resize requested while a previous fit is running', async () => {
-    let releaseFirst: () => void = () => {}
-    const work = vi
-      .fn()
-      .mockImplementationOnce(
-        () =>
-          new Promise<void>((resolve) => {
-            releaseFirst = resolve
-          }),
-      )
-      .mockResolvedValue(undefined)
-    const request = coalesceTrailingAsync(work)
-    const first = request()
-    expect(request()).toBe(first)
-    expect(work).toHaveBeenCalledTimes(1)
-    releaseFirst()
-    await first
-    expect(work).toHaveBeenCalledTimes(2)
-    await request()
-    expect(work).toHaveBeenCalledTimes(3)
-  })
-
   it('sizes the active client with another client on the same window', async () => {
     const clientArgs = listClientsTargetArgs(target, '#{client_pid}\t#{window_id}')
     const run = vi.fn(async (args: string[]) => {

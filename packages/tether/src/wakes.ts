@@ -946,18 +946,7 @@ export class WakeScheduler {
       .filter((wake) => ridesAlong(wake) && wake.dueAt <= now)
     if (!rows.length) return null
     const { text, taken } = composeDelivery(rows, now, this.ops.policy())
-    // Before the rows go: a pass that sees none clears why the session was held.
-    const held = this.heldNote(sessionId, taken)
-    for (const wake of taken) this.store.remove(wake.id)
-    try {
-      this.ops.delivered?.(sessionId, taken, 'native')
-    } catch (error) {
-      this.ops.log(`delivery record failed: ${(error as Error).message}`)
-    }
-    this.ops.changed(sessionId)
-    this.ops.log(
-      `delivered ${taken.length} ride-along line(s) to session=${sessionId} (natural turn)${held}`,
-    )
+    this.deliverRide(sessionId, taken, 'natural turn')
     return text
   }
 
@@ -985,6 +974,13 @@ export class WakeScheduler {
       .forSession(sessionId)
       .filter((wake) => ridesAlong(wake) && marks.has(rideMark(wake)))
     if (!taken.length) return 0
+    this.deliverRide(sessionId, taken, 'natural turn, confirmed')
+    return taken.length
+  }
+
+  /** Ride-along lines the session has now seen: they go, and the delivery is recorded and logged. */
+  private deliverRide(sessionId: string, taken: Wake[], how: string): void {
+    // Before the rows go: a pass that sees none clears why the session was held.
     const held = this.heldNote(sessionId, taken)
     for (const wake of taken) this.store.remove(wake.id)
     try {
@@ -994,9 +990,8 @@ export class WakeScheduler {
     }
     this.ops.changed(sessionId)
     this.ops.log(
-      `delivered ${taken.length} ride-along line(s) to session=${sessionId} (natural turn, confirmed)${held}`,
+      `delivered ${taken.length} ride-along line(s) to session=${sessionId} (${how})${held}`,
     )
-    return taken.length
   }
 
   /** Something changed (a wake, an agent state): look again soon. */

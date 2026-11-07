@@ -28,27 +28,6 @@ export function coalesceAsync<T>(load: () => Promise<T>): () => Promise<T> {
   }
 }
 
-/** Merge overlapping resize signals, then repeat once for the latest size. */
-export function coalesceTrailingAsync(work: () => Promise<void>): () => Promise<void> {
-  let pending = false
-  let running: Promise<void> | null = null
-  return () => {
-    pending = true
-    if (running) return running
-    running = (async () => {
-      try {
-        while (pending) {
-          pending = false
-          await work()
-        }
-      } finally {
-        running = null
-      }
-    })()
-    return running
-  }
-}
-
 export type { ResizeRefusal }
 
 /** The shared tmux window follows the foreground client's grid. Never size an
