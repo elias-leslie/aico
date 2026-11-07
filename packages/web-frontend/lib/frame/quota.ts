@@ -28,11 +28,13 @@ function quotaOf(row: StatusRow): QuotaGlance {
   const percents = [...meaning.matchAll(/(\d+)% left/g)].map((match) =>
     Number(match[1]),
   )
+  // The first sentence leads with the state: "Running on credits.",
+  // "Weekly used up until Nov 8, 7:00 PM." (or a bare "Used up."), "Unknown.".
+  const lead = meaning.split(/\.(?:\s|$)/)[0] ?? ''
   let state: QuotaState = 'left'
-  if (/^Used up\./.test(meaning)) state = 'used_up'
-  else if (/^Running on credits\./.test(meaning)) state = 'credits'
-  else if (/^Unknown\./.test(meaning) || row.shown === 'unknown')
-    state = 'unknown'
+  if (/^Running on credits$/.test(lead)) state = 'credits'
+  else if (/\bused up\b/i.test(lead)) state = 'used_up'
+  else if (/^Unknown$/.test(lead) || row.shown === 'unknown') state = 'unknown'
   else if (!percents.length) state = 'unknown'
   return {
     id: row.id,
