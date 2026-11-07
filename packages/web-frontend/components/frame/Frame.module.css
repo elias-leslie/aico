@@ -243,17 +243,6 @@
   background: var(--mist);
   opacity: 0.5;
 }
-.quotaLine {
-  max-width: 600px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-@media (max-width: 1279px) {
-  .quotaLine {
-    display: none;
-  }
-}
 .stale {
   opacity: 0.62;
 }

@@ -307,7 +307,6 @@ export function TopBar() {
               />
             ))}
           </span>
-          <span className={styles.quotaLine}>{quotaLine(glances)}</span>
         </button>
       )}
 

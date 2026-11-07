@@ -184,7 +184,10 @@ describe('TopBar', () => {
     expect(screen.getByTestId('top-bar-health')).toHaveTextContent('2problems')
     fireEvent.click(screen.getByTestId('top-bar-health'))
     expect(state.frame?.open).toHaveBeenCalledWith('/status', 'wide')
-    expect(screen.getByTestId('top-bar-quota')).toHaveTextContent('Claude 82%')
+    expect(screen.getByTestId('top-bar-quota')).toHaveAccessibleName(
+      /^Quota: Claude 82%/,
+    )
+    expect(screen.getByTestId('top-bar-quota')).toHaveTextContent('')
     fireEvent.click(screen.getByTestId('top-bar-quota'))
     expect(state.frame?.open).toHaveBeenCalledWith('/quota', 'wide')
     fireEvent.click(screen.getByTestId('top-bar-notes'))

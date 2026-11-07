@@ -163,31 +163,15 @@ beforeEach(() => {
 const slots = [] as never[]
 
 describe('Panel', () => {
-  it('leads with what happened since the last look, then the sections in order', () => {
+  it('goes straight to Needs you and the sessions: no since card, no Sessions heading over the state groups', () => {
     render(<Panel slots={slots} onSelect={vi.fn()} />)
-    const since = screen.getByTestId('since-line')
-    expect(since).toHaveTextContent(
-      /Since .*3 finished, 1 of them failed, 1 quiet \(stuck\), 2 questions waiting/,
-    )
+    expect(screen.queryByTestId('since-line')).toBeNull()
     expect(
       screen
         .getAllByRole('heading', { level: 2 })
         .map((heading) => heading.textContent),
-    ).toEqual(['Sessions', 'Everything else'])
-    // "1 of them failed" opens the failed sessions.
-    expect(
-      screen.getByRole('link', { name: '1 of them failed' }),
-    ).toHaveAttribute('href', '/history?standing=failed')
-    fireEvent.click(screen.getByRole('link', { name: 'See the day' }))
-    expect(state.open).toHaveBeenCalledWith('/today', 'wide')
-  })
-
-  it('says how far back it counts when this device never looked, not a time it never had', () => {
-    state.lastLook = null
-    render(<Panel slots={slots} onSelect={vi.fn()} />)
-    const since = screen.getByTestId('since-line')
-    expect(since).toHaveTextContent(/^Past 12 hours/)
-    expect(since).not.toHaveTextContent(/Since/)
+    ).toEqual(['Everything else'])
+    expect(screen.getByRole('navigation', { name: 'Sessions' })).toBeVisible()
   })
 
   it('lists every place to open, Quota and Recovery included, at their own addresses, and no Notes entry (the top bar opens Notes)', () => {
@@ -217,27 +201,9 @@ describe('Panel', () => {
     expect(screen.getByRole('link', { name: 'Backups' })).toBeVisible()
   })
 
-  it('has its own copy for loading, failed and quiet states, never a zero for unknown', () => {
-    state.digest = { ...state.digest, digest: null, loading: true }
+  it('shows no Status count while Status is unread, never a zero for unknown', () => {
     state.status = { view: null, loading: true, failed: false, stale: false }
-    state.usage = { ...state.usage, report: null, loading: true }
-    const { rerender } = render(<Panel slots={slots} onSelect={vi.fn()} />)
-    expect(screen.getByText('Checking what happened…')).toBeVisible()
-
-    state.digest = { ...state.digest, loading: false, failed: true }
-    state.status = { view: null, loading: false, failed: true, stale: false }
-    state.usage = { ...state.usage, loading: false, failed: true }
-    rerender(<Panel slots={slots} onSelect={vi.fn()} />)
-    expect(screen.getByText(/Couldn’t read what happened/)).toBeVisible()
-    expect(screen.queryByText('No problems.')).toBeNull()
-
-    state.digest = {
-      ...state.digest,
-      failed: false,
-      digest: digest({ unavailable: ['history'] }),
-    }
-    rerender(<Panel slots={slots} onSelect={vi.fn()} />)
-    expect(screen.getByText(/finished sessions not read/)).toBeVisible()
-    expect(screen.queryByText(/nothing finished/)).toBeNull()
+    render(<Panel slots={slots} onSelect={vi.fn()} />)
+    expect(screen.getByRole('link', { name: 'Status' })).toBeVisible()
   })
 })

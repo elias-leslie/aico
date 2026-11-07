@@ -17,20 +17,11 @@ import {
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import type { ComponentType, ReactNode } from 'react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { apiFetch } from '@/lib/api-fetch'
 import { type BackupEntry, backupGlance } from '@/lib/backups'
-import {
-  digestParts,
-  digestStart,
-  sinceText,
-  spendText,
-  useDigest,
-  useLastLook,
-} from '@/lib/frame/digest'
 import type { QuotaGlance } from '@/lib/frame/quota'
-import { askCounts, useApprovals, useOwnerAsks } from '@/lib/hooks/use-asks'
-import { useClock } from '@/lib/hooks/use-clock'
+import { useApprovals } from '@/lib/hooks/use-asks'
 import { useHosts } from '@/lib/hooks/use-hosts'
 import { useSessionAttention } from '@/lib/hooks/use-session-attention'
 import { useStatus } from '@/lib/hooks/use-status'
@@ -116,76 +107,6 @@ function MoreLink({
     >
       {children}
     </Link>
-  )
-}
-
-/** Recent, narrowed to the sessions that failed (what "1 of them failed" opens). */
-const FAILED_RECENT_HREF = '/history?standing=failed'
-
-/** The line at the top: what happened since this device last looked. */
-function SinceLine({ frame }: { frame: Frame | null }) {
-  const lastLook = useLastLook()
-  const now = useClock(60_000)
-  // The start is fixed for the visit; the clock only words it.
-  const start = useMemo(() => digestStart(lastLook, Date.now()), [lastLook])
-  const { digest, loading, failed, stale, refetch } = useDigest(start)
-  const { asks, isLoading: asksLoading, isError: asksFailed } = useOwnerAsks()
-  // Questions open now, whatever the digest's window: a reload keeps the one still waiting.
-  const kinds = asksLoading || asksFailed ? undefined : askCounts(asks)
-  const head = sinceText(start, now, lastLook === null)
-  if (loading)
-    return (
-      <p className={styles.since} role="status">
-        <span className={styles.sinceHead}>{head}</span>
-        Checking what happened…
-      </p>
-    )
-  if (failed || !digest)
-    return (
-      <p className={styles.since} role="status">
-        <span className={styles.sinceHead}>{head}</span>
-        Couldn’t read what happened.{' '}
-        <button
-          type="button"
-          className={styles.linkBtn}
-          onClick={() => void refetch()}
-        >
-          Try again
-        </button>
-      </p>
-    )
-  const parts = digestParts(digest, kinds?.questions, kinds)
-  const spend = spendText(digest)
-  return (
-    <div
-      className={styles.since}
-      data-testid="since-line"
-      data-stale={stale ? 'true' : undefined}
-    >
-      <p>
-        <span className={styles.sinceHead}>{head}</span>
-        <span>
-          {parts.failedPhrase ? (
-            <>
-              {parts.finishedLead}{' '}
-              <MoreLink frame={frame} href={FAILED_RECENT_HREF}>
-                <span className={styles.bad}>{parts.failedPhrase}</span>
-              </MoreLink>
-            </>
-          ) : (
-            parts.finished
-          )}
-        </span>
-        {parts.rest.length > 0 && `, ${parts.rest.join(', ')}`}
-        {parts.quiet && '; nothing else'}
-        {spend && ` · ${spend}`}
-        {stale && ' · as of the last read'}
-      </p>
-      {parts.unread && <p className={styles.unread}>{parts.unread}</p>}
-      <MoreLink frame={frame} href="/today">
-        See the day
-      </MoreLink>
-    </div>
   )
 }
 
@@ -341,7 +262,7 @@ function Everything({ frame }: { frame: Frame | null }) {
 }
 
 /** The left side's Panel: the triage view. What waits on you, every session
- * by state, then everything else. */
+ * by state (each state group carries its own count), then everything else. */
 export function Panel({
   slots,
   currentId,
@@ -355,10 +276,8 @@ export function Panel({
   const attention = useSessionAttention()
   return (
     <div className={styles.panel} data-testid="session-sidebar">
-      <SinceLine frame={frame} />
       <NeedsYouSection />
       <section className={styles.section} aria-label="Sessions">
-        <SectionHead title="Sessions" count={slots.length} />
         <nav
           aria-label="Sessions"
           data-testid="session-list"
