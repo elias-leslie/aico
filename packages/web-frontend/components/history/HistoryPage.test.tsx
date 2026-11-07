@@ -209,6 +209,10 @@ describe('transcript', () => {
     const final = await screen.findByTestId('history-final')
     expect(final).toHaveTextContent('Final reply')
     expect(final.querySelector('strong')?.textContent).toBe('done')
+    // The same message in the transcript below shows no markup characters.
+    const transcript = screen.getByRole('region', { name: 'Transcript' })
+    expect(transcript.querySelector('strong')?.textContent).toBe('done')
+    expect(transcript).not.toHaveTextContent('**')
   })
 
   const detail = () => ({

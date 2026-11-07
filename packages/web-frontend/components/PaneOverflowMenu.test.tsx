@@ -133,7 +133,7 @@ describe('PaneOverflowMenu', () => {
         'title',
         'Only agent sessions can check in later.',
       )
-      expect(row).toHaveTextContent('Agent sessions only')
+      expect(row).toHaveTextContent('Agents only')
       fireEvent.click(row)
       expect(
         screen.queryByRole('menuitem', { name: 'In 1 hour6:30 PM' }),

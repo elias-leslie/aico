@@ -11,7 +11,7 @@ interface MenuItemButtonProps {
   variant?: 'default' | 'danger'
   title?: string
   /** Shown on the right and makes the row unavailable, still focusable so
-   * its tooltip and this note can be read ("Agent sessions only"). */
+   * its tooltip and this note can be read ("Agents only"). */
   unavailable?: string
 }
 
@@ -40,9 +40,14 @@ export function MenuItemButton({
       style={{ minHeight: isMobile ? 44 : 38 }}
     >
       {icon}
-      <span>{label}</span>
+      <span className={unavailable ? 'whitespace-nowrap' : undefined}>
+        {label}
+      </span>
       {unavailable && (
-        <span className="ml-auto text-xs" style={{ color: 'var(--mist)' }}>
+        <span
+          className="ml-auto whitespace-nowrap text-xs"
+          style={{ color: 'var(--mist)' }}
+        >
           {unavailable}
         </span>
       )}

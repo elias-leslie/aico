@@ -2596,6 +2596,18 @@ a.lantern-ask-attached {
   overflow-wrap: anywhere;
 }
 
+.history-event > .lantern-ask-body {
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+}
+
+.history-event .lantern-ask-body pre {
+  margin: 0 0 6px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  white-space: pre;
+}
+
 .history-event.tool_call code {
   display: block;
   margin-top: 4px;

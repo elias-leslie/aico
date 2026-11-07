@@ -194,9 +194,7 @@ export function PaneOverflowMenu({
                     checkInUnavailable ??
                     'Have the agent report back at a time you pick'
                   }
-                  unavailable={
-                    checkInUnavailable ? 'Agent sessions only' : undefined
-                  }
+                  unavailable={checkInUnavailable ? 'Agents only' : undefined}
                 />
               )}
               {onReset && (

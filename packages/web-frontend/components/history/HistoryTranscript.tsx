@@ -74,6 +74,9 @@ function EventItem({ event }: { event: HistoryEvent }) {
       <div className="head">{head}</div>
       {event.kind === 'tool_call' ? (
         <code>{event.text}</code>
+      ) : event.role === 'assistant' ? (
+        // What the agent said is markdown: shown formatted, as in the final reply.
+        <PlainMarkdown text={event.text} className="lantern-ask-body" />
       ) : (
         <pre>{event.text}</pre>
       )}

@@ -204,8 +204,8 @@ export function NewSessionDialog({
           className={clsx(
             'lantern-sheet fixed z-[10001] flex flex-col overflow-hidden outline-none',
             isMobile
-              ? 'lantern-rise inset-x-0 bottom-0 h-[84dvh] rounded-t-[14px]'
-              : 'lantern-enter top-1/2 left-1/2 max-h-[min(90dvh,720px)] w-[min(92vw,520px)] -translate-x-1/2 -translate-y-1/2 rounded-xl',
+              ? 'lantern-rise inset-x-0 bottom-0 h-[92dvh] rounded-t-[14px]'
+              : 'lantern-enter top-1/2 left-1/2 max-h-[min(92dvh,820px)] w-[min(92vw,520px)] -translate-x-1/2 -translate-y-1/2 rounded-xl',
           )}
           style={{ color: 'var(--bone)' }}
         >
@@ -409,11 +409,11 @@ export function NewSessionDialog({
                 {startError}
               </p>
             )}
-            <label className="mb-2.5 flex flex-col gap-1.5 text-xs">
-              <span style={{ color: 'var(--mist)' }}>
+            <label className="mb-2 flex items-center gap-2.5 text-xs">
+              <span className="flex-none" style={{ color: 'var(--mist)' }}>
                 Name <span className="font-normal">(optional)</span>
               </span>
-              <span className="lantern-field">
+              <span className="lantern-field min-w-0 flex-1">
                 <input
                   type="text"
                   value={name}
@@ -425,9 +425,7 @@ export function NewSessionDialog({
                       void start()
                     }
                   }}
-                  placeholder={
-                    project ? `Leave blank to use “${project.name}”` : ''
-                  }
+                  placeholder={project ? `Defaults to “${project.name}”` : ''}
                   aria-label="Name (optional)"
                   autoComplete="off"
                   className="text-sm"
