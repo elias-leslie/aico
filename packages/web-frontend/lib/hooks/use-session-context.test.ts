@@ -17,6 +17,28 @@ it("reads the session's newest conversation, and unknown stays unknown", () => {
   expect(contextTokensOf([])).toBeNull()
 })
 
+it('reads the conversation that wrote last, not a side run started later', () => {
+  expect(
+    contextTokensOf(
+      [
+        {
+          tool: 'claude-code',
+          startedAt: 1,
+          endedAt: 100,
+          contextTokens: 94_991,
+        },
+        {
+          tool: 'claude-code',
+          startedAt: 50,
+          endedAt: 51,
+          contextTokens: 28_542,
+        },
+      ],
+      'claude',
+    ),
+  ).toBe(94_991)
+})
+
 it("prefers the session's own tool over a side run it started", () => {
   const items = [
     { tool: 'claude-code', startedAt: 1, contextTokens: 233_069 },

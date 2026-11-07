@@ -9,6 +9,7 @@ import { usePaneListError } from '@/lib/hooks/use-terminal-panes'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
 import { NeedsYouLauncher } from './asks/NeedsYou'
 import { CaptureLauncher } from './capture/CaptureLauncher'
+import { useFrame } from './frame/FrameContext'
 import { HostsLauncher } from './HostsButton'
 import { HistoryLauncher } from './history/HistoryLauncher'
 import { NotesLauncher } from './notes/NotesLauncher'
@@ -44,6 +45,10 @@ export function EmptySessionState({
   const onHome = usePathname() === '/'
   const linked = useSearchParams()?.get('session') ?? null
   const missing = onHome ? linked : null
+  // The side panel already lists the sessions: don't repeat them here.
+  const frame = useFrame()
+  const listedBeside =
+    !!frame?.docked && (frame.tier === 'panel' || frame.tier === 'wide')
   return (
     <div
       className="h-full w-full overflow-y-auto p-4"
@@ -87,21 +92,23 @@ export function EmptySessionState({
             >
               {missing ? 'Session not found.' : 'No session open.'}
             </p>
-            <button
-              type="button"
-              onClick={onNewSession}
-              className="lantern-btn primary"
-            >
-              <Plus className="h-4 w-4" strokeWidth={1.7} />
-              New session
-            </button>
-            <button type="button" className="lantern-btn" onClick={newChat}>
-              New chat
-            </button>
+            <div className="flex flex-wrap justify-center gap-2">
+              <button
+                type="button"
+                onClick={onNewSession}
+                className="lantern-btn primary"
+              >
+                <Plus className="h-4 w-4" strokeWidth={1.7} />
+                New session
+              </button>
+              <button type="button" className="lantern-btn" onClick={newChat}>
+                New chat
+              </button>
+            </div>
           </>
         )}
       </div>
-      {slots.length > 0 && onOpen && (
+      {slots.length > 0 && onOpen && !listedBeside && (
         <section
           aria-label="Running sessions"
           className="mx-auto mt-6 max-w-md transition-opacity"

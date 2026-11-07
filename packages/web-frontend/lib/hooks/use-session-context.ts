@@ -9,12 +9,15 @@ const CONTEXT_REFRESH_MS = 20_000
 interface HistorySummary {
   tool: string
   startedAt: number | null
+  endedAt?: number | null
   contextTokens?: number | null
 }
 
 /** The session's current conversation's context fill, or null while unknown:
- * the newest conversation Tether bound to the session, unless it has no
- * reading yet (a missing number is unknown, never zero). */
+ * the conversation Tether bound to the session that wrote last (a short side
+ * run of the same tool, like a hook's `claude -p`, starts later but stops
+ * at once), unless it has no reading yet (a missing number is unknown, never
+ * zero). */
 export function contextTokensOf(
   items: HistorySummary[],
   mode?: string,
@@ -22,9 +25,12 @@ export function contextTokensOf(
   // A session can also own side runs of other tools (an agent's `codex exec`); prefer its own tool's.
   const own = mode ? items.filter((i) => sameTool(i.tool, mode)) : []
   const newest = [...(own.length ? own : items)].sort(
-    (a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0),
+    (a, b) => lastWrite(b) - lastWrite(a),
   )[0]
   return newest?.contextTokens ?? null
+}
+function lastWrite(item: HistorySummary): number {
+  return item.endedAt ?? item.startedAt ?? 0
 }
 function sameTool(tool: string, mode: string): boolean {
   return (

@@ -405,6 +405,8 @@ export function NeedsYouSection() {
   })
   const shown = showAll ? waiting : waiting.slice(0, 3)
   const total = waiting.length + taps.length
+  // Known and empty: the heading says so in one line, no body below it.
+  const empty = total === 0 && !unreachable && !isLoading && !isError
   const openPage = () => {
     router.push('/needs-you')
     if (frame && !frame.docked) frame.close()
@@ -420,6 +422,11 @@ export function NeedsYouSection() {
       <div className="lantern-sec">
         <h2>Needs you</h2>
         {total > 0 && <span className="n">{total}</span>}
+        {empty && !sent && (
+          <span className="n" style={{ color: 'var(--mist)' }}>
+            Nothing waiting
+          </span>
+        )}
         <button
           type="button"
           className="ml-auto text-[11px] normal-case tracking-normal max-lg:min-h-11"
@@ -446,9 +453,7 @@ export function NeedsYouSection() {
         refetch={refetch}
       >
         {total === 0 ? (
-          <Note>
-            {sent ? 'Nothing else waiting.' : 'Nothing is waiting for you.'}
-          </Note>
+          sent && <Note>Nothing else waiting.</Note>
         ) : (
           <ul className="flex flex-col gap-2" aria-label="Questions">
             {taps.map((tap) => (

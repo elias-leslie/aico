@@ -75,8 +75,8 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  min-height: 44px;
-  padding: 6px 8px;
+  min-height: 34px;
+  padding: 4px 8px;
   border-radius: 8px;
   color: var(--mist);
   text-align: left;
@@ -94,8 +94,10 @@
 }
 .place > span {
   display: flex;
-  flex-direction: column;
+  align-items: baseline;
+  gap: 6px;
   min-width: 0;
+  white-space: nowrap;
 }
 .label {
   font-size: 13.5px;
@@ -116,6 +118,9 @@
 
 /* Phone and tablet: text links and link buttons are 44px touch targets. */
 @media (max-width: 1023px) {
+  .place {
+    min-height: 44px;
+  }
   .moreLink {
     display: inline-flex;
     align-items: center;

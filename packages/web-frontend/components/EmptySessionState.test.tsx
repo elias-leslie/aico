@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { EmptySessionState } from './EmptySessionState'
 
 const nav = vi.hoisted(() => ({ pathname: '/', query: '' }))
+const frame = vi.hoisted(() => ({
+  value: null as { docked: boolean; tier: string } | null,
+}))
 
 vi.mock('next/navigation', () => ({
   usePathname: () => nav.pathname,
@@ -23,13 +26,32 @@ vi.mock('./capture/CaptureLauncher', () => ({ CaptureLauncher: () => null }))
 vi.mock('./HostsButton', () => ({ HostsLauncher: () => null }))
 vi.mock('./history/HistoryLauncher', () => ({ HistoryLauncher: () => null }))
 vi.mock('./notes/NotesLauncher', () => ({ NotesLauncher: () => null }))
-vi.mock('./SessionList', () => ({ SessionList: () => null }))
+vi.mock('./SessionList', () => ({
+  SessionList: () => <ul data-testid="session-list" />,
+}))
+vi.mock('./frame/FrameContext', () => ({ useFrame: () => frame.value }))
 vi.mock('./status/StatusLauncher', () => ({ StatusLauncher: () => null }))
 
 describe('EmptySessionState', () => {
   beforeEach(() => {
     nav.pathname = '/'
     nav.query = ''
+    frame.value = null
+  })
+
+  const slot = { type: 'terminal', id: 's1' } as never
+
+  it('lists running sessions unless the side panel already does', () => {
+    const { rerender } = render(
+      <EmptySessionState slots={[slot]} onOpen={() => undefined} />,
+    )
+    expect(screen.getByTestId('session-list')).toBeInTheDocument()
+    frame.value = { docked: true, tier: 'panel' }
+    rerender(<EmptySessionState slots={[slot]} onOpen={() => undefined} />)
+    expect(screen.queryByTestId('session-list')).toBeNull()
+    frame.value = { docked: true, tier: 'rail' }
+    rerender(<EmptySessionState slots={[slot]} onOpen={() => undefined} />)
+    expect(screen.getByTestId('session-list')).toBeInTheDocument()
   })
 
   it('says a linked session was not found only on the home link', () => {

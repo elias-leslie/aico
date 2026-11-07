@@ -300,7 +300,7 @@ describe('Needs you in the side', () => {
         screen.getByText('Questions show here once it answers.'),
       ).toBeVisible()
       expect(screen.queryByText('Loading questions…')).toBeNull()
-      expect(screen.queryByText('Nothing is waiting for you.')).toBeNull()
+      expect(screen.queryByText('Nothing waiting')).toBeNull()
     } finally {
       resetServerReachForTest()
     }
@@ -374,7 +374,7 @@ describe('Needs you in the side', () => {
     expect(screen.getByText(/Couldn’t load questions/)).toBeInTheDocument()
     state.isError = false
     rerender(<NeedsYouSection />)
-    expect(screen.getByText('Nothing is waiting for you.')).toBeInTheDocument()
+    expect(screen.getByText('Nothing waiting')).toBeInTheDocument()
   })
 
   it('lists access requests as cards with Review and approve', () => {
