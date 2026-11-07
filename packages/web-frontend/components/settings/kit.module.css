@@ -90,9 +90,7 @@ button.rowHead:focus-visible {
 .meta {
   color: var(--mist);
   font-size: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .chip {
   flex: none;
