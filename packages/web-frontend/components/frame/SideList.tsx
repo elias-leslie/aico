@@ -3,18 +3,13 @@
 import { clsx } from 'clsx'
 import {
   Activity,
-  BookOpen,
   CalendarDays,
   Clock,
   Database,
   Folder,
   Gauge,
-  KeyRound,
   Server,
-  Smartphone,
   StickyNote,
-  Undo2,
-  UserRound,
 } from 'lucide-react'
 import Link from 'next/link'
 import type { ComponentType } from 'react'
@@ -22,9 +17,9 @@ import { useStatus } from '@/lib/hooks/use-status'
 import { popOutNotes } from '@/lib/notes-window'
 import { plural } from '@/lib/status'
 import styles from './Frame.module.css'
+import { SETTINGS_PLACES } from './settings-places'
 
 const MACHINES_HREF = '/machines'
-const RECOVERY_HREF = '/recovery'
 
 interface Place {
   label: string
@@ -81,18 +76,6 @@ const PLACES: readonly (readonly Place[])[] = [
       match: (path) => path.startsWith('/backups'),
     },
     {
-      label: 'Grants',
-      href: '/grants',
-      icon: KeyRound,
-      match: (path) => path === '/grants',
-    },
-    {
-      label: 'Logins',
-      href: '/logins',
-      icon: UserRound,
-      match: (path) => path === '/logins',
-    },
-    {
       label: 'Machines',
       href: MACHINES_HREF,
       icon: Server,
@@ -100,27 +83,11 @@ const PLACES: readonly (readonly Place[])[] = [
         path === '/machines' ||
         (path === '/status' && query.get('kind') === 'machine'),
     },
-    {
-      label: 'Recovery',
-      href: RECOVERY_HREF,
-      icon: Undo2,
-      match: (path) => path === RECOVERY_HREF,
-    },
   ],
-  [
-    {
-      label: 'Context',
-      href: '/agents',
-      icon: BookOpen,
-      match: (path) => path === '/agents',
-    },
-    {
-      label: 'Phone app',
-      href: '/app',
-      icon: Smartphone,
-      match: (path) => path === '/app',
-    },
-  ],
+  SETTINGS_PLACES.map((place) => ({
+    ...place,
+    match: (path: string) => path === place.href,
+  })),
 ]
 
 /** Full's side list: every place to dig, the chosen one marked. Notes opens

@@ -32,6 +32,8 @@ const state = vi.hoisted(() => ({
   },
   open: vi.fn(),
   phone: false,
+  docked: true,
+  notes: vi.fn((_path: string) => true),
   backups: {
     entries: [] as unknown[] | null,
     loading: false,
@@ -60,7 +62,7 @@ const state = vi.hoisted(() => ({
   lastLook: null as number | null,
 }))
 vi.mock('./FrameContext', () => ({
-  useFrame: () => ({ open: state.open }),
+  useFrame: () => ({ open: state.open, docked: state.docked }),
 }))
 vi.mock('@/lib/frame/digest', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/frame/digest')>()),
@@ -106,7 +108,9 @@ vi.mock('../asks/NeedsYou', () => ({
 }))
 vi.mock('../SessionList', () => ({ SessionList: () => <p>rows</p> }))
 vi.mock('../capture/CaptureLauncher', () => ({ CaptureLauncher: () => null }))
-vi.mock('@/lib/notes-window', () => ({ popOutNotes: () => true }))
+vi.mock('@/lib/notes-window', () => ({
+  popOutNotes: (path: string) => state.notes(path),
+}))
 
 const digest = (patch: object = {}) => ({
   since: 0,
@@ -201,24 +205,18 @@ describe('Panel', () => {
   beforeEach(() => {
     localStorage.clear()
     state.phone = false
+    state.docked = true
+    state.notes.mockClear()
   })
 
-  it('goes straight to Needs you and the sessions, then the glance sections and the places for setup', () => {
+  it('goes straight to Needs you and the sessions, then the glance sections', () => {
     render(<Panel slots={slots} onSelect={vi.fn()} />)
     expect(screen.queryByTestId('since-line')).toBeNull()
     expect(
       screen
         .getAllByRole('heading', { level: 2 })
         .map((heading) => heading.textContent),
-    ).toEqual([
-      'Status',
-      'Quota',
-      'Backups',
-      'Recent',
-      'Machines',
-      'Projects',
-      'Everything else',
-    ])
+    ).toEqual(['Status', 'Quota', 'Backups', 'Recent', 'Machines', 'Projects'])
     expect(screen.getByRole('navigation', { name: 'Sessions' })).toBeVisible()
   })
 
@@ -296,32 +294,63 @@ describe('Panel', () => {
     expect(state.open).toHaveBeenLastCalledWith('/machines', 'full')
   })
 
-  it('keeps only the setup places in Everything else, with no Notes entry (the top bar opens Notes)', () => {
+  it('has no Everything else grid: the setup places live under Settings, and nothing else is listed twice', () => {
     render(<Panel slots={slots} onSelect={vi.fn()} />)
-    const places = screen.getByRole('region', { name: 'Everything else' })
-    const href = (name: RegExp | string) =>
-      within(places).getByRole('link', { name }).getAttribute('href')
-    expect(href('Recovery')).toBe('/recovery')
-    expect(href('Logins')).toBe('/logins')
-    fireEvent.click(within(places).getByRole('link', { name: 'Recovery' }))
-    expect(state.open).toHaveBeenCalledWith('/recovery', 'full')
-    for (const gone of [
-      'Status',
-      'Projects',
-      'Recent',
-      'Quota',
-      'Backups',
-      'Machines',
-    ])
-      expect(within(places).queryByRole('link', { name: gone })).toBeNull()
-    expect(within(places).queryByText('Notes')).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Everything else' })).toBeNull()
+    for (const gone of ['Grants', 'Recovery', 'Logins', 'Context', 'Phone app'])
+      expect(screen.queryByRole('link', { name: gone })).toBeNull()
   })
 
-  it('shows a waiting-grants value only where it is read', () => {
+  it('pins Notes, Capture and Settings in a footer, Notes opening in its own window', () => {
     render(<Panel slots={slots} onSelect={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Notes' }))
+    expect(state.notes).toHaveBeenCalledWith('/notes')
+    expect(screen.getByRole('button', { name: 'Settings' })).toHaveAttribute(
+      'aria-haspopup',
+      'menu',
+    )
+  })
+
+  it('opens a menu above the gear with the five setup places, each opening its page in place, no badge', () => {
+    render(<Panel slots={slots} onSelect={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    const menu = screen.getByRole('menu', { name: 'Settings' })
     expect(
-      screen.getByRole('link', { name: /Grants.*1 waiting/ }),
-    ).toBeVisible()
-    expect(screen.getByRole('link', { name: 'Logins' })).toBeVisible()
+      within(menu)
+        .getAllByRole('menuitem')
+        .map((item) => item.textContent),
+    ).toEqual(['Logins', 'Grants', 'Recovery', 'Context', 'Phone app'])
+    expect(screen.getByRole('menuitem', { name: 'Logins' })).toHaveFocus()
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Recovery' }))
+    expect(state.open).toHaveBeenCalledWith('/recovery', 'full')
+    expect(screen.queryByRole('menu')).toBeNull()
+  })
+
+  it('closes the menu on Escape and returns focus to the gear', () => {
+    render(<Panel slots={slots} onSelect={vi.fn()} />)
+    const gear = screen.getByRole('button', { name: 'Settings' })
+    fireEvent.click(gear)
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+    expect(screen.queryByRole('menu')).toBeNull()
+    expect(gear).toHaveFocus()
+  })
+
+  it('on a phone the gear opens a Settings page in the sheet, with Back to the list', () => {
+    state.docked = false
+    render(<Panel slots={slots} onSelect={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    expect(screen.queryByRole('navigation', { name: 'Sessions' })).toBeNull()
+    const places = screen.getByRole('navigation', { name: 'Settings places' })
+    expect(within(places).getAllByRole('link')).toHaveLength(5)
+    expect(within(places).getByText('agent sign-ins')).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    expect(screen.getByRole('navigation', { name: 'Sessions' })).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    fireEvent.click(
+      within(
+        screen.getByRole('navigation', { name: 'Settings places' }),
+      ).getByRole('link', { name: /Grants/ }),
+    )
+    expect(state.open).toHaveBeenLastCalledWith('/grants', 'full')
   })
 })

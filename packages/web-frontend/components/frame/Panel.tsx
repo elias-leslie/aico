@@ -1,11 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { BookOpen, KeyRound, Smartphone, Undo2, UserRound } from 'lucide-react'
-import Link from 'next/link'
+import { Settings, StickyNote } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import type { ComponentType, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { useState } from 'react'
 import { apiFetch } from '@/lib/api-fetch'
-import { useApprovals } from '@/lib/hooks/use-asks'
 import { useHosts } from '@/lib/hooks/use-hosts'
 import { useLocalStorageState } from '@/lib/hooks/use-local-storage-state'
 import { useMediaQuery } from '@/lib/hooks/use-media-query'
@@ -15,12 +13,13 @@ import {
   RECOVERY_QUERY_KEY,
   useStatusSessions,
 } from '@/lib/hooks/use-status-sessions'
+import { popOutNotes } from '@/lib/notes-window'
 import { rowButtons, type StatusRow } from '@/lib/status'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
 import { NeedsYouSection } from '../asks/NeedsYou'
 import { CaptureLauncher } from '../capture/CaptureLauncher'
 import { SessionList } from '../SessionList'
-import { type Frame, useFrame } from './FrameContext'
+import { useFrame } from './FrameContext'
 import { Disclosure } from './glance/Disclosure'
 import { GlanceBackups, useBackupsGlance } from './glance/GlanceBackups'
 import { GlanceMachines, useMachinesGlance } from './glance/GlanceMachines'
@@ -29,28 +28,7 @@ import { GlanceQuota, useQuotaGlance } from './glance/GlanceQuota'
 import { GlanceRecent, useRecentGlance } from './glance/GlanceRecent'
 import { GlanceStatus, useStatusGlance } from './glance/GlanceStatus'
 import styles from './Panel.module.css'
-
-interface Place {
-  label: string
-  href: string
-  icon: ComponentType<{ className?: string; strokeWidth?: number }>
-}
-
-const PLACES: readonly Place[] = [
-  { label: 'Grants', href: '/grants', icon: KeyRound },
-  { label: 'Recovery', href: '/recovery', icon: Undo2 },
-  { label: 'Logins', href: '/logins', icon: UserRound },
-  { label: 'Context', href: '/agents', icon: BookOpen },
-  { label: 'Phone app', href: '/app', icon: Smartphone },
-]
-
-function SectionHead({ title }: { title: string }) {
-  return (
-    <div className="lantern-sec">
-      <h2>{title}</h2>
-    </div>
-  )
-}
+import { SettingsMenu, SettingsPage } from './Settings'
 
 /** The session button a Status row offers (Resume for one that stopped, else Open), and what
  * pressing it does. Shared by the Worst problem card and Wide's Status rows. */
@@ -108,54 +86,6 @@ export function useRowSessionAction(top: StatusRow | undefined) {
 }
 
 export { QuotaBar } from './glance/GlanceQuota'
-
-/** Every other place, one quiet list; a value only where it is read live. */
-function Everything({ frame }: { frame: Frame | null }) {
-  const { approvals } = useApprovals()
-  const waiting = approvals?.state === 'ok' ? approvals.taps.length : undefined
-  const glance: Record<string, { text: string; warn?: boolean } | undefined> = {
-    Grants: waiting ? { text: `${waiting} waiting`, warn: true } : undefined,
-  }
-  return (
-    <section className={styles.section} aria-label="Everything else">
-      <SectionHead title="Everything else" />
-      <div className={styles.else}>
-        {PLACES.map((place) => {
-          const Icon = place.icon
-          const value = glance[place.label]
-          return (
-            <Link
-              key={place.label}
-              href={place.href}
-              className={styles.place}
-              onClick={(event) => {
-                if (!frame) return
-                event.preventDefault()
-                frame.open(place.href, 'full')
-              }}
-            >
-              <Icon className="h-4 w-4" strokeWidth={1.7} />
-              <span>
-                <span className={styles.label}>{place.label}</span>
-                {value && (
-                  <span
-                    className={styles.value}
-                    data-warn={value.warn ? 'true' : undefined}
-                  >
-                    {value.text}
-                  </span>
-                )}
-              </span>
-            </Link>
-          )
-        })}
-        <div className={styles.capture}>
-          <CaptureLauncher variant="row" />
-        </div>
-      </div>
-    </section>
-  )
-}
 
 /** Folds are kept per device, by section; a section nobody folded or opened follows its default. */
 const FOLDS_KEY = 'aico-panel-folds'
@@ -259,9 +189,27 @@ function Glances() {
   )
 }
 
+/** Notes opens in its own window, as from Full's side list. */
+function NotesButton() {
+  return (
+    <button
+      type="button"
+      className="lantern-btn ghost small"
+      title="Notes open in their own window"
+      onClick={() => {
+        if (!popOutNotes('/notes')) window.location.assign('/notes')
+      }}
+    >
+      <StickyNote className="h-4 w-4" strokeWidth={1.7} aria-hidden="true" />
+      Notes
+    </button>
+  )
+}
+
 /** The left side's Panel: the triage view. What waits on you, every session
  * by state (each state group carries its own count), the glance sections,
- * then the places for setup. */
+ * and a footer pinned to the bottom: Notes, Capture and Settings. On a
+ * phone Settings is a page inside the sheet, with Back. */
 export function Panel({
   slots,
   currentId,
@@ -273,31 +221,60 @@ export function Panel({
 }) {
   const frame = useFrame()
   const attention = useSessionAttention()
+  const sheet = frame !== null && !frame.docked
+  const [settings, setSettings] = useState(false)
+  if (sheet && settings)
+    return (
+      <div className={styles.panel} data-testid="session-sidebar">
+        <SettingsPage frame={frame} onBack={() => setSettings(false)} />
+      </div>
+    )
   return (
     <div className={styles.panel} data-testid="session-sidebar">
-      <NeedsYouSection />
-      <section className={styles.section} aria-label="Sessions">
-        <nav
-          aria-label="Sessions"
-          data-testid="session-list"
-          className={styles.sessions}
-        >
-          {slots.length === 0 ? (
-            <p className={styles.note}>
-              No sessions yet. New session starts one.
-            </p>
-          ) : (
-            <SessionList
-              slots={slots}
-              currentId={currentId}
-              attention={attention}
-              onSelect={onSelect}
+      <div className={styles.scroll}>
+        <NeedsYouSection />
+        <section className={styles.section} aria-label="Sessions">
+          <nav
+            aria-label="Sessions"
+            data-testid="session-list"
+            className={styles.sessions}
+          >
+            {slots.length === 0 ? (
+              <p className={styles.note}>
+                No sessions yet. New session starts one.
+              </p>
+            ) : (
+              <SessionList
+                slots={slots}
+                currentId={currentId}
+                attention={attention}
+                onSelect={onSelect}
+              />
+            )}
+          </nav>
+        </section>
+        <Glances />
+      </div>
+      <div className={styles.foot}>
+        <NotesButton />
+        <CaptureLauncher variant="row" />
+        {sheet ? (
+          <button
+            type="button"
+            className={`lantern-btn ghost small ${styles.settingsWrap}`}
+            onClick={() => setSettings(true)}
+          >
+            <Settings
+              className="h-4 w-4"
+              strokeWidth={1.7}
+              aria-hidden="true"
             />
-          )}
-        </nav>
-      </section>
-      <Glances />
-      <Everything frame={frame} />
+            Settings
+          </button>
+        ) : (
+          <SettingsMenu frame={frame} />
+        )}
+      </div>
     </div>
   )
 }
