@@ -35,6 +35,17 @@
       "lease_s": 300
     },
     {
+      "kind": "morning-digest",
+      "what": "Morning digest to the phone",
+      "project": "aico",
+      "home": "davion-sidarli",
+      "at": "07:30",
+      "run": {
+        "post": "/api/digest/push"
+      },
+      "lease_s": 120
+    },
+    {
       "kind": "notes-export",
       "what": "Notes export to Drive",
       "project": "aico",
