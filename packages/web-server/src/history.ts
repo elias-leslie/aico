@@ -95,11 +95,15 @@ export function registerHistoryRoutes(
     const text = (ctx.query.get('q') ?? '').trim()
     if (text.length < 2 || text.length > 200)
       throw new HttpError(400, 'Search for 2 to 200 characters')
+    // The browser dropped the request (a newer search replaced it): Tether stops reading.
+    const gone = new AbortController()
+    ctx.res.once('close', () => gone.abort())
     const page = await tetherCall(() =>
       tether.historySearch(text, {
         limit: number(ctx.query.get('limit')),
         tool: ctx.query.get('tool') ?? undefined,
         project: ctx.query.get('project') ?? undefined,
+        signal: gone.signal,
       }),
     )
     // `test`: a smoke or scratch run, so the page can leave it out like Recent does.

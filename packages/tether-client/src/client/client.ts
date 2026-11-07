@@ -61,6 +61,8 @@ interface RequestOptions {
   timeoutMs?: number
   /** Accept these non-2xx statuses as answers instead of throwing. */
   accept?: number[]
+  /** Abort the request (the connection closes, and Tether stops work for it). */
+  signal?: AbortSignal
 }
 
 export class TetherClient {
@@ -116,6 +118,7 @@ export class TetherClient {
           method,
           path,
           timeout: timeoutMs,
+          signal: options.signal,
           headers: payload
             ? { 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload) }
             : {},
@@ -212,13 +215,16 @@ export class TetherClient {
   /** Text search through past Claude Code, Codex and Pi sessions, newest first. */
   historySearch(
     text: string,
-    options: { limit?: number; tool?: string; project?: string } = {},
+    options: { limit?: number; tool?: string; project?: string; signal?: AbortSignal } = {},
   ): Promise<HistorySearchPage> {
     const query = new URLSearchParams({ q: text })
     if (options.limit) query.set('limit', String(options.limit))
     if (options.tool) query.set('tool', options.tool)
     if (options.project) query.set('project', options.project)
-    return this.json('GET', `/v1/history/search?${query}`, undefined, { timeoutMs: 60_000 })
+    return this.json('GET', `/v1/history/search?${query}`, undefined, {
+      timeoutMs: 60_000,
+      signal: options.signal,
+    })
   }
 
   /** The Aico agent's run, pushed at its start and end; `kept` is false in a skipped folder. */

@@ -16,7 +16,7 @@ import { basename, delimiter, join } from 'node:path'
 import { maskKnownSecrets } from '@aico/shared/secrets'
 import { completeEnd, edgeHash, fileFacts, readBackward, readForward } from './lines'
 import { READERS, readerFor } from './readers'
-import { type SearchHit, searchFile } from './search'
+import { type SearchHit, type SearchRun, searchFile, stopOf } from './search'
 import type {
   Fold,
   HistoryTool,
@@ -41,6 +41,10 @@ export interface HistoryOptions {
   budget?: number
   /** Rows idle longer than this go. */
   keepMs?: number
+  /** Bytes one `search()` reads at most (the rest of the history is reported as unread). */
+  searchBytes?: number
+  /** Milliseconds one `search()` runs at most. */
+  searchMs?: number
 }
 
 export interface SessionSummary {
@@ -131,10 +135,15 @@ export interface SearchPage {
   items: SearchResult[]
   /** The tools read; agy and the Aico agent keep nothing a search can read yet. */
   covers: HistoryTool[]
-  /** Conversations looked through, and the start of the oldest one. */
+  /** The conversations read (a part of one counts), the start of the oldest of them, the
+   * bytes read and the time taken. Newest first, so older ones past `sessions` are unread
+   * when `more`. */
   searched: { sessions: number; since: number | null; bytes: number; ms: number }
-  /** More conversations matched than `limit` returned. */
+  /** Older conversations were not read; `stop` says why. */
   more: boolean
+  /** `limit`: enough conversations matched. `budget`: the read or time budget ran out.
+   * `cancelled`: the caller went away. Null when the whole history was read. */
+  stop: 'limit' | 'budget' | 'cancelled' | null
 }
 
 export interface EventPage {
@@ -238,6 +247,8 @@ export class History {
       sinceMs: options.sinceMs ?? 3 * DAY,
       budget: options.budget ?? 48 << 20,
       keepMs: options.keepMs ?? 90 * DAY,
+      searchBytes: options.searchBytes ?? 1 << 30,
+      searchMs: options.searchMs ?? 10_000,
     }
   }
 
@@ -715,7 +726,7 @@ export class History {
         run.toolCalls,
         this.now(),
         JSON.stringify({ role: run.role, turns: run.turns, ...(run.chat && { chat: run.chat }) }),
-        run.chat?.title ?? null,
+        run.chat?.title ? maskKnownSecrets(run.chat.title) : null,
       )
     return true
   }
@@ -768,7 +779,14 @@ export class History {
    * conversations matched (`more` says there were others). */
   async search(
     query: string,
-    options: { limit?: number; tool?: string; project?: string; hits?: number } = {},
+    options: {
+      limit?: number
+      tool?: string
+      project?: string
+      hits?: number
+      /** Aborted when the caller goes away: the search ends at the next chunk. */
+      signal?: AbortSignal
+    } = {},
   ): Promise<SearchPage> {
     const started = this.now()
     const text = query.trim()
@@ -797,21 +815,41 @@ export class History {
       )
       .all(...args) as unknown as (Row & { files_written: number })[]
     const items: SearchResult[] = []
-    let bytes = 0
+    const run: SearchRun = {
+      bytes: 0,
+      maxBytes: this.options.searchBytes,
+      deadline: started + this.options.searchMs,
+      now: this.now,
+      signal: options.signal,
+    }
+    let read = 0
     let more = false
+    let stop: SearchPage['stop'] = null
     let since: number | null = null
     for (const row of rows) {
-      if (row.started_at !== null && (since === null || row.started_at < since))
-        since = row.started_at
-      if (!text) continue
+      if (!text) break
       if (items.length >= limit) {
         more = true
-        continue
+        stop = 'limit'
+        break
       }
-      const found = await searchFile(row, text, keep)
-      bytes += found.bytes
+      const why = stopOf(run)
+      if (why) {
+        more = true
+        stop = why
+        break
+      }
+      const found = await searchFile(row, text, keep, run)
+      read += 1
+      if (row.started_at !== null && (since === null || row.started_at < since))
+        since = row.started_at
       if (found.matches)
         items.push({ session: summaryOf(row), matches: found.matches, hits: found.hits })
+      if (!found.complete) {
+        more = true
+        stop = stopOf(run)
+        break
+      }
     }
     return {
       query: text,
@@ -819,8 +857,9 @@ export class History {
       covers: options.tool
         ? SEARCHED_TOOLS.filter((tool) => tool === options.tool)
         : SEARCHED_TOOLS,
-      searched: { sessions: rows.length, since, bytes, ms: this.now() - started },
+      searched: { sessions: read, since, bytes: run.bytes, ms: this.now() - started },
       more,
+      stop,
     }
   }
 
@@ -1044,11 +1083,19 @@ function projectOfRoots(roots: ReadonlyMap<string, string>): (cwd: string) => st
   }
 }
 
+/** `value` (a positive number) times `unit`, or undefined for the default. */
+function positive(value: string | undefined, unit: number): number | undefined {
+  const number = Number(value)
+  return value && Number.isFinite(number) && number > 0 ? number * unit : undefined
+}
+
 /**
  * The history for a Tether instance. `TETHER_HISTORY_HOMES` (path-list) replaces
  * the one native home (this user's); `TETHER_HISTORY_SKIP` (comma list of words)
  * names projects whose transcripts are never read (default: neri);
- * `TETHER_HISTORY_DAYS` is how far back a first pass looks (default 3).
+ * `TETHER_HISTORY_DAYS` is how far back a first pass looks (default 3);
+ * `TETHER_HISTORY_SEARCH_MB` and `TETHER_HISTORY_SEARCH_SECONDS` bound one text search
+ * (default 1024 and 10).
  */
 export function historyFromEnv(
   db: HistoryDb,
@@ -1070,6 +1117,8 @@ export function historyFromEnv(
         new RegExp(`(?<![a-z0-9])${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![a-z0-9])`, 'i'),
     ),
     sinceMs: Number.isFinite(days) && days > 0 ? days * DAY : undefined,
+    searchBytes: positive(env.TETHER_HISTORY_SEARCH_MB, 1 << 20),
+    searchMs: positive(env.TETHER_HISTORY_SEARCH_SECONDS, 1000),
   })
 }
 

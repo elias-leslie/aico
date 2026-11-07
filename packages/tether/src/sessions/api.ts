@@ -123,6 +123,9 @@ export function registerHistoryRoutes(router: Router, history: History): void {
       sendJson(res, 200, { kept: history.record(run) })
     })
     .add('GET', '/v1/history/search', async (_req, res, _params, query) => {
+      // A client that goes away (a newer search replaced this one) ends the read.
+      const gone = new AbortController()
+      res.once('close', () => gone.abort())
       const text = (query.get('q') ?? '').trim()
       if (text.length < 2 || text.length > 200)
         throw new HttpError(400, 'invalid_query', { field: 'q' })
@@ -134,6 +137,7 @@ export function registerHistoryRoutes(router: Router, history: History): void {
           tool: query.get('tool') ?? undefined,
           project: query.get('project') ?? undefined,
           hits: count(query.get('hits'), 'hits'),
+          signal: gone.signal,
         }),
       )
     })

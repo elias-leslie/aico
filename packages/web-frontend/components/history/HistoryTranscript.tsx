@@ -2,7 +2,7 @@
 
 import { ArrowLeft, RefreshCw } from 'lucide-react'
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { PlainMarkdown } from '@/components/PlainMarkdown'
 import { TranscriptFold } from '@/components/TranscriptFold'
 import { ApiError } from '@/lib/api-fetch'
@@ -26,6 +26,7 @@ import {
   useHistorySession,
 } from '@/lib/hooks/use-history'
 import { useSessionLabels } from '@/lib/hooks/use-session-labels'
+import { Marked } from './Marked'
 
 /** A file the agent linked: opens in the session view's Files, when one is on screen. */
 const openPath = (path: string) => openFiles({ kind: 'path', path })
@@ -45,7 +46,17 @@ function refusal(error: unknown, what: string): string {
   return `${what}: ${(error as Error)?.message || 'the Aico server didn’t answer'}.`
 }
 
-function EventItem({ event }: { event: HistoryEvent }) {
+function EventItem({ event, mark }: { event: HistoryEvent; mark?: string }) {
+  // The message a search found: its text as written with the match marked, and the box
+  // scrolled to the first match (a long message would otherwise hide it below the fold).
+  const found = useRef<HTMLPreElement>(null)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll once per message and text
+  useEffect(() => {
+    const box = found.current
+    const first = box?.querySelector('mark')
+    if (box && first)
+      box.scrollTop = Math.max(0, first.offsetTop - box.clientHeight / 3)
+  }, [event.offset, mark])
   const when = event.at === null ? '' : clock(event.at)
   const head = (
     <>
@@ -80,7 +91,13 @@ function EventItem({ event }: { event: HistoryEvent }) {
     <div className={`history-event ${event.role} ${event.kind}`}>
       <div className="head">{head}</div>
       {event.kind === 'tool_call' ? (
-        <code>{event.text}</code>
+        <code>
+          {mark ? <Marked text={event.text} query={mark} /> : event.text}
+        </code>
+      ) : mark ? (
+        <pre ref={found}>
+          <Marked text={event.text} query={mark} />
+        </pre>
       ) : event.role === 'assistant' ? (
         // What the agent said is markdown: shown formatted, as in the final reply.
         <PlainMarkdown
@@ -99,10 +116,13 @@ function EventItem({ event }: { event: HistoryEvent }) {
 export function HistoryTranscript({
   id,
   at = null,
+  mark = '',
 }: {
   id: string
   /** A search hit's byte offset: that message is shown first, marked. */
   at?: number | null
+  /** The search text: marked in that message. */
+  mark?: string
 }) {
   const detail = useHistorySession(id)
   const newest = useHistoryEvents(id)
@@ -312,7 +332,7 @@ export function HistoryTranscript({
               That message is no longer in the transcript.
             </p>
           )}
-          {matched && <EventItem event={matched} />}
+          {matched && <EventItem event={matched} mark={mark.trim()} />}
         </section>
       )}
 

@@ -450,9 +450,13 @@ export interface HistorySearchPage {
   items: HistorySearchResult[]
   /** The tools read; the Aico agent and agy keep nothing a search can read yet. */
   covers: HistorySession['tool'][]
+  /** What was read: the conversations (newest first), the start of the oldest, the bytes. */
   searched: { sessions: number; since: number | null; bytes: number; ms: number }
-  /** Stopped at the limit: older conversations were not read. */
+  /** Older conversations were not read. */
   more: boolean
+  /** Why: the limit, the read or time budget, or the caller going away. Absent from an older
+   * Tether, where `more` means the limit. */
+  stop?: 'limit' | 'budget' | 'cancelled' | null
 }
 
 /** One turn of an Aico agent run and the model that ran it. */

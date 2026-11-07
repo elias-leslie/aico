@@ -284,7 +284,7 @@ describe('session history', () => {
     expect(found.status).toBe(200)
     expect(tether.callsOf('historySearch')[0]).toEqual([
       'backup key',
-      { limit: 5, tool: 'codex', project: undefined },
+      { limit: 5, tool: 'codex', project: undefined, signal: expect.any(AbortSignal) },
     ])
     expect(
       found.body.items.map((item: { session: { test: boolean } }) => item.session.test),

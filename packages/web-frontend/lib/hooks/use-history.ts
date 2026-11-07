@@ -85,10 +85,11 @@ export function useHistorySearch(text: string, tool: string) {
   return useQuery({
     queryKey: ['history', 'search', query, tool],
     enabled: query.length >= 2,
-    queryFn: () =>
+    // The signal ends the request when the text changes or the page goes: the server stops reading.
+    queryFn: ({ signal }) =>
       apiFetch<HistorySearchPage>(
         `/api/history/search?q=${encodeURIComponent(query)}&limit=30${tool ? `&tool=${encodeURIComponent(tool)}` : ''}`,
-        undefined,
+        { signal },
         'Couldn’t search the sessions',
       ),
     staleTime: 60_000,

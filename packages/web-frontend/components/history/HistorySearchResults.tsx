@@ -15,25 +15,7 @@ import { useClock } from '@/lib/hooks/use-clock'
 import { useHistorySearch } from '@/lib/hooks/use-history'
 import { useSessionLabels } from '@/lib/hooks/use-session-labels'
 import { SkeletonRows } from '../status/SkeletonRows'
-
-/** The snippet with each place the search text appears marked (case-blind, as the search is). */
-function Marked({ text, query }: { text: string; query: string }) {
-  const lower = text.toLowerCase()
-  const needle = query.toLowerCase()
-  const parts: React.ReactNode[] = []
-  let from = 0
-  for (
-    let at = lower.indexOf(needle);
-    at >= 0;
-    at = lower.indexOf(needle, from)
-  ) {
-    if (at > from) parts.push(text.slice(from, at))
-    parts.push(<mark key={at}>{text.slice(at, at + needle.length)}</mark>)
-    from = at + needle.length
-  }
-  parts.push(text.slice(from))
-  return <>{parts}</>
-}
+import { Marked } from './Marked'
 
 function who(hit: HistorySearchHit): string {
   if (hit.kind === 'tool_call') return hit.tool ?? 'Tool call'
@@ -63,6 +45,12 @@ export function HistorySearchResults({
   // biome-ignore lint/correctness/useExhaustiveDependencies: tell the page how many test runs there are when the answer changes
   useEffect(() => onTests(tests), [tests])
   const covers = page ? toolList(page.covers) : null
+  // Out of read or time budget (not the limit): says how far back it got.
+  const budget = page?.more === true && page.stop === 'budget'
+  const reach =
+    page && page.searched.since !== null
+      ? ` back to ${agoAt(page.searched.since, now)}`
+      : ''
 
   return (
     <section aria-label="Search results" data-testid="history-search-results">
@@ -99,16 +87,20 @@ export function HistorySearchResults({
         <p className="status-muted history-scope">
           {countOf(shown.length, 'session')} with “{page.query}”
           {page.more && ' so far'} · searched {covers}
-          {' (agy and Aico agent chats are not searchable yet)'}
-          {page.more && ' · newest first, older ones not read'}
+          {' (Antigravity and Aico agent chats are not searchable yet)'}
+          {page.more &&
+            (budget
+              ? ` · read the newest ${countOf(page.searched.sessions, 'session')}${reach}, then hit the search’s read limit; older ones not read`
+              : ' · newest first, older ones not read')}
         </p>
       )}
       {page && shown.length === 0 && (
         <div className="status-rows">
           <div className="status-empty">
             <h3>Nothing found for “{page.query}”</h3>
-            None of the {tool ? toolName(tool) : covers} sessions Aico kept has
-            these words in a message or a command it ran.
+            {budget
+              ? `None of the newest ${countOf(page.searched.sessions, 'session')}${reach} has these words in a message or a command it ran. Older ones were not read: the search hit its read limit.`
+              : `None of the ${tool ? toolName(tool) : covers} sessions Aico kept has these words in a message or a command it ran.`}
             {!showTests &&
               tests > 0 &&
               ` ${countOf(tests, 'test run')} hidden.`}
@@ -120,7 +112,7 @@ export function HistorySearchResults({
           {shown.map(({ session, matches, hits }) => (
             <div key={session.id} className="history-hit">
               <Link
-                href={sessionHref(session.id, hits[0]?.offset)}
+                href={sessionHref(session.id, hits[0]?.offset, query)}
                 className="head"
               >
                 <span className="what">{labelOf(session)}</span>
@@ -134,7 +126,7 @@ export function HistorySearchResults({
               {hits.map((hit) => (
                 <Link
                   key={hit.offset}
-                  href={sessionHref(session.id, hit.offset)}
+                  href={sessionHref(session.id, hit.offset, query)}
                   className="snippet"
                 >
                   <span className="who">{who(hit)}</span>

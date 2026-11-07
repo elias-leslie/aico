@@ -13,7 +13,7 @@ export function HistoryPage({
   session?: string
   /** A search hit's byte offset: the transcript opens on that message. */
   at?: number | null
-  /** Text to search for when the list opens. */
+  /** Text to search for when the list opens; on a session, the text marked in the message at `at`. */
   search?: string
   failedOnly?: boolean
 }) {
@@ -21,7 +21,7 @@ export function HistoryPage({
     <main className="status-page history-page">
       <div className="status">
         {session ? (
-          <HistoryTranscript id={session} at={at} />
+          <HistoryTranscript id={session} at={at} mark={search} />
         ) : (
           <HistoryList failedOnly={failedOnly} search={search} />
         )}

@@ -7,6 +7,25 @@ import { open } from 'node:fs/promises'
 import { readerFor } from './readers'
 import type { EventKind, EventRole, HistoryTool, Reader } from './types'
 
+/** What one search may spend, shared by all the files it reads. */
+export interface SearchRun {
+  /** Bytes read so far. */
+  bytes: number
+  maxBytes: number
+  /** Time (`now()`) the search must end by. */
+  deadline: number
+  now: () => number
+  /** The caller gave up (the connection closed). */
+  signal?: AbortSignal
+  sliceMs?: number
+}
+
+/** Why a search ended before the end of the history, or null: it can go on. */
+export function stopOf(run: SearchRun): 'budget' | 'cancelled' | null {
+  if (run.signal?.aborted) return 'cancelled'
+  return run.bytes >= run.maxBytes || run.now() >= run.deadline ? 'budget' : null
+}
+
 /** A match in a conversation: the event it is in and a few words around it. */
 export interface SearchHit {
   /** Byte offset of the transcript line (`aico recent events ID --from OFFSET`). */
@@ -24,15 +43,20 @@ export interface SearchedFile {
 }
 
 const CHUNK = 8 << 20
+/** How long the scan runs before it hands the event loop back (Tether answers others between). */
+const SLICE_MS = 15
 const SNIPPET_RADIUS = 70
 /** What is searched: what was said and the commands run, not tool output or thinking. */
 const SEARCHED_KINDS: ReadonlySet<EventKind> = new Set(['text', 'tool_call'])
 
+// Non-ASCII too: the raw scan lowercases only ASCII bytes (É and é differ there), and some
+// writers escape it as \uXXXX. Such a letter ends the plain stretch; the parsed line decides.
 // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what JSON escapes
-const JSON_ESCAPED = /["\\/<>&\u0000-\u001f\u2028\u2029]+/
+const JSON_ESCAPED = /["\\/<>&\u0000-\u001f\u0080-\uffff]+/
 
-/** The longest stretch of the query that reads the same in the raw JSON line (no quote,
- * backslash, slash, angle bracket, ampersand or control character, which JSON may escape). */
+/** The longest stretch of the query that reads the same in the raw JSON line (ASCII with no
+ * quote, backslash, slash, angle bracket, ampersand or control character, which JSON may
+ * escape). Empty when the query has no such stretch: then every line is parsed. */
 export function prefilterNeedle(query: string): string {
   let best = ''
   for (const run of query.split(JSON_ESCAPED)) {
@@ -56,30 +80,66 @@ function raw(buffer: Buffer): string {
   return buffer.toString('latin1').toLowerCase()
 }
 
+/** The `[start, end)` of each line that can hold the prefilter (every line when it is empty). */
+function* candidates(text: string, prefilter: string): Generator<[number, number]> {
+  if (!prefilter) {
+    for (let start = 0; start < text.length; ) {
+      let end = text.indexOf('\n', start)
+      if (end < 0) end = text.length
+      yield [start, end]
+      start = end + 1
+    }
+    return
+  }
+  for (let at = text.indexOf(prefilter); at >= 0; ) {
+    const start = text.lastIndexOf('\n', at) + 1
+    let end = text.indexOf('\n', at)
+    if (end < 0) end = text.length
+    yield [start, end]
+    at = text.indexOf(prefilter, end + 1)
+  }
+}
+
+const nextTurn = () => new Promise<void>((resolve) => setImmediate(resolve))
+
 /**
  * Every hit of `query` (a phrase, case-blind) in one transcript, oldest line first, and
- * how many events matched in all. `keep` bounds the hits returned, not the count.
+ * how many events matched in all. `keep` bounds the hits returned, not the count. With a
+ * `run`, the read stops at its budget (`complete` false), and the scan hands the event loop
+ * back every few milliseconds.
  */
 export async function searchFile(
   file: SearchedFile,
   query: string,
   keep: number,
-): Promise<{ matches: number; hits: SearchHit[]; bytes: number }> {
+  run?: SearchRun,
+): Promise<{ matches: number; hits: SearchHit[]; bytes: number; complete: boolean }> {
   const reader: Reader | undefined = readerFor(file.tool as HistoryTool)
-  const out = { matches: 0, hits: [] as SearchHit[], bytes: 0 }
+  const out = { matches: 0, hits: [] as SearchHit[], bytes: 0, complete: true }
   if (!reader) return out
   const needle = query.toLowerCase()
   const prefilter = raw(Buffer.from(prefilterNeedle(query), 'utf8'))
   const handle = await open(file.path, 'r').catch(() => null)
   if (!handle) return out
+  let sliceAt = performance.now()
+  const breathe = async () => {
+    if (performance.now() - sliceAt < (run?.sliceMs ?? SLICE_MS)) return
+    await nextTurn()
+    sliceAt = performance.now()
+  }
   try {
     const state = reader.initialState()
     let position = 0
     let carry: Buffer = Buffer.alloc(0)
     for (;;) {
+      if (run && stopOf(run)) {
+        out.complete = false
+        break
+      }
       const chunk = Buffer.allocUnsafe(CHUNK)
       const { bytesRead } = await handle.read(chunk, 0, CHUNK, position)
       out.bytes += bytesRead
+      if (run) run.bytes += bytesRead
       const last = bytesRead < CHUNK
       const buffer = carry.length
         ? Buffer.concat([carry, chunk.subarray(0, bytesRead)])
@@ -94,14 +154,12 @@ export async function searchFile(
       }
       carry = buffer.subarray(cut)
       const text = raw(buffer.subarray(0, cut))
-      for (let at = text.indexOf(prefilter); at >= 0; ) {
-        const start = text.lastIndexOf('\n', at) + 1
-        let end = text.indexOf('\n', at)
-        if (end < 0) end = text.length
+      for (const [start, end] of candidates(text, prefilter)) {
         read(reader, state, buffer.subarray(start, end), base + start, needle, keep, out)
-        at = text.indexOf(prefilter, end)
+        await breathe()
       }
       if (last) break
+      await breathe()
     }
   } finally {
     await handle.close()

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Store } from '../store'
 import { searchLines } from './cli'
 import { codeDoing, lastSentence, patchDoing, promptName, toolDoing } from './doing'
-import { History } from './history'
+import { History, type HistoryOptions } from './history'
 import { prefilterNeedle, snippetAround } from './search'
 
 // Fixture transcripts are made up here: no real conversation text.
@@ -22,11 +22,12 @@ afterEach(() => {
   rmSync(home, { recursive: true, force: true })
 })
 
-const history = () =>
+const history = (more: Partial<HistoryOptions> = {}) =>
   new History(store.db, {
     homes: [home],
     now: () => now,
     skip: [/(?<![a-z0-9])neri(?![a-z0-9])/i],
+    ...more,
   })
 
 const jsonl = (...records: unknown[]) => `${records.map((r) => JSON.stringify(r)).join('\n')}\n`
@@ -412,9 +413,67 @@ describe('history search', () => {
     expect(found.items[0]?.hits[0]?.offset).toBeGreaterThan(8 << 20)
   })
 
+  it('finds a query made only of characters the JSON line may escape, and ends', async () => {
+    claude('p1', user('open https://example.test/a and then a && b <> "" \\ done'))
+    claude('p2', user('nothing special here'))
+    const h = history()
+    await h.scan()
+    for (const query of ['//', '&&', '<>', '""', '\\']) {
+      const found = await h.search(query)
+      expect(found.items.map((item) => item.session.id)).toEqual(['claude-code:p1'])
+    }
+  })
+
+  it('matches non-ASCII letters whatever their case', async () => {
+    claude('u1', user('Lister l’étendue à Genève'))
+    const h = history()
+    await h.scan()
+    expect((await h.search('Éte')).items).toHaveLength(1)
+    expect((await h.search('ÉTENDUE À')).items).toHaveLength(1)
+    expect((await h.search('é')).items).toHaveLength(1)
+    expect((await h.search('ète')).items).toHaveLength(0)
+  })
+
+  it('reports only the conversations it read, and stops at the byte budget', async () => {
+    claude('b1', user('shared words in one', '2026-11-05T10:00:00Z'))
+    claude('b2', user('shared words in two', '2026-11-04T10:00:00Z'))
+    claude('b3', user('shared words in three', '2026-11-03T10:00:00Z'))
+    const h = history({ searchBytes: 1 })
+    await h.scan()
+    const found = await h.search('shared words')
+    expect(found.stop).toBe('budget')
+    expect(found.more).toBe(true)
+    expect(found.items).toHaveLength(1)
+    expect(found.searched.sessions).toBe(1)
+    expect(found.searched.since).toBe(Date.parse('2026-11-05T10:00:00Z'))
+    const lines = searchLines(found).join('\n')
+    expect(lines).toContain(': 1 sessions since ')
+    expect(lines).toContain('read limit')
+    const all = await history().search('shared words')
+    expect(all.stop).toBeNull()
+    expect(all.more).toBe(false)
+    expect(all.searched.sessions).toBe(3)
+  })
+
+  it('stops at the time budget and when the caller gives up', async () => {
+    claude('t1', user('slow words'))
+    const h = history({ searchMs: 0 })
+    await h.scan()
+    const late = await h.search('slow words')
+    expect(late).toMatchObject({ stop: 'budget', more: true, items: [] })
+    expect(late.searched.sessions).toBe(0)
+    const quit = new AbortController()
+    quit.abort()
+    const gone = await history().search('slow words', { signal: quit.signal })
+    expect(gone).toMatchObject({ stop: 'cancelled', more: true })
+    expect(gone.searched.sessions).toBe(0)
+  })
+
   it('keeps the plain part of a query for the byte scan and cuts a snippet around the match', () => {
     expect(prefilterNeedle('say "hello world" now')).toBe('hello world')
     expect(prefilterNeedle('a/b')).toBe('a')
+    expect(prefilterNeedle('//')).toBe('')
+    expect(prefilterNeedle('Éte')).toBe('te')
     expect(snippetAround(`${'a '.repeat(100)}NEEDLE${' b'.repeat(100)}`, 'needle')).toMatch(
       /^….*needle.*…$/i,
     )

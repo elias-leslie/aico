@@ -16,7 +16,7 @@ export const HISTORY_USAGE = `Usage:
       Text search through what was said and the commands run in past Claude Code,
       Codex and Pi sessions (not tool output). A phrase, any capitals. Newest
       sessions first, with the matching lines; open one with the events command
-      shown under it. Aico agent chats and agy sessions are not searched yet.
+      shown under it. Aico agent chats and Antigravity sessions are not searched yet.
   aico recent show <id> [--json]
       One session: model, project, start and end, outcome, tokens, tool
       calls, files written and its subagents (an Aico agent run: the model of
@@ -273,8 +273,10 @@ const HIT_WHO: Record<string, string> = { user: 'you', assistant: 'assistant' }
 export function searchLines(page: SearchPage): string[] {
   const names = page.covers.map((tool) => TOOL_NAMES[tool] ?? tool).join(', ')
   const since = page.searched.since === null ? '' : ` since ${localTime(page.searched.since)}`
+  // Newest first: when it stopped early, say how many of the kept sessions it reached.
+  const budget = page.more && page.stop === 'budget'
   const lines = [
-    `Searched ${names}: ${page.searched.sessions} sessions${since}. Aico agent chats and agy sessions are not searched yet.`,
+    `Searched ${names}: ${page.searched.sessions} sessions${since}. Aico agent chats and Antigravity sessions are not searched yet.`,
   ]
   if (!page.items.length) lines.push(`Nothing found for "${page.query}".`)
   const ids = shortIds(page.items.map((item) => item.session.id))
@@ -293,7 +295,12 @@ export function searchLines(page: SearchPage): string[] {
     const first = item.hits[0]
     if (first) lines.push(`  open: aico recent events ${id} --from ${first.offset}`)
   })
-  if (page.more)
+  if (budget)
+    lines.push(
+      '',
+      `Stopped at the read limit after ${page.searched.sessions} sessions (${Math.round(page.searched.bytes / (1 << 20))} MB, ${(page.searched.ms / 1000).toFixed(1)} s); older sessions were not searched. Narrow it with --project or --tool.`,
+    )
+  else if (page.more)
     lines.push(
       '',
       'Stopped at the limit; older sessions were not searched. Narrow it with --project or --tool, or raise --limit.',

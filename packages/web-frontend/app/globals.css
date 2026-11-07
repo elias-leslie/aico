@@ -2699,6 +2699,7 @@ a.lantern-ask-attached {
 }
 
 .history-event pre {
+  position: relative;
   margin: 6px 0 0;
   max-height: 420px;
   overflow: auto;
@@ -2808,4 +2809,11 @@ a.lantern-ask-attached {
     width: 44px !important;
     height: 44px !important;
   }
+}
+
+.history-event pre mark {
+  padding: 0 2px;
+  border-radius: 3px;
+  background: rgb(var(--lantern-rgb) / 0.22);
+  color: var(--bone);
 }

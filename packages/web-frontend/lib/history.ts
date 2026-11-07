@@ -60,8 +60,10 @@ export interface HistorySearchPage {
     bytes: number
     ms: number
   }
-  /** Stopped at the limit: older conversations were not read. */
+  /** Older conversations were not read. */
   more: boolean
+  /** Why: the limit, or the search's read/time budget. Absent from an older Tether: the limit. */
+  stop?: 'limit' | 'budget' | 'cancelled' | null
 }
 
 export interface HistoryDetail extends HistorySession {
@@ -218,8 +220,11 @@ export function shortFolder(cwd: string | null): string {
   return cwd.split('/').filter(Boolean).slice(-2).join('/')
 }
 
-export function sessionHref(id: string, at?: number): string {
-  return `/history?session=${encodeURIComponent(id)}${at === undefined ? '' : `&at=${at}`}`
+/** A session's page; with `at` (a search hit's offset) it opens on that message, and `text`
+ * (the search) is marked in it. */
+export function sessionHref(id: string, at?: number, text?: string): string {
+  const mark = at !== undefined && text ? `&q=${encodeURIComponent(text)}` : ''
+  return `/history?session=${encodeURIComponent(id)}${at === undefined ? '' : `&at=${at}`}${mark}`
 }
 
 /** "Claude Code, Codex and Pi": the tools a search reads, in a sentence. */
