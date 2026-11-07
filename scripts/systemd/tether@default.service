@@ -9,6 +9,12 @@
 [Unit]
 Description=Tether session daemon (default)
 Documentation=https://github.com/elias-leslie/tether
+# Peer links and phone pushes need the network. A user manager has no
+# network-online.target of its own, so wait for the system's through podman's
+# documented user helper; where it is not installed the Wants is ignored and
+# the peer links' retry covers it.
+Wants=podman-user-wait-network-online.service
+After=podman-user-wait-network-online.service
 
 [Service]
 Type=simple
