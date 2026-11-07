@@ -15,7 +15,7 @@ import {
   setWidgetOwnership,
 } from './lifecycle/catalog'
 import * as engine from './lifecycle/engine'
-import { generationOf } from './lifecycle-api'
+import { generationOf } from './running-session'
 
 vi.mock('./lifecycle/engine', async (original) => ({
   ...(await original<typeof import('./lifecycle/engine')>()),

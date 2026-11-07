@@ -35,10 +35,11 @@ import { ENTRY_RETRY_EXIT } from './lifecycle/entries'
 import { withRootPrompt } from './lifecycle/root-launch'
 import { isResumeSessionId } from './lifecycle/tui/launch'
 import { getTui } from './lifecycle/tui/registry'
-import { type LifecycleApiContext, pasteIntoRunningSession } from './lifecycle-api'
+import type { LifecycleApiContext } from './lifecycle-api'
 import { nodeProcFs } from './proc-fs'
 import type { Recovery } from './recovery'
 import { restoreSessionReservation } from './recovery-placement'
+import { pasteIntoRunningSession } from './running-session'
 
 const OBSERVE_INTERVAL_MS = 60_000
 const RESTORE_RETRY_MS = 30_000

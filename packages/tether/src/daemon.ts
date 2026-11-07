@@ -5,7 +5,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { FleetService } from '@aico/fleet/service'
 import { registryProjects } from '@aico/tasks/registry'
-import { AgentStatePoller, AgentStateTracker } from './agent-state'
+import { AgentStatePoller, AgentStateTracker, bindAgentStates } from './agent-state'
 import { type AskDelivery, AskStore, aicoOrigin, handOffAsks, type NeedsYouFeed } from './asks'
 import {
   agentExitMarkerDir,
@@ -56,12 +56,9 @@ import { setLifecycleInstance } from './lifecycle/ownership'
 import { configureTmuxPaths } from './lifecycle/tmux'
 import { adapterOf, bindToolSource, isDeliveryTool } from './lifecycle/tui/registry'
 import {
-  bindAgentStates,
   bindModelWatch,
   foregroundPaneScope,
-  generationOf,
   learnProjects,
-  pressKeysInRunningSession,
   sessionSnapshot,
 } from './lifecycle-api'
 import { startMemoryGuard } from './memory-guard'
@@ -71,6 +68,7 @@ import { nodeFileTail, nodeProcFs } from './proc-fs'
 import { activeProjectFileFromEnv, ProjectProvider } from './projects'
 import { Continuity } from './reboot'
 import { Recovery, runCommand } from './recovery'
+import { generationOf, pressKeysInRunningSession } from './running-session'
 import { createTetherServer } from './server'
 import { type History, historyFromEnv, startHistoryScan } from './sessions/history'
 import { persistSizeHolders } from './size-holder'

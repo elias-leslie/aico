@@ -385,3 +385,28 @@ export class AgentStatePoller {
     return null
   }
 }
+
+/** The daemon's agent-state tracker; unbound in tests and scratch instances. */
+let bound: AgentStateTracker | null = null
+
+export function bindAgentStates(tracker: AgentStateTracker | null): void {
+  bound = tracker
+}
+
+/** The session's agent state fields (docs/api-v1.md "Agent state"). */
+export function agentStateOf(id: string): Record<string, unknown> {
+  const record = bound?.get(id) ?? {
+    state: 'unknown',
+    stateSource: 'none',
+    stateAt: 0,
+    stateDetail: null,
+    statePrevious: 'unknown',
+    stateAgentAt: 0,
+  }
+  return { ...record, stateAt: record.stateAt || null, stateAgentAt: record.stateAgentAt || null }
+}
+
+/** Apply a hook report to the bound tracker; false when unbound or ignored. */
+export function reportAgentState(id: string, report: HookReport): boolean {
+  return bound?.report(id, report) ?? false
+}

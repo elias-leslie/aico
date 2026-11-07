@@ -3,10 +3,9 @@
 // a kept wake's relaunch), the End hook that keeps wakes, and the HTTP routes
 // (docs/api-v1.md "Wakes"). The scheduling rules live in wakes.ts.
 
-import { execFile } from 'node:child_process'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { promisify } from 'node:util'
+import { agentStateOf } from './agent-state'
 import { type ContinuitySnapshot, observeAgent, readJsonFile } from './continuity'
 import { DeliveryLog, registerDeliveryRoutes } from './deliveries'
 import { HttpError, type Router, readJsonObject, sendJson } from './http'
@@ -41,14 +40,14 @@ import {
   whenReady,
 } from './lifecycle/engine'
 import { withRootPrompt } from './lifecycle/root-launch'
-import { terminalClientEnv } from './lifecycle/terminal-env'
 import { captureVisibleTargetArgs, clientActivityTargetArgs } from './lifecycle/tmux'
 import { MAIN_TURN_OVER } from './lifecycle/tui/adapters/contract'
 import { ensureBlankSlateWorkspace, isBlankSlateRoot } from './lifecycle/tui/blank-slate'
 import { isResumeSessionId } from './lifecycle/tui/launch'
 import { getTui, isDeliveryTool } from './lifecycle/tui/registry'
-import { agentStateOf, type LifecycleApiContext, pasteIntoRunningSession } from './lifecycle-api'
+import type { LifecycleApiContext } from './lifecycle-api'
 import { nodeProcFs } from './proc-fs'
+import { pasteIntoRunningSession, runTmux } from './running-session'
 import {
   applyWakePolicyPatch,
   cleanNote,
@@ -67,9 +66,6 @@ import {
   wakeJson,
 } from './wakes'
 
-const execFileAsync = promisify(execFile)
-const TMUX_BIN = '/usr/bin/tmux'
-const TMUX_TIMEOUT_MS = 2_000
 const POLICY_KEY = 'wake_policy'
 /** The furthest ahead a wake may be set. */
 const MAX_AHEAD_MS = 366 * 24 * 3600_000
@@ -78,16 +74,6 @@ const MAX_BEHIND_MS = 5 * 60_000
 const WAKE_ID = /^[0-9a-f]{12}$/
 /** How long a "session told session" mark is kept. */
 const TOLD_KEEP_MS = 6 * 3600_000
-
-async function runTmux(args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync(TMUX_BIN, args, {
-    encoding: 'utf8',
-    env: terminalClientEnv(),
-    timeout: TMUX_TIMEOUT_MS,
-    maxBuffer: 1024 * 1024,
-  })
-  return stdout
-}
 
 function isAgent(tool: string): boolean {
   return (getTui(tool)?.command.length ?? 0) > 0

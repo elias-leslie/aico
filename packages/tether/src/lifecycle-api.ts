@@ -2,11 +2,9 @@
 // Terminal I/O, Roots, GUI forwarding). Handlers only
 // parse, fence and map results; every lifecycle decision is the engine's.
 
-import { execFile } from 'node:child_process'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { hostname } from 'node:os'
-import { promisify } from 'node:util'
-import type { AgentStateTracker, HookReport } from './agent-state'
+import { agentStateOf, type HookReport, reportAgentState } from './agent-state'
 import { type AskDelivery, AskStore, sessionAsks, transferAskNotices } from './asks'
 import type { TetherPaths } from './config'
 import type { EventBus } from './events'
@@ -77,27 +75,22 @@ import {
 } from './lifecycle/engine'
 import { claimTmuxViewSize, type ResizeClaimResult } from './lifecycle/interactive-tmux'
 import { isNeverAllocatedWidget } from './lifecycle/lifecycle-guard'
-import { sessionGeneration } from './lifecycle/owner-retirement'
 import { ForegroundPaneMemory, systemdPaneMemoryHost } from './lifecycle/pane-memory'
 import {
   createRootHandler,
   isProjectRootPath,
-  MUTATION_WAIT_MS,
   type MutationRejection,
   parseLabel,
   type RootControlOperations,
   type RootHandlerState,
   type WidgetMutation,
-  widgetMutationOperation,
 } from './lifecycle/root-control'
 import { sessionSpec, withRootPrompt } from './lifecycle/root-launch'
 import { readScrollbackPage } from './lifecycle/scrollback-page'
-import { terminalClientEnv } from './lifecycle/terminal-env'
 import {
   bracketedPasteTargetArgs,
   captureVisibleTargetArgs,
   isBoundedTerminalText,
-  type PaneKey,
   sendKeyTargetArgs,
   sendTextTargetArgs,
   sessionName,
@@ -124,6 +117,7 @@ import type { Project, ProjectProvider } from './projects'
 import { type Continuity, registerRebootRoutes } from './reboot'
 import { type Recovery, registerRecoveryRoutes } from './recovery'
 import { RewindRefused, rewindClaude } from './rewind'
+import { generationOf, runTmux, TMUX_BIN, withRunningSession } from './running-session'
 import { parseViewerLabel, recordSizeHolder, sizeHolderOf } from './size-holder'
 import type { Store } from './store'
 import { registerWaitRoutes, type WaitService } from './waits'
@@ -134,9 +128,6 @@ import {
   type WakeService,
 } from './wake-runtime'
 
-const execFileAsync = promisify(execFile)
-const TMUX_BIN = '/usr/bin/tmux'
-const TMUX_TIMEOUT_MS = 2_000
 const RUNNING_SETTLE_MS = 3_000
 const RUNNING_POLL_MS = 100
 const GENERATION_RE = /^[0-9a-f]{64}$/
@@ -218,13 +209,6 @@ function needsFromQuery(query: URLSearchParams): Needs | null {
   })
 }
 
-/** The daemon's agent-state tracker; unbound in tests and scratch instances. */
-let agentStates: AgentStateTracker | null = null
-
-export function bindAgentStates(tracker: AgentStateTracker | null): void {
-  agentStates = tracker
-}
-
 /** The daemon's model watch (src/model-switch.ts); unbound in tests and
  * scratch instances. */
 let modelWatch: ModelWatch | null = null
@@ -236,24 +220,6 @@ export function bindModelWatch(watch: ModelWatch | null): void {
 /** The session's standing model switch (docs/api-v1.md "Model switches"). */
 function sessionModelSwitch(id: string): ModelSwitch | null {
   return modelWatch?.switchOf(id) ?? null
-}
-
-/** The session's agent state fields (docs/api-v1.md "Agent state"). */
-export function agentStateOf(id: string): Record<string, unknown> {
-  const record = agentStates?.get(id) ?? {
-    state: 'unknown',
-    stateSource: 'none',
-    stateAt: 0,
-    stateDetail: null,
-    statePrevious: 'unknown',
-    stateAgentAt: 0,
-  }
-  return { ...record, stateAt: record.stateAt || null, stateAgentAt: record.stateAgentAt || null }
-}
-
-/** The session's opaque fence (Aico `sessionGeneration`). */
-export function generationOf(row: WidgetRow): string {
-  return sessionGeneration(row)
 }
 
 /**
@@ -429,16 +395,6 @@ function respawnError(result: RespawnResult): HttpError | null {
   }
 }
 
-async function runTmux(args: string[], maxBuffer = 1024 * 1024): Promise<string> {
-  const { stdout } = await execFileAsync(TMUX_BIN, args, {
-    encoding: 'utf8',
-    env: terminalClientEnv(),
-    timeout: TMUX_TIMEOUT_MS,
-    maxBuffer,
-  })
-  return stdout
-}
-
 /** Client environment for `tmux attach` (docs/api-v1.md Terminal I/O). */
 const ATTACH_ENV = { TERM: 'xterm-256color', COLORTERM: 'truecolor', CLICOLOR: '1' }
 const ATTACH_UNSET = ['TMUX', 'TMUX_PANE', 'TMUX_TMPDIR', 'NO_COLOR']
@@ -446,70 +402,6 @@ const ATTACH_UNSET = ['TMUX', 'TMUX_PANE', 'TMUX_TMPDIR', 'NO_COLOR']
 function attachArgv(target: TmuxTarget): string[] {
   if (!target.socket) throw new HttpError(409, 'workload_unavailable')
   return [TMUX_BIN, '-S', target.socket, 'attach-session', '-t', target.session]
-}
-
-/**
- * Run `apply` only against the exact running generation while holding the one
- * lifecycle lock (Aico `widgetMutationOperation`). A session of that generation
- * that is briefly busy or still settling is waited for (MUTATION_WAIT_MS).
- * Returns the apply outcome, or `false` when the session is not the exact
- * running workload by then.
- */
-async function withRunningSession<T>(
-  widgetId: string,
-  generation: string,
-  apply: (row: WidgetRow) => Promise<T>,
-): Promise<T | false> {
-  let outcome: T | undefined
-  const ok = await widgetMutationOperation(
-    widgetId,
-    generation,
-    {
-      acquire: (id) => lifecycleOwners.acquire(id),
-      release: (id, owner) => releaseLifecycleOwner(id, owner),
-      getWidget,
-      gateState: rootManagedGateState,
-      apply: async (row) => {
-        outcome = await apply(row)
-      },
-    },
-    { ms: MUTATION_WAIT_MS },
-  )
-  return ok ? (outcome as T) : false
-}
-
-/** Paste `text` into a running session and submit it (the inject route's
- * paste mode). False when the session is not running. */
-export async function pasteIntoRunningSession(widgetId: string, text: string): Promise<boolean> {
-  const row = getWidget(widgetId)
-  if (!row || !isBoundedTerminalText(text)) return false
-  const delivered = await withRunningSession(row.id, generationOf(row), async (current) => {
-    await runTmux(bracketedPasteTargetArgs(tmuxPaneTargetForWidget(current.id), text, true))
-    return true
-  })
-  return delivered === true
-}
-
-/** Press named keys in a running session's pane, in order, only while it is
- * the exact `generation` (or its current one when omitted). False when it is
- * not running, busy, or has no pane. */
-export async function pressKeysInRunningSession(
-  widgetId: string,
-  keys: readonly PaneKey[],
-  generation?: string,
-): Promise<boolean> {
-  const row = getWidget(widgetId)
-  if (!row || keys.length === 0) return false
-  const pressed = await withRunningSession(
-    row.id,
-    generation ?? generationOf(row),
-    async (current) => {
-      const target = tmuxPaneTargetForWidget(current.id)
-      for (const key of keys) await runTmux(sendKeyTargetArgs(target, key))
-      return true
-    },
-  )
-  return pressed === true
 }
 
 /** Mark, unmark, or join a coordinator, and publish every changed session. */
@@ -1167,7 +1059,7 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
     .add('POST', '/v1/sessions/:id/agent-event', async (req, res, params) => {
       const row = requireSession(params.id)
       const report = parseHookReport(await readJsonObject(req))
-      const applied = agentStates?.report(row.id, report) ?? false
+      const applied = reportAgentState(row.id, report)
       sendJson(res, 200, { applied, ...agentStateOf(row.id) })
     })
     .add('POST', '/v1/sessions/:id/context-check', async (_req, res, params) => {
