@@ -3,7 +3,7 @@
 Assessed at aico 3e05a608 (working tree has unrelated edits) and box-yard 3ed69f4 (shallow clone, read only, never installed or run). Box Yard claims below come from its README, `AGENTS.md`, `docs/` and `server/` source. Its "verified against real services" section (README, 2026-10-22) is the author's own claim; I did not check it.
 
 ## What Box Yard is
-Box Yard (github.com/AgentSystemLabs/box-yard, MIT, TypeScript) is a chat-first web app that runs a "yard" of headless Claude Code agents. You talk to a Coordinator, which routes to one Captain per project, which starts tasks. Each task runs `claude -p --resume` once per message, in an Upstash box, Docker, a GPU pod, an SSH machine or a local folder (README "How it works", "Tasks and turns"). It is very new (repo created 2026-11-07, one squashed commit, 17 stars, no issues or releases) and its README opens with "built for one person's workflow, breaking changes expected".
+Box Yard (github.com/AgentSystemLabs/box-yard, MIT, TypeScript) is a chat-first web app that runs a "yard" of headless Claude Code agents. You talk to a Coordinator, which routes to one Captain per project, which starts tasks. Each task runs `claude -p --resume` once per message, in an Upstash box, Docker, a GPU pod, an SSH machine or a local folder (README "How it works", "Tasks and turns").
 
 Overlap with Aico: the same owner problem (many agents, one person, phone access, keep going when the laptop is closed, ask the owner questions, track quota and spend, remember things per project). The architecture differs at the root: Box Yard owns a headless agent loop and puts a chat UI on top; Aico owns real interactive terminal sessions (Tether, tmux, cgroups) and puts a viewer and an inbox on top.
 
@@ -38,7 +38,6 @@ Overlap with Aico: the same owner problem (many agents, one person, phone access
 | State storage and code shape | One SQLite (`server/store.ts` 4.5k lines, `tasks.ts` 9.3k, `mcp.ts` 3.5k) | Small per-concern databases and JSON contracts (`contracts/`, context.db, usage.db, status.db) | Ours | Smaller seams are easier for agents to change safely. Their file sizes are the warning sign |
 | Testing | Fast/slow tiers with a machine-wide lock, `test:related` from the diff, and a scripted fake Claude (`scripts/fake-claude.mjs`) that drives the whole app with triggers like `[ask]`, `[fail]`, `[hang]` | `st check`, package tests, Tether lifecycle harness (shells and a real-agent smoke that submits no prompt), live Haiku testers | Mix | The scripted fake agent makes Needs you / Finished / stuck states reproducible. We have none |
 | Backup of the tool's own state | Snapshots its own box every 6 hours, keeps 3 | Full backup and recovery system with drills | Ours | Not comparable in depth |
-| Maturity | Created today, one commit, single-author, self-declared WIP | Long history, live in daily use | Ours | Treat Box Yard as a source of ideas, not a dependency |
 
 Areas with no real overlap, so not compared: Box Yard's Gmail/Notion/Linear connectors, spoken replies, Upstash/Daytona/RunPod/Vast billing, GitHub identity sealing; Aico's Status page, backups and recovery, notes and capture, Android app pairing, Proxmox power actions, Neri hunter placement.
 
