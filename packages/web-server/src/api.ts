@@ -36,6 +36,8 @@ export interface ApiDeps {
   store: WebStore
   chats?: ChatSessions
   uploads: UploadConfig
+  /** Folders Files > Everywhere offers beside Home (`AICO_FILE_SHORTCUTS`). */
+  fileShortcuts?: string[]
   shows: Shows
   asks: Asks
   /** The notes store and blob folder behind `/api/captures`; the routes are off without it. */
@@ -444,7 +446,7 @@ export function buildApi(deps: ApiDeps): Router {
     registerNoteRoutes(router, deps.captures)
   }
   registerPaneFileRoutes(router, life, tether)
-  registerFileLocationRoutes(router)
+  registerFileLocationRoutes(router, { shortcuts: deps.fileShortcuts ?? [] })
   registerShowRoutes(router, deps.shows)
   registerAskRoutes(router, deps.asks, (ask) => {
     if (ask.session && deps.chats?.has(ask.session))

@@ -1,8 +1,16 @@
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { rawType, registerFileLocationRoutes } from './file-locations'
+import { filePlaces, rawType, registerFileLocationRoutes } from './file-locations'
 import { serveRoutes } from './testing'
 
 let top: string
@@ -23,11 +31,18 @@ beforeEach(async () => {
   mkdirSync(join(top, '.ssh'))
   writeFileSync(join(top, '.ssh', 'notes'), 'x')
   symlinkSync(join(top, 'work', '.env'), join(top, 'work', 'innocent.txt'))
-  server = await serveRoutes((router) => registerFileLocationRoutes(router))
+  server = await serveRoutes((router) =>
+    registerFileLocationRoutes(router, { shortcuts: [top, join(top, 'missing')] }),
+  )
 })
 
 afterEach(async () => {
   await server.close()
+  for (const locked of ['locked', 'work/sealed.txt']) {
+    try {
+      chmodSync(join(top, locked), 0o755)
+    } catch {}
+  }
   rmSync(top, { recursive: true, force: true })
 })
 
@@ -62,7 +77,6 @@ describe('file locations', () => {
     for (const [route, root, path] of [
       ['raw', join(top, 'work'), '.env'],
       ['raw', join(top, 'work'), 'innocent.txt'],
-      ['raw', join(top, 'work'), '../work/prompt.md'],
       ['content', join(top, 'work'), '.env'],
       ['tree', join(top, '.ssh'), undefined],
     ] as const) {
@@ -91,6 +105,118 @@ describe('file locations', () => {
     expect((await get('raw', join(top, 'work'), 'missing.md')).status).toBe(404)
     expect((await get('tree', join(top, 'gone'))).status).toBe(404)
     expect((await get('tree', 'relative')).status).toBe(400)
+  })
+})
+
+describe('file locations anywhere', () => {
+  it('reads outside the starting folder: up with .., through a symlink out, hidden and build folders listed', async () => {
+    mkdirSync(join(top, 'elsewhere', '.hidden'), { recursive: true })
+    mkdirSync(join(top, 'elsewhere', 'build'))
+    writeFileSync(join(top, 'elsewhere', 'note.txt'), 'outside\n')
+    symlinkSync(join(top, 'elsewhere'), join(top, 'work', 'out'))
+    expect(
+      await (await get('content', join(top, 'work'), '../elsewhere/note.txt')).json(),
+    ).toMatchObject({
+      content: 'outside\n',
+    })
+    expect(await (await get('content', join(top, 'work'), 'out/note.txt')).json()).toMatchObject({
+      content: 'outside\n',
+    })
+    expect(await (await get('raw', join(top, 'work'), 'out/note.txt')).text()).toBe('outside\n')
+    const listing = (await (await get('tree', join(top, 'elsewhere'))).json()) as {
+      entries: { name: string }[]
+    }
+    expect(listing.entries.map((entry) => entry.name)).toEqual(['.hidden', 'build', 'note.txt'])
+  })
+
+  it('shows a symlink as one, saying what it leads to and when it leads nowhere', async () => {
+    symlinkSync(join(top, 'work'), join(top, 'to-work'))
+    symlinkSync('prompt.md', join(top, 'work', 'link.md'))
+    symlinkSync('nowhere', join(top, 'work', 'dead'))
+    const top1 = (await (await get('tree', top)).json()) as { entries: Record<string, unknown>[] }
+    expect(top1.entries.find((entry) => entry.name === 'to-work')).toMatchObject({
+      is_directory: true,
+      is_symlink: true,
+      link_target: join(top, 'work'),
+    })
+    const work = (await (await get('tree', join(top, 'work'))).json()) as {
+      entries: Record<string, unknown>[]
+    }
+    expect(work.entries.find((entry) => entry.name === 'link.md')).toMatchObject({
+      is_directory: false,
+      is_symlink: true,
+      link_target: 'prompt.md',
+      size: 9,
+    })
+    expect(work.entries.find((entry) => entry.name === 'dead')).toMatchObject({
+      is_symlink: true,
+      link_broken: true,
+    })
+    // Opening the link's folder lists what it leads to.
+    const through = (await (await get('tree', top, 'to-work')).json()) as {
+      entries: { name: string; path: string }[]
+    }
+    expect(through.entries.find((entry) => entry.name === 'prompt.md')?.path).toBe(
+      'to-work/prompt.md',
+    )
+  })
+
+  it('says a folder or file this account cannot read is unreadable, not missing', async () => {
+    mkdirSync(join(top, 'locked'))
+    writeFileSync(join(top, 'locked', 'inside.txt'), 'x')
+    writeFileSync(join(top, 'work', 'sealed.txt'), 'x')
+    chmodSync(join(top, 'locked'), 0o000)
+    chmodSync(join(top, 'work', 'sealed.txt'), 0o000)
+    const folder = await get('tree', join(top, 'locked'))
+    expect(folder.status).toBe(403)
+    expect(((await folder.json()) as { detail: string }).detail).toMatch(/Can’t read this folder/)
+    const inside = await get('content', top, 'locked/inside.txt')
+    expect(inside.status).toBe(403)
+    const file = await get('content', join(top, 'work'), 'sealed.txt')
+    expect(file.status).toBe(403)
+    expect(((await file.json()) as { detail: string }).detail).toMatch(/Can’t read this file/)
+    const raw = await get('raw', join(top, 'work'), 'sealed.txt')
+    expect(raw.status).toBe(403)
+    const stat = await fetch(
+      `${server.base}/api/files/stat?path=${encodeURIComponent(join(top, 'locked', 'inside.txt'))}`,
+    )
+    expect(stat.status).toBe(403)
+  })
+
+  it('pages a large folder', async () => {
+    mkdirSync(join(top, 'many'))
+    for (let i = 0; i < 12; i += 1)
+      writeFileSync(join(top, 'many', `f${String(i).padStart(2, '0')}`), 'x')
+    const page = async (offset: number) =>
+      (await (
+        await fetch(
+          `${server.base}/api/files/tree?${query(join(top, 'many'))}&offset=${offset}&limit=5`,
+        )
+      ).json()) as { entries: { name: string }[]; total: number; offset: number }
+    const first = await page(0)
+    expect(first).toMatchObject({ total: 12, offset: 0 })
+    expect(first.entries.map((entry) => entry.name)).toEqual(['f00', 'f01', 'f02', 'f03', 'f04'])
+    const last = await page(10)
+    expect(last.entries.map((entry) => entry.name)).toEqual(['f10', 'f11'])
+  })
+
+  it('lists Home and the shortcut folders that exist', async () => {
+    const places = (await (await fetch(`${server.base}/api/files/places`)).json()) as {
+      places: { id: string; label: string; path: string }[]
+    }
+    expect(places.places).toEqual([
+      { id: 'home', label: 'Home', path: homedir() },
+      { id: top, label: top, path: top },
+    ])
+    expect(filePlaces([])).toHaveLength(1)
+  })
+
+  it('streams a file of any size as a download once it is too large to open in the browser', async () => {
+    writeFileSync(join(top, 'work', 'big.txt'), Buffer.alloc(26 * 1024 * 1024, 97))
+    const response = await get('raw', join(top, 'work'), 'big.txt')
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-disposition')).toBe('attachment; filename="big.txt"')
+    expect((await response.arrayBuffer()).byteLength).toBe(26 * 1024 * 1024)
   })
 })
 

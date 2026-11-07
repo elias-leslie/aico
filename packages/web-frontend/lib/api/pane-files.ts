@@ -7,12 +7,19 @@ export interface PaneFileTreeEntry {
   size?: number
   extension?: string | null
   children_count?: number
+  /** A symbolic link: `is_directory` and `size` describe what it leads to. */
+  is_symlink?: boolean
+  link_target?: string
+  link_broken?: boolean
 }
 
 export interface PaneFileTreeResponse {
   entries: PaneFileTreeEntry[]
   path: string
+  /** Every entry of the folder; a listing past one page has more to fetch. */
   total: number
+  /** Where this page starts (only location listings are paged). */
+  offset?: number
 }
 
 export interface PaneFileContentResponse {
@@ -54,13 +61,18 @@ function filesUrl(
   source: FilesSource,
   route: 'tree' | 'content',
   path: string | undefined,
+  offset?: number,
 ): string {
   const query = buildQueryString({ path })
   if (source.kind === 'pane')
     return `/api/panes/${source.paneId}/files/${route}${query}`
   if (source.kind === 'session')
     return `/api/sessions/${source.sessionId}/files/${route}${query}`
-  return `/api/files/${route}${buildQueryString({ root: source.root, path })}`
+  return `/api/files/${route}${buildQueryString({
+    root: source.root,
+    path,
+    offset: offset ? String(offset) : undefined,
+  })}`
 }
 
 /** A stable cache key for a source. */
@@ -73,9 +85,10 @@ export function sourceKey(source: FilesSource): string {
 export function fetchFileTree(
   source: FilesSource,
   path = '',
+  offset = 0,
 ): Promise<PaneFileTreeResponse> {
   return apiFetch<PaneFileTreeResponse>(
-    filesUrl(source, 'tree', path || undefined),
+    filesUrl(source, 'tree', path || undefined, offset),
     undefined,
     "Couldn't load the files",
   )
@@ -117,4 +130,37 @@ export function isHtmlPath(path: string): boolean {
  */
 export function sharedPageUrl(path: string): string {
   return `/api/files/page${path.split('/').map(encodeURIComponent).join('/')}`
+}
+
+/** Where a session's project folder is: a path here, or the host it is on. */
+export interface ProjectRoot {
+  root: string | null
+  host: string | null
+}
+
+export function fetchProjectRoot(project: ProjectSource): Promise<ProjectRoot> {
+  const base =
+    project.kind === 'pane'
+      ? `/api/panes/${project.paneId}/files`
+      : `/api/sessions/${project.sessionId}/files`
+  return apiFetch<ProjectRoot>(
+    `${base}/root`,
+    undefined,
+    "Couldn't find the project folder",
+  )
+}
+
+/** A shortcut: Home or a scratch folder on this computer. */
+export interface FilePlace {
+  id: string
+  label: string
+  path: string
+}
+
+export function fetchFilePlaces(): Promise<{ places: FilePlace[] }> {
+  return apiFetch<{ places: FilePlace[] }>(
+    '/api/files/places',
+    undefined,
+    "Couldn't load the shortcuts",
+  )
 }

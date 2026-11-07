@@ -1,20 +1,29 @@
-// Files by location: the viewer behind shared files and file paths clicked in
-// a terminal. A location is a folder (`root`, absolute) and a path inside it;
-// @aico/tether-client/files keeps every read inside the folder and refuses secrets, and
-// the folder itself may not name one. The file is read where it is, never
-// copied.
+// Files by location: the viewer behind Files > Everywhere, shared files and
+// file paths clicked in a terminal. A location is a starting folder (`root`,
+// absolute) and a path from it; the whole host filesystem is browsable (Cloudflare
+// Access is the boundary), so `..` and symlinks may lead out of the folder.
+// @aico/tether-client/files still refuses secret names, and the folder itself
+// may not name one. Folders list a page at a time; a file is streamed where it is,
+// never copied or read whole into memory.
 
 import { constants, realpathSync, statSync } from 'node:fs'
 import { type FileHandle, open } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, isAbsolute, join } from 'node:path'
-import { isDenied, listDirectory, readFile, resolveSafePath } from '@aico/tether-client/files'
+import {
+  type BrowseOptions,
+  isDenied,
+  listDirectory,
+  readFile,
+  resolveSafePath,
+} from '@aico/tether-client/files'
 import { RAW, type RequestContext, type Router } from './http'
 import { translate } from './pane-files'
 import { HttpError } from './tether'
 
-/** The largest file the viewer streams. */
-const MAX_RAW_BYTES = 25 * 1024 * 1024
+/** A text or image file over this opens as a download, not in the browser. */
+const MAX_INLINE_BYTES = 25 * 1024 * 1024
+const ANYWHERE: BrowseOptions = { anywhere: true }
 const CHUNK_BYTES = 64 * 1024
 const SNIFF_BYTES = 8192
 
@@ -27,11 +36,18 @@ function locationRoot(ctx: RequestContext): string {
   let isDir: boolean
   try {
     isDir = statSync(root).isDirectory()
-  } catch {
+  } catch (error) {
+    if (isPermissionError(error))
+      throw new HttpError(403, 'Can’t read this folder: permission denied')
     throw new HttpError(404, 'This folder was moved or deleted')
   }
   if (!isDir) throw new HttpError(400, 'root must be a folder')
   return root
+}
+
+function isPermissionError(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | null)?.code
+  return code === 'EACCES' || code === 'EPERM'
 }
 
 function imageType(header: Buffer): string | null {
@@ -59,16 +75,20 @@ async function streamFile(ctx: RequestContext, target: string): Promise<typeof R
   let file: FileHandle
   try {
     file = await open(target, constants.O_RDONLY | constants.O_NONBLOCK)
-  } catch {
+  } catch (error) {
+    if (isPermissionError(error))
+      throw new HttpError(403, 'Can’t read this file: permission denied')
     throw new HttpError(404, 'This file was moved or deleted')
   }
   try {
     const info = await file.stat()
     if (!info.isFile()) throw new HttpError(404, 'Not a file')
-    if (info.size > MAX_RAW_BYTES) throw new HttpError(413, 'File is over 25 MB')
     const header = Buffer.alloc(SNIFF_BYTES)
     const { bytesRead: headRead } = await file.read(header, 0, SNIFF_BYTES, 0)
-    const { type, inline } = rawType(header.subarray(0, headRead))
+    const sniffed = rawType(header.subarray(0, headRead))
+    const type = sniffed.type
+    // A very large text file or image downloads rather than filling a browser tab.
+    const inline = sniffed.inline && info.size <= MAX_INLINE_BYTES
     const { res } = ctx
     const name = basename(target).replace(/[^\x20-\x7e]|["\\]/g, '_')
     res.statusCode = 200
@@ -107,24 +127,65 @@ function statLocation(raw: string): { path: string; kind: 'file' | 'folder' } {
   let path: string
   try {
     path = realpathSync(expanded)
-  } catch {
+  } catch (error) {
+    if (isPermissionError(error))
+      throw new HttpError(403, 'Can’t read this path: permission denied')
     throw new HttpError(404, 'This file was moved or deleted')
   }
   if (path.split('/').some((part) => part && isDenied(part)))
     throw new HttpError(403, 'Access denied')
-  const info = statSync(path)
+  let info: ReturnType<typeof statSync>
+  try {
+    info = statSync(path)
+  } catch (error) {
+    if (isPermissionError(error))
+      throw new HttpError(403, 'Can’t read this path: permission denied')
+    throw new HttpError(404, 'This file was moved or deleted')
+  }
   if (info.isDirectory()) return { path, kind: 'folder' }
   if (info.isFile()) return { path, kind: 'file' }
   throw new HttpError(400, 'Not a file or folder')
 }
 
-export function registerFileLocationRoutes(router: Router): void {
+/** A listing page's bounds from the query; absent or unreadable values mean the defaults. */
+function pageOf(ctx: RequestContext): BrowseOptions {
+  const number = (name: string): number | undefined => {
+    const value = Number(ctx.query.get(name))
+    return ctx.query.get(name) !== null && Number.isFinite(value) ? value : undefined
+  }
+  return { ...ANYWHERE, offset: number('offset'), limit: number('limit') }
+}
+
+export interface FilePlace {
+  id: string
+  label: string
+  path: string
+}
+
+/** Home and the configured shortcut folders that exist here, in order. */
+export function filePlaces(shortcuts: readonly string[]): FilePlace[] {
+  const places: FilePlace[] = [{ id: 'home', label: 'Home', path: homedir() }]
+  for (const path of shortcuts) {
+    try {
+      if (statSync(path).isDirectory())
+        places.push({ id: path, label: path, path: realpathSync(path) })
+    } catch {}
+  }
+  return places
+}
+
+export function registerFileLocationRoutes(
+  router: Router,
+  options: { shortcuts: readonly string[] } = { shortcuts: [] },
+): void {
   router.on('GET', '/api/files/stat', (ctx) => statLocation(ctx.query.get('path') ?? ''))
+
+  router.on('GET', '/api/files/places', () => ({ places: filePlaces(options.shortcuts) }))
 
   router.on('GET', '/api/files/tree', (ctx) => {
     const root = locationRoot(ctx)
     try {
-      return listDirectory(root, ctx.query.get('path') ?? '')
+      return listDirectory(root, ctx.query.get('path') ?? '', pageOf(ctx))
     } catch (error) {
       throw translate(error)
     }
@@ -135,7 +196,7 @@ export function registerFileLocationRoutes(router: Router): void {
     const path = ctx.query.get('path')
     if (path === null) throw new HttpError(422, 'path is required')
     try {
-      return readFile(root, path)
+      return readFile(root, path, ANYWHERE)
     } catch (error) {
       throw translate(error)
     }
@@ -147,7 +208,7 @@ export function registerFileLocationRoutes(router: Router): void {
     if (path === null) throw new HttpError(422, 'path is required')
     let target: string
     try {
-      target = resolveSafePath(root, path)
+      target = resolveSafePath(root, path, ANYWHERE)
     } catch (error) {
       throw translate(error)
     }

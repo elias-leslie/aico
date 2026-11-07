@@ -2,12 +2,25 @@
 // file_browser.py, check for check): one directory level or one file, never
 // outside the root, never a secret, before or after following symlinks.
 
-import { closeSync, openSync, readdirSync, readSync, realpathSync, statSync } from 'node:fs'
+import {
+  accessSync,
+  closeSync,
+  constants,
+  type Dirent,
+  openSync,
+  readdirSync,
+  readlinkSync,
+  readSync,
+  realpathSync,
+  statSync,
+} from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 
 /** Refused: the path leaves the root, or names a secret or a hidden directory (403). */
 export class AccessDenied extends Error {}
+/** Refused by the operating system (permission denied): the folder or file exists but this account cannot read it (403). */
+export class Unreadable extends AccessDenied {}
 /** Malformed input (400). */
 export class InvalidPath extends Error {}
 /** Nothing of that kind there (404). */
@@ -215,8 +228,47 @@ function inside(root: string, target: string): boolean {
   return target === root || target.startsWith(root === sep ? root : root + sep)
 }
 
+/**
+ * How a read treats the root. By default it is a confinement: nothing outside
+ * it, no hidden folders, no build folders. `anywhere` makes the root only a
+ * starting folder (the host's whole filesystem is browsable, symlinks may lead
+ * out, hidden and build folders are listed); secrets stay refused. `offset` and
+ * `limit` page a listing.
+ */
+export interface BrowseOptions {
+  anywhere?: boolean
+  offset?: number
+  limit?: number
+}
+
+export const DEFAULT_PAGE = 500
+export const MAX_PAGE = 2000
+
+/** Refuse only secret names, in the requested path and in what it resolves to. */
+function refuseSecrets(names: string[]): void {
+  for (const part of names) if (isDenied(part)) throw new AccessDenied(`Access denied: ${part}`)
+}
+
+/** A path under the root, `..` and symlinks free to leave it; only secrets are refused. */
+function resolveAnywhere(rootPath: string, relativePath: string): string {
+  if (relativePath.includes('\0')) throw new AccessDenied('Access denied: invalid path')
+  if (relativePath.startsWith('/'))
+    throw new AccessDenied('Access denied: absolute paths are not allowed')
+  const root = safeRoot(rootPath)
+  const names = parts(relativePath)
+  refuseSecrets(names)
+  const target = realpathLoose(resolve(root, ...names))
+  refuseSecrets(parts(target))
+  return target
+}
+
 /** A path inside the root, without traversal or a denied part (before or after symlinks). */
-export function resolveSafePath(rootPath: string, relativePath: string): string {
+export function resolveSafePath(
+  rootPath: string,
+  relativePath: string,
+  options: BrowseOptions = {},
+): string {
+  if (options.anywhere) return resolveAnywhere(rootPath, relativePath)
   const root = safeRoot(rootPath)
   const target = realpathLoose(join(root, ...safeRelative(relativePath)))
   if (!inside(root, target)) throw new AccessDenied('Access denied: path escapes pane root')
@@ -233,10 +285,29 @@ export interface TreeEntry {
   size?: number
   extension?: string | null
   children_count?: number
+  /** The entry is a symbolic link (`is_directory` and `size` describe what it leads to). */
+  is_symlink?: boolean
+  /** What the link says it points at. */
+  link_target?: string
+  /** The link leads nowhere. */
+  link_broken?: boolean
+}
+
+export interface Listing {
+  entries: TreeEntry[]
+  path: string
+  /** Every entry of the folder (not only this page). */
+  total: number
+  /** Where this page starts; only paged listings carry it. */
+  offset?: number
 }
 
 function errorCode(error: unknown): string | undefined {
   return (error as NodeJS.ErrnoException | null)?.code
+}
+
+function isPermissionError(error: unknown): boolean {
+  return errorCode(error) === 'EACCES' || errorCode(error) === 'EPERM'
 }
 
 function entryInfo(entry: string, root: string): TreeEntry {
@@ -252,7 +323,7 @@ function entryInfo(entry: string, root: string): TreeEntry {
         return !(childIsDir && (name.startsWith('.') || SKIP_DIRS.has(name)))
       }).length
     } catch (error) {
-      if (errorCode(error) !== 'EACCES' && errorCode(error) !== 'EPERM') throw error
+      if (!isPermissionError(error)) throw error
       data.children_count = 0
     }
   } else {
@@ -266,11 +337,94 @@ function entryInfo(entry: string, root: string): TreeEntry {
   return data
 }
 
-/** One directory level within the root. */
+function compareEntries(
+  a: { name: string; isDir: boolean },
+  b: { name: string; isDir: boolean },
+): number {
+  if (a.isDir !== b.isDir) return a.isDir ? -1 : 1
+  const x = a.name.toLowerCase()
+  const y = b.name.toLowerCase()
+  return x < y ? -1 : x > y ? 1 : 0
+}
+
+/** Whether a dirent is a folder, following a symlink (a broken link is not). */
+function direntIsDirectory(dirent: Dirent, path: string): boolean {
+  return dirent.isSymbolicLink() ? isDirectory(path) : dirent.isDirectory()
+}
+
+/** One listed entry of an anywhere listing: size and kind, and what a symlink leads to. */
+function anywhereEntry(dirent: Dirent, logicalPath: string, real: string): TreeEntry {
+  const isDir = direntIsDirectory(dirent, real)
+  const data: TreeEntry = { name: dirent.name, path: logicalPath, is_directory: isDir }
+  if (dirent.isSymbolicLink()) {
+    data.is_symlink = true
+    try {
+      data.link_target = readlinkSync(real)
+    } catch {}
+    try {
+      statSync(real)
+    } catch {
+      data.link_broken = true
+    }
+  }
+  if (!isDir) {
+    try {
+      data.size = statSync(real).size
+    } catch {
+      data.size = 0
+    }
+    data.extension = suffix(dirent.name).toLowerCase() || null
+  }
+  return data
+}
+
+/** One page of a folder's entries wherever it is: secrets left out, symlinks marked, nothing else hidden. */
+function listAnywhere(rootPath: string, relativePath: string, options: BrowseOptions): Listing {
+  const target = resolveAnywhere(rootPath, relativePath)
+  try {
+    if (!statSync(target).isDirectory()) throw new NotFound(`Not a directory: ${relativePath}`)
+  } catch (error) {
+    if (error instanceof NotFound) throw error
+    if (isPermissionError(error)) throw new Unreadable('Can’t read this folder: permission denied')
+    throw new NotFound(`Not a directory: ${relativePath}`)
+  }
+  let dirents: Dirent[]
+  try {
+    dirents = readdirSync(target, { withFileTypes: true })
+  } catch (error) {
+    if (isPermissionError(error)) throw new Unreadable('Can’t read this folder: permission denied')
+    throw error
+  }
+  const listed = dirents
+    .filter((dirent) => !isDenied(dirent.name))
+    .map((dirent) => ({
+      dirent,
+      name: dirent.name,
+      real: join(target, dirent.name),
+      isDir: direntIsDirectory(dirent, join(target, dirent.name)),
+    }))
+    // A link to a secret is left out like the secret.
+    .filter(({ dirent, real }) => {
+      if (!dirent.isSymbolicLink()) return true
+      return !parts(realpathLoose(real)).some((part) => isDenied(part))
+    })
+    .sort(compareEntries)
+  const offset = Math.max(0, Math.floor(options.offset ?? 0))
+  const limit = Math.min(MAX_PAGE, Math.max(1, Math.floor(options.limit ?? DEFAULT_PAGE)))
+  const base = parts(relativePath).join('/')
+  const entries = listed
+    .slice(offset, offset + limit)
+    .map(({ dirent, real, name }) => anywhereEntry(dirent, base ? `${base}/${name}` : name, real))
+  return { entries, path: relativePath || '', total: listed.length, offset }
+}
+
+/** One directory level within the root (or, with `anywhere`, a page of it wherever it is). */
 export function listDirectory(
   rootPath: string,
   relativePath = '',
-): { entries: TreeEntry[]; path: string; total: number } {
+  options: BrowseOptions = {},
+): Listing {
+  if (options.anywhere) return listAnywhere(rootPath, relativePath, options)
   const target = resolveSafePath(rootPath, relativePath)
   if (!isDirectory(target)) throw new NotFound(`Not a directory: ${relativePath}`)
   const root = safeRoot(rootPath)
@@ -281,12 +435,7 @@ export function listDirectory(
       isDir: isDirectory(join(target, dirent.name)),
       isSymlink: dirent.isSymbolicLink(),
     }))
-    .sort((a, b) => {
-      if (a.isDir !== b.isDir) return a.isDir ? -1 : 1
-      const x = a.name.toLowerCase()
-      const y = b.name.toLowerCase()
-      return x < y ? -1 : x > y ? 1 : 0
-    })
+    .sort(compareEntries)
   const entries: TreeEntry[] = []
   for (const child of children) {
     if (child.isDir && (child.name.startsWith('.') || SKIP_DIRS.has(child.name))) continue
@@ -349,15 +498,25 @@ export interface FileContent {
 }
 
 /** One file inside the root: text (decoded as Python's text mode reads it) or marked binary. */
-export function readFile(rootPath: string, relativePath: string): FileContent {
-  const target = resolveSafePath(rootPath, relativePath)
+export function readFile(
+  rootPath: string,
+  relativePath: string,
+  options: BrowseOptions = {},
+): FileContent {
+  const target = resolveSafePath(rootPath, relativePath, options)
   let stat: ReturnType<typeof statSync>
   try {
     stat = statSync(target)
-  } catch {
+  } catch (error) {
+    if (isPermissionError(error)) throw new Unreadable('Can’t read this file: permission denied')
     throw new NotFound(`Not a file: ${relativePath}`)
   }
   if (!stat.isFile()) throw new NotFound(`Not a file: ${relativePath}`)
+  try {
+    accessSync(target, constants.R_OK)
+  } catch {
+    throw new Unreadable('Can’t read this file: permission denied')
+  }
   const name = basename(target)
   const extension = suffix(name).toLowerCase()
   const base = {

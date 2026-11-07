@@ -1259,6 +1259,167 @@ div.xterm .xterm-viewport {
   margin: 0;
 }
 
+.lantern-file-row .n .lnk {
+  font: 11.5px var(--font-mono);
+  color: var(--mist);
+}
+
+/* Files > Everywhere: the path box, shortcuts, and the breadcrumb above the list. */
+.files-bar {
+  display: grid;
+  gap: 8px;
+  flex: none;
+  padding: 0 18px 8px;
+}
+
+.files-go {
+  display: flex;
+  gap: 8px;
+}
+
+.files-go .lantern-field {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+}
+
+.files-go input {
+  font-size: 16px;
+}
+
+.files-go .lantern-btn {
+  flex: none;
+  height: 40px;
+  min-width: 52px;
+}
+
+.files-chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.files-chip {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--paper-veil);
+  border-radius: 17px;
+  background: transparent;
+  color: var(--mist);
+  font: 600 13px var(--font-ui);
+  white-space: nowrap;
+  transition:
+    background 0.15s var(--ease-arrival),
+    color 0.15s var(--ease-arrival),
+    border-color 0.15s var(--ease-arrival);
+}
+
+.files-chip svg {
+  width: 14px;
+  height: 14px;
+}
+
+.files-chip:hover {
+  background: var(--paper);
+  color: var(--bone);
+}
+
+.files-chip[aria-pressed="true"] {
+  border-color: var(--lantern);
+  background: var(--paper-veil);
+  color: var(--bone);
+}
+
+.files-chip-note {
+  align-self: center;
+  color: var(--mist);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.files-pathrow {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px 6px 18px;
+  min-width: 0;
+}
+
+.files-crumbs {
+  flex: 1;
+  min-width: 0;
+}
+
+.files-crumbs ol {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.files-crumbs li {
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+
+.files-crumbs button {
+  min-width: 34px;
+  height: 34px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mist);
+  font: 12.5px var(--font-mono);
+}
+
+.files-crumbs button:hover {
+  background: var(--paper);
+  color: var(--bone);
+}
+
+.files-crumbs button[aria-current="location"] {
+  color: var(--bone);
+}
+
+.files-crumbs .sep {
+  width: 12px;
+  height: 12px;
+  color: var(--mist);
+  opacity: 0.6;
+}
+
+.files-note {
+  flex: none;
+  margin: 0;
+  padding: 0 18px 8px;
+  color: var(--mist);
+  font-size: 12px;
+}
+
+@media (pointer: coarse) {
+  .files-go .lantern-field,
+  .files-go .lantern-btn,
+  .files-chip,
+  .files-crumbs button {
+    height: 44px;
+  }
+
+  .files-chip {
+    border-radius: 22px;
+  }
+}
+
 /* Needs you: its cards, choices and command box. Amber marks what waits on
    the owner and the recommendation. */
 .lantern-ask {

@@ -8,6 +8,7 @@ import { homedir, hostname } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { RouteName, VisionConfig } from '@aico/notes/vision-extract'
+import type { MajorWindows } from '@aico/status'
 import { defaultTetherSocketPath, hostsFile, tetherSocketPath } from '@aico/tether-client'
 import { DEFAULT_REMOTE_UPLOAD_DIR } from '@aico/tether-client/term'
 import type { AccessConfig } from './access'
@@ -44,9 +45,10 @@ export interface WebConfig {
   export: ExportConfig
   /**
    * How often aico-web reports its own Status rows (`AICO_STATUS_HEARTBEAT_SECONDS`), and how long
-   * the same rows turning the same way again stay off the phone (`AICO_STATUS_ALERT_COOLDOWN_SECONDS`).
+   * the same rows turning the same way again stay quiet in the tray (`AICO_STATUS_ALERT_COOLDOWN_SECONDS`);
+   * `major` is how long a major row stays bad before it interrupts the phone.
    */
-  status: { heartbeatMs: number; alertCooldownS: number }
+  status: { heartbeatMs: number; alertCooldownS: number; major: MajorWindows }
   /**
    * The Projects page: how often Proxmox is read for each place's power state
    * (`AICO_PROJECTS_POLL_SECONDS`), how long a start, shutdown or restart is shown as going
@@ -67,6 +69,8 @@ export interface WebConfig {
   /** Agent shares are taken only from this user's tether@default (the owner's own socket). */
   trustShows: boolean
   uploads: UploadConfig
+  /** Folders Files > Everywhere offers beside Home (`AICO_FILE_SHORTCUTS`, comma separated). */
+  fileShortcuts: string[]
   maintenance: MaintenanceConfig
 }
 
@@ -209,6 +213,8 @@ function accessFrom(identity: Identity): AccessConfig | null {
 // working; only the upload dir name is Aico's own.
 /** The host the phone app uses; it is also the pairing base. */
 const DEFAULT_PHONE_HOSTS = ['app.summitflow.dev']
+/** Where agents leave files besides a project: scratch space. */
+const DEFAULT_FILE_SHORTCUTS = ['/tmp', '/srv/scratch']
 const DEFAULT_CAPTURE_MAX_MB = 25
 const DEFAULT_CAPTURE_MAX_FILES = 20
 /** Least time between two kept revisions of one note field while it is being edited. */
@@ -229,6 +235,13 @@ const DEFAULT_PROJECTS_ACTIVITY_SECONDS = 30
 const DEFAULT_PROJECTS_PVE_TIMEOUT_SECONDS = 15
 // A row that flaps pushes at most this often for the same change (notify's per-key cooldown).
 const DEFAULT_STATUS_ALERT_COOLDOWN_SECONDS = 6 * 60 * 60
+/**
+ * How long a major row (status/major.ts) stays failed or late before it interrupts the phone.
+ * A backup: a day and two hours, so its retry and next scheduled (daily) run have also failed.
+ * An always-on machine or a service: half an hour.
+ */
+const DEFAULT_STATUS_DATA_RISK_SECONDS = 26 * 60 * 60
+const DEFAULT_STATUS_OUTAGE_SECONDS = 30 * 60
 // The FCM access token host-steward's root timer mints; the paired phones live in Aico's data directory
 // (phones.json). The site file and the app's FCM options are the shared, readable copies under /etc/aico.
 const DEFAULT_FCM_TOKEN_FILE = '/var/lib/host-steward/fcm/token.json'
@@ -437,6 +450,12 @@ export function loadConfig(
         positiveInt(env.AICO_STATUS_ALERT_COOLDOWN_SECONDS, DEFAULT_STATUS_ALERT_COOLDOWN_SECONDS),
         7 * 24 * 60 * 60,
       ),
+      // Seconds in the environment (`AICO_STATUS_DATA_RISK_SECONDS`, `AICO_STATUS_OUTAGE_SECONDS`), ms here.
+      major: {
+        'data-risk':
+          positiveInt(env.AICO_STATUS_DATA_RISK_SECONDS, DEFAULT_STATUS_DATA_RISK_SECONDS) * 1000,
+        outage: positiveInt(env.AICO_STATUS_OUTAGE_SECONDS, DEFAULT_STATUS_OUTAGE_SECONDS) * 1000,
+      },
     },
     projects: {
       pollMs: positiveInt(env.AICO_PROJECTS_POLL_SECONDS, DEFAULT_PROJECTS_POLL_SECONDS) * 1000,
@@ -498,6 +517,7 @@ export function loadConfig(
     },
     tetherSocket,
     trustShows: tetherSocket === defaultTetherSocketPath(env, uid),
+    fileShortcuts: list(env.AICO_FILE_SHORTCUTS) ?? DEFAULT_FILE_SHORTCUTS,
     uploads: {
       dir: resolve(expandHome(env.UPLOAD_DIR?.trim() || join(home, uploadDirName), home)),
       remoteDir: env.AICO_REMOTE_UPLOAD_DIR?.trim() || DEFAULT_REMOTE_UPLOAD_DIR,

@@ -124,6 +124,13 @@ function registerFolderRoutes(
   base: string,
   folders: Folders,
 ): void {
+  // Where the project folder is, so Everywhere can start in it; a folder on another host is
+  // named by host (this computer's files are not that folder).
+  router.on('GET', `${base}/root`, async (ctx) => {
+    const folder = await folders(ctx)
+    return 'host' in folder ? { root: null, host: folder.host } : { root: folder.root, host: null }
+  })
+
   router.on('GET', `${base}/tree`, async (ctx) => {
     const folder = await folders(ctx)
     const path = ctx.query.get('path') ?? ''

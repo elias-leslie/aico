@@ -131,7 +131,25 @@ function TreeNode({
           <FileIcon strokeWidth={1.7} />
         ) : null}
 
-        <span className="n">{entry.name}</span>
+        <span
+          className="n"
+          title={
+            entry.is_symlink
+              ? entry.link_broken
+                ? `${entry.name}: a link to ${entry.link_target ?? 'nothing'}, which isn’t there`
+                : `${entry.name}: a link to ${entry.link_target ?? 'another path'}`
+              : undefined
+          }
+        >
+          {entry.name}
+          {entry.is_symlink ? (
+            <span className="lnk">
+              {entry.link_broken
+                ? ` → ${entry.link_target ?? ''} (nothing there)`
+                : ` → ${entry.link_target ?? ''}`}
+            </span>
+          ) : null}
+        </span>
         <span className="s">
           {entry.is_directory ? (
             <ChevronRight
@@ -156,20 +174,67 @@ function TreeNode({
             >
               Loading
             </li>
+          ) : childTree.isError ? (
+            <li
+              className="py-1.5 text-xs"
+              style={{ paddingLeft: 38 + depth * 16, color: 'var(--mist)' }}
+            >
+              {childTree.error?.message || 'Couldn’t load this folder.'}
+            </li>
           ) : (
-            childTree.data?.entries?.map((child) => (
-              <TreeNode
-                key={child.path}
-                source={source}
-                entry={child}
-                depth={depth + 1}
-                selectedPath={selectedPath}
-                onSelect={onSelect}
-              />
-            ))
+            <>
+              {childTree.entries?.map((child) => (
+                <TreeNode
+                  key={child.path}
+                  source={source}
+                  entry={child}
+                  depth={depth + 1}
+                  selectedPath={selectedPath}
+                  onSelect={onSelect}
+                />
+              ))}
+              {!childTree.entries?.length && (
+                <li
+                  className="py-1.5 text-xs"
+                  style={{ paddingLeft: 38 + depth * 16, color: 'var(--mist)' }}
+                >
+                  Empty
+                </li>
+              )}
+              <MoreRow tree={childTree} indent={38 + depth * 16} />
+            </>
           )}
         </ul>
       )}
+    </li>
+  )
+}
+
+/** The rest of a long folder: how many are shown, and a button for the next page. */
+function MoreRow({
+  tree,
+  indent,
+}: {
+  tree: ReturnType<typeof useFileTree>
+  indent: number
+}) {
+  if (!tree.hasMore) return null
+  return (
+    <li
+      className="flex flex-wrap items-center gap-2 py-1"
+      style={{ paddingLeft: indent }}
+    >
+      <span className="text-xs" style={{ color: 'var(--mist)' }}>
+        Showing {tree.entries?.length ?? 0} of {tree.total ?? 'many'}
+      </span>
+      <button
+        type="button"
+        className="lantern-btn"
+        disabled={tree.loadingMore}
+        onClick={tree.loadMore}
+      >
+        {tree.loadingMore ? 'Loading' : 'Show more'}
+      </button>
     </li>
   )
 }
@@ -233,9 +298,9 @@ export function FileBrowser({
               </button>
             )}
           </div>
-        ) : tree.data?.entries.length ? (
+        ) : tree.entries?.length ? (
           <ul className="m-0 list-none p-0">
-            {tree.data.entries.map((entry) => (
+            {tree.entries.map((entry) => (
               <TreeNode
                 key={entry.path}
                 source={source}
@@ -245,6 +310,7 @@ export function FileBrowser({
                 onSelect={setSelected}
               />
             ))}
+            <MoreRow tree={tree} indent={10} />
           </ul>
         ) : (
           <p className="files-state">This folder is empty.</p>
@@ -400,7 +466,11 @@ export function FilePreview({
                   className="lantern-btn h-8! px-2.5! text-xs!"
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
-                  {pageUrl ? 'Open page' : 'Open'}
+                  {pageUrl
+                    ? 'Open page'
+                    : content.data.is_binary && !image
+                      ? 'Download'
+                      : 'Open'}
                 </a>
               )}
               {onInsertPath && (

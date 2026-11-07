@@ -1,5 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ProjectSource } from '@/lib/api/pane-files'
 import type { FilesRequest } from '@/lib/files-opener'
@@ -24,7 +31,8 @@ function serve(url: string) {
   if (pathname === '/api/shows') return json({ shows: [share] })
   if (pathname === '/api/files/stat') {
     const path = searchParams.get('path')
-    if (path === '/srv/out/image.png') return json({ path, kind: 'file' })
+    if (path === '/srv/out/image.png' || path === '/tmp/agent/out.txt')
+      return json({ path, kind: 'file' })
     if (path === '/srv/out/run/')
       return json({ path: '/srv/out/run', kind: 'folder' })
     return json({ detail: 'This file was moved or deleted' }, 404)
@@ -42,17 +50,36 @@ function serve(url: string) {
               extension: '.png',
             },
           ]
-        : [
-            {
-              name: 'log.txt',
-              path: 'log.txt',
-              is_directory: false,
-              size: 2,
-              extension: '.txt',
-            },
-          ]
+        : root === '/srv/out/run'
+          ? [
+              {
+                name: 'log.txt',
+                path: 'log.txt',
+                is_directory: false,
+                size: 2,
+                extension: '.txt',
+              },
+            ]
+          : [
+              {
+                name: 'tmp-file.txt',
+                path: 'tmp-file.txt',
+                is_directory: false,
+                size: 2,
+                extension: '.txt',
+              },
+            ]
     return json({ entries, path: '', total: entries.length })
   }
+  if (pathname === '/api/files/places')
+    return json({
+      places: [
+        { id: 'home', label: 'Home', path: '/home/me' },
+        { id: '/tmp', label: '/tmp', path: '/tmp' },
+      ],
+    })
+  if (pathname === '/api/sessions/ab12cd34/files/root')
+    return json({ root: '/srv/work', host: null })
   if (pathname === '/api/sessions/ab12cd34/files/tree')
     return json({
       entries: [
@@ -110,6 +137,15 @@ function renderDialog(
     </QueryClientProvider>,
   )
   return { onInsertPath, fetchMock }
+}
+
+/** The folders the browser has asked to list, in order. */
+function treeRoots(): string[] {
+  return vi
+    .mocked(fetch)
+    .mock.calls.map(([url]) => new URL(String(url), 'http://aico.test'))
+    .filter((url) => url.pathname === '/api/files/tree')
+    .map((url) => url.searchParams.get('root') ?? '')
 }
 
 afterEach(() => {
@@ -195,7 +231,12 @@ describe('FilesDialog', () => {
     renderDialog({ kind: 'shared' })
     fireEvent.click(await screen.findByRole('button', { name: /run/ }))
     expect(await screen.findByText('log.txt')).toBeVisible()
-    expect(screen.getByTitle('/srv/out/run')).toBeVisible()
+    expect(
+      within(screen.getByRole('navigation', { name: 'Folder path' })).getByRole(
+        'button',
+        { name: 'run' },
+      ),
+    ).toHaveAttribute('aria-current', 'location')
   })
 
   it('opens a clicked path, and says when it is gone', async () => {
@@ -214,20 +255,212 @@ describe('FilesDialog', () => {
       'aria-pressed',
       'false',
     )
-    expect(screen.getByRole('button', { name: 'Project' })).toHaveAttribute(
+    expect(
+      screen.getByRole('button', { name: 'This project' }),
+    ).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it("opens on This project, a session's own folder, with its path above it", async () => {
+    renderDialog(null, { kind: 'session', sessionId: 'ab12cd34' })
+    expect(await screen.findByText('README.md')).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: 'This project' }),
+    ).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Everywhere' })).toHaveAttribute(
       'aria-pressed',
       'false',
     )
+    const crumbs = within(
+      await screen.findByRole('navigation', { name: 'Folder path' }),
+    )
+    expect(crumbs.getByRole('button', { name: 'work' })).toHaveAttribute(
+      'aria-current',
+      'location',
+    )
   })
 
-  it("opens on the Project view of a session's own folder", async () => {
+  it('goes above the project from the breadcrumb, up to the top', async () => {
     renderDialog(null, { kind: 'session', sessionId: 'ab12cd34' })
+    const crumbs = within(
+      await screen.findByRole('navigation', { name: 'Folder path' }),
+    )
+    fireEvent.click(crumbs.getByRole('button', { name: 'srv' }))
+    expect(await screen.findByText('tmp-file.txt')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Everywhere' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    expect(treeRoots()).toContain('/srv')
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'Folder path' })).getByRole(
+        'button',
+        { name: 'Top folder, /' },
+      ),
+    )
+    await waitFor(() => expect(treeRoots()).toContain('/'))
+  })
+
+  it('switches between This project and Everywhere, Everywhere starting in the project folder', async () => {
+    renderDialog(null, { kind: 'session', sessionId: 'ab12cd34' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Everywhere' }))
+    expect(await screen.findByText('tmp-file.txt')).toBeVisible()
+    expect(treeRoots()).toContain('/srv/work')
+    expect(screen.getByRole('textbox', { name: 'Go to a path' })).toHaveValue(
+      '/srv/work',
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'This project' }))
     expect(await screen.findByText('README.md')).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Project' })).toHaveAttribute(
+  })
+
+  it('opens on Home with Shared in sight when no session is open', async () => {
+    renderDialog(null, null)
+    expect(await screen.findByText('tmp-file.txt')).toBeVisible()
+    expect(treeRoots()).toEqual(['/home/me'])
+    expect(screen.getByRole('button', { name: /Home/ })).toHaveAttribute(
       'aria-pressed',
       'true',
     )
     expect(screen.getByRole('button', { name: 'Shared' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'This project' })).toBeNull()
+  })
+
+  it('jumps to a path typed in the box, a file opening in its folder', async () => {
+    renderDialog(null, null)
+    await screen.findByText('tmp-file.txt')
+    const box = screen.getByRole('textbox', { name: 'Go to a path' })
+    fireEvent.change(box, { target: { value: '/tmp/agent/out.txt' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Go' }))
+    await waitFor(() => expect(treeRoots()).toContain('/tmp/agent'))
+    expect(
+      within(screen.getByRole('navigation', { name: 'Folder path' })).getByRole(
+        'button',
+        { name: 'agent' },
+      ),
+    ).toHaveAttribute('aria-current', 'location')
+    fireEvent.change(box, { target: { value: '/nowhere' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Go' }))
+    expect(
+      await screen.findByText('This file was moved or deleted'),
+    ).toBeVisible()
+    // The box stays to try another path.
+    expect(screen.getByRole('textbox', { name: 'Go to a path' })).toBeVisible()
+  })
+
+  it('jumps to a shortcut folder and to Shared', async () => {
+    renderDialog(null, null)
+    await screen.findByText('tmp-file.txt')
+    fireEvent.click(screen.getByRole('button', { name: '/tmp' }))
+    await waitFor(() => expect(treeRoots().at(-1)).toBe('/tmp'))
+    fireEvent.click(screen.getByRole('button', { name: 'Shared' }))
+    expect(await screen.findByText('Image and prompt')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Shared' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  })
+
+  it('shows a symlink as a link, and says when a folder cannot be read', async () => {
+    renderDialog(null, null, (url) => {
+      const { pathname, searchParams } = new URL(url, 'http://aico.test')
+      if (
+        pathname === '/api/files/stat' &&
+        searchParams.get('path') === '/root'
+      )
+        return json({ path: '/root', kind: 'folder' })
+      if (
+        pathname === '/api/files/tree' &&
+        searchParams.get('root') === '/home/me'
+      )
+        return json({
+          entries: [
+            {
+              name: 'latest',
+              path: 'latest',
+              is_directory: true,
+              is_symlink: true,
+              link_target: '/srv/out',
+            },
+            {
+              name: 'old',
+              path: 'old',
+              is_directory: false,
+              is_symlink: true,
+              link_target: 'gone',
+              link_broken: true,
+              size: 0,
+            },
+          ],
+          path: '',
+          total: 2,
+          offset: 0,
+        })
+      if (
+        pathname === '/api/files/tree' &&
+        searchParams.get('root') === '/root'
+      )
+        return json(
+          { detail: 'Can’t read this folder: permission denied' },
+          403,
+        )
+      return serve(url)
+    })
+    expect(
+      await screen.findByRole('button', { name: /latest.*\/srv\/out/ }),
+    ).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: /old.*nothing there/ }),
+    ).toBeVisible()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Go to a path' }), {
+      target: { value: '/root' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Go' }))
+    expect(
+      await screen.findByText('Can’t read this folder: permission denied'),
+    ).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull()
+  })
+
+  it('pages a long folder with Show more', async () => {
+    const page = (from: number, count: number) =>
+      Array.from({ length: count }, (_, index) => ({
+        name: `f${from + index}`,
+        path: `f${from + index}`,
+        is_directory: false,
+        size: 1,
+        extension: null,
+      }))
+    renderDialog(null, null, (url) => {
+      const { pathname, searchParams } = new URL(url, 'http://aico.test')
+      if (
+        pathname === '/api/files/tree' &&
+        searchParams.get('root') === '/home/me'
+      ) {
+        const offset = Number(searchParams.get('offset') ?? 0)
+        return json({
+          entries: offset ? page(3, 2) : page(0, 3),
+          path: '',
+          total: 5,
+          offset,
+        })
+      }
+      return serve(url)
+    })
+    expect(await screen.findByText('Showing 3 of 5')).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Show more' }))
+    expect(await screen.findByText('f4')).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Show more' })).toBeNull()
+  })
+
+  it('says on another host that Everywhere is this computer’s files', async () => {
+    renderDialog(null, { kind: 'pane', paneId: 'pane-remote' }, (url) =>
+      url.startsWith('/api/panes/pane-remote/files/root')
+        ? json({ root: null, host: 'agent-work' })
+        : serve(url),
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Everywhere' }))
+    expect(
+      await screen.findByText(/agent-work’s files are under This project/),
+    ).toBeVisible()
   })
 
   it('says when nothing is shared yet', async () => {
@@ -243,14 +476,14 @@ describe('FilesDialog', () => {
         <FilesDialog
           isOpen
           project={null}
-          request={null}
+          request={{ kind: 'shared' }}
           onClose={vi.fn()}
           onInsertPath={vi.fn()}
         />
       </QueryClientProvider>,
     )
     expect(await screen.findByText(/Nothing shared yet/)).toBeVisible()
-    expect(screen.queryByRole('button', { name: 'Project' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'This project' })).toBeNull()
   })
 
   it('shows a refusal from another host at once, without Try again', async () => {

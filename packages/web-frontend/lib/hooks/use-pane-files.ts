@@ -1,10 +1,14 @@
-import { useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import {
   type FilesSource,
   fetchFileContent,
+  fetchFilePlaces,
   fetchFileTree,
+  fetchProjectRoot,
   type PaneFileContentResponse,
+  type PaneFileTreeEntry,
   type PaneFileTreeResponse,
+  type ProjectSource,
   sourceKey,
 } from '@/lib/api/pane-files'
 import { isPermanentRefusal } from '@/lib/api-fetch'
@@ -23,12 +27,63 @@ function retryFiles(failures: number, error: Error): boolean {
   return !isPermanentRefusal(error) && failures < 3
 }
 
+/** A folder's entries, a page at a time: `loadMore` fetches the next page. */
 export function useFileTree(source: FilesSource, path = '', enabled = true) {
-  return useQuery<PaneFileTreeResponse>({
+  const query = useInfiniteQuery<
+    PaneFileTreeResponse,
+    Error,
+    { pages: PaneFileTreeResponse[] },
+    readonly unknown[],
+    number
+  >({
     queryKey: fileQueryKeys.tree(source, path),
-    queryFn: () => fetchFileTree(source, path),
+    queryFn: ({ pageParam }) => fetchFileTree(source, path, pageParam),
+    initialPageParam: 0,
+    getNextPageParam: (last) => {
+      const next = (last.offset ?? 0) + last.entries.length
+      return last.offset !== undefined &&
+        last.entries.length > 0 &&
+        next < last.total
+        ? next
+        : undefined
+    },
     enabled,
     staleTime: 10_000,
+    retry: retryFiles,
+  })
+  const pages = query.data?.pages
+  return {
+    entries: pages?.flatMap((page) => page.entries) as
+      | PaneFileTreeEntry[]
+      | undefined,
+    total: pages?.at(-1)?.total,
+    isLoading: query.isLoading,
+    isError: query.isError,
+    error: query.error,
+    refetch: query.refetch,
+    hasMore: query.hasNextPage,
+    loadingMore: query.isFetchingNextPage,
+    loadMore: () => void query.fetchNextPage(),
+  }
+}
+
+/** Where a session's project folder is (so Everywhere can start there). */
+export function useProjectRoot(project: ProjectSource | null) {
+  return useQuery({
+    queryKey: [...fileQueryKeys.all, 'root', project ? sourceKey(project) : ''],
+    queryFn: () => fetchProjectRoot(project as ProjectSource),
+    enabled: project !== null,
+    staleTime: 60_000,
+    retry: retryFiles,
+  })
+}
+
+/** Home and the scratch folders, for the shortcuts. */
+export function useFilePlaces() {
+  return useQuery({
+    queryKey: [...fileQueryKeys.all, 'places'],
+    queryFn: fetchFilePlaces,
+    staleTime: 60_000,
     retry: retryFiles,
   })
 }
