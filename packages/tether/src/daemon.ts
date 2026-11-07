@@ -135,24 +135,14 @@ function closeServer(server: Server): Promise<void> {
   })
 }
 
-export async function startDaemon(
+/** One process serves one instance: bind the extracted lifecycle modules. */
+function bindLifecycleModules(
   paths: TetherPaths,
-  env: NodeJS.ProcessEnv = process.env,
-): Promise<RunningDaemon> {
-  const show = resolveShowConfig(env)
-  configureEntryScan(resolveEntryScanConfig(env))
-  mkdirSync(paths.stateDir, { recursive: true, mode: 0o700 })
-  chmodSync(paths.stateDir, 0o700)
-  mkdirSync(agentExitMarkerDir(paths), { recursive: true, mode: 0o700 })
-  const store = new Store(paths.dbPath)
-  const events = new EventBus()
-  const projects = new ProjectProvider({
-    registry: () => registryProjects(env),
-    localFile: paths.localProjectsFile,
-  })
-  const projectRoots = new Map<string, string>()
-
-  // One process serves one instance: bind the extracted lifecycle modules.
+  env: NodeJS.ProcessEnv,
+  store: Store,
+  events: EventBus,
+  projectRoots: Map<string, string>,
+): void {
   setLifecycleInstance(paths.instance)
   configureTmuxPaths({
     // Non-default instances get a path that is never created, so a
@@ -178,9 +168,21 @@ export async function startDaemon(
     projectRoot: (projectId) => projectRoots.get(projectId) ?? null,
     graphicalEnv: reconcileEnabled(env) ? userManagerGraphicalEnvironment : undefined,
   })
+}
 
+/** The shared state every route group and background service reads. The
+ * fields set to undefined here are filled in by the startup steps. */
+function createContext(
+  paths: TetherPaths,
+  env: NodeJS.ProcessEnv,
+  store: Store,
+  events: EventBus,
+  projects: ProjectProvider,
+  projectRoots: Map<string, string>,
+  show: ReturnType<typeof resolveShowConfig>,
+) {
   const coordDocs = new CoordinationDocs(store.db, Date.now)
-  const context = {
+  return {
     coordDocs,
     show,
     paths,
@@ -217,62 +219,68 @@ export async function startDaemon(
         ),
     }),
   }
-  if (reconcileEnabled(env)) {
-    // The session history: each tool's transcripts, read in small passes.
-    context.history = historyFromEnv(store.db, env, projectRoots)
-    context.history.endRetired()
-    events.subscribe((event) => {
-      if (
-        event.type === 'session.ended' &&
-        typeof event.data.id === 'string' &&
-        typeof event.data.host !== 'string'
-      )
-        context.history?.endOwned(event.data.id)
-    })
-  }
-  if (reconcileEnabled(env)) {
-    const graphical = () => userManagerGraphicalEnvironment()
-    const continuity = new Continuity(context, {
-      // TETHER_HEADLESS=1: an instance with no desktop never waits for DISPLAY.
-      headless: env.TETHER_HEADLESS === '1',
-      desktopReady: () => Boolean(graphical().DISPLAY || graphical().WAYLAND_DISPLAY),
-    })
-    const recovery = new Recovery(context, {
-      awaitingRestore: (id) => continuity.isAwaitingRestore(id),
-      // A fresh pass, so a session started a moment ago is seen too.
-      engine: {
-        runningConversations: async () =>
-          (await continuity.observe()).map(({ row, resumeId }) => ({ id: row.id, resumeId })),
-      },
-    })
-    continuity.setRecovery(recovery)
-    const deadShells = new DeadShells({
-      awaitingRestore: (id) => continuity.isAwaitingRestore(id),
-      restorePlanned: continuity.restorePlanned,
-      restoreFinished: continuity.restoreFinished,
-      list: listWidgets,
-      status: verifySessionStatus,
-      end: endSession,
-      generationOf,
-    })
-    onAbandonedScope((event) => {
-      void recovery.onAbandoned(event)
-      deadShells.onAbandoned(event)
-    })
-    void deadShells.settleStartup(context.startedAt)
-    setLaunchGuard((id) => recovery.holdsLaunch(id))
-    context.continuity = continuity
-    context.recovery = recovery
-  }
-  const wakes = new WakeService(context)
-  context.wakes = wakes
-  bindWakeStore(wakes.store)
-  // An owner's answer to an ask goes to the asking session as an event line
-  // on its delivery queue, or to the session that launched it once the asker
-  // has ended; a session Tether cannot deliver to reads it with `tether ask get`.
+}
+
+type DaemonContext = ReturnType<typeof createContext>
+
+/** The session history: each tool's transcripts, read in small passes. */
+function startSessionHistory(context: DaemonContext, env: NodeJS.ProcessEnv): void {
+  const { store, events, projectRoots } = context
+  context.history = historyFromEnv(store.db, env, projectRoots)
+  context.history.endRetired()
+  events.subscribe((event) => {
+    if (
+      event.type === 'session.ended' &&
+      typeof event.data.id === 'string' &&
+      typeof event.data.host !== 'string'
+    )
+      context.history?.endOwned(event.data.id)
+  })
+}
+
+/** Reboot continuity and crash recovery, where Tether observes sessions. */
+function startContinuity(context: DaemonContext, env: NodeJS.ProcessEnv): void {
+  const graphical = () => userManagerGraphicalEnvironment()
+  const continuity = new Continuity(context, {
+    // TETHER_HEADLESS=1: an instance with no desktop never waits for DISPLAY.
+    headless: env.TETHER_HEADLESS === '1',
+    desktopReady: () => Boolean(graphical().DISPLAY || graphical().WAYLAND_DISPLAY),
+  })
+  const recovery = new Recovery(context, {
+    awaitingRestore: (id) => continuity.isAwaitingRestore(id),
+    // A fresh pass, so a session started a moment ago is seen too.
+    engine: {
+      runningConversations: async () =>
+        (await continuity.observe()).map(({ row, resumeId }) => ({ id: row.id, resumeId })),
+    },
+  })
+  continuity.setRecovery(recovery)
+  const deadShells = new DeadShells({
+    awaitingRestore: (id) => continuity.isAwaitingRestore(id),
+    restorePlanned: continuity.restorePlanned,
+    restoreFinished: continuity.restoreFinished,
+    list: listWidgets,
+    status: verifySessionStatus,
+    end: endSession,
+    generationOf,
+  })
+  onAbandonedScope((event) => {
+    void recovery.onAbandoned(event)
+    deadShells.onAbandoned(event)
+  })
+  void deadShells.settleStartup(context.startedAt)
+  setLaunchGuard((id) => recovery.holdsLaunch(id))
+  context.continuity = continuity
+  context.recovery = recovery
+}
+
+/** An owner's answer to an ask goes to the asking session as an event line
+ * on its delivery queue, or to the session that launched it once the asker
+ * has ended; a session Tether cannot deliver to reads it with `tether ask get`. */
+function askDelivery(wakes: WakeService): AskDelivery {
   // A session that is there (not ended), even while its state is unknown.
   const askReceiver = (id: string): boolean => Boolean(getWidget(id))
-  context.asks = {
+  return {
     wake: (sessionId, text, source) =>
       wakes.queueAnswer(sessionId, text, source ?? `ask:${Date.now()}`),
     lost: (wakeId) =>
@@ -299,16 +307,28 @@ export async function startDaemon(
       if (getWidget(sessionId)) notifySessionChanged(sessionId, { force: true })
     },
   }
-  // The machine has one fleet link, held by the default instance. A test instance (tether@dev) reading
-  // the same fleet.json fights it for the link's sockets and writes failed link rows; it runs a link
-  // only when given its own AICO_FLEET_CONFIG.
-  const fleet = new FleetService(
+}
+
+/** The machine has one fleet link, held by the default instance. A test instance (tether@dev) reading
+ * the same fleet.json fights it for the link's sockets and writes failed link rows; it runs a link
+ * only when given its own AICO_FLEET_CONFIG. */
+function createFleet(paths: TetherPaths, env: NodeJS.ProcessEnv): FleetService {
+  return new FleetService(
     paths.instance === 'default' || env.AICO_FLEET_CONFIG
       ? env
       : { ...env, AICO_FLEET_CONFIG: join(paths.runtimeDir, 'no-fleet-link.json') },
     paths.socket,
   )
-  const hosts = hubEnabled(env)
+}
+
+function createHub(
+  context: DaemonContext,
+  env: NodeJS.ProcessEnv,
+  fleet: FleetService,
+  askStore: AskStore,
+): Hub | null {
+  const { store, events } = context
+  return hubEnabled(env)
     ? new Hub({
         env,
         fault: (error) => fleet.fault(error),
@@ -336,9 +356,16 @@ export async function startDaemon(
         },
       })
     : null
-  if (hosts) context.hub = hosts
-  // `--host auto`: pick a host with room from live readings (src/hub/placement.ts).
-  context.placement = new Placement({
+}
+
+/** `--host auto`: pick a host with room from live readings (src/hub/placement.ts). */
+function createPlacement(
+  context: DaemonContext,
+  env: NodeJS.ProcessEnv,
+  hosts: Hub | null,
+): Placement {
+  const { store } = context
+  return new Placement({
     env,
     hostNames: () => hosts?.hostNames() ?? [],
     peer: (name) => hosts?.peerView(name) ?? null,
@@ -366,8 +393,15 @@ export async function startDaemon(
       put: (key, value) => store.putSetting(key, value, Date.now()),
     },
   })
-  // The owner's waiting notice: only the Tether that knows where Aico is.
-  const aicoUrl = aicoOrigin(env.TETHER_AICO_URL)
+}
+
+/** The owner's waiting notice: only the Tether that knows where Aico is. */
+function startWaitingNotices(
+  context: DaemonContext,
+  env: NodeJS.ProcessEnv,
+  aicoUrl: string | null,
+): WaitingNotices | null {
+  const { store, events } = context
   const waiting =
     aicoUrl && reconcileEnabled(env)
       ? new WaitingNotices({
@@ -399,7 +433,16 @@ export async function startDaemon(
       }
     })
   }
-  // A model switch in a window nobody launched: the owner's notice (src/model-notices.ts).
+  return waiting
+}
+
+/** A model switch in a window nobody launched: the owner's notice (src/model-notices.ts). */
+function startModelNotices(
+  context: DaemonContext,
+  env: NodeJS.ProcessEnv,
+  aicoUrl: string | null,
+): ModelNotices | null {
+  const { store, events } = context
   const modelNotices =
     aicoUrl && reconcileEnabled(env)
       ? new ModelNotices({
@@ -434,9 +477,20 @@ export async function startDaemon(
         console.error('[tether:models] notice failed:', error)
       }
     })
-  // Lane reports: a launched lane tells its launcher it finished, is blocked
-  // or ended (src/lane-reports.ts); only where Tether observes sessions, since
-  // the lines are pasted.
+  return modelNotices
+}
+
+/** Lane reports: a launched lane tells its launcher it finished, is blocked
+ * or ended (src/lane-reports.ts); only where Tether observes sessions, since
+ * the lines are pasted. */
+function startLaneReports(
+  context: DaemonContext,
+  env: NodeJS.ProcessEnv,
+  wakes: WakeService,
+  hosts: Hub | null,
+  modelNotices: ModelNotices | null,
+): LaneReporter | null {
+  const { store, events } = context
   const lanes = reconcileEnabled(env)
     ? new LaneReporter(new LaneReportStore(store.db), {
         childGone: (id) => {
@@ -508,10 +562,20 @@ export async function startDaemon(
       }
     })
   }
-  // General waits: an agent's wait on another session, a job, a request, an
-  // ask or a host fires once, as one line on its delivery
-  // queue (src/waits.ts); pasted, so only where Tether observes sessions.
-  const askStore = new AskStore(store.db)
+  return lanes
+}
+
+/** General waits: an agent's wait on another session, a job, a request, an
+ * ask or a host fires once, as one line on its delivery
+ * queue (src/waits.ts); pasted, so only where Tether observes sessions. */
+function startWaits(
+  context: DaemonContext,
+  env: NodeJS.ProcessEnv,
+  wakes: WakeService,
+  hosts: Hub | null,
+  askStore: AskStore,
+): WaitService | null {
+  const { store, events, paths, coordDocs } = context
   let pokeWaits: (kind: PullKind, ref?: string) => void = () => {}
   coordDocs.onWrite((name) => {
     if (name === '_coord') pokeWaits('reply')
@@ -632,8 +696,13 @@ export async function startDaemon(
       }
     })
   }
-  // A session that ends with open asks hands them to its launcher (one
-  // line); their answers go there (src/asks.ts handOffAsks).
+  return waits
+}
+
+/** A session that ends with open asks hands them to its launcher (one
+ * line); their answers go there (src/asks.ts handOffAsks). */
+function handOffAsksOnEnd(context: DaemonContext, askStore: AskStore): void {
+  const { events } = context
   events.subscribe((event) => {
     if (event.type !== 'session.ended' || typeof event.data.id !== 'string') return
     if (typeof event.data.host === 'string' || !context.asks) return
@@ -644,24 +713,16 @@ export async function startDaemon(
       console.error('[tether:asks] hand-off failed:', error)
     }
   })
-  const server = createTetherServer(context)
-  try {
-    await listenPrivateSocket(server, paths.socket)
-  } catch (error) {
-    store.close()
-    throw error
-  }
-  await fleet.start()
-  const ready = startLifecycle({ reconcile: reconcileEnabled(env) })
-  hosts?.start()
-  // Agent state: hook reports always; the poll only where Tether observes tmux.
-  const agentStates = new AgentStateTracker((id) => {
-    notifySessionChanged(id, { force: true })
-    wakes.scheduler.nudge()
-  })
-  bindAgentStates(agentStates)
-  // Model switches: each agent's own record, read on the agent poll; a switch
-  // nobody asked for stops the turn (src/model-switch.ts).
+}
+
+/** Model switches: each agent's own record, read on the agent poll; a switch
+ * nobody asked for stops the turn (src/model-switch.ts). */
+function startModelWatch(
+  context: DaemonContext,
+  env: NodeJS.ProcessEnv,
+  agentStates: AgentStateTracker,
+): ModelWatch | null {
+  const { store, events, paths } = context
   const models = reconcileEnabled(env)
     ? new ModelWatch({
         now: Date.now,
@@ -693,7 +754,16 @@ export async function startDaemon(
       if (event.type === 'session.ended' && typeof event.data.host !== 'string')
         models.retain(listWidgets().map((row) => row.id))
     })
-  const agentPoller = new AgentStatePoller(
+  return models
+}
+
+function createAgentPoller(
+  context: DaemonContext,
+  env: NodeJS.ProcessEnv,
+  agentStates: AgentStateTracker,
+  models: ModelWatch | null,
+): AgentStatePoller {
+  return new AgentStatePoller(
     agentStates,
     {
       sessions: () =>
@@ -713,6 +783,20 @@ export async function startDaemon(
       ...(context.history ? { runs: context.history.agentRun } : {}),
     },
   )
+}
+
+/** Background services that start once startup reconciliation has finished. */
+function startWhenReady(
+  ready: Promise<void>,
+  env: NodeJS.ProcessEnv,
+  services: {
+    agentPoller: AgentStatePoller
+    wakes: WakeService
+    waits: WaitService | null
+    lanes: LaneReporter | null
+  },
+): void {
+  const { agentPoller, wakes, waits, lanes } = services
   if (reconcileEnabled(env)) void ready.then(() => agentPoller.start()).catch(() => {})
   // Wakes paste into sessions, so only where Tether observes tmux.
   if (reconcileEnabled(env)) void ready.then(() => wakes.scheduler.start()).catch(() => {})
@@ -728,22 +812,15 @@ export async function startDaemon(
         }
       })
       .catch(() => {})
-  // Display titles name each session's project: learn names now and keep
-  // up with renames in SummitFlow.
-  setPersonalWorkspaceRoot(
-    join(env.HOME ?? homedir(), '.local', 'share', 'aico', 'personal-workspace'),
-  )
-  const learn = () =>
-    projects
-      .list()
-      .then((list) => learnProjects(context, list.projects))
-      .catch(() => {})
-  void learn()
-  const projectNames = setInterval(learn, PROJECT_NAMES_MS)
-  projectNames.unref()
-  void context.continuity?.start()
-  startHistoryScan(context.history)
-  void ready.then(() => context.recovery?.start()).catch(() => {})
+}
+
+/** Notices for what was already waiting or switched when Tether started; once
+ * remote hosts have listed theirs, resolve what no longer holds. */
+function sweepNoticesWhenReady(
+  ready: Promise<void>,
+  waiting: WaitingNotices | null,
+  modelNotices: ModelNotices | null,
+): void {
   if (waiting)
     void ready
       .then(() => {
@@ -763,6 +840,92 @@ export async function startDaemon(
         setTimeout(() => modelNotices.sweep(), WAIT_NOTICE_MS).unref()
       })
       .catch(() => {})
+}
+
+/** Display titles name each session's project: learn names now and keep up
+ * with renames. Returns the refresh timer. */
+function startProjectNames(
+  context: DaemonContext,
+  env: NodeJS.ProcessEnv,
+): ReturnType<typeof setInterval> {
+  const { projects } = context
+  setPersonalWorkspaceRoot(
+    join(env.HOME ?? homedir(), '.local', 'share', 'aico', 'personal-workspace'),
+  )
+  const learn = () =>
+    projects
+      .list()
+      .then((list) => learnProjects(context, list.projects))
+      .catch(() => {})
+  void learn()
+  const projectNames = setInterval(learn, PROJECT_NAMES_MS)
+  projectNames.unref()
+  return projectNames
+}
+
+export async function startDaemon(
+  paths: TetherPaths,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<RunningDaemon> {
+  const show = resolveShowConfig(env)
+  configureEntryScan(resolveEntryScanConfig(env))
+  mkdirSync(paths.stateDir, { recursive: true, mode: 0o700 })
+  chmodSync(paths.stateDir, 0o700)
+  mkdirSync(agentExitMarkerDir(paths), { recursive: true, mode: 0o700 })
+  const store = new Store(paths.dbPath)
+  const events = new EventBus()
+  const projects = new ProjectProvider({
+    registry: () => registryProjects(env),
+    localFile: paths.localProjectsFile,
+  })
+  const projectRoots = new Map<string, string>()
+
+  bindLifecycleModules(paths, env, store, events, projectRoots)
+  const context = createContext(paths, env, store, events, projects, projectRoots, show)
+  if (reconcileEnabled(env)) startSessionHistory(context, env)
+  if (reconcileEnabled(env)) startContinuity(context, env)
+  const wakes = new WakeService(context)
+  context.wakes = wakes
+  bindWakeStore(wakes.store)
+  context.asks = askDelivery(wakes)
+  const fleet = createFleet(paths, env)
+  const askStore = new AskStore(store.db)
+  const hosts = createHub(context, env, fleet, askStore)
+  if (hosts) context.hub = hosts
+  context.placement = createPlacement(context, env, hosts)
+  const aicoUrl = aicoOrigin(env.TETHER_AICO_URL)
+  const waiting = startWaitingNotices(context, env, aicoUrl)
+  if (waiting) context.waiting = waiting
+  const modelNotices = startModelNotices(context, env, aicoUrl)
+  const lanes = startLaneReports(context, env, wakes, hosts, modelNotices)
+  if (lanes) context.lanes = lanes
+  const waits = startWaits(context, env, wakes, hosts, askStore)
+  if (waits) context.waits = waits
+  handOffAsksOnEnd(context, askStore)
+  const server = createTetherServer(context)
+  try {
+    await listenPrivateSocket(server, paths.socket)
+  } catch (error) {
+    store.close()
+    throw error
+  }
+  await fleet.start()
+  const ready = startLifecycle({ reconcile: reconcileEnabled(env) })
+  hosts?.start()
+  // Agent state: hook reports always; the poll only where Tether observes tmux.
+  const agentStates = new AgentStateTracker((id) => {
+    notifySessionChanged(id, { force: true })
+    wakes.scheduler.nudge()
+  })
+  bindAgentStates(agentStates)
+  const models = startModelWatch(context, env, agentStates)
+  const agentPoller = createAgentPoller(context, env, agentStates, models)
+  startWhenReady(ready, env, { agentPoller, wakes, waits, lanes })
+  const projectNames = startProjectNames(context, env)
+  void context.continuity?.start()
+  startHistoryScan(context.history)
+  void ready.then(() => context.recovery?.start()).catch(() => {})
+  sweepNoticesWhenReady(ready, waiting, modelNotices)
   console.log(`[tether] ${VERSION} instance=${paths.instance} listening on ${paths.socket}`)
   return {
     server,
