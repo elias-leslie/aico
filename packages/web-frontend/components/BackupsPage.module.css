@@ -63,30 +63,9 @@
   font-size: 13px;
   overflow-wrap: anywhere;
 }
-.rows,
 .files {
   list-style: none;
   padding: 0;
-}
-.rows > li {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 140px 190px;
-  gap: 14px;
-  align-items: center;
-  padding: 14px 0;
-  border-bottom: 1px solid var(--paper-veil);
-  font-size: 13px;
-}
-.rows strong,
-.rows small {
-  display: block;
-}
-.rows strong {
-  font-weight: 500;
-  overflow-wrap: anywhere;
-}
-.rows p {
-  margin-block: 6px;
 }
 .badge {
   justify-self: start;
@@ -143,10 +122,6 @@
   .toolbar {
     align-items: stretch;
     flex-direction: column;
-    gap: 8px;
-  }
-  .rows > li {
-    grid-template-columns: minmax(0, 1fr);
     gap: 8px;
   }
   .actions {

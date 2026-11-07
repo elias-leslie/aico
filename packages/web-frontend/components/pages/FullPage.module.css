@@ -37,25 +37,6 @@
   font-size: 13px;
 }
 
-.sec {
-  margin-top: 20px;
-}
-
-.sec h2 {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin: 0 0 8px;
-  font: 600 12px / 1.2 var(--font-ui);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--mist);
-}
-
-.sec h2 .n {
-  font-weight: 500;
-}
-
 .list {
   margin: 0;
   padding: 0;
@@ -114,10 +95,6 @@
   color: var(--mist);
   font-size: 12.5px;
   overflow-wrap: anywhere;
-}
-
-.line.strong {
-  color: var(--bone);
 }
 
 .actions {
@@ -203,15 +180,5 @@
 
   .err {
     grid-column: 1;
-  }
-}
-
-.more {
-  margin-top: 8px;
-}
-
-@media (max-width: 760px) {
-  .more {
-    min-height: 44px;
   }
 }
