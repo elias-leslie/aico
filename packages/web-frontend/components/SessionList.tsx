@@ -35,6 +35,13 @@ import {
 import { AgentIcon, getAgentColor } from './AgentIcon'
 import { CheckInBadge } from './CheckInBadge'
 import { CoordinatorBadge } from './CoordinatorBadge'
+import {
+  LANE_HINT,
+  type LaneChip,
+  LaneList,
+  type LaneRow,
+} from './frame/LaneList'
+import { RailPopover } from './frame/RailPopover'
 import { HostBadge } from './HostBadge'
 import { KeptCheckIns } from './KeptCheckIns'
 
@@ -459,9 +466,18 @@ export function SessionList({
   )
 }
 
+const LANE_CHIP: Partial<Record<Attention['group'], LaneChip>> = {
+  'needs-you': { text: 'Needs you', kind: 'warn' },
+  working: { text: 'Working', kind: 'ok' },
+  finished: { text: 'Finished', kind: 'off' },
+  idle: { text: 'Idle', kind: 'off' },
+}
+
 /** The collapsed list: one agent mark per row, in the list's order and with
  * its teams folded, so the rail never disagrees with the list. A row holding
- * the session on screen is marked current, even when that session is a lane. */
+ * the session on screen is marked current, even when that session is a lane.
+ * A coordinator's mark carries its lane count and opens its team as a
+ * pop-out instead of opening the session. */
 export function SessionRail({
   slots,
   currentId,
@@ -475,6 +491,47 @@ export function SessionRail({
   )
   const live = useLiveSessions()
   const now = useClock(30_000)
+  const stateOf = (item: TeamEntry) => {
+    const sessionId = getSlotSessionId(item.entry.slot)
+    return rowState(
+      item.entry.state,
+      sessionId ? live.bySession.get(sessionId) : undefined,
+      now,
+      item.entry.mode === 'shell',
+    )
+  }
+  /** The coordinator first, then its lanes and their helpers in the list's order. */
+  const teamRows = (team: TeamRow<TeamEntry>): LaneRow[] => {
+    const lead = team.item.entry
+    const rows: LaneRow[] = []
+    const add = (row: TeamRow<TeamEntry>, depth: number) => {
+      const { entry } = row.item
+      const shown = stateOf(row.item)
+      const tool = agentTools.find((t) => t.slug === entry.mode)
+      rows.push({
+        id: entry.id,
+        slot: entry.slot,
+        title: depth === 0 ? entry.label : laneTitle(entry.label, lead.label),
+        mode: entry.mode,
+        color: getAgentColor(entry.mode, tool?.color),
+        chip: LANE_CHIP[entry.state?.group ?? 'no-status'] ?? null,
+        badge: entry.slot.badge ?? null,
+        age: entry.state?.age ?? '',
+        line:
+          (shown.tone === 'work' || shown.tone === 'quiet'
+            ? entry.slot.doing
+            : null) ||
+          askText(entry.asks) ||
+          shown.text,
+        depth,
+        current: entry.id === currentId,
+        needs: entry.state?.group === 'needs-you',
+      })
+      for (const child of row.children) add(child, Math.min(depth + 1, 2))
+    }
+    add(team, 0)
+    return rows
+  }
   return (
     <>
       {teams.map((row) => {
@@ -484,29 +541,15 @@ export function SessionRail({
         const agent = toolName(agentTools, mode)
         const needs = row.group === 'needs-you'
         const current = teamMembers(row).some((m) => m.id === currentId)
-        const sessionId = getSlotSessionId(slot)
-        const shown = rowState(
-          state,
-          sessionId ? live.bySession.get(sessionId) : undefined,
-          now,
-          mode === 'shell',
-        )
+        const shown = stateOf(row.item)
         const name = [
           rowSummary(label, agent, shown, row.item.entry.asks),
           row.summary,
         ]
           .filter(Boolean)
           .join(' · ')
-        return (
-          <button
-            key={id}
-            type="button"
-            onClick={() => onSelect(slot)}
-            aria-current={current ? 'true' : undefined}
-            aria-label={name}
-            title={name}
-            className={clsx('lantern-rail-item', needs && 'needs')}
-          >
+        const mark = (
+          <>
             <AgentIcon
               slug={mode}
               size={18}
@@ -517,7 +560,51 @@ export function SessionRail({
               className="dot lantern-mark"
               data-tone={needs ? 'need' : shown.tone}
             />
-          </button>
+          </>
+        )
+        const className = clsx('lantern-rail-item', needs && 'needs')
+        if (row.children.length === 0)
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => onSelect(slot)}
+              aria-current={current ? 'true' : undefined}
+              aria-label={name}
+              title={name}
+              className={className}
+            >
+              {mark}
+            </button>
+          )
+        const rows = teamRows(row)
+        const lanes = rows.length - 1
+        return (
+          <RailPopover
+            key={id}
+            label={name}
+            panelLabel={`${label} team`}
+            className={className}
+            hint={LANE_HINT}
+            extra={{ 'aria-current': current ? 'true' : undefined }}
+            icon={
+              <>
+                {mark}
+                <span
+                  aria-hidden="true"
+                  className="lantern-rail-count"
+                  data-calm={
+                    rows.some((r) => r.needs && r.depth > 0) ? undefined : ''
+                  }
+                  data-testid="lane-count"
+                >
+                  {lanes}
+                </span>
+              </>
+            }
+          >
+            <LaneList heading={label} rows={rows} onOpen={onSelect} />
+          </RailPopover>
         )
       })}
     </>

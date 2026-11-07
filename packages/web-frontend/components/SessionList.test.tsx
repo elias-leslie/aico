@@ -298,6 +298,101 @@ describe('SessionRail', () => {
   })
 })
 
+describe('SessionRail coordinator pop-out', () => {
+  const open = () => {
+    const onSelect = vi.fn()
+    const view = render(
+      <SessionRail
+        slots={slots}
+        currentId={getSlotPanelId(done)}
+        attention={attention}
+        onSelect={onSelect}
+      />,
+    )
+    const icon = view.container.querySelector(
+      '.lantern-rail-item[aria-haspopup="dialog"]',
+    ) as HTMLElement
+    return { ...view, icon, onSelect }
+  }
+
+  it('gives only a coordinator a lane count and a pop-out; a solo session opens directly', () => {
+    const { container, icon, onSelect } = open()
+    expect(
+      container.querySelectorAll('.lantern-rail-item[aria-haspopup]'),
+    ).toHaveLength(1)
+    expect(icon.getAttribute('aria-label')).toMatch(/^Neri — Daybreak lead/)
+    const count = within(icon).getByTestId('lane-count')
+    expect(count.textContent).toBe('3')
+    // A lane waits on the owner: the badge stays amber, not calm.
+    expect(count.hasAttribute('data-calm')).toBe(false)
+    expect(icon.getAttribute('aria-current')).toBe('true')
+    fireEvent.click(
+      container.querySelector(
+        '.lantern-rail-item:not([aria-haspopup])',
+      ) as HTMLElement,
+    )
+    expect(onSelect).toHaveBeenCalledWith(solo)
+  })
+
+  it('lists the coordinator first, then its lanes with state chip, title, age and last line', () => {
+    const { icon } = open()
+    fireEvent.click(icon)
+    const dialog = screen.getByRole('dialog', {
+      name: 'Neri — Daybreak lead team',
+    })
+    const rows = within(dialog).getAllByRole('button')
+    expect(rows.map((row) => row.querySelector('.name')?.textContent)).toEqual([
+      'Neri — Daybreak lead',
+      'Matomo pair lead',
+      'Scanner',
+      'Report',
+    ])
+    expect(rows[0]?.textContent).toContain('Coordinator')
+    expect(rows[1]?.textContent).toContain('Needs you')
+    expect(rows[1]?.textContent).toContain('1m')
+    expect(rows[2]?.textContent).toContain('Working')
+    expect(rows[3]?.textContent).toContain('Finished')
+    expect(rows[3]?.getAttribute('aria-current')).toBe('true')
+    expect(
+      within(dialog).getByText(
+        'Up and Down move · Enter opens the session · Esc closes',
+      ),
+    ).toBeVisible()
+  })
+
+  it('moves with Up and Down from the coordinator, and a row opens its session and closes the pop-out', () => {
+    const { icon, onSelect } = open()
+    fireEvent.click(icon)
+    const dialog = screen.getByRole('dialog')
+    const rows = within(dialog).getAllByRole('button')
+    expect(rows[0]).toHaveFocus()
+    fireEvent.keyDown(rows[0] as HTMLElement, { key: 'ArrowDown' })
+    expect(rows[1]).toHaveFocus()
+    fireEvent.keyDown(rows[1] as HTMLElement, { key: 'ArrowDown' })
+    fireEvent.keyDown(rows[2] as HTMLElement, { key: 'ArrowDown' })
+    fireEvent.keyDown(rows[3] as HTMLElement, { key: 'ArrowDown' })
+    expect(rows[3]).toHaveFocus()
+    fireEvent.keyDown(rows[3] as HTMLElement, { key: 'ArrowUp' })
+    expect(rows[2]).toHaveFocus()
+    fireEvent.click(rows[2] as HTMLElement)
+    expect(onSelect).toHaveBeenCalledWith(busy)
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('closes on Esc with focus back on the coordinator icon', () => {
+    const { icon } = open()
+    fireEvent.click(icon)
+    fireEvent.keyDown(
+      within(screen.getByRole('dialog')).getAllByRole(
+        'button',
+      )[0] as HTMLElement,
+      { key: 'Escape' },
+    )
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(icon).toHaveFocus()
+  })
+})
+
 describe('sessionsHeading', () => {
   it('counts sessions and says when any need you', () => {
     expect(sessionsHeading(5, 0)).toBe('Sessions · 5')

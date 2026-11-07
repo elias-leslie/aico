@@ -13,6 +13,7 @@ import {
 import { useClickOutside } from '@/lib/hooks/use-click-outside'
 import type { Frame } from './FrameContext'
 import styles from './Panel.module.css'
+import { useBeside } from './RailPopover'
 import { SETTINGS_PLACES } from './settings-places'
 
 /** Opens a setup page over the side, the way every place opens from the Panel. */
@@ -26,12 +27,21 @@ function openPlace(
   frame.open(href, 'full')
 }
 
-/** The gear in the side's footer: a small menu above it listing the setup places (desktop and snapped windows). */
-export function SettingsMenu({ frame }: { frame: Frame | null }) {
+/** The gear in the side's footer: a small menu listing the setup places (desktop and snapped windows).
+ * In the Panel's footer it is a labelled button with the menu above it; on the Rail (`icon`) it is the
+ * rail's own icon button with the menu beside the side. */
+export function SettingsMenu({
+  frame,
+  icon = false,
+}: {
+  frame: Frame | null
+  icon?: boolean
+}) {
   const [open, setOpen] = useState(false)
   const button = useRef<HTMLButtonElement>(null)
   const menu = useRef<HTMLDivElement>(null)
   const close = useCallback(() => setOpen(false), [])
+  const beside = useBeside(button, open && icon)
   const refs = useMemo(() => [button, menu], [])
   useClickOutside(refs, close, open)
   useEffect(() => {
@@ -40,17 +50,25 @@ export function SettingsMenu({ frame }: { frame: Frame | null }) {
   const items = () =>
     Array.from(menu.current?.querySelectorAll<HTMLElement>('a') ?? [])
   return (
-    <div className={styles.settingsWrap}>
+    <div className={icon ? undefined : styles.settingsWrap}>
       <button
         ref={button}
         type="button"
-        className="lantern-btn ghost small"
+        className={
+          icon ? 'lantern-icon-btn compact' : 'lantern-btn ghost small'
+        }
         aria-haspopup="menu"
         aria-expanded={open}
+        aria-label={icon ? 'Settings' : undefined}
+        title={icon ? 'Settings' : undefined}
         onClick={() => setOpen((now) => !now)}
       >
-        <Gear className="h-4 w-4" strokeWidth={1.7} aria-hidden="true" />
-        Settings
+        <Gear
+          className={icon ? 'h-[18px] w-[18px]' : 'h-4 w-4'}
+          strokeWidth={1.7}
+          aria-hidden="true"
+        />
+        {!icon && 'Settings'}
       </button>
       {open && (
         // biome-ignore lint/a11y/noStaticElementInteractions: the menu's own arrow and Escape keys
@@ -58,7 +76,8 @@ export function SettingsMenu({ frame }: { frame: Frame | null }) {
           ref={menu}
           role="menu"
           aria-label="Settings"
-          className={`lantern-sheet lantern-enter ${styles.settingsMenu}`}
+          className={`lantern-sheet lantern-enter ${icon ? styles.settingsMenuBeside : styles.settingsMenu}`}
+          style={icon ? beside : undefined}
           onKeyDown={(event) => {
             if (event.key === 'Escape') {
               event.stopPropagation()
@@ -114,7 +133,11 @@ export function SettingsPage({
   onBack: () => void
 }) {
   return (
-    <section className={styles.settingsPage} aria-label="Settings">
+    <section
+      className={styles.settingsPage}
+      aria-label="Settings"
+      data-settings-page=""
+    >
       <div className={styles.settingsPageHead}>
         <button
           type="button"

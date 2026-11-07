@@ -1,0 +1,29 @@
+/* A rail pop-out: Lantern tokens only; the .frame washes are inherited (the pop-out sits inside the frame). */
+.popover {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  width: min(380px, calc(100vw - 96px));
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  color: var(--bone);
+}
+.popover:focus-visible {
+  outline: 2px solid var(--lantern);
+  outline-offset: -2px;
+}
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.hint {
+  flex: none;
+  margin: 0;
+  padding: 8px 14px 10px;
+  border-top: 1px solid var(--line);
+  color: var(--mist);
+  font-size: 11.5px;
+}

@@ -23,6 +23,7 @@ import { useNeedsYouCounts } from '@/lib/hooks/use-needs-you'
 import { PRODUCT_NAME } from '@/lib/project-branding'
 import { at, plural } from '@/lib/status'
 import { useFrame } from '../frame/FrameContext'
+import { RailPopover, usePopoverClose } from '../frame/RailPopover'
 import { AnsweredCard } from './AnsweredCard'
 import { ApprovalCard } from './ApprovalCard'
 import { AttachedFileView } from './AskAttached'
@@ -31,28 +32,30 @@ import { AsksState, askTitle, Note, useSentNote } from './ask-shared'
 
 type Tab = 'asks' | 'approvals' | 'answered'
 
-/** The "N need you" icon button (the Rail's): it shows Needs you in the side. */
-/** (`variant` is kept for the Rail's call; there is only the icon now.) */
-export function NeedsYouLauncher(_props: { variant?: 'icon' }) {
+/** The Rail's Needs you icon with its count: it opens the same section the side's list starts with, as a pop-out. */
+export function NeedsYouLauncher() {
   const { count, summary } = useNeedsYouCounts()
-  const show = () => openNeedsYou()
   return (
-    <button
-      type="button"
+    <RailPopover
+      label={summary}
+      panelLabel="Needs you"
       className="lantern-icon-btn compact relative"
-      onClick={show}
-      aria-label={summary}
-      title={summary}
-      data-testid="needs-you-pill"
-      data-count={count}
+      extra={{ 'data-testid': 'needs-you-pill', 'data-count': count }}
+      icon={
+        <>
+          <Inbox className="h-[18px] w-[18px]" strokeWidth={1.7} />
+          {count > 0 && (
+            <span aria-hidden="true" className="lantern-rail-count">
+              {count}
+            </span>
+          )}
+        </>
+      }
     >
-      <Inbox className="h-[18px] w-[18px]" strokeWidth={1.7} />
-      {count > 0 && (
-        <span aria-hidden="true" className="lantern-rail-count">
-          {count}
-        </span>
-      )}
-    </button>
+      <div className="p-3">
+        <NeedsYouSection />
+      </div>
+    </RailPopover>
   )
 }
 
@@ -330,6 +333,7 @@ export function NeedsYouSection() {
   const unreachable = useServerReach().down && !known
   const router = useRouter()
   const frame = useFrame()
+  const closePopover = usePopoverClose()
   const ref = useRef<HTMLElement>(null)
   const [focus, setFocus] = useState<string | null>(null)
   /** The section was asked for (the side's count): it flashes once, so a tap
@@ -355,6 +359,7 @@ export function NeedsYouSection() {
   const openPage = () => {
     router.push('/needs-you')
     if (frame && !frame.docked) frame.close()
+    closePopover?.()
   }
   return (
     <section
@@ -413,6 +418,7 @@ export function NeedsYouSection() {
                 onSent={setSent}
                 onOpenSession={() => {
                   if (frame && !frame.docked) frame.close()
+                  closePopover?.()
                 }}
               />
             ))}

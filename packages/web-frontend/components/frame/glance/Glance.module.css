@@ -295,3 +295,11 @@
     transition-duration: 0.01s;
   }
 }
+
+/* A glance inside a rail pop-out: the same heading and body, with room around them. */
+.popout {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px 12px;
+}

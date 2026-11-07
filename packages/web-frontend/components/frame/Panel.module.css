@@ -49,6 +49,13 @@
   padding: 6px;
   border-radius: 12px;
 }
+.settingsMenuBeside {
+  position: fixed;
+  z-index: 60;
+  min-width: 232px;
+  padding: 6px;
+  border-radius: 12px;
+}
 .settingsHeading {
   padding: 6px 10px 4px;
 }

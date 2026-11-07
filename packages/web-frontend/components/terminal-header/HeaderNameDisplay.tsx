@@ -3,6 +3,7 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { getSlotName, type PaneSlot, type TerminalSlot } from '@/lib/utils/slot'
 import { CoordinatorBadge } from '../CoordinatorBadge'
+import { useFrame } from '../frame/FrameContext'
 import { HostBadge } from '../HostBadge'
 import { SessionTitle } from '../SessionTitle'
 
@@ -24,6 +25,9 @@ export const HeaderNameDisplay = memo(function HeaderNameDisplay({
   onEditingChange,
 }: HeaderNameDisplayProps) {
   const name = getSlotName(slot)
+  // The rail already marks coordinators and their lanes, and its width leaves the title little room.
+  const frame = useFrame()
+  const railShowing = frame?.docked === true && frame.tier === 'rail'
   // A session renamed in Tether renames its task; the project stays the
   // workspace's.
   const renameValue = slot.can.rename ? (slot.task ?? '') : name
@@ -95,7 +99,7 @@ export const HeaderNameDisplay = memo(function HeaderNameDisplay({
   // The name; the connection chip beside it is the header's.
   return (
     <span className="flex min-w-0 items-center gap-1.5 overflow-hidden">
-      <CoordinatorBadge badge={slot.badge} dot={isMobile} />
+      {!railShowing && <CoordinatorBadge badge={slot.badge} dot={isMobile} />}
       <HostBadge host={slot.host} state={slot.hostState} />
       <span
         className="flex min-w-0 max-w-[320px] items-center overflow-hidden px-1.5 py-0.5"

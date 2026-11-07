@@ -72,6 +72,10 @@
   font: 500 16px / 1 var(--font-display);
   padding: 0 4px;
 }
+/* The phone's Settings page brings its own Back header, so the sheet's Sessions header steps aside. */
+.sheet:has([data-settings-page]) > .sideHead {
+  display: none;
+}
 .col {
   display: flex;
   flex-direction: column;

@@ -1,0 +1,45 @@
+/* A coordinator's pop-out: rows reuse the session list's .lantern-row; lanes sit indented on a hairline. */
+.lanes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 8px 8px;
+}
+.head {
+  padding: 0 6px;
+}
+.head h2 {
+  margin: 0;
+  font: inherit;
+  letter-spacing: inherit;
+}
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.list li[data-depth="1"] {
+  margin-left: 14px;
+  padding-left: 6px;
+  border-left: 1px solid var(--line-2);
+}
+.list li[data-depth="2"] {
+  margin-left: 28px;
+  padding-left: 6px;
+  border-left: 1px solid var(--line-2);
+}
+.row:focus-visible {
+  outline: 2px solid var(--lantern);
+  outline-offset: -2px;
+}
+.row :global(.meta) :global(.status-chip) {
+  height: 18px;
+  padding: 0 7px;
+  font-size: 11px;
+}
+.row :global(.meta) :global(.status-chip)::before {
+  display: none;
+}

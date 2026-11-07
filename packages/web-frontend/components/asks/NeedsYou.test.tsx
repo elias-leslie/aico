@@ -235,7 +235,7 @@ describe('NeedsYouLauncher', () => {
     )
   })
 
-  it('asks the frame to show Needs you, one request per click', () => {
+  it('opens the questions as a pop-out over the session, not a request to widen the side', () => {
     state.asks = [ask()]
     const heard = vi.fn()
     function Probe() {
@@ -248,8 +248,15 @@ describe('NeedsYouLauncher', () => {
         <NeedsYouLauncher />
       </>,
     )
-    fireEvent.click(screen.getByTestId('needs-you-pill'))
-    expect(heard).toHaveBeenCalledWith({ focus: null })
+    const pill = screen.getByTestId('needs-you-pill')
+    expect(pill).toHaveAttribute('aria-haspopup', 'dialog')
+    fireEvent.click(pill)
+    const dialog = screen.getByRole('dialog', { name: 'Needs you' })
+    expect(within(dialog).getByTestId('needs-you-section')).toBeVisible()
+    expect(heard).not.toHaveBeenCalled()
+    fireEvent.keyDown(dialog, { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(pill).toHaveFocus()
   })
 })
 
