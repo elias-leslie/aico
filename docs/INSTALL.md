@@ -104,7 +104,7 @@ the machine, checks the copy and runs that release's `scripts/install.sh
 --prebuilt --start`, so there is one installer ([deployment.md](deployment.md)).
 The machine needs Node 22+ (the same major as the workstation), Python 3, tmux,
 rsync, curl, a systemd user manager with linger, and for notes
-`libheif-examples` and `rclone`. Deploy the machine with the older database
+`libheif-examples`, `imagemagick` (HEIC previews are scaled to 2000 px) and `rclone`. Deploy the machine with the older database
 first, so a newer schema never reaches a host that cannot read it; a different
 schema pauses sync and the Hosts card says so.
 
