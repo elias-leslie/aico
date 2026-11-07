@@ -3,6 +3,7 @@
 import { Plus, RotateCcw } from 'lucide-react'
 import { useSearchParams } from 'next/navigation'
 import { newChat } from '@/lib/chat'
+import { useServerReach } from '@/lib/frame/server-reach'
 import { useSessionAttention } from '@/lib/hooks/use-session-attention'
 import { usePaneListError } from '@/lib/hooks/use-terminal-panes'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
@@ -34,6 +35,8 @@ export function EmptySessionState({
   showLaunchers = false,
 }: EmptySessionStateProps) {
   const attention = useSessionAttention()
+  // Can't reach the server: the list is its last answer, so its states are muted.
+  const down = useServerReach().down
   const { isError, retry } = usePaneListError()
   const failed = isError && slots.length === 0
   // The link named a session that isn't running (or isn't listed yet).
@@ -42,6 +45,7 @@ export function EmptySessionState({
     <div
       className="h-full w-full overflow-y-auto p-4"
       style={{ backgroundColor: 'var(--rim)' }}
+      data-stale={down ? 'true' : undefined}
     >
       {showLaunchers && (
         <header className="lantern-sheet-tools mx-auto flex max-w-md flex-wrap items-center justify-end gap-2">
@@ -97,7 +101,8 @@ export function EmptySessionState({
       {slots.length > 0 && onOpen && (
         <section
           aria-label="Running sessions"
-          className="mx-auto mt-6 max-w-md"
+          className="mx-auto mt-6 max-w-md transition-opacity"
+          style={{ opacity: down ? 0.62 : 1 }}
         >
           <SessionList slots={slots} attention={attention} onSelect={onOpen} />
         </section>

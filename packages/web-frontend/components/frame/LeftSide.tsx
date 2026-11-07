@@ -61,7 +61,7 @@ function DownNote() {
       <span>
         {reach.answered
           ? `Showing what ${PRODUCT_NAME} last knew, as of ${at(reach.since, now)}.`
-          : `Can’t reach ${PRODUCT_NAME} since ${at(reach.since, now)}. Nothing to show yet; sessions come back once it answers.`}
+          : `Nothing to show yet; sessions come back once ${PRODUCT_NAME} answers.`}
       </span>
     </div>
   )

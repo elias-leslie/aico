@@ -238,4 +238,25 @@ describe('when the server cannot be reached', () => {
     act(() => markAnswered())
     expect(screen.queryByTestId('side-down-note')).toBeNull()
   })
+
+  it('with nothing from it yet, says so and does not keep saying Loading sessions', () => {
+    render(
+      <FrameProvider page={null}>
+        <LeftSide
+          loading
+          onNewSession={vi.fn()}
+          rail={null}
+          panel={null}
+          wideExtra={null}
+        />
+      </FrameProvider>,
+    )
+    expect(screen.getByText('Loading sessions…')).toBeVisible()
+    act(() => markFailed(Date.now()))
+    expect(screen.getByTestId('side-down-note')).toHaveTextContent(
+      'Nothing to show yet; sessions come back once Aico answers.',
+    )
+    expect(screen.queryByText('Loading sessions…')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
+  })
 })
