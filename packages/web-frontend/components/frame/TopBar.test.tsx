@@ -25,9 +25,15 @@ vi.mock('@tanstack/react-query', async (real) => ({
   ...(await real<typeof import('@tanstack/react-query')>()),
   useQueryClient: () => ({ refetchQueries: state.refetch }),
 }))
-vi.mock('@/lib/hooks/use-asks', () => ({
+vi.mock('@/lib/hooks/use-asks', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/hooks/use-asks')>()),
   useOwnerAsks: () => ({
-    asks: state.known ? [{ id: 'a' }, { id: 'b' }] : [],
+    asks: state.known
+      ? [
+          { id: 'a', state: 'open' },
+          { id: 'b', state: 'open' },
+        ]
+      : [],
     known: state.known,
   }),
   useApprovals: () => ({
@@ -144,6 +150,13 @@ describe('TopBar', () => {
     expect(needs).toHaveAttribute('data-count', '3')
     fireEvent.click(needs)
     expect(state.openNeedsYou).toHaveBeenCalled()
+  })
+
+  it('carries its words on the phone too, not the count alone', () => {
+    render(<TopBar />)
+    expect(screen.getByTestId('top-bar-needs-you')).toHaveTextContent(
+      /3.*need you.*need you/,
+    )
   })
 
   it('shows a dash, not 0, while the Needs you lists have not loaded', () => {

@@ -95,7 +95,7 @@ describe('GrantsPage', () => {
     api.view = view()
     renderPage()
     expect(
-      await screen.findByText(/Nothing is open or waiting/),
+      await screen.findByText(/A request shows up here/),
     ).toBeInTheDocument()
     expect(
       screen.getByText('Nothing has expired or ended yet.'),
@@ -108,7 +108,7 @@ describe('GrantsPage', () => {
     expect(
       await screen.findByText('Couldn’t read grants.', {}, { timeout: 4000 }),
     ).toBeInTheDocument()
-    expect(screen.queryByText(/Nothing is open or waiting/)).toBeNull()
+    expect(screen.queryByText(/A request shows up here/)).toBeNull()
   })
 
   it('says it is loading before the answer', () => {

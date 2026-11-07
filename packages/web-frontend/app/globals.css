@@ -117,6 +117,17 @@ select {
   font-size: 11px;
 }
 
+/* A section asked for by a tap (the top bar's count) shows an amber edge for a
+   moment, so the tap answers even when the section is already on screen. */
+.lantern-called {
+  border-radius: 10px;
+  box-shadow: 0 0 0 0 transparent;
+  transition: box-shadow 0.18s var(--ease-arrival);
+}
+.lantern-called[data-called="true"] {
+  box-shadow: 0 0 0 2px rgb(var(--lantern-rgb) / 0.55);
+}
+
 /* Buttons: quiet by default; the primary action is an amber outline on an
    amber wash. */
 .lantern-btn {
@@ -2383,6 +2394,14 @@ a.lantern-ask-attached {
   /* A problem's meaning gets a third line: the part that says what to do often comes last. */
   .status-row:not(.healthy) .meaning {
     -webkit-line-clamp: 3;
+  }
+
+  /* Tapping a row opens it, and the whole sentence with it: nothing stays cut. */
+  .status-row.open .meaning,
+  .status-row.open:not(.healthy) .meaning {
+    display: block;
+    -webkit-line-clamp: unset;
+    overflow: visible;
   }
 
   .status-row .meta-m {

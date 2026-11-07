@@ -130,17 +130,14 @@ describe('Recovery page', () => {
     )
   })
 
-  it('says nothing needs recovering, and the Resume button is off with the reason', async () => {
+  it('says nothing needs recovering, with no Resume button beside it', async () => {
     show()
     expect(
       await screen.findByText('No stopped sessions to bring back.'),
     ).toBeTruthy()
     expect(screen.getByText(/Last checked/)).toBeTruthy()
-    const button = screen.getByRole('button', {
-      name: 'Resume',
-    }) as HTMLButtonElement
-    expect(button.disabled).toBe(true)
-    expect(screen.getByText('Nothing has stopped.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /^Resume/ })).toBeNull()
+    expect(screen.queryByText('Nothing has stopped.')).toBeNull()
   })
 
   it('says it is checking, and never shows a failed check as nothing stopped', async () => {

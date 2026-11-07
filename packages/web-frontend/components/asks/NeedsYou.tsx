@@ -11,6 +11,8 @@ import { useServerReach } from '@/lib/frame/server-reach'
 import {
   type AttachedFile,
   answeredAsks,
+  askCounts,
+  askCountsParts,
   type OwnerAsk,
   openAsks,
   useApprovals,
@@ -154,7 +156,7 @@ function NeedsYouBody({
   onOpenSession,
 }: {
   focus: string | null
-  /** The title row, given the "N agent questions" line. */
+  /** The title row, given the "2 agent questions · 1 notice" line. */
   header: (summary: string) => ReactNode
   /** Called after a card opens its session (the phone closes the sheet). */
   onOpenSession?: () => void
@@ -196,11 +198,11 @@ function NeedsYouBody({
   ).size
   const summary = known
     ? [
-        plural(waiting.length, 'agent question'),
+        ...askCountsParts(askCounts(asks)),
         blockedSessions ? plural(blockedSessions, 'waiting session') : null,
       ]
         .filter(Boolean)
-        .join(' · ')
+        .join(' · ') || 'Nothing waiting'
     : 'Not loaded yet'
 
   return (
@@ -289,7 +291,7 @@ function NeedsYouBody({
                   <Note>
                     {sent
                       ? 'Nothing else waiting.'
-                      : 'No agent questions waiting. Check results are under Status.'}
+                      : 'Nothing waiting for you. Check results are under Status.'}
                   </Note>
                 ) : (
                   <ul className="flex flex-col gap-2.5" aria-label="Questions">
@@ -385,6 +387,9 @@ export function NeedsYouSection() {
   const frame = useFrame()
   const ref = useRef<HTMLElement>(null)
   const [focus, setFocus] = useState<string | null>(null)
+  /** The section was asked for (the top bar's count): it flashes once, so a tap
+   * when it is already showing still answers. */
+  const [called, setCalled] = useState(false)
   const [showAll, setShowAll] = useState(false)
   const [sent, setSent] = useSentNote()
   const now = Date.now()
@@ -392,6 +397,8 @@ export function NeedsYouSection() {
   const taps = approvals?.taps ?? []
   useNeedsYouRequests((request) => {
     setFocus(request.focus)
+    setCalled(true)
+    window.setTimeout(() => setCalled(false), 1400)
     window.requestAnimationFrame(() =>
       ref.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }),
     )
@@ -407,7 +414,8 @@ export function NeedsYouSection() {
       ref={ref}
       aria-label="Needs you"
       data-testid="needs-you-section"
-      className="flex flex-col gap-2"
+      data-called={called ? 'true' : undefined}
+      className="lantern-called flex flex-col gap-2"
     >
       <div className="lantern-sec">
         <h2>Needs you</h2>

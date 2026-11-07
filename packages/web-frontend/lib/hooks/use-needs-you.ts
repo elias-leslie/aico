@@ -1,9 +1,18 @@
 'use client'
 
-import { openAsks, useApprovals, useOwnerAsks } from '@/lib/hooks/use-asks'
+import {
+  type AskCounts,
+  askCounts,
+  askCountsParts,
+  useApprovals,
+  useOwnerAsks,
+} from '@/lib/hooks/use-asks'
 import { plural } from '@/lib/status'
 
 export interface NeedsYouCounts {
+  /** Agent questions, notices and failed checks open now, each by itself. */
+  asks: AskCounts
+  /** Everything open in the Asks tab: all three kinds. */
   questions: number
   approvals: number
   count: number
@@ -14,12 +23,14 @@ export interface NeedsYouCounts {
   summary: string
 }
 
-/** What waits on the owner: agent questions and access requests. One count
- * for the top bar, the launchers and the side, so they never disagree. */
+/** What waits on the owner: agent questions, notices, failed checks and
+ * access requests. One count for the top bar, the launchers and the side, so
+ * they never disagree; the words name each kind for what it is. */
 export function useNeedsYouCounts(): NeedsYouCounts {
   const { asks, known: asksKnown } = useOwnerAsks()
   const { approvals, known: approvalsKnown } = useApprovals()
-  const questions = openAsks(asks).length
+  const kinds = askCounts(asks)
+  const questions = kinds.questions + kinds.notices + kinds.checks
   const taps = approvals?.taps.length ?? 0
   const count = questions + taps
   // Something counted is known to be waiting; zero only counts once both
@@ -28,12 +39,12 @@ export function useNeedsYouCounts(): NeedsYouCounts {
   const summary = !known
     ? 'Needs you: not loaded yet'
     : count === 0
-      ? 'Needs you: no agent questions or grants waiting'
+      ? 'Needs you: nothing waiting'
       : `Needs you: ${[
-          questions ? plural(questions, 'agent question') : null,
+          ...askCountsParts(kinds),
           taps ? plural(taps, 'grant') : null,
         ]
           .filter(Boolean)
-          .join(' and ')} waiting`
-  return { questions, approvals: taps, count, known, summary }
+          .join(', ')} waiting`
+  return { asks: kinds, questions, approvals: taps, count, known, summary }
 }

@@ -119,6 +119,11 @@
 .actions {
   flex-wrap: wrap;
 }
+/* Remove is the one destructive button: apart from Reveal, Copy and Replace, edged in ember. */
+.remove {
+  margin-inline-start: 20px;
+  border-color: var(--term-danger-border);
+}
 .badge {
   flex: none;
   border: 1px solid var(--paper-veil);

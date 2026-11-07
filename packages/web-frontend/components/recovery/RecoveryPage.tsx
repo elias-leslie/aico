@@ -148,22 +148,25 @@ export function RecoveryPage() {
             )}
           </section>
 
-          <div className={styles.action}>
-            <button
-              className="lantern-btn primary"
-              type="button"
-              disabled={!!button.off || resume.isPending}
-              aria-describedby={button.off ? 'resume-why' : undefined}
-              onClick={() => resume.mutate()}
-            >
-              {resume.isPending ? 'Resuming…' : button.label}
-            </button>
-            {button.off && (
-              <span id="resume-why" className={styles.why}>
-                {button.off}
-              </span>
-            )}
-          </div>
+          {/* Nothing stopped: no Resume to offer, so no off button beside "No stopped sessions". */}
+          {(view.items.length > 0 || !button.off) && (
+            <div className={styles.action}>
+              <button
+                className="lantern-btn primary"
+                type="button"
+                disabled={!!button.off || resume.isPending}
+                aria-describedby={button.off ? 'resume-why' : undefined}
+                onClick={() => resume.mutate()}
+              >
+                {resume.isPending ? 'Resuming…' : button.label}
+              </button>
+              {button.off && (
+                <span id="resume-why" className={styles.why}>
+                  {button.off}
+                </span>
+              )}
+            </div>
+          )}
 
           {resume.isError && (
             <p role="alert" className={styles.notice}>

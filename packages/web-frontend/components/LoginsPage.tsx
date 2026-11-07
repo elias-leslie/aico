@@ -509,7 +509,7 @@ function LoginRow({
             Access
           </button>
           <button
-            className="lantern-btn ghost small"
+            className={`lantern-btn ghost small ${styles.remove}`}
             disabled={readOnly}
             onClick={() => {
               setValue(null)

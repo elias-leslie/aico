@@ -198,7 +198,24 @@ describe('NeedsYouLauncher', () => {
     const pill = screen.getByTestId('needs-you-pill')
     expect(pill).toHaveTextContent('2 need you')
     expect(pill).toHaveAccessibleName(
-      'Needs you: 1 agent question and 1 grant waiting',
+      'Needs you: 1 agent question, 1 grant waiting',
+    )
+  })
+
+  it('names a follow-up reminder a notice, not an agent question', () => {
+    state.asks = [
+      ask({
+        id: '222222222222',
+        question: 'Follow-ups due (#a449b3)',
+        origin: 'notice',
+        requester: 'jobinator-4000',
+        options: ['Done'],
+        blocking: false,
+      }),
+    ]
+    render(<NeedsYouLauncher variant="pill" />)
+    expect(screen.getByTestId('needs-you-pill')).toHaveAccessibleName(
+      'Needs you: 1 notice waiting',
     )
   })
 
@@ -213,7 +230,7 @@ describe('NeedsYouLauncher', () => {
   it('stays a quiet icon when nothing waits, and off the phone bar', () => {
     const { unmount } = render(<NeedsYouLauncher />)
     expect(screen.getByTestId('needs-you-pill')).toHaveAccessibleName(
-      'Needs you: no agent questions or grants waiting',
+      'Needs you: nothing waiting',
     )
     unmount()
     render(<NeedsYouLauncher variant="compact" />)
@@ -323,6 +340,28 @@ describe('Needs you in the side', () => {
     expect(screen.getAllByTestId('ask-card')).toHaveLength(3)
     fireEvent.click(screen.getByRole('button', { name: 'Show 1 more' }))
     expect(screen.getAllByTestId('ask-card')).toHaveLength(4)
+  })
+
+  it('counts each kind by itself in the page header', () => {
+    state.asks = [
+      ask({ blocking: false }),
+      ask({
+        id: '222222222222',
+        origin: 'notice',
+        question: 'Follow-ups due',
+        blocking: false,
+      }),
+      ask({
+        id: '333333333333',
+        origin: 'status',
+        question: 'Backup failed',
+        blocking: false,
+      }),
+    ]
+    render(<NeedsYouPage />)
+    expect(
+      screen.getByText('1 agent question · 1 notice · 1 failed check'),
+    ).toBeInTheDocument()
   })
 
   it('has its own loading, failed and empty copy', () => {
@@ -477,7 +516,7 @@ describe('Needs you page', () => {
     expect(screen.getByText(/Couldn’t load questions/)).toBeInTheDocument()
     state.isError = false
     rerender(<NeedsYouPage />)
-    expect(screen.getByText(/No agent questions waiting/)).toBeInTheDocument()
+    expect(screen.getByText(/Nothing waiting for you/)).toBeInTheDocument()
   })
 
   it('says which session gets the answer, and nothing on an older Tether', () => {

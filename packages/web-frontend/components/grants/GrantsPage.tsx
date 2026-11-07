@@ -144,8 +144,7 @@ export function GrantsPage() {
               </h2>
               {split.active.length === 0 ? (
                 <p className={styles.empty}>
-                  Nothing is open or waiting. A request shows up here when an
-                  agent asks for access.
+                  A request shows up here when an agent asks for access.
                 </p>
               ) : (
                 <ul className={styles.list}>

@@ -193,6 +193,9 @@ export function TopBar() {
         <span className={styles.wideOnly}>
           {needs.known ? 'need you' : 'Needs you'}
         </span>
+        <span className={styles.phoneOnly}>
+          {needs.known ? 'need you' : 'Needs you'}
+        </span>
       </button>
 
       {down ? (
