@@ -282,6 +282,12 @@
   border-right: 0;
 }
 .side.dragging,
+.side[data-tier="hidden"] {
+  border-right: none;
+}
+.side[data-tier="hidden"] .handle {
+  right: -10px;
+}
 .sideSpacer:has(.dragging) {
   transition: none;
 }

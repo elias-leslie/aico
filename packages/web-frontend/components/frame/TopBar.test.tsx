@@ -144,6 +144,17 @@ describe('TopBar', () => {
     expect(state.frame?.setTier).toHaveBeenCalledWith('panel')
   })
 
+  it('hides the side and brings it back as the rail', () => {
+    const first = render(<TopBar />)
+    fireEvent.click(screen.getByRole('button', { name: 'Hide the side' }))
+    expect(state.frame?.setTier).toHaveBeenCalledWith('hidden')
+    first.unmount()
+    state.frame = frame({ tier: 'hidden' })
+    render(<TopBar />)
+    fireEvent.click(screen.getByRole('button', { name: 'Show the side' }))
+    expect(state.frame?.setTier).toHaveBeenCalledWith('rail')
+  })
+
   it('counts questions and approvals in Needs you and asks the frame to show it', () => {
     render(<TopBar />)
     const needs = screen.getByTestId('top-bar-needs-you')

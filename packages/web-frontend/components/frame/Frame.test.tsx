@@ -129,6 +129,13 @@ describe('the left side on a desktop', () => {
     alt('BracketLeft')
     expect(tier()).toBe('rail')
     alt('BracketLeft')
+    expect(tier()).toBe('hidden')
+    expect(screen.queryByText('Rail marks')).toBeNull()
+    expect(screen.queryByText('Session list')).toBeNull()
+    expect(screen.getByTestId('frame-handle')).toBeInTheDocument()
+    alt('BracketLeft')
+    expect(tier()).toBe('hidden')
+    alt('Digit1')
     expect(tier()).toBe('rail')
   })
 

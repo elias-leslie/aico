@@ -29,7 +29,8 @@ describe('left side tiers', () => {
   })
 
   it('snaps a drag to the nearest width', () => {
-    expect(nearestTier(30, 1440)).toBe('rail')
+    expect(nearestTier(10, 1440)).toBe('hidden')
+    expect(nearestTier(40, 1440)).toBe('rail')
     expect(nearestTier(250, 1440)).toBe('panel')
     expect(nearestTier(700, 1440)).toBe('wide')
     expect(nearestTier(1300, 1440)).toBe('full')
@@ -38,11 +39,13 @@ describe('left side tiers', () => {
   it('steps one tier and stops at the ends', () => {
     expect(stepTier('panel', 1)).toBe('wide')
     expect(stepTier('panel', -1)).toBe('rail')
-    expect(stepTier('rail', -1)).toBe('rail')
+    expect(stepTier('rail', -1)).toBe('hidden')
+    expect(stepTier('hidden', -1)).toBe('hidden')
     expect(stepTier('full', 1)).toBe('full')
   })
 
   it('reads Alt+1..4 and Alt+[ / Alt+] by key position, nothing else', () => {
+    expect(tierKey(key('Digit0'))).toEqual({ tier: 'hidden' })
     expect(tierKey(key('Digit1'))).toEqual({ tier: 'rail' })
     expect(tierKey(key('Digit4'))).toEqual({ tier: 'full' })
     expect(tierKey(key('BracketLeft'))).toEqual({ step: -1 })

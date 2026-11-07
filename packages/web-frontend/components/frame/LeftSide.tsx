@@ -108,6 +108,7 @@ function Body({
       {loading ? <Loading /> : panel}
     </div>
   )
+  if (frame.tier === 'hidden') return null
   if (frame.tier === 'rail')
     return (
       <div className={styles.railBody} data-stale={down ? 'true' : undefined}>
@@ -176,7 +177,7 @@ function DockedSide({
         data-testid="frame-side"
         aria-label="Sessions and everything else"
       >
-        {tier !== 'rail' && (
+        {tier !== 'rail' && tier !== 'hidden' && (
           <div className={styles.sideHead}>
             <NewSessionButton onClick={onNewSession} />
             <span className={styles.spacer} />
@@ -307,7 +308,7 @@ function Handle({
         const drag = state.current
         if (!drag) return
         const width = Math.max(
-          48,
+          0,
           Math.min(drag.frame, drag.start + event.clientX - drag.x),
         )
         last.current = width
@@ -328,7 +329,7 @@ function Handle({
       onKeyDown={(event) => {
         const step = { ArrowLeft: -1, ArrowRight: 1 }[event.key]
         const index = TIERS.indexOf(tier)
-        if (event.key === 'Home') onSnap('rail')
+        if (event.key === 'Home') onSnap('hidden')
         else if (event.key === 'End') onSnap('full')
         else if (step)
           onSnap(

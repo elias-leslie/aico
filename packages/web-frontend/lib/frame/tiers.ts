@@ -1,15 +1,17 @@
-// The left side's four widths (mockup 2): a rail of icons and counts, the
+// The left side's widths (mockup 2): hidden (the session takes the whole
+// window; the edge and the top bar's side button bring it back), a rail of icons and counts, the
 // panel beside the session (the default), wide (the panel plus a second
 // column) and full (covers the session; Esc or close brings it back).
 // Dragging its edge snaps to the nearest one; the width never decides which
 // session is open.
 
-export const TIERS = ['rail', 'panel', 'wide', 'full'] as const
+export const TIERS = ['hidden', 'rail', 'panel', 'wide', 'full'] as const
 export type Tier = (typeof TIERS)[number]
 /** The tiers kept on this device: full covers the session, so a reload never opens on it. */
 export type DockedTier = Exclude<Tier, 'full'>
 
 export const TIER_LABEL: Record<Tier, string> = {
+  hidden: 'Hidden',
   rail: 'Rail',
   panel: 'Panel',
   wide: 'Wide',
@@ -36,6 +38,7 @@ export const isDocked = (value: unknown): value is DockedTier =>
 
 /** A tier's width in px inside a frame `frameWidth` wide. */
 export function tierWidth(tier: Tier, frameWidth: number): number {
+  if (tier === 'hidden') return 0
   if (tier === 'rail') return RAIL_PX
   if (tier === 'panel') return Math.min(PANEL_PX, frameWidth)
   if (tier === 'wide')
@@ -69,7 +72,7 @@ type KeyLike = Pick<
 >
 
 /**
- * The tier keys: Alt+1 to Alt+4 jump to a tier, Alt+[ and Alt+] step. By
+ * The tier keys: Alt+0 hides the side, Alt+1 to Alt+4 jump to a tier, Alt+[ and Alt+] step. By
  * key position (`code`), so a layout where Alt types a symbol still works.
  */
 export function tierKey(
@@ -77,8 +80,8 @@ export function tierKey(
 ): { tier: Tier } | { step: -1 | 1 } | null {
   if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey)
     return null
-  const digit = /^Digit([1-4])$/.exec(event.code)
-  if (digit) return { tier: TIERS[Number(digit[1]) - 1] as Tier }
+  const digit = /^Digit([0-4])$/.exec(event.code)
+  if (digit) return { tier: TIERS[Number(digit[1])] as Tier }
   if (event.code === 'BracketLeft') return { step: -1 }
   if (event.code === 'BracketRight') return { step: 1 }
   return null

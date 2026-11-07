@@ -174,7 +174,7 @@ export function FrameProvider({
       if (!docked) setSheetOpen(true)
       else {
         setFull(false)
-        if (kept === 'rail') setStored('panel')
+        if (kept === 'rail' || kept === 'hidden') setStored('panel')
       }
     },
     { replay: false },

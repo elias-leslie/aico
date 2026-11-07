@@ -2,7 +2,13 @@
 
 import { useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
-import { Menu, RefreshCw, StickyNote } from 'lucide-react'
+import {
+  Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
+  RefreshCw,
+  StickyNote,
+} from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 import { openNeedsYou } from '@/lib/frame/needs-you-request'
@@ -55,7 +61,12 @@ export function TopBar() {
   const showList = () => {
     if (!frame) return
     if (frame.docked) {
-      if (frame.tier === 'rail' || frame.tier === 'full') frame.setTier('panel')
+      if (
+        frame.tier === 'hidden' ||
+        frame.tier === 'rail' ||
+        frame.tier === 'full'
+      )
+        frame.setTier('panel')
     } else frame.setSheetOpen(true)
     revealCurrentRow()
   }
@@ -124,6 +135,31 @@ export function TopBar() {
             <span className={styles.menuCount} aria-hidden="true">
               {needs.count}
             </span>
+          )}
+        </button>
+      )}
+      {docked && frame && (
+        <button
+          type="button"
+          className={styles.tbIcon}
+          aria-label={
+            frame.tier === 'hidden' ? 'Show the side' : 'Hide the side'
+          }
+          title={
+            frame.tier === 'hidden'
+              ? 'Show the side · Alt+1'
+              : 'Hide the side · Alt+0'
+          }
+          aria-pressed={frame.tier !== 'hidden'}
+          onClick={() =>
+            frame.setTier(frame.tier === 'hidden' ? 'rail' : 'hidden')
+          }
+          data-testid="frame-side-toggle"
+        >
+          {frame.tier === 'hidden' ? (
+            <PanelLeftOpen className="h-5 w-5" strokeWidth={1.7} />
+          ) : (
+            <PanelLeftClose className="h-5 w-5" strokeWidth={1.7} />
           )}
         </button>
       )}
