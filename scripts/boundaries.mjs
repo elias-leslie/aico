@@ -35,7 +35,6 @@ for (const [owner, json] of [['root', rootJson], ...packages.map((pkg) => [pkg.n
   }
 }
 
-const names = new Set(packages.map((pkg) => pkg.name))
 const sameLayer = sameLayerImports(root)
 const dbOwner = new Map()
 for (const pkg of packages) {
