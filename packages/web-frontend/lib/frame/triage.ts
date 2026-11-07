@@ -36,6 +36,7 @@ export function rowState(
   attention: Attention | null,
   live: LiveSession | undefined,
   now: number,
+  shell = false,
 ): RowState {
   const group = attention?.group
   if (group === 'needs-you')
@@ -62,6 +63,8 @@ export function rowState(
       tone: 'idle',
       quiet: null,
     }
+  // A shell has no agent state to read: it is running while the session is there.
+  if (shell) return { text: 'running', tone: 'idle', quiet: null }
   return { text: 'no status', tone: 'idle', quiet: null }
 }
 

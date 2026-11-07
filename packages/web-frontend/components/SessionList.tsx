@@ -247,6 +247,7 @@ export function SessionList({
         item.entry.state,
         sessionId ? live.bySession.get(sessionId) : undefined,
         now,
+        item.entry.mode === 'shell',
       ),
       asks: askText(item.entry.asks),
     }
@@ -425,6 +426,7 @@ export function SessionRail({
           state,
           sessionId ? live.bySession.get(sessionId) : undefined,
           now,
+          mode === 'shell',
         )
         const name = [
           rowSummary(label, agent, shown, row.item.entry.asks),

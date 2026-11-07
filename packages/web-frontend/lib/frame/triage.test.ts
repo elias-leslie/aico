@@ -72,6 +72,18 @@ describe('rowState', () => {
   })
 })
 
+describe('a shell row', () => {
+  it('reads running, not no status, since a shell has no agent state', () => {
+    expect(
+      rowState(attention('no-status', null), undefined, NOW, true),
+    ).toMatchObject({
+      text: 'running',
+    })
+    expect(rowState(null, undefined, NOW, true).text).toBe('running')
+    expect(rowState(null, undefined, NOW).text).toBe('no status')
+  })
+})
+
 describe('askText', () => {
   it('names only the questions that do not block', () => {
     expect(askText(NO_ASKS)).toBeNull()
