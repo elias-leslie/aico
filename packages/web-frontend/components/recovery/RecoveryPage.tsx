@@ -3,8 +3,11 @@
 import Link from 'next/link'
 import { useClock } from '@/lib/hooks/use-clock'
 import { useRecovery } from '@/lib/hooks/use-recovery'
+import { useStatus } from '@/lib/hooks/use-status'
+import { useStatusSessions } from '@/lib/hooks/use-status-sessions'
 import {
   lead,
+  memoryLoss,
   OUTCOME_CHIP,
   OUTCOME_WORD,
   type RecoveryItem,
@@ -12,7 +15,7 @@ import {
   resumeResult,
   tries,
 } from '@/lib/recovery'
-import { at } from '@/lib/status'
+import { at, withSessionNames } from '@/lib/status'
 import styles from './RecoveryPage.module.css'
 
 function Row({
@@ -78,6 +81,9 @@ export function RecoveryPage() {
   const { view, loading, failed, stale, readAt, refetch, refreshing, resume } =
     useRecovery()
   const button = view ? resumeButton(view) : null
+  const status = useStatus()
+  const sessions = useStatusSessions()
+  const lost = status.view ? memoryLoss(status.view.rows) : undefined
   const answer = resume.data ? resumeResult(resume.data) : null
 
   return (
@@ -126,6 +132,14 @@ export function RecoveryPage() {
                 ? '. The latest check failed, so this may be out of date.'
                 : ''}
             </p>
+            {lost && (
+              <p role="status" className={styles.notice}>
+                Status reports lost work this page can’t list, because no
+                session stopped:{' '}
+                {withSessionNames(lost.meaning, sessions.names)}{' '}
+                <Link href="/status">Open Status</Link>
+              </p>
+            )}
             {view.partial && (
               <p role="status" className={styles.notice}>
                 {view.partial} Sessions stopped by a restart may be missing

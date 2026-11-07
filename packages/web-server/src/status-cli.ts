@@ -115,19 +115,19 @@ export function formatStatus(
       : 'No status rows yet: they appear as checks, jobs and services report in.\n'
   const healthyParts = (['ok', 'off'] as const)
     .filter((state) => rollup.counts[state] > 0)
-    .map((state) => `${rollup.counts[state]} ${state}`)
+    .map((state) => `${rollup.counts[state]} ${state === 'ok' ? 'OK' : state}`)
     .join(', ')
   // Rows waiting for their first report since their machine came back are not problems either, as
   // on the badge (show.ts counted); folded into one line per machine unless --all. Rows of a
-  // machine turned off on purpose are off, so they are healthy rows.
+  // machine turned off on purpose are off: counted apart from OK, not as healthy.
   const quiet = rows.filter((row) => row.shown === 'unknown' && !counted(row))
   const away = rows.filter((row) => row.machine_off)
   const problems = rollup.problems - quiet.length
   const out: string[] = []
   out.push(
     problems === 0
-      ? `No problems: ${plural(rollup.healthy, 'row')} healthy (${healthyParts}).`
-      : `${plural(problems, 'problem')}, ${rollup.healthy} healthy.`,
+      ? `No problems: ${healthyParts}.`
+      : `${plural(problems, 'problem')}, ${healthyParts}.`,
   )
   const shown = all
     ? rows
@@ -148,7 +148,7 @@ export function formatStatus(
     )
   }
   if (!all && rollup.healthy > 0 && (problems > 0 || quiet.length > 0 || away.length > 0))
-    out.push('', `${rollup.healthy} healthy (${healthyParts}) not listed; --all lists them.`)
+    out.push('', `${healthyParts} not listed; --all lists them.`)
   return `${out.join('\n')}\n`
 }
 

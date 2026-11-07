@@ -241,6 +241,14 @@ export function buildMachines(
   return { machines, partial: view === null, hostsUnknown: hosts === null }
 }
 
+/** How many machines these Status rows come from, counting one machine once under every name it
+ * goes by (the same count the Machines page shows). */
+export function machineCount(rows: readonly StatusRow[]): number {
+  return new Set(
+    rows.map((row) => SESSION_HOST_MACHINE[row.machine] ?? row.machine),
+  ).size
+}
+
 /** "8 machines; 4 can run sessions", from the list as shown. */
 export function machinesLine(list: Machines): string {
   const total = list.machines.length

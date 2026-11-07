@@ -11,6 +11,7 @@ import type { RecoveryItem, RecoveryView } from '@/lib/recovery'
 import { RecoveryPage } from './RecoveryPage'
 
 const api = vi.hoisted(() => ({
+  status: null as unknown,
   view: null as unknown,
   fail: false,
   resume: { resumed: 1, results: [] } as unknown,
@@ -32,6 +33,15 @@ vi.mock('@/lib/api-fetch', async () => {
     }),
   }
 })
+vi.mock('@/lib/hooks/use-status', () => ({
+  useStatus: () => ({ view: api.status }),
+}))
+vi.mock('@/lib/hooks/use-status-sessions', () => ({
+  useStatusSessions: () => ({
+    names: new Map([['fa41c0c8', 'Aico']]),
+    resumable: new Set(),
+  }),
+}))
 vi.mock('next/link', () => ({
   default: ({
     href,
@@ -95,12 +105,36 @@ beforeEach(() => {
   api.calls = []
   api.resume = { resumed: 1, results: [] }
   api.view = view([])
+  api.status = null
 })
 
 describe('Recovery page', () => {
+  it('names the memory kills Status reports, so the two pages agree', async () => {
+    api.status = {
+      rows: [
+        {
+          id: 'host/check-memory',
+          shown: 'warn',
+          meaning:
+            '6 memory kills in the last 24 hours: Session fa41c0c8: jobs killed.',
+        },
+      ],
+    }
+    show()
+    expect(
+      await screen.findByText(/Status reports lost work this page can’t list/),
+    ).toHaveTextContent('Session “Aico”: jobs killed.')
+    expect(screen.getByRole('link', { name: 'Open Status' })).toHaveAttribute(
+      'href',
+      '/status',
+    )
+  })
+
   it('says nothing needs recovering, and the Resume button is off with the reason', async () => {
     show()
-    expect(await screen.findByText('Nothing needs recovering.')).toBeTruthy()
+    expect(
+      await screen.findByText('No stopped sessions to bring back.'),
+    ).toBeTruthy()
     expect(screen.getByText(/Last checked/)).toBeTruthy()
     const button = screen.getByRole('button', {
       name: 'Resume',
@@ -114,7 +148,7 @@ describe('Recovery page', () => {
     show()
     expect(screen.getByText('Checking for stopped sessions…')).toBeTruthy()
     expect(await screen.findByRole('alert', {}, { timeout: 4000 })).toBeTruthy()
-    expect(screen.queryByText('Nothing needs recovering.')).toBeNull()
+    expect(screen.queryByText('No stopped sessions to bring back.')).toBeNull()
     expect(screen.queryByRole('button', { name: /^Resume/ })).toBeNull()
   })
 

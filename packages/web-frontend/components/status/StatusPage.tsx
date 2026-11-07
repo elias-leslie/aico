@@ -23,6 +23,7 @@ import {
   RECOVERY_QUERY_KEY,
   useStatusSessions,
 } from '@/lib/hooks/use-status-sessions'
+import { machineCount } from '@/lib/machines'
 import {
   type ActionContext,
   at,
@@ -135,6 +136,7 @@ export function StatusPage({
     kind,
   })
   const [healthyOpen, setHealthyOpen] = useState(false)
+  const [offOpen, setOffOpen] = useState(false)
   const [openId, setOpenId] = useState<string | null>(null)
   // Runs this page started and is waiting on; the server's list covers the rest.
   const [starting, setStarting] = useState<ReadonlySet<string>>(new Set())
@@ -186,9 +188,10 @@ export function StatusPage({
     filter.sort,
   )
   const problems = shown.filter((row) => isProblem(row.shown))
-  const healthy = shown.filter((row) => !isProblem(row.shown))
+  // Off is not healthy: a row of a machine that is off has nothing to report, so it folds apart.
+  const healthy = shown.filter((row) => row.shown === 'ok')
+  const offRows = shown.filter((row) => row.shown === 'off')
   const counts = rollup(scope)
-  const healthyCounts = rollup(healthy)
   const find = (id: string) => all.find((row) => row.id === id)
 
   const say = (next: Toast) => {
@@ -314,7 +317,7 @@ export function StatusPage({
             ? `As of ${at(readAt, now)} · couldn’t refresh`
             : narrowed
               ? `${shown.length} of ${plural(inProject.length, 'row')} · updated ${at(readAt, now)}`
-              : `${plural(inProject.length, 'row')} from ${plural(new Set(inProject.map((row) => row.machine)).size, 'machine')} · updated ${at(readAt, now)}`
+              : `${plural(inProject.length, 'row')} from ${plural(machineCount(inProject), 'machine')} · updated ${at(readAt, now)}`
 
   const rollupChips =
     mode === 'live' ? (
@@ -492,10 +495,15 @@ export function StatusPage({
     </div>
   )
 
+  const hasSearch = !!filter.search.trim()
   const showHealthy =
     healthyOpen ||
-    !!filter.search.trim() ||
+    hasSearch ||
     filter.states.includes('ok') ||
+    (!problems.length && filter.states.length > 0)
+  const showOff =
+    offOpen ||
+    hasSearch ||
     filter.states.includes('off') ||
     (!problems.length && filter.states.length > 0)
 
@@ -590,16 +598,7 @@ export function StatusPage({
               onClick={() => setHealthyOpen(!showHealthy)}
             >
               <span>
-                <b>{healthy.length} healthy</b>{' '}
-                <span className="status-muted">
-                  ·{' '}
-                  {[
-                    healthyCounts.ok && `${healthyCounts.ok} OK`,
-                    healthyCounts.off && `${healthyCounts.off} off`,
-                  ]
-                    .filter(Boolean)
-                    .join(', ')}
-                </span>
+                <b>{healthy.length} healthy</b>
               </span>
               <ChevronDown
                 className="h-4 w-4"
@@ -608,6 +607,29 @@ export function StatusPage({
               />
             </button>
             {showHealthy && rowsOf(healthy)}
+          </section>
+        )}
+        {offRows.length > 0 && (
+          <section className="status-group" aria-label="Off">
+            <button
+              type="button"
+              className="status-fold"
+              aria-expanded={showOff}
+              onClick={() => setOffOpen(!showOff)}
+            >
+              <span>
+                <b>{offRows.length} off</b>{' '}
+                <span className="status-muted">
+                  · their machine is off, so nothing is reported
+                </span>
+              </span>
+              <ChevronDown
+                className="h-4 w-4"
+                strokeWidth={1.7}
+                aria-hidden="true"
+              />
+            </button>
+            {showOff && rowsOf(offRows)}
           </section>
         )}
       </>

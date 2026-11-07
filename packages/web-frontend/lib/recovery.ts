@@ -1,7 +1,7 @@
 // The Recovery page's data and words. GET /api/recovery serves what stopped and what came back;
 // the page counts and words it here so the lead line and the button say the same thing.
 
-import { at } from '@/lib/status'
+import { at, isProblem, type StatusRow } from '@/lib/status'
 
 export type RecoveryOutcome = 'resumed' | 'waiting' | 'gave_up'
 
@@ -84,11 +84,22 @@ function outcomes(items: RecoveryItem[]): string {
   return parts.join(', ')
 }
 
-/** The state, led first: "Nothing needs recovering." or what stopped and how it went. */
+/**
+ * The Status row for memory kills, when it reports a problem. Killed jobs and processes are lost
+ * work even though no session stopped, so Recovery names them rather than saying all is well.
+ */
+export function memoryLoss(rows: readonly StatusRow[]): StatusRow | undefined {
+  return rows.find(
+    (row) => /(^|\/)check-memory$/.test(row.id) && isProblem(row.shown),
+  )
+}
+
+/** The state, led first: "No stopped sessions to bring back." or what stopped and how it went. */
 export function lead(view: RecoveryView, now: number): string[] {
   const restart = view.items.filter((item) => item.cause === 'restart')
   const crashed = view.items.filter((item) => item.cause === 'crash')
-  if (!restart.length && !crashed.length) return ['Nothing needs recovering.']
+  if (!restart.length && !crashed.length)
+    return ['No stopped sessions to bring back.']
   const lines: string[] = []
   if (restart.length)
     lines.push(

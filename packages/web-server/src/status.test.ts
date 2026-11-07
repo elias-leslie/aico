@@ -249,13 +249,13 @@ describe('st status', () => {
     ])
     const view = store.read()
     const text = formatStatus(view, false, NOW)
-    expect(text).toContain('2 problems, 2 healthy.')
+    expect(text).toContain('2 problems, 2 OK.')
     expect(text).toContain('Failed   Export (job, here)')
     expect(text).toContain('Run now: systemctl --user start x.service')
     expect(text).toContain(
       `Late     Backup (backup, here), late since ${when('2026-11-03T11:00:00Z', NOW)}`,
     )
-    expect(text).toContain('2 healthy (2 ok) not listed; --all lists them.')
+    expect(text).toContain('2 OK not listed; --all lists them.')
     expect(text).not.toContain('Web (service')
     expect(formatStatus(view, true, NOW)).toContain('OK       Web (service, here)')
     store.close()
@@ -278,7 +278,7 @@ describe('st status', () => {
       { ...ROW, machine: 'apps', id: 'apps/two' },
     ])
     const text = formatStatus(store.read(), false, NOW)
-    expect(text).toContain('No problems: 3 rows healthy (3 off).')
+    expect(text).toContain('No problems: 3 off.')
     expect(text).toContain("2 rows on apps: it's turned off on purpose.")
     expect(text).not.toContain('Backup (backup')
     const all = formatStatus(store.read(), true, NOW)

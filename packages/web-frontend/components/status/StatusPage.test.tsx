@@ -147,6 +147,36 @@ describe('StatusPage', () => {
     expect(screen.getByText('Disk space')).toBeVisible()
   })
 
+  it('keeps rows of a machine that is off apart from the healthy ones', async () => {
+    api.view = view([
+      row({
+        id: 'backups',
+        what: 'Nightly backup',
+        state: 'failed',
+        shown: 'failed',
+      }),
+      row({ id: 'disk', what: 'Disk space' }),
+      row({
+        id: 'scan',
+        what: 'Job scan',
+        machine: 'jobinator',
+        state: 'off',
+        shown: 'off',
+        machine_off: true,
+      }),
+      row({ id: 'hub', what: 'Hub', machine: 'aico' }),
+      row({ id: 'gem', what: 'Gem', machine: 'davion-gem' }),
+    ])
+    show()
+    await screen.findByText('Nightly backup')
+    expect(screen.getByText(/5 rows from 3 machines/)).toBeVisible()
+    expect(screen.getByRole('button', { name: /3 healthy/ })).toBeVisible()
+    fireEvent.click(
+      within(screen.getByRole('region', { name: 'Off' })).getByRole('button'),
+    )
+    expect(screen.getByText('Job scan')).toBeVisible()
+  })
+
   it('filters by a rollup chip and offers to clear when nothing matches', async () => {
     show()
     await screen.findByText('Nightly backup')
