@@ -341,6 +341,55 @@ describe('Codex setup text', () => {
   })
 })
 
+describe('secret masking in events', () => {
+  it('hides known token shapes in every event kind and keeps hashes and ids', async () => {
+    const token = `ghp_${'Fake0123456789abcdefghijklmnopqrstuv'}`
+    const hash = '53a307d9e4b1c2d3a4f5061728394a5b6c7d8e9f'
+    claudeFile(
+      '-work-demo',
+      'mask1',
+      jsonl(
+        {
+          type: 'user',
+          cwd: '/work/demo',
+          timestamp: '2026-11-04T10:00:00Z',
+          message: { role: 'user', content: `use ${token} now` },
+        },
+        {
+          type: 'assistant',
+          timestamp: '2026-11-04T10:00:05Z',
+          message: {
+            id: 'm1',
+            model: 'claude-test-1',
+            stop_reason: null,
+            usage: usage(5, 100, 2),
+            content: [
+              { type: 'text', text: `commit ${hash}` },
+              {
+                type: 'tool_use',
+                id: 't1',
+                name: 'Bash',
+                input: { command: `curl -H "Authorization: Bearer ${token}1"` },
+              },
+            ],
+          },
+        },
+      ),
+    )
+    const h = history()
+    await h.scan()
+    const row = h.list({})[0]
+    const found = h.find(row.id)
+    if (!found || found === 'ambiguous') throw new Error('missing')
+    const page = h.events(found, {})
+    if (page === 'gone') throw new Error('gone')
+    const all = page.items.map((e) => e.text).join('\n')
+    expect(all).not.toContain('Fake0123456789')
+    expect(all).toContain('hidden: looks like a token')
+    expect(all).toContain(hash)
+  })
+})
+
 describe('Pi reader', () => {
   it('adds each message and reads write calls', async () => {
     const dir = join(home, '.pi', 'agent', 'sessions', '--work-demo--')

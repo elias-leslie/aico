@@ -1,9 +1,29 @@
+import { maskKnownSecrets } from '@aico/shared/secrets'
 import type { HistoryTool, Reader } from '../types'
 import { claudeReader } from './claude'
 import { codexReader } from './codex'
 import { piReader } from './pi'
 
-export const READERS: Reader[] = [claudeReader, codexReader, piReader]
+/** Every event text a reader builds passes the exact-shape secret mask here, the one place
+ * transcript text enters Tether, so the events page, the CLI and any search over the readers
+ * show tokens, private keys and bearer values hidden. Totals and ids are untouched. */
+function masked<S>(reader: Reader<S>): Reader<S> {
+  return {
+    ...reader,
+    read(record, state, wantEvents) {
+      const reading = reader.read(record, state, wantEvents)
+      if (!wantEvents) return reading
+      return {
+        ...reading,
+        events: reading.events.map((event) => ({ ...event, text: maskKnownSecrets(event.text) })),
+      }
+    },
+  }
+}
+
+export const READERS: Reader[] = [claudeReader, codexReader, piReader].map((reader) =>
+  masked(reader as Reader),
+)
 
 export function readerFor(tool: string): Reader | undefined {
   return READERS.find((reader) => reader.tool === (tool as HistoryTool))

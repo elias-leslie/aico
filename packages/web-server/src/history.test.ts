@@ -43,4 +43,17 @@ describe('retained chat history', () => {
     expect(JSON.stringify(page)).not.toContain('not-a-real-image')
     expect(chatEvents([], {})).toEqual({ items: [], size: 0, older: null, newer: null })
   })
+
+  it('hides known token shapes in retained messages', () => {
+    const token = `ghp_${'Fake0123456789abcdefghijklmnopqrstuv'}`
+    const page = chatEvents(
+      [
+        message('assistant', [
+          { type: 'toolCall', name: 'bash', arguments: { command: `echo ${token}` } },
+        ]),
+      ],
+      {},
+    )
+    expect(JSON.stringify(page)).not.toContain('Fake0123456789')
+  })
 })

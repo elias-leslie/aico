@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { HIDDEN_KEY, HIDDEN_PASSWORD, HIDDEN_TOKEN, maskSecrets } from './secrets'
+import { HIDDEN_KEY, HIDDEN_PASSWORD, HIDDEN_TOKEN, maskKnownSecrets, maskSecrets } from './secrets'
 
 // Fake values only, built in pieces so no scanner mistakes them for real ones.
 const fake = {
@@ -56,5 +56,67 @@ describe('maskSecrets', () => {
       '',
     ]
     for (const text of plain) expect(maskSecrets(text)).toBe(text)
+  })
+})
+
+describe('maskKnownSecrets', () => {
+  const extra = {
+    gitlab: `glpat-${'Fake0123456789abcdefg'}`,
+    stripe: `sk_${'live'}_${'Fake0123456789abcdefghij'}`,
+    npm: `npm_${'Fake0123456789abcdefghijklmnopqrstuv'}`,
+    huggingface: `hf_${'Fake0123456789abcdefghijklmnopqrstuvw'}`,
+    googleOauth: `ya29.${'Fake0123456789abcdefghijklmnopqrstuv'}`,
+    sendgrid: `SG.${'Fake0123456789abcdefgh'}.${'Fake0123456789abcdefghijklmnopqrstuvwxyz012'}`,
+  }
+  const shaped = {
+    ...Object.fromEntries(Object.entries(fake).filter(([k]) => k !== 'hex' && k !== 'base64')),
+    ...extra,
+  }
+
+  it.each(Object.entries(shaped))(
+    'hides a %s-shaped token in prose and in JSON',
+    (_kind, value) => {
+      for (const text of [
+        `found ${value} here`,
+        JSON.stringify({ command: `curl -H "x: ${value}"` }),
+      ]) {
+        const masked = maskKnownSecrets(text)
+        expect(masked).not.toContain(value)
+        expect(masked).toContain(HIDDEN_TOKEN)
+      }
+    },
+  )
+
+  it('hides bearer values and url passwords but keeps the rest', () => {
+    expect(maskKnownSecrets('Authorization: Bearer fakeBearerValue.0123')).toBe(
+      `Authorization: Bearer ${HIDDEN_TOKEN}`,
+    )
+    expect(maskKnownSecrets('git clone https://owner:fakepass123@example.com/r.git')).toBe(
+      `git clone https://owner:${HIDDEN_TOKEN}@example.com/r.git`,
+    )
+  })
+
+  it('hides a private key block inside escaped JSON', () => {
+    const fence = (edge: string) => `-----${edge} RSA ${'PRIVATE'} KEY-----`
+    const text = JSON.stringify({ text: `${fence('BEGIN')}\nZmFrZQ==\n${fence('END')}\ndone` })
+    const masked = maskKnownSecrets(text)
+    expect(masked).toContain(HIDDEN_KEY)
+    expect(masked).not.toContain('ZmFrZQ')
+    expect(masked).toContain('done')
+  })
+
+  it('leaves hashes, uuids, base64 data, labels and prose alone', () => {
+    const plain = [
+      'commit 53a307d9e4b1c2d3a4f5061728394a5b6c7d8e9f',
+      'sha256 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+      'session 6f1c2a3b-4d5e-4f60-8a9b-0c1d2e3f4a5b',
+      `data:image/png;base64,iVBORw0KGgo${'AAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAHnOcQAAAAABJRU5ErkJggg'.repeat(3)}`,
+      'Bearer authentication is used here, and password: Hunter2 stays in a log',
+      'api_key=somevalue token: abc123 sk-short',
+      'we asked at 1730000000:00 for AKIA only',
+      'https://example.com:8080/path user@host',
+      'Zm9vQmFyQmF6Q3J1eDEyMzQ1Njc4OTBxV2VSdFl1SW9QYXNkZmdoamts',
+    ]
+    for (const text of plain) expect(maskKnownSecrets(text)).toBe(text)
   })
 })

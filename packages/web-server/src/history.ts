@@ -3,6 +3,7 @@
 // answer on.
 
 import type { ChatSessions } from '@aico/agent'
+import { maskKnownSecrets } from '@aico/shared/secrets'
 import type { HistoryEvent, HistoryEventPage, TetherClient } from '@aico/tether-client'
 import type { Router } from './http'
 import { tetherCall } from './lifecycle'
@@ -164,7 +165,7 @@ export function chatEvents(
         at: Date.parse(message.at),
         role,
         kind,
-        text,
+        text: maskKnownSecrets(text),
         ...(typeof block.name === 'string' ? { tool: block.name } : {}),
         ...(message.model ? { model: message.model } : {}),
       })
