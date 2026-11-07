@@ -4,12 +4,13 @@ import { useRouter } from 'next/navigation'
 import { Component, type ReactNode, useEffect, useRef, useState } from 'react'
 import { apiFetch } from '@/lib/api-fetch'
 import { type ChatMessage, type ChatView, chatCall } from '@/lib/chat'
-import { ChatAttachmentSheet, useChatAttachments } from './ChatAttachments'
+import { ChatAttachmentSheet } from './ChatAttachments'
 import { ChatBranchDialog } from './ChatBranchDialog'
 import { ChatComposer } from './ChatComposer'
 import { ChatDetails } from './ChatDetails'
 import { ChatHeader } from './ChatHeader'
 import { ChatTranscript } from './ChatTranscript'
+import { useChatDraft } from './use-chat-draft'
 import { useChatScroll } from './use-chat-scroll'
 import { useChatStream } from './use-chat-stream'
 import './chat.css'
@@ -62,7 +63,6 @@ function ChatSessionBody({ id, onBack }: { id: string; onBack?: () => void }) {
     retry: false,
     refetchOnWindowFocus: false,
   })
-  const [draft, setDraft] = useState('')
   const [model, setModel] = useState('')
   const [effort, setEffort] = useState<string | null>(null)
   const [details, setDetails] = useState(false)
@@ -75,58 +75,17 @@ function ChatSessionBody({ id, onBack }: { id: string; onBack?: () => void }) {
   const [branchModel, setBranchModel] = useState('')
   const [copied, setCopied] = useState<string | null>(null)
   const input = useRef<HTMLTextAreaElement>(null)
-  const initialized = useRef(false)
-  const savingDraft = useRef(Promise.resolve())
   const chat = opened.data
   const { disconnected, connectedAt, reconnect } = useChatStream(
     id,
     Boolean(opened.data),
   )
   const scroll = useChatScroll(chat)
-  const latestDraft = useRef(draft)
-  latestDraft.current = draft
-  const persistDraft = (text: string, attachments: string[]) => {
-    client.setQueryData<ChatView>(['aico-chat', id], (current) =>
-      current
-        ? { ...current, draft: text, draftAttachments: attachments }
-        : current,
-    )
-    savingDraft.current = savingDraft.current
-      .then(() =>
-        apiFetch(`/api/chat/${id}/draft`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ draft: text, attachments }),
-        }),
-      )
-      .then(() => {})
-      .catch((e: Error) => setError(`Draft not saved: ${e.message}`))
-  }
-  const files = useChatAttachments(
+  const { draft, setDraft, files, savingDraft, saveDraft } = useChatDraft(
     id,
-    chat ? (chat.draftAttachments ?? []) : undefined,
-    (ids) => persistDraft(latestDraft.current, ids),
+    chat,
+    setError,
   )
-  const restored = useRef('')
-  useEffect(() => {
-    if (
-      chat?.state !== 'failed' ||
-      !chat.note?.startsWith('Files weren’t sent: ') ||
-      !chat.draftAttachments?.length
-    )
-      return
-    const key = `${chat.updatedAt}:${chat.note}`
-    if (restored.current === key) return
-    restored.current = key
-    setDraft(chat.draft)
-    files.restore(chat.draftAttachments)
-  }, [chat, files.restore])
-  useEffect(() => {
-    if (chat && !initialized.current) {
-      setDraft(chat.draft)
-      initialized.current = true
-    }
-  }, [chat])
   useEffect(() => {
     if (chat?.state && chat.state !== 'working') setModel('')
   }, [chat?.state])
@@ -180,9 +139,6 @@ function ChatSessionBody({ id, onBack }: { id: string; onBack?: () => void }) {
           : [current, value.draft].filter(Boolean).join('\n\n'),
       )
     }
-  }
-  const saveDraft = () => {
-    persistDraft(draft, files.ids)
   }
 
   const copy = async (text: string) => {
