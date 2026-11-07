@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
 import { paneSessionsAsSessions } from '@/lib/utils/slot'
 import { apiFetch } from '../api-fetch'
+import { markCreatedHere } from '../created-here'
 import {
   SESSION_REFRESH_MS,
   type TerminalSession,
@@ -55,12 +56,15 @@ const api = {
   fetchPanes: (): Promise<PaneListResponse> => apiFetch('/api/panes'),
   fetchDetachedPanes: (): Promise<PaneListResponse> =>
     apiFetch('/api/panes/detached'),
-  createPane: (request: CreatePaneRequest): Promise<TerminalPane> =>
-    apiFetch('/api/panes', {
+  createPane: async (request: CreatePaneRequest): Promise<TerminalPane> => {
+    const pane = await apiFetch<TerminalPane>('/api/panes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
-    }),
+    })
+    markCreatedHere((pane.sessions ?? []).map((session) => session.id))
+    return pane
+  },
   updatePane: (
     paneId: string,
     request: UpdatePaneRequest,

@@ -17,6 +17,7 @@ import {
   PHONE_HISTORY_LINES,
   SCROLLBACK,
 } from '../lib/constants/terminal'
+import { wasCreatedHere } from '../lib/created-here'
 import type { TerminalRendererStatus } from '../lib/hooks/terminal-instance-utils'
 import { useTerminalHandle } from '../lib/hooks/use-terminal-handle'
 import { useTerminalInstance } from '../lib/hooks/use-terminal-instance'
@@ -205,6 +206,18 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
             first &&
             sameBrowserHolderRef.current &&
             !isObserver &&
+            isPageActive()
+          ) {
+            reclaimRef.current()
+            return
+          }
+          // Nobody named holds it and this browser just started the session: it takes the size.
+          if (
+            first &&
+            !here &&
+            !viewer &&
+            !isObserver &&
+            wasCreatedHere(sessionId) &&
             isPageActive()
           ) {
             reclaimRef.current()

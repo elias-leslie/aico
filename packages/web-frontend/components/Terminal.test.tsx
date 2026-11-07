@@ -1,6 +1,7 @@
 import { act, render, waitFor } from '@testing-library/react'
 import { createRef } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { markCreatedHere } from '../lib/created-here'
 import { TerminalComponent, type TerminalHandle } from './Terminal'
 
 type TerminalHookOptions = Parameters<
@@ -303,6 +304,30 @@ describe('TerminalComponent', () => {
     void ref.current?.pasteInput('y')
     expect(resizeHandle).toHaveBeenCalledTimes(2)
     vi.useRealTimers()
+  })
+
+  it('a session this browser just started takes the size nobody holds, with no notice', () => {
+    markCreatedHere(['session-new'])
+    const onSizeHolderChange = vi.fn()
+    render(
+      <TerminalComponent
+        sessionId="session-new"
+        isVisible
+        onSizeHolderChange={onSizeHolderChange}
+      />,
+    )
+    onSizeHolderChange.mockClear()
+    act(() =>
+      websocketState.options?.onSizeHolder?.({
+        here: false,
+        viewer: null,
+        size: { cols: 80, rows: 24 },
+        sameBrowser: false,
+      }),
+    )
+    expect(resizeHandle).toHaveBeenCalledTimes(1)
+    expect(onSizeHolderChange).not.toHaveBeenCalled()
+    expect(resizeHookOptions?.viewSize).toBeNull()
   })
 
   it("takes the size back from the owner's other tab on opening, with no notice", () => {
