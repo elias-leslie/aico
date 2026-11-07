@@ -120,7 +120,7 @@ export const UnifiedTerminalHeaderContent = memo(
 
         <div className="min-w-1 flex-1" />
 
-        <div className="flex flex-none items-center gap-0.5">
+        <div className="flex min-w-0 flex-[0_1_auto] items-center gap-0.5">
           {/* Without the session list beside it, the bar carries Needs you. */}
           {allSlots && onSwitchTo && (
             <>

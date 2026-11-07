@@ -28,10 +28,10 @@ export function useNeedsYouCounts(): NeedsYouCounts {
   const summary = !known
     ? 'Needs you: not loaded yet'
     : count === 0
-      ? 'Needs you: no agent questions or approvals waiting'
+      ? 'Needs you: no agent questions or grants waiting'
       : `Needs you: ${[
           questions ? plural(questions, 'agent question') : null,
-          taps ? plural(taps, 'approval') : null,
+          taps ? plural(taps, 'grant') : null,
         ]
           .filter(Boolean)
           .join(' and ')} waiting`

@@ -94,12 +94,12 @@ describe('TerminalTabs session controls', () => {
       ),
     ).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    // One on this computer says so.
+    // One on the Workstation says so.
     slots.list = [slot]
     slots.ending = slot
     fireEvent.click(screen.getByRole('button', { name: 'End control' }))
     expect(
-      screen.getByText(/^End “Work shell” \(Shell on this computer\)\?/),
+      screen.getByText(/^End “Work shell” \(Shell on Workstation\)\?/),
     ).toBeInTheDocument()
   })
 

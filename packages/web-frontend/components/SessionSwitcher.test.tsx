@@ -219,8 +219,8 @@ describe('SessionSwitcher attention', () => {
       .map((el) => el.textContent ?? '')
       .filter((text) => /Alpha|Beta|Gamma|Delta/.test(text))
     expect(rows).toEqual([
-      'Gamma3mShell · waiting for you',
-      'Beta4mShell · working',
+      'Gamma3mShell · waiting for you · Workstation',
+      'Beta4mShell · working · Workstation',
       expect.stringMatching(/^Alpha2hShell · idle since /),
       expect.stringMatching(/^Delta1mShell · finished /),
     ])

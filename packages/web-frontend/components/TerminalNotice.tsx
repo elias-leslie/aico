@@ -103,8 +103,8 @@ interface SizeHolderNoticeProps {
 
 /** Another device holds the one shared terminal size: the session shows at
  * that size, under a slim bar naming the device, with a way to take the size.
- * Looking never takes it; typing here or Use here does. On a phone the bar
- * is docked above the session so it never covers the prompt. */
+ * Looking never takes it; typing here or Use here does. The bar is docked
+ * above the session so it never covers its output or prompt. */
 export function SizeHolderNotice({
   holder,
   onUseHere,
@@ -112,7 +112,7 @@ export function SizeHolderNotice({
 }: SizeHolderNoticeProps) {
   return (
     <div
-      className={isMobile ? 'lantern-size-bar docked' : 'lantern-size-bar'}
+      className="lantern-size-bar"
       role="status"
       aria-live="polite"
       data-testid="size-holder-notice"
@@ -146,7 +146,7 @@ export function SizeClaimedNotice({
 }: SizeClaimedNoticeProps) {
   return (
     <div
-      className={isMobile ? 'lantern-size-bar docked' : 'lantern-size-bar'}
+      className="lantern-size-bar"
       role="status"
       aria-live="polite"
       data-testid="size-claimed-notice"

@@ -51,8 +51,10 @@ export interface SessionModelSwitch {
 
 export interface TerminalSession extends CoordinatorFields {
   id: string
-  /** `Project — Task`, the title Aico shows; `task` is Tether's name alone. */
+  /** The name its owner typed, used as is (no project in front). */
   name: string
+  /** The project's name when the session's name does not already say it. */
+  project_name?: string | null
   user_id: string | null
   project_id: string | null
   working_dir: string | null

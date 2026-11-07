@@ -426,9 +426,32 @@
 .snap:last-child {
   transform: translateX(-100%);
 }
+.snapLine {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 1px dashed var(--line-2);
+}
+.snapLine.snapNear {
+  border-left: 2px solid var(--amber-line);
+}
 .snapNear {
   color: var(--lantern);
   border-color: var(--amber-line);
+}
+/* Names the width the edge will snap to, beside the edge being dragged. */
+.snapTarget {
+  position: absolute;
+  top: 120px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 13px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: rgb(var(--umber-rgb));
+  border: 1px solid var(--amber-line);
+  color: var(--lantern);
 }
 
 /* Full's side list */

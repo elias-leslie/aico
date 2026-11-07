@@ -198,7 +198,7 @@ describe('NeedsYouLauncher', () => {
     const pill = screen.getByTestId('needs-you-pill')
     expect(pill).toHaveTextContent('2 need you')
     expect(pill).toHaveAccessibleName(
-      'Needs you: 1 agent question and 1 approval waiting',
+      'Needs you: 1 agent question and 1 grant waiting',
     )
   })
 
@@ -213,7 +213,7 @@ describe('NeedsYouLauncher', () => {
   it('stays a quiet icon when nothing waits, and off the phone bar', () => {
     const { unmount } = render(<NeedsYouLauncher />)
     expect(screen.getByTestId('needs-you-pill')).toHaveAccessibleName(
-      'Needs you: no agent questions or approvals waiting',
+      'Needs you: no agent questions or grants waiting',
     )
     unmount()
     render(<NeedsYouLauncher variant="compact" />)
@@ -450,7 +450,7 @@ describe('Needs you page', () => {
       ],
     }
     render(<NeedsYouPage />)
-    fireEvent.click(screen.getByRole('tab', { name: /Approvals/ }))
+    fireEvent.click(screen.getByRole('tab', { name: /Grants/ }))
     const link = screen.getByRole('link', { name: 'Review and approve' })
     expect(link).toHaveAttribute(
       'href',
@@ -463,8 +463,8 @@ describe('Needs you page', () => {
   it('says when access requests cannot be read instead of showing nothing waiting', () => {
     state.approvals = { state: 'unavailable', taps: [] }
     render(<NeedsYouPage />)
-    fireEvent.click(screen.getByRole('tab', { name: /Approvals/ }))
-    expect(screen.getByText(/Can’t read access requests/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: /Grants/ }))
+    expect(screen.getByText(/Can’t read grant requests/)).toBeInTheDocument()
   })
 
   it('has its own loading, failed and empty copy', () => {

@@ -168,8 +168,24 @@ describe('the left side on a desktop', () => {
     fireEvent.pointerMove(handle, { clientX: 900 })
     expect(tier()).toBe('panel')
     expect(screen.getByText('Wide')).toBeInTheDocument()
+    expect(screen.getByTestId('snap-target')).toHaveTextContent(
+      'Release for Wide',
+    )
     fireEvent.pointerUp(handle, { clientX: 900 })
     expect(tier()).toBe('wide')
+    expect(screen.queryByTestId('snap-target')).toBeNull()
+  })
+
+  it('names the width a drag in between will snap to', () => {
+    show()
+    const handle = screen.getByTestId('frame-handle')
+    fireEvent.pointerDown(handle, { button: 0, clientX: 360 })
+    fireEvent.pointerMove(handle, { clientX: 600 })
+    expect(screen.getByTestId('snap-target')).toHaveTextContent(
+      'Release for Panel',
+    )
+    fireEvent.pointerUp(handle, { clientX: 600 })
+    expect(tier()).toBe('panel')
   })
 
   it('still works when the browser blocks storage', () => {

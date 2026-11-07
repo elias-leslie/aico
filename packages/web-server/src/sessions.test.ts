@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fromTether } from './sessions'
+import { fromTether, nameAndProject } from './sessions'
 import { descriptor } from './testing'
 
 const REFUSAL = {
@@ -69,5 +69,35 @@ describe('model_switch', () => {
     expect(modelSwitch({ ...REFUSAL, from: 5 })).toBeNull()
     expect(modelSwitch({ ...REFUSAL, to: '' })).toBeNull()
     expect(modelSwitch({ ...REFUSAL, key: undefined })).toBeNull()
+  })
+})
+
+describe("a session's name", () => {
+  it('is what its owner typed, with the project beside it, not in front', () => {
+    expect(nameAndProject('Aico — ux-test', 'ux-test')).toEqual({
+      name: 'ux-test',
+      project: 'Aico',
+    })
+    expect(nameAndProject('Aico — ux-test · prompt@3', 'ux-test')).toEqual({
+      name: 'ux-test · prompt@3',
+      project: 'Aico',
+    })
+  })
+
+  it('keeps the title when nothing was typed or it only says the project', () => {
+    expect(nameAndProject('Aico', null)).toEqual({ name: 'Aico', project: null })
+    expect(nameAndProject(undefined, 'x')).toEqual({
+      name: undefined,
+      project: null,
+    })
+  })
+
+  it('reaches the web app as name and project_name', () => {
+    const session = fromTether(
+      descriptor({ displayTitle: 'Aico — ux-test', name: 'ux-test' } as never),
+      null,
+    )
+    expect(session.name).toBe('ux-test')
+    expect(session.project_name).toBe('Aico')
   })
 })

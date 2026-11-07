@@ -23,6 +23,7 @@ import {
   RECOVERY_QUERY_KEY,
   useStatusSessions,
 } from '@/lib/hooks/use-status-sessions'
+import { machineLabel } from '@/lib/machine-name'
 import { machineCount } from '@/lib/machines'
 import {
   type ActionContext,
@@ -461,8 +462,15 @@ export function StatusPage({
   )
 
   const kindOptions = KINDS.map((kind) => [kind, kind] as const)
-  const machineOptions = machines.map((machine) => [machine, machine] as const)
-  const projectOptions = projectIds.map((id) => [id, id] as const)
+  const machineOptions = machines.map(
+    (machine) => [machine, machineLabel(machine)] as const,
+  )
+  // Only projects Aico knows by name: retired and test ones still have rows but are not filters.
+  // The one picked stays listed; with the project list unread, every id is offered.
+  const known = new Map(projects.map((item) => [item.id, item.name]))
+  const projectOptions = projectIds
+    .filter((id) => known.has(id) || known.size === 0 || id === filter.project)
+    .map((id) => [id, known.get(id) ?? id] as const)
   const sortSelect = (
     <select
       className="status-select"

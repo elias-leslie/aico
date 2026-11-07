@@ -79,7 +79,7 @@ describe('rowButtons', () => {
     ])
     expect(buttons.primary).toBe('run')
     expect(lookMessage(waiting)).toContain(
-      'davion-gem is back; this hasn’t reported since.',
+      'Proxmox host is back; this hasn’t reported since.',
     )
   })
 
@@ -192,7 +192,7 @@ describe('filters and words', () => {
       machine: 'davion-gem',
     })
     expect(lookMessage(off)).toBe(
-      'Status row aico-web is unknown: davion-gem stopped reporting. Serving. Find out why and fix it.',
+      'Status row aico-web is unknown: Proxmox host stopped reporting. Serving. Find out why and fix it.',
     )
     const projects = [
       { id: 'nightshift', root_path: '/srv/workspaces/projects/nightshift' },

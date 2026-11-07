@@ -39,6 +39,7 @@ import {
   useStatusSessions,
 } from '@/lib/hooks/use-status-sessions'
 import { useUsage } from '@/lib/hooks/use-usage'
+import { machineLabel } from '@/lib/machine-name'
 import { popOutNotes } from '@/lib/notes-window'
 import {
   ACTION_LABEL,
@@ -280,7 +281,7 @@ function WorstProblem({ frame }: { frame: Frame | null }) {
               {tierLabel(tierOf(top))}
             </span>
             <span>
-              {WORD[top.shown]} · {top.machine}
+              {WORD[top.shown]} · {machineLabel(top.machine)}
             </span>
           </div>
           <h3>{top.what}</h3>

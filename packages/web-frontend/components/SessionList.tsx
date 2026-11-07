@@ -24,6 +24,7 @@ import { useAgentTools } from '@/lib/hooks/use-agent-tools'
 import { useClock } from '@/lib/hooks/use-clock'
 import { useLocalStorageState } from '@/lib/hooks/use-local-storage-state'
 import type { SessionAttention } from '@/lib/hooks/use-session-attention'
+import { sessionHostLabel } from '@/lib/machines'
 import {
   getSlotName,
   getSlotPanelId,
@@ -184,7 +185,7 @@ export function sessionWhoWhere(
   tools: readonly { slug: string; name: string }[],
 ): string {
   const label = sessionLabel(slots, slot)
-  return `“${label}” (${toolName(tools, slotMode(slot))} on ${slot.host ?? 'this computer'})`
+  return `“${label}” (${toolName(tools, slotMode(slot))} on ${sessionHostLabel(slot.host ?? null)})`
 }
 
 const TEAMS_OPEN_KEY = 'aico:teams-open'
@@ -283,6 +284,9 @@ export function SessionList({
           agentName(mode),
           shown.state.text,
           shown.asks,
+          slot?.projectLabel,
+          // Where it runs: a remote host has its chip beside this.
+          slot?.host ? null : sessionHostLabel(null),
           // A team row: the coordinator's own state, then its team summary.
           isTeam ? row.summary : null,
           row.orphaned ? 'coordinator ended' : null,

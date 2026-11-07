@@ -239,7 +239,7 @@ export function HostsSheet({
                 </LinkButton>
               </Note>
             ) : hosts.length === 0 ? (
-              <Note>No other hosts. Sessions run on this computer.</Note>
+              <Note>No other hosts. Sessions run on the Workstation.</Note>
             ) : (
               <ul className="flex flex-col gap-3" aria-label="Hosts">
                 {hosts.map((host) => (

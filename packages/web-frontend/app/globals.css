@@ -884,22 +884,19 @@ div.xterm .xterm-viewport {
   margin-top: 10px;
 }
 
-/* Another device holds the size: a slim bar over the session, which stays
-   readable at that device's size underneath. */
+/* Another device holds the size: a slim bar docked above the session, never
+   over its output (which stays readable at that device's size underneath). */
 .lantern-size-bar {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  z-index: 6;
+  flex: none;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
-  max-width: calc(100% - 12px);
+  margin: 0 4px 4px;
   padding: 4px 4px 4px 12px;
   border: 1px solid var(--frame-edge);
   border-radius: 8px;
   background: rgb(var(--ink-rgb) / 0.92);
-  box-shadow: var(--shadow-rim);
   font-size: 13px;
   line-height: 1.3;
   color: var(--bone);
@@ -916,15 +913,6 @@ div.xterm .xterm-viewport {
 
 .lantern-size-bar .d {
   color: var(--mist);
-}
-
-/* Phone: docked above the session, so the prompt line stays visible. */
-.lantern-size-bar.docked {
-  position: static;
-  justify-content: space-between;
-  max-width: none;
-  margin: 0 4px 4px;
-  box-shadow: none;
 }
 
 /* The agent's model changed or a refusal paused it: a slim line docked

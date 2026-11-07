@@ -3,6 +3,7 @@
 // way, so the rollup chips can count every state while one is picked.
 
 import { byTier, tierLabel, tierOf } from '@aico/shared/status-order'
+import { machineLabel } from './machine-name'
 
 export { tierLabel, tierOf }
 
@@ -201,13 +202,14 @@ export function summaryLine(summary: StatusSummary): string {
 
 /** Why a late, unknown or machine-off row is so, said before its last report. */
 export function reason(row: StatusRow): string {
-  if (row.machine_off) return `${row.machine} is off.`
+  if (row.machine_off) return `${machineLabel(row.machine)} is off.`
   if (row.shown === 'late') return 'Didn’t report when due.'
   if (row.shown !== 'unknown') return ''
-  if (row.unknown_why === 'late') return `${row.machine} stopped reporting.`
+  if (row.unknown_why === 'late')
+    return `${machineLabel(row.machine)} stopped reporting.`
   if (row.unknown_why === 'back')
-    return `${row.machine} is back; this hasn’t reported since.`
-  return `Aico hasn’t heard from ${row.machine} itself.`
+    return `${machineLabel(row.machine)} is back; this hasn’t reported since.`
+  return `Aico hasn’t heard from ${machineLabel(row.machine)} itself.`
 }
 
 // -- Time: 12-hour local times, as the rest of the web app shows them.
@@ -278,7 +280,7 @@ export function when(row: StatusRow, now: number): When {
     return {
       lead:
         since === null
-          ? `No word from ${row.machine}`
+          ? `No word from ${machineLabel(row.machine)}`
           : `Unknown since ${at(since, now)}`,
       sub: `Last report ${at(updated, now)}`,
       short: since === null ? 'no word' : `since ${atShort(since, now)}`,
@@ -287,7 +289,7 @@ export function when(row: StatusRow, now: number): When {
   if (row.machine_off)
     return {
       lead: `Last report ${at(updated, now)}`,
-      sub: `${row.machine} off since ${at(since, now)}`,
+      sub: `${machineLabel(row.machine)} off since ${at(since, now)}`,
       short: `reported ${atShort(updated, now)}`,
       tone: 'plain',
     }
@@ -421,7 +423,7 @@ export function rowButtons(
       ref: action.ref,
       disabled:
         action.kind === 'run' && silent
-          ? `${row.machine} isn’t reporting, so it can’t run now`
+          ? `${machineLabel(row.machine)} isn’t reporting, so it can’t run now`
           : null,
     })
   }

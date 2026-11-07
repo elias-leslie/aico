@@ -133,7 +133,7 @@ export function NeedsYouLauncher({ variant = 'pill' }: { variant?: Variant }) {
 }
 
 /** Needs you as a page in the main area (Wide, Full or the phone's sheet):
- * every question, the access requests, and what was answered. The side's own
+ * every question, the grant requests, and what was answered. The side's own
  * Needs you section shows the same cards on top of the list. */
 export function NeedsYouPage({ focus = null }: { focus?: string | null }) {
   const frame = useFrame()
@@ -254,7 +254,7 @@ function NeedsYouBody({
           Asks{waiting.length ? ` ${waiting.length}` : ''}
         </TabButton>
         <TabButton id="approvals" tab={tab} onSelect={setTab}>
-          Approvals{taps.length ? ` ${taps.length}` : ''}
+          Grants{taps.length ? ` ${taps.length}` : ''}
         </TabButton>
         <TabButton id="answered" tab={tab} onSelect={setTab}>
           Answered
@@ -270,16 +270,16 @@ function NeedsYouBody({
         </div>
         {tab === 'approvals' ? (
           approvalsLoading ? (
-            <Note>Checking access requests…</Note>
+            <Note>Checking grant requests…</Note>
           ) : approvals?.state !== 'ok' ? (
             <Note>
-              Can’t read access requests right now. Open the Aico tray on your
+              Can’t read grant requests right now. Open the Aico tray on your
               computer to see them.
             </Note>
           ) : taps.length === 0 ? (
             <Note>Nothing waiting for your security key.</Note>
           ) : (
-            <ul className="flex flex-col gap-2.5" aria-label="Approvals">
+            <ul className="flex flex-col gap-2.5" aria-label="Grants">
               {taps.map((tap) => (
                 <ApprovalCard key={tap.id} tap={tap} />
               ))}
@@ -964,7 +964,7 @@ function ApprovalCard({ tap }: { tap: Approval }) {
     <li className="lantern-ask" data-blocking="true">
       <Meta>
         <span className="lantern-chip" data-tone="wait">
-          Access request
+          Grant request
         </span>
         <span className="min-w-0 truncate" style={{ color: 'var(--mist)' }}>
           security key · expires in{' '}

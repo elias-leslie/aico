@@ -313,8 +313,8 @@ export function SessionView({
           <SignInLink sessionId={sessionId} tool={signInTool} />
         )}
 
-        {/* On a phone the bar sits above the session, clear of its prompt. */}
-        {isMobile && sizeNotice}
+        {/* The size bar sits above the session, never over its output. */}
+        {sizeNotice}
 
         {/* Ink terminal inside one steady frame-edge hairline */}
         <div
@@ -366,7 +366,6 @@ export function SessionView({
               onPowerOn={() => powerHost(awayHere.host, 'on')}
             />
           )}
-          {!isMobile && sizeNotice}
         </div>
         {files && sessionId && (
           <FilesDialog

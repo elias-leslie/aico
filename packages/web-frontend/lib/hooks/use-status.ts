@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '../api-fetch'
+import { rememberWorkstation } from '../machine-name'
 import type { StatusView } from '../status'
 import { useClock } from './use-clock'
 
@@ -26,6 +27,7 @@ export function useStatus() {
     retry: 1,
   })
   const view = query.data ?? null
+  rememberWorkstation(view?.machine)
   return {
     view,
     loading: query.isPending,

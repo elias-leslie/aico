@@ -114,7 +114,7 @@ describe('SessionList teams', () => {
     const team = container.querySelector('.lantern-row.lead') as HTMLElement
     expect(team.className).toContain('needs')
     expect(team.textContent).toContain(
-      'Coordinatorcodex · working · 1 working, 1 needs you, 1 idle',
+      'Coordinatorcodex · working · Workstation · 1 working, 1 needs you, 1 idle',
     )
     expect(within(team).getByTestId('check-in-badge').textContent).toContain(
       'Check-in 5:30 PM',

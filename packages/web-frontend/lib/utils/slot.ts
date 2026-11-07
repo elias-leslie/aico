@@ -35,6 +35,8 @@ export interface SlotCapabilities {
 interface SlotSessionFields {
   /** Tether's name alone (the rename input), without the project. */
   task?: string | null
+  /** The project it belongs to, when its name does not already say it. */
+  projectLabel?: string | null
   /** Coordinator or lane chip, as Aico shows it. */
   badge?: CoordinatorBadgeInfo | null
   /** The session's pending check-ins, oldest first. */
@@ -217,6 +219,7 @@ function slotFields(
   const badge = getCoordinatorBadge(session)
   return {
     task: session.task,
+    projectLabel: session.project_name ?? null,
     badge,
     checkIns: session.check_ins ?? [],
     coordinator: session.is_coordinator === true,

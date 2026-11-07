@@ -234,12 +234,30 @@ function DockedSide({
           {TIERS.map((t) => (
             <span
               key={t}
+              className={clsx(styles.snapLine, near === t && styles.snapNear)}
+              style={{ left: tierWidth(t, drag.frameWidth) }}
+            />
+          ))}
+          {TIERS.map((t) => (
+            <span
+              key={t}
               className={clsx(styles.snap, near === t && styles.snapNear)}
               style={{ left: tierWidth(t, drag.frameWidth) }}
             >
               {TIER_LABEL[t]}
             </span>
           ))}
+          {near && (
+            <span
+              className={styles.snapTarget}
+              style={{
+                left: Math.max(70, Math.min(drag.width, drag.frameWidth - 70)),
+              }}
+              data-testid="snap-target"
+            >
+              Release for {TIER_LABEL[near]}
+            </span>
+          )}
         </div>
       )}
     </div>

@@ -2,6 +2,7 @@
 // sessions can run on (Tether's links). Pure; the page fetches and renders.
 
 import type { HostChoice } from './hooks/use-hosts'
+import { MACHINE_LABEL, WORKSTATION_LABEL } from './machine-name'
 import {
   ago,
   at,
@@ -12,17 +13,11 @@ import {
 } from './status'
 
 /** The session host that is this computer: `New session` and the hosts list name it only by omission. */
-const WORKSTATION_LABEL = 'Workstation'
 
 /** Session hosts whose Tether name is not the machine's own name (data, from the Tether hosts
  * file: the `aico` link reaches the Proxmox host over ssh). */
 const SESSION_HOST_MACHINE: Record<string, string> = {
   aico: 'davion-gem',
-}
-
-/** Names that differ from the machine's own (Status reports it as davion-gem). */
-const MACHINE_LABEL: Record<string, string> = {
-  'davion-gem': 'Proxmox host',
 }
 
 /** What a machine is for, where Aico's data does not already say. */

@@ -17,6 +17,8 @@ export interface WebSession {
   id: string
   name: string
   task: string | null
+  /** The project it belongs to, by name, when the name does not already say it; null otherwise. */
+  project_name: string | null
   badge: { kind: string; text: string; color: string } | null
   is_coordinator: boolean
   coordinator_id: string | null
@@ -158,6 +160,18 @@ function hasArmedWait(descriptor: SessionDescriptor): boolean {
   return typeof waitingOn === 'string' && !!waitingOn && !waitingOn.startsWith('a check-in')
 }
 
+/** Tether's title is `Project — Task`. The session's name is what its owner typed, used as is; the
+ * project goes beside it, never in front of it. A session named only by its project keeps that name. */
+export function nameAndProject(
+  title: string | undefined,
+  task: string | null,
+): { name: string | undefined; project: string | null } {
+  if (!title || !task) return { name: title, project: null }
+  const at = title.indexOf(` — ${task}`)
+  if (at < 0) return { name: title, project: null }
+  return { name: title.slice(at + 3), project: at > 0 ? title.slice(0, at) : null }
+}
+
 export function fromTether(
   descriptor: SessionDescriptor,
   link: Link | null,
@@ -167,12 +181,14 @@ export function fromTether(
   const status = typeof descriptor.status === 'string' ? descriptor.status : null
   const title = descriptor.displayTitle?.trim()
   const task = typeof descriptor.name === 'string' ? descriptor.name.trim() || null : null
+  const { name, project } = nameAndProject(title, task)
   const state = agentStateFor(mode, status)
   const isRoot = !!descriptor.rootRequestId
   const tmux = descriptor.tmux ?? ({} as Partial<SessionDescriptor['tmux']>)
   return {
     id: descriptor.id,
-    name: title || descriptor.label || descriptor.id,
+    name: name || descriptor.label || descriptor.id,
+    project_name: project,
     task,
     badge: badgeOf(descriptor),
     is_coordinator: descriptor.coordinator === true,

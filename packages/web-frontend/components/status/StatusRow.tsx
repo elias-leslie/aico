@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import type { MouseEvent } from 'react'
+import { machineLabel } from '@/lib/machine-name'
 import {
   ACTION_LABEL,
   type ActionContext,
@@ -105,7 +106,7 @@ export function ActionButtons({
           (going
             ? 'It’s running; the row updates when it reports'
             : button.kind === 'hosts'
-              ? `Open ${row.machine} in Hosts`
+              ? `Open ${machineLabel(row.machine)} in Hosts`
               : button.kind === 'look'
                 ? 'Start a session to look into it'
                 : button.kind === 'resume'
@@ -201,12 +202,12 @@ export function StatusRowItem({
           <Meaning row={row} names={context.sessions?.names} />
         </div>
         <span className="meta-m">
-          {row.kind} · {row.machine}
+          {row.kind} · {machineLabel(row.machine)}
           {row.project && <> · {project}</>}
         </span>
       </div>
       <div className="where">
-        <b>{row.kind}</b> · {row.machine}
+        <b>{row.kind}</b> · {machineLabel(row.machine)}
         {row.project && (
           <>
             <br />
