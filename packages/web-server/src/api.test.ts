@@ -275,6 +275,25 @@ describe('session history', () => {
     ])
   })
 
+  it('searches past sessions and marks test runs', async () => {
+    tether.historyItems = [
+      { id: 'codex:a', project: 'live-smoke-codex-1', cwd: '/work/x' },
+      { id: 'pi:b', project: 'aico', cwd: '/srv/aico' },
+    ]
+    const found = await call('GET', '/api/history/search?q=backup%20key&limit=5&tool=codex')
+    expect(found.status).toBe(200)
+    expect(tether.callsOf('historySearch')[0]).toEqual([
+      'backup key',
+      { limit: 5, tool: 'codex', project: undefined },
+    ])
+    expect(
+      found.body.items.map((item: { session: { test: boolean } }) => item.session.test),
+    ).toEqual([true, false])
+    expect(found.body.covers).toEqual(['claude-code', 'codex', 'pi'])
+    expect((await call('GET', '/api/history/search?q=a')).status).toBe(400)
+    expect((await call('GET', '/api/history/search')).status).toBe(400)
+  })
+
   it('answers a missing session and a removed transcript in words', async () => {
     expect((await call('GET', '/api/history/missing')).status).toBe(404)
     expect(await call('GET', '/api/history/gone/events')).toMatchObject({ status: 410 })
