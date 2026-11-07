@@ -2,6 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { HostEntry } from '@aico/fleet/hosts'
+import { PveError } from '@aico/fleet/proxmox'
 import { afterEach, describe, expect, it } from 'vitest'
 import { DEFAULT_AGENT_ADMISSION_LIMITS } from '../lifecycle/agent-admission'
 import type { RunResult } from './host-admin'
@@ -55,13 +56,19 @@ function guest(memGiB: number, psiSome = 0.5, cpus = 8, load5 = 1): string {
   ].join(sep)
 }
 
-function proxmox(availGiB: number, status = 'running', maxGiB = 16, storageGiB = 300): string {
-  const sep = '\n@@tether-placement@@\n'
-  return [
-    JSON.stringify({ memory: { available: availGiB * GIB, free: availGiB * GIB } }),
-    JSON.stringify({ status, maxmem: maxGiB * GIB, cpus: 8 }),
-    JSON.stringify({ avail: storageGiB * GIB }),
-  ].join(sep)
+/** What the Proxmox API answers for the node, the VM and its storage. */
+interface PveWorld {
+  node: unknown
+  vm: unknown
+  storage: unknown
+}
+
+function proxmox(availGiB: number, status = 'running', maxGiB = 16, storageGiB = 300): PveWorld {
+  return {
+    node: { memory: { available: availGiB * GIB, free: availGiB * GIB } },
+    vm: { status, maxmem: maxGiB * GIB, cpus: 8 },
+    storage: { avail: storageGiB * GIB },
+  }
 }
 
 const ENTRY: HostEntry = {
@@ -87,13 +94,13 @@ const BOX: HostEntry = {
   status: ['neri-hunt-box', 'status', '1'],
 }
 
-const PVE = { ssh: 'pve', node: 'pve', vmid: 200, storage: 'local-lvm' }
+const PVE = { node: 'pve', vmid: 200, storage: 'local-lvm' }
 
 interface World {
   admission: string | null
   guest: string
-  /** null: the Proxmox host does not answer (ssh fails). */
-  proxmox: string | null
+  /** null: the Proxmox API does not answer. */
+  proxmox: PveWorld | null
   peerLive: boolean
   peerState: string
   hosts: string[]
@@ -144,7 +151,7 @@ describe('placement', () => {
       env,
       hostNames: () => world.hosts,
       peer: (name): PeerView | null =>
-        // The Proxmox node ('pve') is not a fleet peer: it is read over ssh only.
+        // The Proxmox node ('pve') is not a fleet peer: it is read through the Proxmox API only.
         name === 'vm'
           ? {
               entry: ENTRY,
@@ -171,14 +178,6 @@ describe('placement', () => {
       run: async (argv) => {
         world.runs.push(argv)
         const line = argv.at(-1) ?? ''
-        if (argv[0] === 'ssh' && argv.includes('pve'))
-          return world.proxmox === null
-            ? {
-                code: 255,
-                stdout: '',
-                output: 'ssh: connect to host pve port 22: No route to host',
-              }
-            : { code: 0, stdout: world.proxmox, output: '' }
         if (line.includes(GUEST_LINE)) return { code: 0, stdout: world.guest, output: '' }
         if (line.includes('cat ') && line.includes('live-ready.json')) {
           const marker = world.files[argv.includes('/box-ctl') ? 'box:live-ready' : 'vm:live-ready']
@@ -187,6 +186,15 @@ describe('placement', () => {
             : { code: 0, stdout: marker, output: '' }
         }
         return world.fingerprint
+      },
+      pve: async (method, path) => {
+        world.runs.push([method, path])
+        if (world.proxmox === null) throw new PveError('Proxmox API connection failed')
+        if (method !== 'GET') throw new Error(`unexpected ${method} ${path}`)
+        if (path === '/nodes/pve/status') return world.proxmox.node
+        if (path === '/nodes/pve/qemu/200/status/current') return world.proxmox.vm
+        if (path === '/nodes/pve/storage/local-lvm/status') return world.proxmox.storage
+        throw new PveError('Proxmox API refused the operation (HTTP 404)', 404)
       },
       cpu: () => ({ cpus: 16, load5: 2 }),
       limits: () => DEFAULT_AGENT_ADMISSION_LIMITS,
@@ -601,10 +609,30 @@ describe('placement', () => {
     expect(placement.list()).toEqual([expect.objectContaining({ requestId: 'h1', host: 'local' })])
     expect(placed.verdicts[0]).toMatchObject({ fits: false, room: null })
     expect(placed.verdicts[0]?.reason).toMatch(
-      /^the Proxmox reading failed \(ssh: connect to host pve/,
+      /^the Proxmox reading failed \(Proxmox API connection failed\)/,
     )
     // Never woken or read over its link while Proxmox is unreadable.
     expect(world.runs.some((argv) => (argv.at(-1) ?? '').includes(GUEST_LINE))).toBe(false)
+  })
+
+  it('never calls a refused or half-answered Proxmox reading healthy, and keeps an old ssh key valid', async () => {
+    const refused = setup({ ...CONFIG, order: ['vm'], skip: ['local'] })
+    refused.world.proxmox = null
+    const verdict = (await refused.placement.check(needs(1)))[0]
+    expect(verdict).toMatchObject({ fits: false, room: null })
+    const partial = setup(
+      { ...CONFIG, order: ['vm'], skip: ['local'] },
+      { proxmox: { ...proxmox(20), vm: { status: 'running' } } },
+    )
+    expect((await partial.placement.check(needs(1)))[0]).toMatchObject({ fits: false, room: null })
+    expect((await partial.placement.check(needs(1)))[0]?.reason).toMatch(/unreadable/)
+    // placement.json files written for the ssh reading still carry `ssh`; it is ignored.
+    const old = setup({
+      ...CONFIG,
+      hosts: { vm: { proxmox: { ...PVE, ssh: 'davion-gem' } } },
+    })
+    expect(old.placement.check(needs(1))).resolves.toBeDefined()
+    expect((await old.placement.check(needs(1)))[0]).toMatchObject({ fits: true })
   })
 
   it('takes the smaller of the VM and Proxmox room, and refuses low storage or pressure', async () => {

@@ -4,7 +4,8 @@
 
 import { join } from 'node:path'
 import { agentDbPath, ChatSessions, openAgentDb, tetherPush } from '@aico/agent'
-import { guestAction, listGuests, proxmoxSshFrom, setGuestOnboot } from '@aico/fleet/power'
+import { guestAction, listGuests, proxmoxFrom, setGuestOnboot } from '@aico/fleet/power'
+import { pveRequest } from '@aico/fleet/proxmox'
 import { loadCaptureTypes } from '@aico/notes/capture-types'
 import { execRunner, PreviewJobs } from '@aico/notes/heic'
 import { extract } from '@aico/notes/vision-extract'
@@ -196,16 +197,17 @@ function serve(): void {
   const runs = new StatusRuns()
   registerStatusRoutes(api, status, { changed: notify, machine, running: () => runs.ids() })
   registerStatusActions(api, { status, machine, tether, runs })
-  const proxmox = proxmoxSshFrom(process.env)
+  const proxmox = proxmoxFrom(process.env)
+    ? pveRequest(process.env, { timeoutMs: config.projects.pveTimeoutMs })
+    : null
   const registry = new Registry(openTasksDb(tasksDbPathFromEnv(process.env)))
   const places = new Places({
     declared: () => registry.list().flatMap((project) => project.runtime),
     guests: proxmox
       ? {
-          list: () => listGuests(proxmox, config.projects.pveTimeoutMs),
-          act: (guest, action) => guestAction(proxmox, guest, action, config.projects.pveTimeoutMs),
-          setOnboot: (guest, on) =>
-            setGuestOnboot(proxmox, guest, on, config.projects.pveTimeoutMs),
+          list: () => listGuests(proxmox),
+          act: (guest, action) => guestAction(proxmox, guest, action),
+          setOnboot: (guest, on) => setGuestOnboot(proxmox, guest, on),
         }
       : null,
     status,

@@ -16,6 +16,7 @@ import { type Identity, loadIdentity, validName } from './identity'
 import { loginPeerRpc } from './logins-client'
 import { serveLoginWire } from './logins-wire'
 import { guestPower, peerStatusRow } from './power'
+import { type PveRequest, pveRequest } from './proxmox'
 import { pushToolLogins } from './secrets'
 import { type FleetSettings, localAddress, readSettings } from './settings'
 import { type Pin, PinCache } from './trust'
@@ -49,6 +50,7 @@ const FORWARDS_BYTES = 4096
 /** One connection per unordered machine pair; the lower name is the dialer.
  * Both ends may open channels. Local sockets preserve callers' HTTP/stream APIs. */
 export class Fleet {
+  private pve?: PveRequest
   private readonly connections = new Map<string, Connection>()
   private readonly connecting = new Set<TLSSocket>()
   private readonly accepted = new Set<TLSSocket>()
@@ -593,6 +595,11 @@ export class Fleet {
     }
   }
 
+  private pveCall(timeoutMs: number): PveRequest {
+    this.pve ??= pveRequest(this.options.env ?? process.env, { timeoutMs })
+    return this.pve
+  }
+
   /** Reads guest power at most once per powerCacheMs, in the background so a hung probe never
    * holds up link Status; a fresh reading reports at once. A failed reading clears the cache. */
   private refreshPower(): void {
@@ -602,8 +609,8 @@ export class Fleet {
     const read =
       this.options.peerPower ??
       (() =>
-        s.proxmoxSsh
-          ? guestPower(s.proxmoxSsh, s.powerTimeoutMs ?? 10_000)
+        s.proxmox
+          ? guestPower(this.pveCall(s.powerTimeoutMs ?? 10_000))
           : Promise.resolve(new Map<string, string>()))
     this.powerProbe = (async () => {
       try {

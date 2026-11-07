@@ -52,11 +52,7 @@
   },
   "vm": {
     "timeoutSeconds": 900,
-    "labHours": 4,
-    "apiUrl": "https://192.168.86.39:8006",
-    "node": "davion-gem",
-    "caBundle": "/home/kasadis/.config/summitflow/pve-root-ca.pem",
-    "login": "proxmox-vm"
+    "labHours": 4
   },
   "snapshots": {
     "catalogue": "~/.local/share/st/snaps",

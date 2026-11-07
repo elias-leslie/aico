@@ -1,12 +1,10 @@
 // Proxmox is the authority on a disconnected guest's power state. A missing or
 // failed reading must never turn a broken link into a healthy one.
-import { execFile } from 'node:child_process'
 import { readFileSync } from 'node:fs'
-import { promisify } from 'node:util'
 import type { StatusRow } from '@aico/status'
+import { guestConfig, PveError, type PveRequest, setOnboot } from './proxmox'
 import { type FleetSettings, fleetFile } from './settings'
 
-const exec = promisify(execFile)
 export function parseGuestPower(value: unknown): Map<string, string> {
   if (!Array.isArray(value)) throw new Error('Proxmox guest list must be an array')
   const power = new Map<string, string>()
@@ -28,24 +26,9 @@ export function parseGuestPower(value: unknown): Map<string, string> {
   }
   return power
 }
-export async function guestPower(ssh: string, timeout: number): Promise<Map<string, string>> {
-  const { stdout } = await exec(
-    'ssh',
-    [
-      '-o',
-      'BatchMode=yes',
-      ssh,
-      'pvesh',
-      'get',
-      '/cluster/resources',
-      '--type',
-      'vm',
-      '--output-format',
-      'json',
-    ],
-    { timeout },
-  )
-  return parseGuestPower(JSON.parse(stdout))
+/** Power of every named guest, from the Proxmox API. A failed reading throws. */
+export async function guestPower(call: PveRequest): Promise<Map<string, string>> {
+  return parseGuestPower(await call('GET', '/cluster/resources?type=vm'))
 }
 export function peerStatusRow(
   settings: Pick<FleetSettings, 'machine' | 'deadMs'>,
@@ -123,59 +106,24 @@ export function parseGuests(value: unknown): Guest[] {
   return guests
 }
 
-/**
- * Proxmox's `onboot` per guest id, from the guest config files (only the live section: the
- * snapshot sections after the first `[` are skipped). A guest with no `onboot` line is not here:
- * Proxmox's default is off.
- */
-export function parseOnboot(output: string): Map<number, boolean> {
-  const boot = new Map<number, boolean>()
-  for (const line of output.split('\n')) {
-    const match = /^(?:.*\/)?(\d+)\.conf: onboot:\s*(\d)\s*$/.exec(line)
-    if (match) boot.set(Number(match[1]), match[2] === '1')
-  }
-  return boot
+/** `onboot` from one guest's config: absent means Proxmox's default, off. */
+export function onbootOf(config: Record<string, unknown>): boolean {
+  return Number(config.onboot) === 1
 }
 
-const CONFIG_GLOB = '/etc/pve/nodes/*/qemu-server/*.conf /etc/pve/nodes/*/lxc/*.conf'
-// One pass over every guest config; ends each file's reading at its first `[snapshot]` section.
-const READ_ONBOOT = `awk 'FNR==1{skip=0} /^\\[/{skip=1} !skip && /^onboot:/{print FILENAME": "$0}' ${CONFIG_GLOB}`
-
-/** Every guest's start-at-boot setting that is written; a guest not in the map has none, so off. */
-export async function readOnboot(ssh: string, timeout: number): Promise<Map<number, boolean>> {
-  const { stdout } = await exec('ssh', ['-o', 'BatchMode=yes', ssh, READ_ONBOOT], { timeout })
-  return parseOnboot(stdout)
-}
-
-/** Every guest and its power state, read through the Proxmox SSH alias (fleet.json `proxmoxSsh`).
- * Each carries its `onboot`; when the configs cannot be read that stays unknown, never off. */
-export async function listGuests(ssh: string, timeout: number): Promise<Guest[]> {
-  const [guests, boot] = await Promise.all([
-    listGuestPower(ssh, timeout),
-    readOnboot(ssh, timeout).catch(() => null),
-  ])
-  if (!boot) return guests
-  return guests.map((guest) => ({ ...guest, onboot: boot.get(guest.vmid) ?? false }))
-}
-
-async function listGuestPower(ssh: string, timeout: number): Promise<Guest[]> {
-  const { stdout } = await exec(
-    'ssh',
-    [
-      '-o',
-      'BatchMode=yes',
-      ssh,
-      'pvesh',
-      'get',
-      '/cluster/resources',
-      '--type',
-      'vm',
-      '--output-format',
-      'json',
-    ],
-    { timeout },
+/** Every guest and its power state from the Proxmox API. Each carries its `onboot`; a guest whose
+ * config cannot be read stays unknown (undefined), never off. */
+export async function listGuests(call: PveRequest): Promise<Guest[]> {
+  const guests = parseGuests(await call('GET', '/cluster/resources?type=vm'))
+  return await Promise.all(
+    guests.map(async (guest) => {
+      try {
+        return { ...guest, onboot: onbootOf(await guestConfig(call, guest)) }
+      } catch {
+        return guest
+      }
+    }),
   )
-  return parseGuests(JSON.parse(stdout))
 }
 
 /**
@@ -185,52 +133,35 @@ async function listGuestPower(ssh: string, timeout: number): Promise<Guest[]> {
 export const GUEST_ACTIONS = ['start', 'shutdown', 'reboot'] as const
 export type GuestAction = (typeof GUEST_ACTIONS)[number]
 
-/** The pvesh arguments for one guest action (the task is queued; callers watch the guest's state). */
-export function guestActionArgs(guest: Pick<Guest, 'vmid' | 'type' | 'node'>, action: GuestAction) {
+/** Queue one power action; Proxmox runs the task and callers watch the guest's state. A refusal
+ * (permission, bad state) throws, so a failed request is never reported as done. */
+export async function guestAction(
+  call: PveRequest,
+  guest: Pick<Guest, 'vmid' | 'type' | 'node'>,
+  action: GuestAction,
+): Promise<void> {
   if (!(GUEST_ACTIONS as readonly string[]).includes(action))
     throw new Error(`No guest action ${action}`)
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(guest.node)) throw new Error('Bad Proxmox node name')
-  return ['pvesh', 'create', `/nodes/${guest.node}/${guest.type}/${guest.vmid}/status/${action}`]
-}
-
-/** The pvesh arguments that set a guest's start-at-boot. */
-export function guestOnbootArgs(guest: Pick<Guest, 'vmid' | 'type' | 'node'>, on: boolean) {
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(guest.node)) throw new Error('Bad Proxmox node name')
-  if (guest.type !== 'qemu' && guest.type !== 'lxc') throw new Error('Bad Proxmox guest type')
-  return [
-    'pvesh',
-    'set',
-    `/nodes/${guest.node}/${guest.type}/${guest.vmid}/config`,
-    '--onboot',
-    on ? '1' : '0',
-  ]
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(guest.node)) throw new PveError('Bad Proxmox node name')
+  if (guest.type !== 'qemu' && guest.type !== 'lxc') throw new PveError('Bad Proxmox guest type')
+  await call('POST', `/nodes/${guest.node}/${guest.type}/${guest.vmid}/status/${action}`)
 }
 
 export async function setGuestOnboot(
-  ssh: string,
+  call: PveRequest,
   guest: Pick<Guest, 'vmid' | 'type' | 'node'>,
   on: boolean,
-  timeout: number,
 ): Promise<void> {
-  await exec('ssh', ['-o', 'BatchMode=yes', ssh, ...guestOnbootArgs(guest, on)], { timeout })
+  await setOnboot(call, guest, on)
 }
 
-export async function guestAction(
-  ssh: string,
-  guest: Pick<Guest, 'vmid' | 'type' | 'node'>,
-  action: GuestAction,
-  timeout: number,
-): Promise<void> {
-  await exec('ssh', ['-o', 'BatchMode=yes', ssh, ...guestActionArgs(guest, action)], { timeout })
-}
-
-/** The Proxmox SSH alias in the fleet settings file, or null when there is none. */
-export function proxmoxSshFrom(env: NodeJS.ProcessEnv, read = readFileSync): string | null {
+/** Whether this machine controls Proxmox (`"proxmox": true` in fleet.json): it holds a scoped
+ * Proxmox login. */
+export function proxmoxFrom(env: NodeJS.ProcessEnv, read = readFileSync): boolean {
   try {
-    const value = JSON.parse(String(read(fleetFile(env), 'utf8'))) as { proxmoxSsh?: unknown }
-    const alias = value.proxmoxSsh
-    return typeof alias === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(alias) ? alias : null
+    const value = JSON.parse(String(read(fleetFile(env), 'utf8'))) as { proxmox?: unknown }
+    return value.proxmox === true
   } catch {
-    return null
+    return false
   }
 }

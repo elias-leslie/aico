@@ -123,11 +123,17 @@ Features that copy data to a peer for safety (the repo copies, `aico wip`) skip 
 
 ### Powered-off peers
 
-On a full machine with read access to its Proxmox authority, set `proxmoxSsh` in
-`fleet.json` to the existing SSH host alias. Fleet reads `/cluster/resources`
-through `pvesh` while peers are disconnected, at most once per `powerCacheMs`
-(default 60000) with an SSH timeout of `powerTimeoutMs` (default 10000). The reading
-runs in the background, so a hung probe never delays link Status. Guest
+On a full machine that holds a scoped Proxmox login, set `"proxmox": true` in
+`fleet.json`. Fleet reads `/cluster/resources` from the Proxmox HTTP API
+(`packages/fleet/src/proxmox.ts`: the token from Aico Logins, HTTPS pinned to
+`~/.config/aico/pve-root-ca.pem`) while peers are disconnected, at most once per
+`powerCacheMs` (default 60000) with a request timeout of `powerTimeoutMs` (default
+10000). The same client serves the Projects and Machines pages (guest list, power,
+autostart) and Tether placement (node, storage and VM readings). No root ssh or `pvesh`
+is involved. Tokens live in Aico Logins: `proxmox-vm` for the workstation,
+`proxmox-ct190` (user `aico@pve`, token `ct190`, granted to machine `aico`) for CT 190;
+Proxmox ACLs limit it to audit at `/` and power plus autostart on the pools `summitflow`,
+`summitflow-ops` and `summitflow-power`. Guest
 names must match fleet machine names. An approved peer whose guest is reported
 `stopped` is `off` and does not count as a late connection. A running guest with no link
 still warns; a failed, missing or ambiguous power reading also keeps the warning.

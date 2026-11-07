@@ -7,8 +7,8 @@
 //
 // Readings: this computer from host-steward's admission file (green required);
 // a remote VM from its own /proc (MemAvailable, PSI, CPUs, load) through the
-// link's ssh master, plus its Proxmox node's free memory and storage (clones
-// and ballooning draw on them). A powered-off VM counts only when Proxmox has
+// link's ssh master, plus its Proxmox node's free memory and storage read through
+// the Proxmox API with this machine's scoped token (clones and ballooning draw on them). A powered-off VM counts only when Proxmox has
 // room to start it; the create path then wakes it with hosts.json `wake`.
 // A host with `room: "local"` (a container on this computer) is judged by this
 // computer's reading and reserve, its reservations shared with `local`'s; with
@@ -29,6 +29,13 @@ import { availableParallelism, homedir, loadavg } from 'node:os'
 import { isAbsolute, join, normalize } from 'node:path'
 import type { HostEntry } from '@aico/fleet/hosts'
 import { peerRequest } from '@aico/fleet/peer-http'
+import {
+  nodeStatus,
+  type PveRequest,
+  pveRequest,
+  storageStatus,
+  vmStatus,
+} from '@aico/fleet/proxmox'
 import {
   type AgentAdmissionLimits,
   admissionLimitsFromEnv,
@@ -78,8 +85,7 @@ export function parseNeeds(value: unknown): Needs | null {
 // ---------------------------------------------------------------- config
 
 export interface ProxmoxRef {
-  /** ssh Host alias of the Proxmox node (root access, as `st vm` uses). */
-  ssh: string
+  /** The Proxmox node, read through the Proxmox API with this machine's scoped token. */
   node: string
   vmid: number
   /** The storage the VM's disks and clones live on; null skips the check. */
@@ -180,8 +186,7 @@ function parseProxmoxRef(value: unknown): ProxmoxRef | string | null {
   if (value === undefined || value === null) return null
   const raw = record(value)
   if (!raw) return 'proxmox must be an object'
-  const { ssh, node, vmid, storage = null } = raw
-  if (typeof ssh !== 'string' || !NODE.test(ssh)) return 'proxmox.ssh must be an ssh Host alias'
+  const { node, vmid, storage = null } = raw
   if (typeof node !== 'string' || !NODE.test(node)) return 'proxmox.node must be a node name'
   if (typeof vmid !== 'number' || !Number.isSafeInteger(vmid) || vmid < 100 || vmid > 999_999_999)
     return 'proxmox.vmid must be a VM id'
@@ -191,7 +196,7 @@ function parseProxmoxRef(value: unknown): ProxmoxRef | string | null {
   const minFreeStorageBytes = gib(raw.minFreeStorageGiB, DEFAULT_MIN_STORAGE)
   if (reserveBytes === null) return 'proxmox.reserveGiB must be 0-4096'
   if (minFreeStorageBytes === null) return 'proxmox.minFreeStorageGiB must be 0-4096'
-  return { ssh, node, vmid, storage, reserveBytes, minFreeStorageBytes }
+  return { node, vmid, storage, reserveBytes, minFreeStorageBytes }
 }
 
 /** Validate placement.json against the hosts.json names. A missing or broken
@@ -402,7 +407,7 @@ export function parseGuest(stdout: string): GuestReading {
   }
 }
 
-/** The Proxmox node and VM, as `pvesh` reports them. */
+/** The Proxmox node and VM, as the Proxmox API reports them. */
 export interface ProxmoxReading {
   nodeAvailableBytes: number
   vmStatus: string
@@ -411,30 +416,12 @@ export interface ProxmoxReading {
   storageAvailBytes: number | null
 }
 
-/** ssh argv reading the Proxmox node; BatchMode so a missing key fails, never prompts. */
-function proxmoxArgv(ref: ProxmoxRef): string[] {
-  return ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', ref.ssh, proxmoxLine(ref)]
-}
-
-function proxmoxLine(ref: ProxmoxRef): string {
-  const get = (path: string) => `pvesh get ${path} --output-format json`
-  const parts = [
-    get(`/nodes/${ref.node}/status`),
-    get(`/nodes/${ref.node}/qemu/${ref.vmid}/status/current`),
-  ]
-  if (ref.storage) parts.push(get(`/nodes/${ref.node}/storage/${ref.storage}/status`))
-  return parts.join(`; echo; echo ${SEPARATOR}; `)
-}
-
 function bytes(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
 }
 
-function parseProxmox(stdout: string, ref: ProxmoxRef): ProxmoxReading {
-  const parts = stdout.split(`${SEPARATOR}\n`)
-  if (parts.length !== (ref.storage ? 3 : 2)) throw new Error('the reading is incomplete')
-  const docs = parts.map((part) => record(JSON.parse(part)))
-  const [node, vm, storage] = docs
+function parseProxmox(docs: [unknown, unknown, unknown?], ref: ProxmoxRef): ProxmoxReading {
+  const [node, vm, storage] = docs.map((doc) => record(doc))
   const memory = record(node?.memory)
   const available = bytes(memory?.available) ?? bytes(memory?.free)
   const maxmem = bytes(vm?.maxmem)
@@ -543,6 +530,8 @@ export interface PlacementDeps {
   existingHost(requestId: string): string | null | undefined
   settings: { get(key: string): string | null; put(key: string, value: string): void }
   run?: Runner
+  /** The Proxmox API client for the hosts' Proxmox readings (default: this machine's Logins token). */
+  pve?: PveRequest
   readText?(path: string): Promise<string>
   cpu?(): { cpus: number; load5: number }
   limits?(): AgentAdmissionLimits
@@ -614,6 +603,7 @@ export class Placement {
   private readonly reservations: Reservation[]
   private readonly intents = new Map<string, { host: string; needs: Needs }>()
   private readonly run: Runner
+  private pveCall: PveRequest | undefined
   private readonly readText: (path: string) => Promise<string>
   private readonly cpu: () => { cpus: number; load5: number }
   private readonly limits: () => AgentAdmissionLimits
@@ -793,7 +783,7 @@ export class Placement {
   private onNode(config: PlacementConfig, ref: ProxmoxRef): (name: string) => boolean {
     return (name) => {
       const other = config.hosts[name]?.proxmox
-      return Boolean(other && other.ssh === ref.ssh && other.node === ref.node)
+      return Boolean(other && other.node === ref.node)
     }
   }
 
@@ -935,6 +925,12 @@ export class Placement {
     return this.verdict(name, needs, room, detail)
   }
 
+  private pve(): PveRequest {
+    this.pveCall ??=
+      this.deps.pve ?? pveRequest(this.deps.env ?? process.env, { timeoutMs: READ_MS })
+    return this.pveCall
+  }
+
   private async readGuest(peer: PeerView, line: string): Promise<RunResult> {
     return this.run(remoteArgv(peer.entry, peer.control, line), READ_MS)
   }
@@ -953,13 +949,25 @@ export class Placement {
     let pveRoom = Number.POSITIVE_INFINITY
     let pveDetail = ''
     if (ref) {
-      // The Proxmox node is never an Aico machine on the fleet link: read it over
-      // root ssh to its configured alias, as the VM wake and status commands do.
-      const result = await this.run(proxmoxArgv(ref), READ_MS)
-      if (result.code !== 0)
-        return this.unknown(name, `the Proxmox reading failed (${clean(result.output, 80)})`)
+      // The Proxmox node is never an Aico machine on the fleet link: read it through the
+      // Proxmox API with this machine's scoped token, as the VM wake and status commands do.
+      let docs: [unknown, unknown, unknown?]
       try {
-        pve = parseProxmox(result.stdout, ref)
+        const call = this.pve()
+        const [node, vm, storage] = await Promise.all([
+          nodeStatus(call, ref.node),
+          vmStatus(call, ref.node, ref.vmid),
+          ref.storage ? storageStatus(call, ref.node, ref.storage) : undefined,
+        ])
+        docs = [node, vm, storage]
+      } catch (error) {
+        return this.unknown(
+          name,
+          `the Proxmox reading failed (${clean((error as Error).message, 80)})`,
+        )
+      }
+      try {
+        pve = parseProxmox(docs, ref)
       } catch (error) {
         return this.unknown(name, `the Proxmox reading is unreadable: ${(error as Error).message}`)
       }

@@ -17,8 +17,9 @@ export interface FleetSettings {
   /** Optional label for the physical computer this machine runs on. Peers with the same label
    * share a computer (a VM beside this one, say); containers need none, they share this kernel. */
   hardware?: string
-  /** SSH host alias of the Proxmox authority; guest names match fleet names. */
-  proxmoxSsh?: string
+  /** This machine holds a scoped Proxmox API login (Aico Logins) and may read guest power;
+   * guest names match fleet names. */
+  proxmox?: boolean
   mode?: 'full' | 'worker'
   updatePins?: string
   controlSocket: string
@@ -34,7 +35,7 @@ export interface FleetSettings {
   statusMs: number
   /** How long a Proxmox guest power reading is reused (default 60 s). */
   powerCacheMs?: number
-  /** SSH timeout for one guest power reading (default 10 s). */
+  /** Timeout for one guest power reading (default 10 s). */
   powerTimeoutMs?: number
   statusUrl: string
 }
@@ -84,8 +85,8 @@ export function readSettings(env: NodeJS.ProcessEnv, controlSocket: string): Fle
     throw new Error(
       `Waiting for this machine's LAN address ${value.listen.address}: it isn't assigned yet`,
     )
-  if (value.proxmoxSsh !== undefined && !/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(value.proxmoxSsh))
-    throw new Error('Proxmox SSH host must be a host alias')
+  if (value.proxmox !== undefined && typeof value.proxmox !== 'boolean')
+    throw new Error('Fleet proxmox must be true or false')
   const peerRoot = join(
     env.XDG_RUNTIME_DIR || `/run/user/${process.getuid?.() ?? 0}`,
     'aico',

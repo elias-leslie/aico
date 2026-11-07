@@ -1,0 +1,10 @@
+{
+  "apiUrl": "https://192.168.86.39:8006",
+  "node": "davion-gem",
+  "caBundle": "~/.config/aico/pve-root-ca.pem",
+  "requestSeconds": 30,
+  "taskSeconds": 900,
+  "login": "proxmox-vm",
+  "machineLogins": { "aico": "proxmox-ct190" },
+  "credentialMinutes": 10
+}

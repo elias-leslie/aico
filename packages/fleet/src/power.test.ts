@@ -1,6 +1,16 @@
 import { parseRow, view } from '@aico/status'
 import { describe, expect, it } from 'vitest'
-import { guestOnbootArgs, parseGuestPower, parseOnboot, peerStatusRow } from './power'
+import {
+  guestAction,
+  guestPower,
+  listGuests,
+  onbootOf,
+  parseGuestPower,
+  peerStatusRow,
+  setGuestOnboot,
+} from './power'
+import type { PveRequest } from './proxmox'
+import { PveError } from './proxmox'
 
 const settings = { machine: 'workstation', deadMs: 5000 }
 const peer = { name: 'worker', connected: false, lastSeen: null }
@@ -43,34 +53,108 @@ describe('fleet peer power status', () => {
   })
 })
 
-describe('Proxmox start-at-boot', () => {
-  it('reads onboot from the configs and leaves out guests that do not say', () => {
-    const boot = parseOnboot(
-      [
-        '/etc/pve/nodes/gem/qemu-server/180.conf: onboot: 0',
-        '/etc/pve/nodes/gem/lxc/150.conf: onboot: 1',
-        'noise',
-        '/etc/pve/nodes/gem/lxc/x.conf: onboot: 1',
-      ].join('\n'),
-    )
-    expect([...boot]).toEqual([
-      [180, false],
-      [150, true],
+/** A fake PVE: guests by id, their configs, and every request it was sent. */
+function fakePve(
+  configs: Record<number, Record<string, unknown> | Error>,
+  writes: Error | null = null,
+) {
+  const sent: [string, string, Record<string, unknown> | undefined][] = []
+  const call: PveRequest = async (method, path, body) => {
+    sent.push([method, path, body])
+    if (method === 'GET' && path === '/cluster/resources?type=vm')
+      return [
+        { type: 'lxc', vmid: 150, node: 'gem', name: 'hub', status: 'running' },
+        { type: 'qemu', vmid: 180, node: 'gem', name: 'apps', status: 'stopped' },
+        { type: 'lxc', vmid: 190, node: 'gem', name: 'aico', status: 'running' },
+        { type: 'qemu', vmid: 200, node: 'gem', name: 'agent-work', status: 'stopped' },
+      ]
+    const config = /^\/nodes\/gem\/(?:qemu|lxc)\/(\d+)\/config$/.exec(path)
+    if (method === 'GET' && config) {
+      const found = configs[Number(config[1])]
+      if (found instanceof Error) throw found
+      return found
+    }
+    if (writes) throw writes
+    return method === 'POST' ? 'UPID:gem:1' : null
+  }
+  return { call, sent }
+}
+
+describe('Proxmox through the API', () => {
+  it('reads power for every named guest', async () => {
+    const { call } = fakePve({})
+    expect([...(await guestPower(call))]).toEqual([
+      ['hub', 'running'],
+      ['apps', 'stopped'],
+      ['aico', 'running'],
+      ['agent-work', 'stopped'],
     ])
   })
-  it('writes it with pvesh on the guest’s own node and type, and refuses a bad node', () => {
-    expect(guestOnbootArgs({ vmid: 180, type: 'qemu', node: 'gem' }, true)).toEqual([
-      'pvesh',
-      'set',
-      '/nodes/gem/qemu/180/config',
-      '--onboot',
-      '1',
+  it('lists guests with autostart from their configs; absent onboot is off', async () => {
+    const { call } = fakePve({
+      150: { onboot: 1 },
+      180: { onboot: 0 },
+      190: { onboot: '1' },
+      200: { memory: 4096 },
+    })
+    expect((await listGuests(call)).map((g) => [g.vmid, g.onboot])).toEqual([
+      [150, true],
+      [180, false],
+      [190, true],
+      [200, false],
     ])
-    expect(guestOnbootArgs({ vmid: 150, type: 'lxc', node: 'gem' }, false).slice(2)).toEqual([
-      '/nodes/gem/lxc/150/config',
-      '--onboot',
-      '0',
+    expect(onbootOf({})).toBe(false)
+  })
+  it('shows an unreadable guest autostart as unknown, never off', async () => {
+    const { call } = fakePve({
+      150: { onboot: 1 },
+      180: new PveError('Proxmox API refused the operation (HTTP 403)', 403),
+      190: new Error('socket hang up'),
+      200: { onboot: 0 },
+    })
+    const guests = await listGuests(call)
+    expect(guests.map((g) => g.onboot)).toEqual([true, undefined, undefined, false])
+  })
+  it('fails the whole list when Proxmox cannot be read, never an empty healthy one', async () => {
+    const call: PveRequest = async () => {
+      throw new PveError('Proxmox API connection failed')
+    }
+    await expect(listGuests(call)).rejects.toThrow('connection failed')
+    await expect(guestPower(call)).rejects.toThrow('connection failed')
+  })
+  it('sends power actions to the guest’s node and type, and reports a refusal', async () => {
+    const { call, sent } = fakePve({})
+    await guestAction(call, { vmid: 200, type: 'qemu', node: 'gem' }, 'start')
+    await guestAction(call, { vmid: 150, type: 'lxc', node: 'gem' }, 'reboot')
+    expect(sent).toEqual([
+      ['POST', '/nodes/gem/qemu/200/status/start', undefined],
+      ['POST', '/nodes/gem/lxc/150/status/reboot', undefined],
     ])
-    expect(() => guestOnbootArgs({ vmid: 1, type: 'lxc', node: 'a;b' }, true)).toThrow()
+    const denied = fakePve({}, new PveError('Proxmox API refused the operation (HTTP 403)', 403))
+    await expect(
+      guestAction(denied.call, { vmid: 200, type: 'qemu', node: 'gem' }, 'shutdown'),
+    ).rejects.toThrow('403')
+    await expect(
+      guestAction(call, { vmid: 200, type: 'qemu', node: 'gem' }, 'stop' as never),
+    ).rejects.toThrow('No guest action')
+    await expect(
+      guestAction(call, { vmid: 200, type: 'qemu', node: 'a/../b' }, 'start'),
+    ).rejects.toThrow('node')
+  })
+  it('writes autostart as a config PUT and surfaces a refusal', async () => {
+    const { call, sent } = fakePve({})
+    await setGuestOnboot(call, { vmid: 180, type: 'qemu', node: 'gem' }, true)
+    await setGuestOnboot(call, { vmid: 150, type: 'lxc', node: 'gem' }, false)
+    expect(sent).toEqual([
+      ['PUT', '/nodes/gem/qemu/180/config', { onboot: 1 }],
+      ['PUT', '/nodes/gem/lxc/150/config', { onboot: 0 }],
+    ])
+    const denied = fakePve({}, new PveError('Proxmox API refused the operation (HTTP 403)', 403))
+    await expect(
+      setGuestOnboot(denied.call, { vmid: 180, type: 'qemu', node: 'gem' }, true),
+    ).rejects.toThrow('403')
+    await expect(setGuestOnboot(call, { vmid: 1, type: 'lxc', node: 'a;b' }, true)).rejects.toThrow(
+      'node',
+    )
   })
 })

@@ -32,7 +32,8 @@
     "./logins-delivery": "./src/logins-delivery.ts",
     "./secrets": "./src/secrets.ts",
     "./releases": "./src/releases.ts",
-    "./power": "./src/power.ts"
+    "./power": "./src/power.ts",
+    "./proxmox": "./src/proxmox.ts"
   },
   "scripts": {
     "test": "vitest run"

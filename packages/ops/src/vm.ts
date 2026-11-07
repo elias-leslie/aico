@@ -1,11 +1,15 @@
-// Proxmox VM operations use the existing scoped API token held in Aico Logins.
+// Proxmox VM operations use the scoped API token held in Aico Logins (client: @aico/fleet/proxmox).
 // Proxmox enforces its pool rights; no SummitFlow service is involved.
 
-import { readFileSync } from 'node:fs'
-import { request } from 'node:https'
-import { setTimeout as delay } from 'node:timers/promises'
-import { loginCaller } from '@aico/fleet/logins-cli'
-import { LoginClient } from '@aico/fleet/logins-client'
+import {
+  type PveRequest as FleetPveRequest,
+  pveRequest as fleetPveRequest,
+  waitTask as fleetWaitTask,
+  isUpid,
+  PveError,
+  type PveTransport,
+  proxmoxConfig,
+} from '@aico/fleet/proxmox'
 import ops from '../data/ops.json' with { type: 'json' }
 import { Refusal } from './deploy'
 import { type Runner, tail } from './sh'
@@ -24,115 +28,31 @@ export interface Guest {
 /** One scoped Proxmox operation, or a Refusal. */
 export type VmOp = (op: string, vmid?: string, args?: Record<string, unknown>) => Promise<unknown>
 
-export interface VmCredential {
-  tokenId: string
-  tokenSecret: string
-}
-export type PveRequest = (
-  method: string,
-  path: string,
-  body?: Record<string, unknown>,
-) => Promise<unknown>
+/** The shared Proxmox client; its failures surface here as Refusals (the CLI's exit codes). */
+export type PveRequest = FleetPveRequest
 
-/** HTTPS is pinned to the existing PVE CA; Logins grants the existing scoped token at runtime. */
-export interface PveTransport {
-  credential?: () => Promise<VmCredential>
-  ca?: () => Buffer
-  request?: typeof request
-}
 export function pveRequest(
   env: NodeJS.ProcessEnv = process.env,
   transport: PveTransport = {},
 ): PveRequest {
-  // One token fetch per operation: task polling reuses it instead of reading Logins every second.
-  let pending: Promise<VmCredential> | null = null
-  const fetchCredential = async () =>
-    transport.credential
-      ? await transport.credential()
-      : (JSON.parse(
-          (
-            await new LoginClient(env).value(ops.vm.login, loginCaller(env), 'VM operation')
-          ).toString(),
-        ) as VmCredential)
+  const call = fleetPveRequest(env, { timeoutMs: ops.vm.timeoutSeconds * 1000, ...transport })
   return async (method, path, body) => {
-    let credential: VmCredential
     try {
-      pending ??= fetchCredential()
-      credential = await pending
-    } catch {
-      pending = null
-      throw new Refusal('Scoped Proxmox login is unavailable in Aico Logins')
+      return await call(method, path, body)
+    } catch (error) {
+      throw error instanceof PveError ? new Refusal(error.message) : error
     }
-    if (!credential.tokenId || !credential.tokenSecret)
-      throw new Refusal('Scoped Proxmox login is incomplete')
-    const url = new URL(`/api2/json${path}`, ops.vm.apiUrl)
-    const payload = body
-      ? new URLSearchParams(
-          Object.entries(body).map(([k, v]): [string, string] => [k, String(v)]),
-        ).toString()
-      : undefined
-    return new Promise((accept, reject) => {
-      const req = (transport.request ?? request)(
-        url,
-        {
-          method,
-          ca: transport.ca ? transport.ca() : readFileSync(ops.vm.caBundle),
-          headers: {
-            Authorization: `PVEAPIToken=${credential.tokenId}=${credential.tokenSecret}`,
-            ...(payload
-              ? {
-                  'content-type': 'application/x-www-form-urlencoded',
-                  'content-length': Buffer.byteLength(payload),
-                }
-              : {}),
-          },
-        },
-        (res) => {
-          const chunks: Buffer[] = []
-          res.on('data', (chunk: Buffer) => chunks.push(chunk))
-          res.on('error', () => reject(new Refusal('Proxmox response failed')))
-          res.on('end', () => {
-            if (!res.statusCode || res.statusCode >= 400)
-              return reject(
-                new Refusal(
-                  `Proxmox API refused the operation (HTTP ${res.statusCode ?? 'unknown'})`,
-                ),
-              )
-            try {
-              accept((JSON.parse(Buffer.concat(chunks).toString()) as { data: unknown }).data)
-            } catch {
-              reject(new Refusal('Proxmox returned invalid JSON'))
-            }
-          })
-        },
-      )
-      req.setTimeout(ops.vm.timeoutSeconds * 1000, () => req.destroy(new Error('timeout')))
-      req.on('error', () => reject(new Refusal('Proxmox API connection failed')))
-      req.end(payload)
-    })
   }
 }
 
-/** Wait for a PVE task (UPID) to stop; a non-OK exit status is a Refusal. */
 async function waitTask(call: PveRequest, node: string, task: string): Promise<void> {
-  const until = Date.now() + ops.vm.timeoutSeconds * 1000
-  for (;;) {
-    const status = (await call(
-      'GET',
-      `/nodes/${encodeURIComponent(node)}/tasks/${encodeURIComponent(task)}/status`,
-    )) as { status?: string; exitstatus?: string }
-    if (status.status === 'stopped') {
-      if (status.exitstatus !== 'OK')
-        throw new Refusal(`Proxmox task failed: ${status.exitstatus ?? 'unknown'}`)
-      return
-    }
-    if (Date.now() >= until) throw new Refusal(`Proxmox task did not finish: ${task}`)
-    await delay(1000)
+  try {
+    await fleetWaitTask(call, node, task, ops.vm.timeoutSeconds * 1000)
+  } catch (error) {
+    throw error instanceof PveError ? new Refusal(error.message) : error
   }
 }
 
-const isUpid = (task: unknown): task is string =>
-  typeof task === 'string' && task.startsWith('UPID:')
 const STORAGE = /^[a-z0-9][a-z0-9-]{0,62}$/
 const SNAPSHOT = /^[A-Za-z][A-Za-z0-9_-]{1,39}$/
 
@@ -197,7 +117,7 @@ async function observe(
   }
   const use = (await call(
     'GET',
-    `/nodes/${encodeURIComponent(ops.vm.node)}/storage/${storage}/status`,
+    `/nodes/${encodeURIComponent(proxmoxConfig.node)}/storage/${storage}/status`,
   )) as { used?: number; total?: number }
   return {
     vms,
