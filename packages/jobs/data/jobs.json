@@ -57,6 +57,19 @@
       "lease_s": 120
     },
     {
+      "kind": "note-reminders",
+      "what": "Note reminders to the phone",
+      "project": "aico",
+      "home": "davion-sidarli",
+      "lease_host": "aico",
+      "workers": ["davion-sidarli", "aico"],
+      "every_min": 1,
+      "run": {
+        "post": "/api/notes/reminders/run"
+      },
+      "lease_s": 60
+    },
+    {
       "kind": "context-unused",
       "what": "Loaded context use",
       "project": "aico",
