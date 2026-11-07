@@ -58,8 +58,8 @@
 .row {
   position: relative;
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto auto;
-  gap: 2px 10px;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: 4px 10px;
   align-items: center;
   min-height: 64px;
   padding: 10px 14px;
@@ -76,7 +76,9 @@
   box-shadow: inset 3px 0 0 var(--bone);
 }
 
-/* The whole row opens the project; the badges sit above it. */
+/* The whole row opens the project; the badges sit above it. The mark and name share the
+   first line with the age, the one-line summary is the second, and the badges get a line of
+   their own so the name never has to share its room with them. */
 .pick {
   display: contents;
   color: inherit;
@@ -102,6 +104,8 @@
 }
 
 .name {
+  grid-row: 1;
+  grid-column: 2;
   min-width: 0;
   overflow: hidden;
   font-weight: 600;
@@ -110,7 +114,8 @@
 }
 
 .top {
-  grid-column: 2 / 5;
+  grid-row: 2;
+  grid-column: 2 / 4;
   min-width: 0;
   overflow: hidden;
   font-size: 13px;
@@ -122,19 +127,21 @@
 .badges {
   position: relative;
   z-index: 1;
-  grid-row: 1;
-  grid-column: 3;
+  grid-row: 3;
+  grid-column: 2 / 4;
   display: flex;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px 8px;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
+  margin-top: 2px;
 }
 
 .age {
   position: relative;
   z-index: 1;
   grid-row: 1;
-  grid-column: 4;
+  grid-column: 3;
   width: 44px;
   color: var(--mist);
   font-size: 12px;
@@ -251,6 +258,7 @@
   border-radius: 999px;
   background: none;
   font-size: 12px;
+  white-space: nowrap;
   cursor: pointer;
   transition: filter 0.15s var(--ease-arrival);
 }
@@ -761,8 +769,9 @@
   }
 }
 
-/* --- Phone: the list, then the project, one at a time --- */
-@media (max-width: 760px) {
+/* --- Narrow page (a phone, or Wide's second column): the list, then the project, one at a
+   time. Sized by the page's own box, so Wide gets it too. --- */
+@container frame-page (max-width: 760px) {
   .page {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -776,6 +785,17 @@
     border: 0;
   }
 
+  .back {
+    display: inline-flex;
+  }
+
+  .detail {
+    padding: 12px 16px 40px;
+  }
+}
+
+/* --- Phone: touch-sized controls and bottom sheets --- */
+@media (max-width: 760px) {
   .row {
     min-height: 72px;
   }
@@ -783,28 +803,11 @@
   .badge {
     height: 44px;
     padding: 0 10px;
-    white-space: nowrap;
-  }
-
-  /* Badges drop under the name so it keeps its room. */
-  .badges {
-    grid-row: 3;
-    grid-column: 2 / 5;
-    flex-wrap: wrap;
-    justify-content: flex-start;
   }
 
   .search,
   .group {
     min-height: 44px;
-  }
-
-  .back {
-    display: inline-flex;
-  }
-
-  .detail {
-    padding: 12px 16px 40px;
   }
 
   .power {
