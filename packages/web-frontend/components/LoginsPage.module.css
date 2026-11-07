@@ -2,7 +2,6 @@
   height: var(--terminal-viewport-height, 100dvh);
   overflow: auto;
   padding: 12px 20px 40px;
-  background: var(--ink);
   color: var(--bone);
 }
 .page > * {

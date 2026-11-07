@@ -3,7 +3,6 @@
 .scroll {
   height: var(--terminal-viewport-height, 100dvh);
   overflow: auto;
-  background: var(--ink);
 }
 .scroll > :first-child {
   height: auto;

@@ -1,6 +1,6 @@
 'use client'
 
-import { ArrowLeft, RefreshCw } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
 import Link from 'next/link'
 import { useState } from 'react'
 import {
@@ -49,14 +49,6 @@ export function HistoryList() {
   return (
     <>
       <header className="status-head">
-        <Link
-          href="/"
-          className="lantern-icon-btn"
-          aria-label="Back to sessions"
-          title="Back to sessions"
-        >
-          <ArrowLeft className="h-[18px] w-[18px]" strokeWidth={1.7} />
-        </Link>
         <h1>Recent sessions</h1>
         <span className="sub">{sub}</span>
       </header>

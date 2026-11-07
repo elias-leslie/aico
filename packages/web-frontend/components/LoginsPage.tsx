@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { useHosts } from '@/lib/hooks/use-hosts'
 import { HostSignIn } from './HostsSheet'
@@ -111,9 +110,6 @@ export function LoginsPage() {
   return (
     <main className={styles.page}>
       <header>
-        <Link href="/" className="lantern-btn ghost small">
-          Sessions
-        </Link>
         <h1>Logins</h1>
         <button className="lantern-btn ghost small" onClick={() => void load()}>
           Refresh

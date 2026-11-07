@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import styles from '@/components/BackupsPage.module.css'
 
@@ -60,9 +59,6 @@ export default function PhoneAppPage() {
   return (
     <main className={styles.page}>
       <header>
-        <Link className="lantern-btn ghost small" href="/">
-          Sessions
-        </Link>
         <h1>Phone app</h1>
         <button
           className="lantern-btn ghost small"

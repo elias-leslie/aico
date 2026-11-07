@@ -58,17 +58,38 @@ const view: ContextView = {
     },
   ],
 }
-function show(fetcher: typeof fetch) {
+function show(fetcher: typeof fetch, tab = 'Cost') {
   vi.stubGlobal('fetch', fetcher)
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
-  return render(
+  const shown = render(
     <QueryClientProvider client={client}>
-      <ContextPage />
+      <ContextPage memory={<p>The memory list</p>} />
     </QueryClientProvider>,
   )
+  fireEvent.click(screen.getByRole('button', { name: tab }))
+  return shown
 }
+it('is called Context, opens on Prompts, and has Roles, Memory and Cost', async () => {
+  show(
+    vi.fn(async () => Response.json(view)),
+    'Prompts',
+  )
+  expect(
+    screen.getByRole('heading', { level: 1, name: 'Context' }),
+  ).toBeInTheDocument()
+  expect(
+    screen
+      .getAllByRole('button', { pressed: false })
+      .concat(screen.getAllByRole('button', { pressed: true }))
+      .map((b) => b.textContent),
+  ).toEqual(expect.arrayContaining(['Prompts', 'Roles', 'Memory', 'Cost']))
+  expect(await screen.findByLabelText('Prompt text')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Memory' }))
+  expect(screen.getByText('The memory list')).toBeInTheDocument()
+  expect(screen.queryByLabelText('Prompt text')).toBeNull()
+})
 afterEach(() => vi.unstubAllGlobals())
 it('shows partial delivery, unknown use and no budget without inventing zeros', async () => {
   show(vi.fn(async () => Response.json(view)))

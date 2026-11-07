@@ -29,25 +29,6 @@
   padding: 12px 12px 8px 6px;
 }
 
-.home {
-  display: inline-grid;
-  place-items: center;
-  flex: none;
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  color: var(--mist);
-  transition:
-    background 0.15s var(--ease-arrival),
-    color 0.15s var(--ease-arrival);
-}
-
-.home:hover {
-  background: var(--paper-veil);
-  color: var(--bone);
-}
-
-.home svg,
 .back svg {
   width: 16px;
   height: 16px;
@@ -649,11 +630,6 @@ button.power:hover {
   .badge {
     height: 32px;
     padding: 0 8px;
-  }
-
-  .home {
-    width: 44px;
-    height: 44px;
   }
 
   .search,

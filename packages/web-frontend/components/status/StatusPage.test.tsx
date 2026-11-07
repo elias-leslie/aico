@@ -211,7 +211,8 @@ describe('StatusPage', () => {
     show()
     await screen.findByText('Nightly backup')
     expect(screen.getByText(/^3 rows from 1 machine/)).toBeVisible()
-    expect(screen.getByRole('link', { name: 'Back to sessions' })).toBeVisible()
+    // The frame closes the page; Status has no way back of its own.
+    expect(screen.queryByRole('link', { name: 'Back to sessions' })).toBeNull()
     fireEvent.change(screen.getByLabelText('All projects'), {
       target: { value: 'aico' },
     })

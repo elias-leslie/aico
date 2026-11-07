@@ -66,12 +66,11 @@ async function api<T>(path: string, body?: unknown): Promise<T> {
 function Header({ restore = false }: { restore?: boolean }) {
   return (
     <header>
-      <Link
-        className="lantern-btn ghost small"
-        href={restore ? '/backups' : '/'}
-      >
-        {restore ? 'Backups' : 'Sessions'}
-      </Link>
+      {restore && (
+        <Link className="lantern-btn ghost small" href="/backups">
+          Backups
+        </Link>
+      )}
       <h1>{restore ? 'Restore files' : 'Backups'}</h1>
       <Link className="lantern-btn ghost small" href="/status?kind=backup">
         Status

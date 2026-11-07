@@ -1,7 +1,6 @@
 .page {
   height: var(--terminal-viewport-height, 100dvh);
   overflow: auto;
-  background: var(--ink);
   color: var(--bone);
   padding: 12px 20px 40px;
 }

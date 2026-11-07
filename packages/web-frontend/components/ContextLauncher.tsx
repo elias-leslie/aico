@@ -14,11 +14,11 @@ export function ContextLauncher({
           ? 'lantern-icon-btn compact'
           : 'lantern-btn ghost small'
       }
-      title="Agents and prompts"
-      aria-label="Agents and prompts"
+      title="Context"
+      aria-label="Context"
     >
       <BookOpen className="h-4 w-4" aria-hidden="true" />
-      {variant === 'row' && 'Agents'}
+      {variant === 'row' && 'Context'}
     </Link>
   )
 }

@@ -1,9 +1,8 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, RefreshCw } from 'lucide-react'
-import Link from 'next/link'
-import { useState } from 'react'
+import { RefreshCw } from 'lucide-react'
+import { type ReactNode, useState } from 'react'
 import { apiFetch } from '@/lib/api-fetch'
 import type {
   ContextDelivery,
@@ -421,7 +420,17 @@ function RoleEditor({
   )
 }
 
-export function ContextPage() {
+const TABS = ['prompts', 'roles', 'memory', 'cost'] as const
+type Tab = (typeof TABS)[number]
+const TAB_LABEL: Record<Tab, string> = {
+  prompts: 'Prompts',
+  roles: 'Roles',
+  memory: 'Memory',
+  cost: 'Cost',
+}
+
+/** Context: what agents start with (prompts, roles, memory) and what it costs. */
+export function ContextPage({ memory }: { memory?: ReactNode }) {
   const query = useQuery({
     queryKey: ['context'],
     queryFn: () => apiFetch<ContextView>('/api/context'),
@@ -429,7 +438,7 @@ export function ContextPage() {
     refetchOnWindowFocus: false,
     retry: false,
   })
-  const [tab, setTab] = useState<'cost' | 'prompts' | 'roles'>('cost')
+  const [tab, setTab] = useState<Tab>('prompts')
   const [prompt, setPrompt] = useState('')
   const [role, setRole] = useState('')
   const view = query.data
@@ -439,14 +448,7 @@ export function ContextPage() {
   return (
     <main className={styles.page}>
       <header>
-        <Link
-          href="/"
-          className="lantern-icon-btn"
-          aria-label="Back to sessions"
-        >
-          <ArrowLeft size={18} />
-        </Link>
-        <h1>Agents and prompts</h1>
+        <h1>Context</h1>
         <button
           className="lantern-icon-btn"
           type="button"
@@ -457,8 +459,8 @@ export function ContextPage() {
           <RefreshCw size={18} />
         </button>
       </header>
-      <nav aria-label="Agents and prompts">
-        {(['cost', 'prompts', 'roles'] as const).map((t) => (
+      <nav aria-label="Context">
+        {TABS.map((t) => (
           <button
             className={`lantern-btn ${tab === t ? 'primary' : 'ghost'}`}
             aria-pressed={tab === t}
@@ -466,24 +468,23 @@ export function ContextPage() {
             key={t}
             onClick={() => setTab(t)}
           >
-            {t === 'cost'
-              ? 'Context cost'
-              : t === 'prompts'
-                ? 'Prompts'
-                : 'Roles'}
+            {TAB_LABEL[t]}
           </button>
         ))}
       </nav>
-      {query.isPending && <p role="status">Loading agents and context…</p>}
-      {query.isError && (
+      {tab === 'memory' && memory}
+      {tab !== 'memory' && query.isPending && (
+        <p role="status">Loading prompts, roles and cost…</p>
+      )}
+      {tab !== 'memory' && query.isError && (
         <p role="alert">
           {view
             ? 'Refresh failed. Showing the last loaded view.'
-            : 'Could not load agents and context.'}{' '}
+            : 'Could not load prompts, roles and cost.'}{' '}
           Use Refresh to try again.
         </p>
       )}
-      {view && (
+      {view && tab !== 'memory' && (
         <>
           <p className={styles.asof}>
             Read {new Date(view.at).toLocaleString()}

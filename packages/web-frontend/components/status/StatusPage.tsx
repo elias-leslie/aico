@@ -93,7 +93,17 @@ function Select({
 }
 
 /** The Status screen: every row, problems first; `project` fixes the project filter (a project's page). */
-export function StatusPage({ project = '' }: { project?: string }) {
+export function StatusPage({
+  project = '',
+  search = '',
+  kind = '',
+}: {
+  project?: string
+  /** Opening search, as in /status?q=usage (the quota rows). */
+  search?: string
+  /** Opening kind, as in /status?kind=machine. */
+  kind?: string
+}) {
   const {
     view,
     loading,
@@ -109,7 +119,12 @@ export function StatusPage({ project = '' }: { project?: string }) {
   const queryClient = useQueryClient()
   const { hosts } = useHosts()
   const { projects } = useProjectSettings()
-  const [filter, setFilter] = useState<StatusFilter>({ ...NO_FILTER, project })
+  const [filter, setFilter] = useState<StatusFilter>({
+    ...NO_FILTER,
+    project,
+    search,
+    kind,
+  })
   const [healthyOpen, setHealthyOpen] = useState(false)
   const [openId, setOpenId] = useState<string | null>(null)
   // Runs this page started and is waiting on; the server's list covers the rest.
@@ -747,16 +762,7 @@ export function StatusPage({ project = '' }: { project?: string }) {
             >
               <ArrowLeft className="h-[18px] w-[18px]" strokeWidth={1.7} />
             </button>
-          ) : (
-            <Link
-              href="/"
-              className="lantern-icon-btn"
-              aria-label="Back to sessions"
-              title="Back to sessions"
-            >
-              <ArrowLeft className="h-[18px] w-[18px]" strokeWidth={1.7} />
-            </Link>
-          )}
+          ) : null}
           {filter.project ? (
             <>
               <span className="crumb">

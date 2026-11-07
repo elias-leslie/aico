@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import { useState } from 'react'
 import { useClock } from '@/lib/hooks/use-clock'
 import {
@@ -10,7 +9,6 @@ import {
   splitProjects,
 } from '@/lib/projects'
 import { AgentsBadge, Beacon, ProblemBadge, RunMark } from './Badges'
-import { BackIcon } from './icons'
 import styles from './ProjectsPage.module.css'
 
 export type Pick = (id: string, open?: ProblemKind | 'agents') => void
@@ -113,14 +111,6 @@ export function ProjectList({
   return (
     <aside className={styles.side}>
       <div className={styles.searchRow}>
-        <Link
-          href="/"
-          className={styles.home}
-          aria-label="Sessions"
-          title="Sessions"
-        >
-          <BackIcon />
-        </Link>
         <input
           className={styles.search}
           type="search"

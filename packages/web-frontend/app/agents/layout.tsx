@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { PRODUCT_NAME } from '@/lib/project-branding'
 
 export const metadata: Metadata = {
-  title: `Agents and prompts · ${PRODUCT_NAME}`,
+  title: `Context · ${PRODUCT_NAME}`,
 }
 
 export default function AgentsLayout({
