@@ -17,6 +17,8 @@ const note = (over: Partial<NoteDetail> = {}): NoteDetail => ({
   labels: [],
   unchecked: 0,
   checked: 0,
+  remindAt: null,
+  remindedAt: null,
   body: '',
   items: [],
   attachments: [],
@@ -149,5 +151,23 @@ describe('New note', () => {
       }),
     )
     expect(api.putLabels).not.toHaveBeenCalled()
+  })
+
+  it('a reminder makes it too, and a note holding only a reminder is not blank', async () => {
+    api.createNote.mockImplementation(async (input) =>
+      note({ id: 'f00dfeed0003', ...input }),
+    )
+    renderNew()
+    fireEvent.click(screen.getByTestId('note-remind'))
+    fireEvent.change(screen.getByLabelText('Reminder time'), {
+      target: { value: '2030-01-15T09:30' },
+    })
+    await waitFor(() =>
+      expect(api.createNote).toHaveBeenCalledWith({
+        kind: 'note',
+        remindAt: new Date(2030, 0, 15, 9, 30).getTime(),
+      }),
+    )
+    expect(isBlankNote(note({ remindAt: 5 }), empty)).toBe(false)
   })
 })

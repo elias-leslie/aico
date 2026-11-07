@@ -43,8 +43,11 @@ const PAGE_DEFAULT = 100
 const SNIPPET = 200
 /** Read past the cut, so a token crossing it is still recognised and hidden whole. */
 const SNIPPET_MARGIN = 400
-const CREATE_KEYS = ['kind', 'title', 'body', 'pinned', 'labels', 'items']
-const PATCH_KEYS = ['title', 'body', 'pinned', 'archived', 'kind', 'keepRevision']
+const CREATE_KEYS = ['kind', 'title', 'body', 'pinned', 'labels', 'items', 'remindAt']
+const PATCH_KEYS = ['title', 'body', 'pinned', 'archived', 'kind', 'keepRevision', 'remindAt']
+/** A reminder time is a date between 2000 and 2100 (ms). */
+const REMIND_MIN = Date.UTC(2000, 0, 1)
+const REMIND_MAX = Date.UTC(2100, 0, 1)
 
 interface ItemJson {
   id: string
@@ -83,6 +86,10 @@ interface NoteJson {
   updatedAt: number
   origin: string
   labels: string[]
+  /** When to remind the owner (ms), or null. */
+  remindAt: number | null
+  /** When that reminder was sent, or null while it has not been. */
+  remindedAt: number | null
 }
 
 export interface NoteSummaryJson extends NoteJson {
@@ -139,6 +146,8 @@ function noteJson(row: NoteRow, labels: string[]): NoteJson {
     updatedAt: row.updated_at,
     origin: row.origin,
     labels,
+    remindAt: row.remind_at,
+    remindedAt: row.reminded_at,
   }
 }
 
@@ -216,6 +225,21 @@ function optionalNumber(body: Record<string, unknown>, key: string): number | un
   return value
 }
 
+/** `remindAt`: a time in ms, null to clear it, undefined when the body leaves it out. */
+function remindAt(body: Record<string, unknown>): number | null | undefined {
+  if (!('remindAt' in body)) return undefined
+  const value = body.remindAt
+  if (value === null) return null
+  if (
+    typeof value !== 'number' ||
+    !Number.isInteger(value) ||
+    value < REMIND_MIN ||
+    value > REMIND_MAX
+  )
+    throw new HttpError(422, 'remindAt must be a time in ms between 2000 and 2100, or null')
+  return value
+}
+
 function optionalKind(body: Record<string, unknown>): NoteKind | undefined {
   const kind = optionalString(body, 'kind', { max: 20 })
   if (kind === undefined) return undefined
@@ -277,6 +301,12 @@ export function registerNoteRoutes(router: Router, deps: NoteDeps): void {
   const detail = (id: string): NoteDetailJson =>
     detailJson(notes.detail(id) as NoteDetail, blobsDir)
 
+  router.on('GET', '/api/notes/labels', (ctx) => {
+    const archivedText = ctx.query.get('archived')
+    const archived = archivedText === 'all' ? 'all' : boolQuery(archivedText, 'archived')
+    return { labels: deps.store.notes.labelCounts(archived) }
+  })
+
   router.on('GET', '/api/notes', (ctx) => {
     const kind = ctx.query.get('kind') || undefined
     if (kind && !(NOTE_KINDS as readonly string[]).includes(kind))
@@ -297,6 +327,7 @@ export function registerNoteRoutes(router: Router, deps: NoteDeps): void {
       kind: kind as NoteKind | undefined,
       label: ctx.query.get('label') || undefined,
       pinned: boolQuery(ctx.query.get('pinned'), 'pinned'),
+      reminders: boolQuery(ctx.query.get('reminders'), 'reminders'),
       archived,
       q,
       limit,
@@ -332,6 +363,7 @@ export function registerNoteRoutes(router: Router, deps: NoteDeps): void {
       pinned: optionalBool(body, 'pinned'),
       labels: body.labels === undefined ? undefined : labelList(body.labels),
       items,
+      remindAt: remindAt(body),
     })
     return created(ctx.res, detail(row.id))
   })
@@ -349,6 +381,7 @@ export function registerNoteRoutes(router: Router, deps: NoteDeps): void {
       archived: optionalBool(body, 'archived'),
       kind: optionalKind(body),
       keepRevision: optionalBool(body, 'keepRevision'),
+      remindAt: remindAt(body),
     }
     if (!notes.update(row.id, patch)) throw new HttpError(404, 'That note is gone')
     return detail(row.id)

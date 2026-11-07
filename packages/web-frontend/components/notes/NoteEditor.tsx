@@ -35,6 +35,7 @@ import { ConfirmationDialog } from '../ConfirmationDialog'
 import { NoteAttachments } from './NoteAttachments'
 import { NoteHistory } from './NoteHistory'
 import { type NoteActions, NoteItems } from './NoteItems'
+import { NoteReminder } from './NoteReminder'
 
 const MUTED = { color: 'var(--mist)' } as const
 
@@ -160,7 +161,8 @@ export function isBlankNote(
     draft.body.trim() === '' &&
     note.items.length === 0 &&
     note.attachments.length === 0 &&
-    note.labels.length === 0
+    note.labels.length === 0 &&
+    note.remindAt === null
   )
 }
 
@@ -420,6 +422,13 @@ function Editor({
 
       <Labels note={note} actions={actions} onError={setError} />
 
+      <NoteReminder
+        key={note.remindAt === null ? 'none' : 'set'}
+        remindAt={note.remindAt}
+        remindedAt={note.remindedAt}
+        onChange={(remindAt) => change({ remindAt })}
+      />
+
       {showBody && (
         <textarea
           ref={bodyBox}
@@ -504,6 +513,8 @@ const blankNote = (kind: NoteKind): NoteDetail => ({
   labels: [],
   unchecked: 0,
   checked: 0,
+  remindAt: null,
+  remindedAt: null,
   body: '',
   items: [],
   attachments: [],

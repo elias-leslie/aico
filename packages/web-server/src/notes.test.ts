@@ -279,6 +279,69 @@ describe('notes', () => {
     }
   })
 
+  it('serves reminders and the label list', async () => {
+    const api = await serveRoutes((r) =>
+      registerNoteRoutes(r, { store, blobsDir: join(dir, 'blobs') }),
+    )
+    const call = async (method: string, path: string, body?: unknown) => {
+      const response = await fetch(`${api.base}${path}`, {
+        method,
+        headers: { 'content-type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      })
+      // biome-ignore lint/suspicious/noExplicitAny: test responses are read loosely
+      return { status: response.status, body: (await response.json()) as Record<string, any> }
+    }
+    try {
+      const soon = wall + 2 * MINUTE
+      const later = wall + 60 * MINUTE
+      const a = await call('POST', '/api/notes', {
+        title: 'Later',
+        remindAt: later,
+        labels: ['Car'],
+      })
+      expect(a.body).toMatchObject({ remindAt: later, remindedAt: null })
+      const b = await call('POST', '/api/notes', { title: 'Soon', labels: ['car', 'Home'] })
+      const c = await call('POST', '/api/notes', { title: 'No reminder' })
+      expect(c.body.remindAt).toBeNull()
+      expect(
+        (await call('PATCH', `/api/notes/${b.body.id}`, { remindAt: soon })).body.remindAt,
+      ).toBe(soon)
+      // The due list: only notes with a reminder, soonest first.
+      const due = await call('GET', '/api/notes?reminders=true')
+      expect(due.body.notes.map((n: { title: string }) => n.title)).toEqual(['Soon', 'Later'])
+      expect(due.body.total).toBe(2)
+      // An archived note with a reminder still shows in it; the plain list hides it.
+      await call('PATCH', `/api/notes/${a.body.id}`, { archived: true })
+      expect((await call('GET', '/api/notes?reminders=true')).body.total).toBe(2)
+      expect((await call('GET', '/api/notes')).body.total).toBe(2)
+      // Clearing, and bad times.
+      expect(
+        (await call('PATCH', `/api/notes/${b.body.id}`, { remindAt: null })).body.remindAt,
+      ).toBeNull()
+      expect((await call('GET', '/api/notes?reminders=true')).body.total).toBe(1)
+      for (const bad of ['tomorrow', 1.5, 5, 1e15])
+        expect((await call('PATCH', `/api/notes/${b.body.id}`, { remindAt: bad })).status).toBe(422)
+      // One entry per label whatever its casing, counted over live notes.
+      expect((await call('GET', '/api/notes/labels')).body.labels).toEqual([
+        { label: 'car', count: 1 },
+        { label: 'Home', count: 1 },
+      ])
+      expect((await call('GET', '/api/notes/labels?archived=true')).body.labels).toEqual([
+        { label: 'Car', count: 1 },
+      ])
+      expect((await call('GET', '/api/notes/labels?archived=all')).body.labels).toEqual([
+        { label: 'Car', count: 2 },
+        { label: 'Home', count: 1 },
+      ])
+      await call('DELETE', `/api/notes/${b.body.id}`)
+      expect((await call('GET', '/api/notes/labels')).body.labels).toEqual([])
+      expect((await call('GET', '/api/notes/labels?archived=x')).status).toBe(422)
+    } finally {
+      await api.close()
+    }
+  })
+
   it('hides secret-looking text in list previews, not in the note itself', async () => {
     const api = await serveRoutes((r) =>
       registerNoteRoutes(r, { store, blobsDir: join(dir, 'blobs') }),

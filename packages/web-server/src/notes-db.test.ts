@@ -105,7 +105,9 @@ describe('NotesStore', () => {
     raw.exec(
       `${['captures', 'notes', 'note_items', 'note_labels', 'attachments', 'note_revisions']
         .map((table) => `ALTER TABLE ${table} DROP COLUMN prev_origin;`)
-        .join(' ')} UPDATE meta SET value = '4' WHERE key = 'schema_version'`,
+        .join(
+          ' ',
+        )} DROP INDEX notes_remind; ALTER TABLE notes DROP COLUMN remind_at; ALTER TABLE notes DROP COLUMN reminded_at; UPDATE meta SET value = '4' WHERE key = 'schema_version'`,
     )
     raw.close()
     const store = open(path)
@@ -113,6 +115,29 @@ describe('NotesStore', () => {
     expect(store.getCapture(kept.id)).toMatchObject({ client_id: 'dddddddd', prev_origin: null })
     expect(store.notes.getNote(note.id)?.title).toBe('Kept')
     expect(store.notes.items(note.id).map((i) => i.text)).toEqual(['milk'])
+    store.close()
+  })
+
+  it('migrates a schema 5 file by adding the reminder columns, keeping every note', () => {
+    const path = join(dir, 'notes.db')
+    const first = open(path)
+    const note = first.notes.create({ title: 'Kept', remindAt: wall })
+    first.close()
+    const raw = new DatabaseSync(path)
+    raw.exec(
+      `DROP INDEX notes_remind; ALTER TABLE notes DROP COLUMN remind_at;
+       ALTER TABLE notes DROP COLUMN reminded_at; UPDATE meta SET value = '5' WHERE key = 'schema_version'`,
+    )
+    raw.close()
+    const store = open(path)
+    expect(store.meta('schema_version')).toBe(String(SCHEMA_VERSION))
+    expect(store.notes.getNote(note.id)).toMatchObject({
+      title: 'Kept',
+      remind_at: null,
+      reminded_at: null,
+    })
+    store.notes.update(note.id, { remindAt: wall })
+    expect(store.notes.getNote(note.id)?.remind_at).toBe(wall)
     store.close()
   })
 

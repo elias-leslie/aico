@@ -35,6 +35,7 @@ import { registerLoginRoutes } from './logins'
 import { MachinesService, registerMachineRoutes } from './machines'
 import { registerMemoryRoutes } from './memory-routes'
 import { registerMockupRoutes } from './mockups'
+import { registerReminderRoutes } from './note-reminders'
 import { NotesStore } from './notes-db'
 import { registerExportRoutes } from './notes-export'
 import { NotifyHub } from './notify'
@@ -183,6 +184,11 @@ function serve(): void {
     tether,
     asks,
     status,
+    notifier: notify.notifier,
+  })
+  registerReminderRoutes(api, {
+    store: notes,
+    publicHost: config.publicHost,
     notifier: notify.notifier,
   })
   registerMemoryRoutes(api, { dataDir: config.dataDir })

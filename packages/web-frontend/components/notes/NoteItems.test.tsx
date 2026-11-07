@@ -33,6 +33,8 @@ const note = (items: NoteItem[]): NoteDetail => ({
   labels: [],
   unchecked: items.filter((x) => !x.checked).length,
   checked: items.filter((x) => x.checked).length,
+  remindAt: null,
+  remindedAt: null,
   body: '',
   items,
   attachments: [],

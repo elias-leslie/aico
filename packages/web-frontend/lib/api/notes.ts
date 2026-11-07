@@ -41,6 +41,10 @@ interface NoteBase {
   labels: string[]
   unchecked: number
   checked: number
+  /** When Aico reminds the owner (ms), or null. */
+  remindAt: number | null
+  /** When that reminder was sent, or null while it has not been. */
+  remindedAt: number | null
 }
 
 export interface NoteSummary extends NoteBase {
@@ -168,18 +172,39 @@ function send<T>(
 export interface NoteQuery {
   q?: string
   archived?: boolean
+  /** Only notes with a reminder, soonest first (archived ones too). */
+  reminders?: boolean
   signal?: AbortSignal
 }
 
 export function fetchNotes(query: NoteQuery = {}) {
   const params = new URLSearchParams({ limit: '500' })
   if (query.q) params.set('q', query.q)
-  if (query.archived) params.set('archived', 'true')
+  if (query.reminders) params.set('reminders', 'true')
+  else if (query.archived) params.set('archived', 'true')
   return apiFetch<unknown>(
     `/api/notes?${params}`,
     { signal: query.signal, cache: 'no-store' },
     "Couldn't load notes",
   ).then(parseNoteList)
+}
+
+export interface NoteLabelCount {
+  label: string
+  count: number
+}
+
+/** Every label in use, over all notes (not just the newest 500). */
+export function fetchNoteLabels(
+  archived: boolean | 'all',
+  signal?: AbortSignal,
+): Promise<NoteLabelCount[]> {
+  const params = archived === false ? '' : `?archived=${archived}`
+  return apiFetch<{ labels?: NoteLabelCount[] }>(
+    `/api/notes/labels${params}`,
+    { signal, cache: 'no-store' },
+    "Couldn't load labels",
+  ).then((page) => (Array.isArray(page.labels) ? page.labels : []))
 }
 
 export function fetchNote(id: string, signal?: AbortSignal) {
@@ -197,6 +222,7 @@ export interface NoteCreate {
   body?: string
   pinned?: boolean
   labels?: string[]
+  remindAt?: number | null
 }
 
 export function createNote(input: NoteCreate = { kind: 'note' }) {
@@ -214,6 +240,8 @@ export interface NotePatch {
   pinned?: boolean
   archived?: boolean
   kind?: NoteKind
+  /** When to remind the owner (ms); null takes the reminder off. */
+  remindAt?: number | null
   /** A restore: the server keeps the text it replaces. */
   keepRevision?: boolean
 }

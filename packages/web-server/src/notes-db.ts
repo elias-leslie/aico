@@ -13,7 +13,7 @@ import { NoteStore } from './notes-data'
 import { baseOf, type SyncHandle } from './sync/engine'
 import { NOTES_SYNC_TABLES } from './sync/registry'
 
-export const SCHEMA_VERSION = 5
+export const SCHEMA_VERSION = 6
 
 /** Which column names the note a synced row belongs to (to refresh its search entry). */
 const NOTE_ID_COLUMN: Record<string, string> = {
@@ -126,6 +126,11 @@ const MIGRATIONS: Record<number, string> = {
       ALTER TABLE note_labels ADD COLUMN prev_origin TEXT;
       ALTER TABLE attachments ADD COLUMN prev_origin TEXT;
       ALTER TABLE note_revisions ADD COLUMN prev_origin TEXT;`,
+  // A note's reminder: `remind_at` is when (ms), `reminded_at` when it was sent (NULL until it
+  // is). Changing `remind_at` clears `reminded_at`, so a new time sends again.
+  5: `ALTER TABLE notes ADD COLUMN remind_at INTEGER;
+      ALTER TABLE notes ADD COLUMN reminded_at INTEGER;
+      CREATE INDEX IF NOT EXISTS notes_remind ON notes (remind_at) WHERE remind_at IS NOT NULL;`,
 }
 
 const SCHEMA = `

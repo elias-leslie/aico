@@ -3,6 +3,7 @@
 import { clsx } from 'clsx'
 import {
   Archive,
+  Bell,
   ListChecks,
   Paperclip,
   Pin,
@@ -20,7 +21,8 @@ import {
   noteHref,
 } from '@/lib/api/notes'
 import { formatAge } from '@/lib/attention'
-import { useNotes } from '@/lib/hooks/use-notes'
+import { formatWhen } from '@/lib/capture-format'
+import { useNoteLabels, useNotes } from '@/lib/hooks/use-notes'
 
 const MUTED = { color: 'var(--mist)' } as const
 
@@ -62,6 +64,40 @@ const TextButton = ({
   </button>
 )
 
+function Chip({
+  pressed,
+  onClick,
+  children,
+}: {
+  pressed: boolean
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={pressed}
+      className="inline-flex min-h-9 flex-none items-center gap-1.5 rounded-full px-3 text-[13px]"
+      style={
+        pressed
+          ? {
+              background: 'rgb(var(--lantern-rgb) / 0.14)',
+              border: '1px solid var(--lantern)',
+              color: 'var(--lantern)',
+            }
+          : {
+              background: 'var(--paper-veil)',
+              border: '1px solid transparent',
+              color: 'var(--bone)',
+            }
+      }
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  )
+}
+
 const counts = (note: { unchecked: number; checked: number }) =>
   [
     note.unchecked > 0 ? `${note.unchecked} open` : null,
@@ -83,6 +119,25 @@ function Labels({ labels }: { labels: string[] }) {
           {label}
         </span>
       ))}
+    </span>
+  )
+}
+
+/** When the reminder is (or was): amber until it has gone out, then quiet. */
+function Due({ note }: { note: NoteSummary }) {
+  const at = note.remindAt as number
+  return (
+    <span
+      className="inline-flex items-center gap-1"
+      data-testid="note-due"
+      style={{
+        color: note.remindedAt === null ? 'var(--lantern)' : 'var(--mist)',
+      }}
+    >
+      <Bell className="h-3 w-3" strokeWidth={1.7} aria-hidden />
+      {note.remindedAt === null
+        ? formatWhen(at)
+        : `Sent ${formatWhen(note.remindedAt)}`}
     </span>
   )
 }
@@ -146,6 +201,7 @@ function Card({ note }: { note: NoteSummary }) {
             </span>
           )}
           <Labels labels={note.labels} />
+          {note.remindAt !== null && <Due note={note} />}
         </span>
       </Link>
     </li>
@@ -216,27 +272,42 @@ export function NoteList() {
   const [text, setText] = useState('')
   const [archived, setArchived] = useState(false)
   const [label, setLabel] = useState<string | null>(null)
+  const [reminders, setReminders] = useState(false)
   const q = useDebounced(text.trim(), 250)
-  const list = useNotes(q, archived)
+  const list = useNotes(q, archived, reminders)
+  const allLabels = useNoteLabels(reminders ? 'all' : archived)
 
-  // The chosen label stays a chip even where no note has it (the archive), so
-  // the filter can always be turned off.
+  // Every label in use (the server's list), else the ones on the notes loaded;
+  // the chosen label stays a chip even where no note has it, so the filter can
+  // always be turned off.
   const labels = [
-    ...new Set([
-      ...list.notes.flatMap((note) => note.labels),
-      ...(label === null ? [] : [label]),
-    ]),
+    ...new Map(
+      [
+        ...(allLabels ?? list.notes.flatMap((note) => note.labels)),
+        ...(label === null ? [] : [label]),
+      ].map((name) => [name.toLowerCase(), name]),
+    ).values(),
   ].sort()
-  const filtering = q !== '' || archived || label !== null
+  const hasLabel = (note: NoteSummary, name: string) =>
+    note.labels.some((have) => have.toLowerCase() === name.toLowerCase())
+  const filtering = q !== '' || archived || label !== null || reminders
   const groceries =
     list.notes.find((note) => note.source === GROCERIES_SOURCE) ?? null
   const shown = list.notes.filter(
     (note) =>
-      (label === null || note.labels.includes(label)) &&
+      (label === null || hasLabel(note, label)) &&
       (filtering || note !== groceries),
   )
-  const pinned = shown.filter((note) => note.pinned)
-  const others = shown.filter((note) => !note.pinned)
+  // The reminders view is in time order: what has come due first, then what is coming.
+  const nowMs = Date.now()
+  const dueNow = reminders
+    ? shown.filter((note) => (note.remindAt as number) <= nowMs)
+    : []
+  const coming = reminders
+    ? shown.filter((note) => (note.remindAt as number) > nowMs)
+    : []
+  const pinned = reminders ? [] : shown.filter((note) => note.pinned)
+  const others = reminders ? [] : shown.filter((note) => !note.pinned)
 
   return (
     <div className="flex flex-col gap-3">
@@ -292,38 +363,25 @@ export function NoteList() {
         </button>
       </div>
 
-      {labels.length > 0 && (
-        <div
-          className="flex gap-1.5 overflow-x-auto pb-1"
-          role="group"
-          aria-label="Filter by label"
-        >
-          {labels.map((name) => (
-            <button
-              key={name}
-              type="button"
-              aria-pressed={label === name}
-              className="min-h-9 flex-none rounded-full px-3 text-[13px]"
-              style={
-                label === name
-                  ? {
-                      background: 'rgb(var(--lantern-rgb) / 0.14)',
-                      border: '1px solid var(--lantern)',
-                      color: 'var(--lantern)',
-                    }
-                  : {
-                      background: 'var(--paper-veil)',
-                      border: '1px solid transparent',
-                      color: 'var(--bone)',
-                    }
-              }
-              onClick={() => setLabel((now) => (now === name ? null : name))}
-            >
-              {name}
-            </button>
-          ))}
-        </div>
-      )}
+      <div
+        className="flex gap-1.5 overflow-x-auto pb-1"
+        role="group"
+        aria-label="Filter notes"
+      >
+        <Chip pressed={reminders} onClick={() => setReminders((now) => !now)}>
+          <Bell className="h-3.5 w-3.5" strokeWidth={1.7} aria-hidden="true" />
+          Reminders
+        </Chip>
+        {labels.map((name) => (
+          <Chip
+            key={name}
+            pressed={label === name}
+            onClick={() => setLabel((now) => (now === name ? null : name))}
+          >
+            {name}
+          </Chip>
+        ))}
+      </div>
 
       {list.isLoading ? (
         <Message>Loading notes…</Message>
@@ -347,12 +405,37 @@ export function NoteList() {
                 ? `Nothing matches "${q}".`
                 : label
                   ? `No notes labelled ${label}.`
-                  : archived
-                    ? 'Nothing archived.'
-                    : 'No notes yet. Tap New note or New list.'}
+                  : reminders
+                    ? 'No reminders. Open a note and tap Remind me.'
+                    : archived
+                      ? 'Nothing archived.'
+                      : 'No notes yet. Tap New note or New list.'}
             </Message>
           ) : (
             <>
+              {dueNow.length > 0 && (
+                <section aria-label="Due" className="flex flex-col gap-1.5">
+                  <h2 className="lantern-sec">Due</h2>
+                  <ul className="flex flex-col gap-2">
+                    {dueNow.map((note) => (
+                      <Card key={note.id} note={note} />
+                    ))}
+                  </ul>
+                </section>
+              )}
+              {coming.length > 0 && (
+                <section
+                  aria-label="Coming up"
+                  className="flex flex-col gap-1.5"
+                >
+                  <h2 className="lantern-sec">Coming up</h2>
+                  <ul className="flex flex-col gap-2">
+                    {coming.map((note) => (
+                      <Card key={note.id} note={note} />
+                    ))}
+                  </ul>
+                </section>
+              )}
               {pinned.length > 0 && (
                 <section
                   aria-label="Pinned notes"

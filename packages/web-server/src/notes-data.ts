@@ -40,6 +40,10 @@ export interface NoteRow extends Sync {
   source: string | null
   created_at: number
   edited_at: number
+  /** When the owner wants a reminder (ms), or null. */
+  remind_at: number | null
+  /** When that reminder was sent, or null while it has not been. */
+  reminded_at: number | null
 }
 
 export interface NoteItemRow extends Sync {
@@ -101,6 +105,8 @@ export interface NoteQuery {
   kind?: NoteKind
   label?: string
   pinned?: boolean
+  /** Only notes with a reminder, soonest first. Archived ones count unless `archived` says otherwise. */
+  reminders?: boolean
   /** false (default): live notes only; true: archived only; 'all': both. */
   archived?: boolean | 'all'
   q?: string
@@ -121,6 +127,8 @@ export interface NewNote {
   /** ms; an import keeps the note's original times (default: now). */
   createdAt?: number
   editedAt?: number
+  /** ms: remind the owner then. */
+  remindAt?: number | null
 }
 
 export interface NotePatch {
@@ -130,6 +138,8 @@ export interface NotePatch {
   archived?: boolean
   kind?: NoteKind
   scope?: string | null
+  /** ms to remind the owner, or null for none. A new time sends again. */
+  remindAt?: number | null
   /** ms; with a title or text change, the edit time to keep instead of now (imports). */
   editedAt?: number
   /** Keep the old title or text even inside the revision window: a restore
@@ -306,6 +316,8 @@ export class NoteStore {
       source: input.source ?? null,
       created_at: input.createdAt ?? now,
       edited_at: input.editedAt ?? input.createdAt ?? now,
+      remind_at: input.remindAt ?? null,
+      reminded_at: null,
     })
     for (const item of input.items ?? [])
       this.addItemNow(id, { text: item.text, checked: item.checked, hint: item.hint })
@@ -337,11 +349,51 @@ export class NoteStore {
         edited = true
       }
       if (patch.scope !== undefined && patch.scope !== current.scope) fields.scope = patch.scope
+      if (patch.remindAt !== undefined && patch.remindAt !== current.remind_at) {
+        fields.remind_at = patch.remindAt
+        fields.reminded_at = null
+      }
       if (edited) fields.edited_at = patch.editedAt ?? this.core.now()
       if (Object.keys(fields).length === 0) return current
       this.edit('notes', id, current, fields)
       this.reindex(id)
       return this.getNote(id)
+    })
+  }
+
+  // -- Reminders ----------------------------------------------------------------
+
+  /** Live notes whose reminder time has come and has not been sent, soonest first. */
+  dueReminders(now: number): NoteRow[] {
+    return this.db
+      .prepare(
+        `SELECT * FROM notes WHERE deleted = 0 AND remind_at IS NOT NULL AND remind_at <= ?
+           AND reminded_at IS NULL ORDER BY remind_at, id`,
+      )
+      .all(now) as unknown as NoteRow[]
+  }
+
+  /**
+   * Marks the reminder sent, if it is still due and unsent (the row is read again inside the
+   * transaction, so a second caller, or a reminder the owner just moved, gets null). The mark
+   * syncs, which is how the other host knows not to send it.
+   */
+  claimReminder(id: string, now: number): NoteRow | null {
+    return this.core.transaction(() => {
+      const current = this.getNote(id)
+      if (!current || current.remind_at === null || current.remind_at > now) return null
+      if (current.reminded_at !== null) return null
+      this.edit('notes', id, current, { reminded_at: now })
+      return this.getNote(id)
+    })
+  }
+
+  /** Takes the sent mark off (the notice could not be queued), so the next pass tries again. */
+  releaseReminder(id: string, remindAt: number): void {
+    this.core.transaction(() => {
+      const current = this.getNote(id)
+      if (current && current.remind_at === remindAt && current.reminded_at !== null)
+        this.edit('notes', id, current, { reminded_at: null })
     })
   }
 
@@ -656,10 +708,12 @@ export class NoteStore {
   list(query: NoteQuery = {}): { notes: NoteSummary[]; total: number } {
     const where = ['n.deleted = 0']
     const args: Value[] = []
-    if (query.archived !== 'all') {
+    const archived = query.archived ?? (query.reminders ? 'all' : false)
+    if (archived !== 'all') {
       where.push('n.archived = ?')
-      args.push(bit(query.archived === true))
+      args.push(bit(archived === true))
     }
+    if (query.reminders) where.push('n.remind_at IS NOT NULL')
     if (query.kind) {
       where.push('n.kind = ?')
       args.push(query.kind)
@@ -696,7 +750,9 @@ export class NoteStore {
            max(n.edited_at,
                coalesce((SELECT max(i.updated_at) FROM note_items i WHERE i.note_id = n.id), 0)) AS activity_at
          FROM notes n WHERE ${where.join(' AND ')}
-         ORDER BY n.pinned DESC, activity_at DESC, n.id DESC LIMIT ? OFFSET ?`,
+         ORDER BY ${
+           query.reminders ? 'n.remind_at ASC, n.id' : 'n.pinned DESC, activity_at DESC, n.id DESC'
+} LIMIT ? OFFSET ?`,
       )
       .all(...args, limit, offset) as unknown as (NoteRow & {
       unchecked: number
@@ -715,6 +771,19 @@ export class NoteStore {
         .all(row.id, PREVIEW_ITEMS) as unknown as NoteItemRow[],
     }))
     return { notes, total }
+  }
+
+  /** Each label in use on live notes with how many notes carry it (one casing per label). */
+  labelCounts(archived: boolean | 'all' = false): { label: string; count: number }[] {
+    const rows = this.db
+      .prepare(
+        `SELECT min(l.label) AS label, count(DISTINCT l.note_id) AS count
+           FROM note_labels l JOIN notes n ON n.id = l.note_id
+          WHERE l.deleted = 0 AND n.deleted = 0 ${archived === 'all' ? '' : 'AND n.archived = ?'}
+          GROUP BY lower(l.label) ORDER BY lower(l.label)`,
+      )
+      .all(...(archived === 'all' ? [] : [bit(archived)])) as Row[]
+    return rows.map((row) => ({ label: String(row.label), count: Number(row.count) }))
   }
 
   /** Every word must match the title, body, an item or a label (a word start in FTS, any part in LIKE). */

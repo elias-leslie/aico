@@ -12,6 +12,7 @@ import {
   deleteItem,
   deleteNote,
   fetchNote,
+  fetchNoteLabels,
   fetchNotes,
   fetchRevisions,
   type NoteCreate,
@@ -33,10 +34,10 @@ const POLL_MS = 10_000
 const retryOther = (count: number, error: unknown) =>
   !isPermanentRefusal(error) && count < 2
 
-export function useNotes(q: string, archived: boolean) {
+export function useNotes(q: string, archived: boolean, reminders = false) {
   const query = useQuery({
-    queryKey: [...NOTES_KEY, 'list', q, archived],
-    queryFn: ({ signal }) => fetchNotes({ q, archived, signal }),
+    queryKey: [...NOTES_KEY, 'list', q, archived, reminders],
+    queryFn: ({ signal }) => fetchNotes({ q, archived, reminders, signal }),
     placeholderData: keepPreviousData,
     refetchInterval: POLL_MS,
     refetchOnWindowFocus: true,
@@ -48,6 +49,19 @@ export function useNotes(q: string, archived: boolean) {
     loaded: query.data !== undefined,
     ...loadState(query, query.data !== undefined),
   }
+}
+
+/** Every label in use, for the filter chips; null until the first answer (or if it fails). */
+export function useNoteLabels(archived: boolean | 'all'): string[] | null {
+  const query = useQuery({
+    queryKey: [...NOTES_KEY, 'list', 'labels', archived],
+    queryFn: ({ signal }) => fetchNoteLabels(archived, signal),
+    placeholderData: keepPreviousData,
+    refetchInterval: POLL_MS,
+    refetchOnWindowFocus: true,
+    staleTime: 0,
+  })
+  return query.data ? query.data.map((entry) => entry.label) : null
 }
 
 export function useNote(id: string | null) {
