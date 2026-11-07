@@ -1,0 +1,19 @@
+{
+  "state": "~/.local/state/aico/wip-mirror.json",
+  "mirrorDir": ".local/state/aico/wip-mirror",
+  "webUrl": "http://127.0.0.1:3002",
+  "projectsCommand": ["aico", "projects", "list", "--json"],
+  "pinned": ["aico"],
+  "activeDays": 14,
+  "skipPaths": [
+    {
+      "segment": "neri-hunters",
+      "reason": "Neri hunter case data stays on the machine that holds it"
+    }
+  ],
+  "excludeFiles": [".env", ".env.*", "*.pem", "*.key", "id_*"],
+  "maxRepoMb": 2048,
+  "maxDirtyMb": 100,
+  "maxMirrorMb": 8192,
+  "minFreeMb": 4096
+}

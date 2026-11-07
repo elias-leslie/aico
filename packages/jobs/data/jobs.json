@@ -156,6 +156,28 @@
       "lease_s": 300
     },
     {
+      "kind": "wip-mirror-davion-sidarli",
+      "what": "Repo copies to the other full Aico",
+      "project": "aico",
+      "home": "davion-sidarli",
+      "every_min": 10,
+      "run": {
+        "command": ["../../web-server/scripts/aico", "wip", "run"]
+      },
+      "lease_s": 300
+    },
+    {
+      "kind": "wip-mirror-aico",
+      "what": "Repo copies to the other full Aico",
+      "project": "aico",
+      "home": "aico",
+      "every_min": 10,
+      "run": {
+        "command": ["../../web-server/scripts/aico", "wip", "run"]
+      },
+      "lease_s": 300
+    },
+    {
       "kind": "peer-release",
       "what": "Aico container on the workstation's release",
       "project": "aico",

@@ -16,6 +16,7 @@
   "exports": {
     "./hosts": "./src/hosts.ts",
     "./link": "./src/link.ts",
+    "./peers": "./src/peers.ts",
     "./peer-http": "./src/peer-http.ts",
     "./identity": "./src/identity.ts",
     "./trust": "./src/trust.ts",

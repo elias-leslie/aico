@@ -13,7 +13,10 @@ export interface FleetSettings {
   stateDir: string
   allowlist: string
   listen: Endpoint
-  peers: { name: string; endpoint: Endpoint; tools?: string[] }[]
+  peers: { name: string; endpoint: Endpoint; tools?: string[]; hardware?: string }[]
+  /** Optional label for the physical computer this machine runs on. Peers with the same label
+   * share a computer (a VM beside this one, say); containers need none, they share this kernel. */
+  hardware?: string
   /** SSH host alias of the Proxmox authority; guest names match fleet names. */
   proxmoxSsh?: string
   mode?: 'full' | 'worker'
@@ -97,6 +100,13 @@ export function readSettings(env: NodeJS.ProcessEnv, controlSocket: string): Fle
     throw new Error('Fleet paths are required')
   if (value.mode !== undefined && value.mode !== 'full' && value.mode !== 'worker')
     throw new Error('Fleet mode must be full or worker')
+  const label = /^[a-z0-9][a-z0-9._-]{0,62}$/
+  if (
+    [value.hardware, ...value.peers.map((peer) => peer.hardware)].some(
+      (name) => name !== undefined && (typeof name !== 'string' || !label.test(name)),
+    )
+  )
+    throw new Error('Fleet hardware labels must be short lower-case names')
   if (
     value.peers.some(
       (peer) =>

@@ -21,6 +21,8 @@ export interface CliIo {
   coordination: Coordination
   /** Records the result on Status (best effort; tests leave it out). */
   report?(root: string, summary: CheckSummary): Promise<string | null>
+  /** Starts the copy of this repo on the other full machines after a commit (best effort; tests leave it out). */
+  copy?(root: string): void
 }
 
 const CHECK_USAGE = `aico check: the repo's gate (.st-check.toml).
@@ -265,6 +267,7 @@ async function commitCli(argv: string[], io: CliIo): Promise<number> {
     })
     if (note) io.err(note)
   }
+  io.copy?.(root)
   return 0
 }
 

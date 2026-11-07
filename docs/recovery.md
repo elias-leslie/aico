@@ -58,6 +58,30 @@ Choose the snapshot belonging to `pve-ct-190-aico-data` using the Aico Backups s
 
 For the whole Proxmox machine, reinstall Proxmox, then restore the saved `pve-host-files` and `pve-cluster-config` copies for inspection in scratch. The Drive guest backups (`vzdump-…`) rebuild guests: restore CT 190 to a **new unused scratch guest ID**, never an existing one, and inspect its mount/network configuration before starting it. The guest copy includes its installed units/source; overlay the newer consistent Aico data only after validation. Physical disk/boot setup, Proxmox network/storage mapping and the final switch to replacement services stay manual.
 
+## Get a repo's latest work back from the other full machine
+
+Every full Aico machine copies its active repos (a pinned list plus any repo with commits in the last 14 days; never Neri hunter data) to the other full machines on other hardware. A copy holds all branches and a snapshot of the working tree including uncommitted and untracked files, under `refs/aico/wip/<machine>/heads/<branch>` and `refs/aico/wip/<machine>/stash/<branch>` in a bare repo at `~/.local/state/aico/wip-mirror/<machine>/<project>.git` on each receiver. Ignored files, `.env` and key files are not copied. A new commit goes out within seconds; uncommitted work goes out with the `wip-mirror-<machine>` job, every 10 minutes. With only one full machine the job is off and Status says so.
+
+On the machine that lost the work (Aico running), pull it from any peer into a new folder:
+
+```sh
+aico wip restore PROJECT --to /srv/scratch/PROJECT-wip            # this machine's own work, newest copy found on the peers
+aico wip restore PROJECT --of davion-sidarli --to /srv/scratch/PROJECT-wip   # another machine's work, read from this machine's own mirror
+```
+
+It never writes over an existing folder. The newest uncommitted-work snapshot is checked out as branch `wip-restored` (one commit on top of the branch's last commit); `git diff HEAD~1` shows only the uncommitted part. All copies are listed as `refs/wip/*`.
+
+With no Aico (only git and the peer's files), on the peer:
+
+```sh
+git init /srv/scratch/PROJECT-wip
+git -C /srv/scratch/PROJECT-wip fetch ~/.local/state/aico/wip-mirror/MACHINE/PROJECT.git 'refs/aico/wip/MACHINE/*:refs/wip/*'
+git -C /srv/scratch/PROJECT-wip for-each-ref refs/wip/
+git -C /srv/scratch/PROJECT-wip checkout -b restored refs/wip/stash/BRANCH   # or refs/wip/heads/BRANCH
+```
+
+The limits (repo size, uncommitted size, how much the peer may hold, how much disk it keeps free) and the skip list are `packages/ops/data/wip-mirror.json`. A repo that is skipped or failing shows in Status as its own row (`Repo copy: PROJECT`) with the reason.
+
 ## Damaged repository
 
 Run `recover check --repository /LOCAL/REPO --password-file /PRIVATE/password` first. All source inspection/restoration uses `--no-lock --no-cache`: it never unlocks, prunes, forgets, repairs or deletes anything in the original repository. Drive authentication is copied to private scratch before use so token refresh cannot rewrite the owner's auth file.

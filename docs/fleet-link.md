@@ -104,6 +104,10 @@ peers. The cross-machine drill is separate: stop the home runner mid-job,
 observe the second machine complete under the next fence, then submit the old
 result and observe refusal. Local TLS tests do not establish that live drill.
 
+### Which computer a machine runs on
+
+Features that copy data to a peer for safety (the repo copies, `aico wip`) skip a full peer that runs on this machine's own computer. A container shares this machine's kernel, which the feature reads over the link, so it needs no setting. For anything else (a VM beside this one), give this machine and that peer the same optional `hardware` label in `fleet.json` (`"hardware": "davion-gem"` at the top and in the peer's entry).
+
 ### Powered-off peers
 
 On a full machine with read access to its Proxmox authority, set `proxmoxSsh` in

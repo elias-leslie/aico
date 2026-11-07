@@ -9,7 +9,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { accept } from './accept'
 import { ownChanged, runCheck } from './check'
@@ -461,6 +461,7 @@ describe('commit', () => {
     const root = repo('')
     write(root, 'src/with space.ts', 'new\n')
     const lines: string[] = []
+    const copied: string[] = []
     expect(
       await runCli('commit', ['-m', 'Add file', '--paths', 'src/with space.ts'], {
         cwd: root,
@@ -468,8 +469,11 @@ describe('commit', () => {
         coordination: coordination(),
         out: (line) => lines.push(line),
         err: (line) => lines.push(line),
+        copy: (at) => copied.push(at),
       }),
     ).toBe(0)
+    expect(copied).toHaveLength(1)
+    expect(copied[0]).toContain(basename(root))
     expect(git(root, 'show', '--name-only', '--format=', 'HEAD')).toBe('src/with space.ts')
   })
 })

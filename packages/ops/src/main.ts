@@ -18,6 +18,7 @@ import { plug, plugDeps } from './plug'
 import { run } from './sh'
 import { snapDeps, snapshots } from './snapshots'
 import { routeOp, vm } from './vm'
+import { wip } from './wip-mirror'
 
 const USAGE = `Usage:
   aico deploy [PROJECT] [--scope full|backend|frontend|worker|UNIT] [--worker UNIT]... [--include-all-workers]
@@ -38,6 +39,7 @@ const USAGE = `Usage:
   aico vm observe ID... --storage NAME               read-only inventory as one JSON document
   aico vm reset ID --name NAME --snapshot SNAPSHOT   roll a stopped guest back; it stays stopped
       Proxmox guests with Aico Logins' scoped API token (Proxmox enforces its pools)
+  aico wip run | restore PROJECT --to DIR            copies of the active repos (uncommitted work too) on the other full machines
   aico plug [status] [--json]                        every power plug: its sockets, machine, on or off, how long on
   aico plug on|off MACHINE|PLUG:SOCKET [--force]     switch one socket (PLUG:SOCKET, e.g. shed:1, also for an empty one)
   aico plug cycle MACHINE|PLUG:SOCKET [--wait S] [--force]  off, wait (default 10 s), on
@@ -73,6 +75,7 @@ export async function main(argv: string[], env = process.env): Promise<number> {
   const err = (line: string) => console.error(line)
   try {
     if (verb === 'backups') return await backups(rest, env)
+    if (verb === 'wip') return await wip(rest, env)
     // Help before anything reads the project, git or a host: `aico deploy --help` works anywhere.
     if (
       ['deploy', 'logs', 'snapshots', 'vm', 'plug'].includes(verb as string) &&
