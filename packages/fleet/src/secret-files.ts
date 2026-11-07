@@ -12,7 +12,10 @@ import {
 } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
-import staticLogins from './static-logins.json' with { type: 'json' }
+import staticLoginRows from './static-logins.json' with { type: 'json' }
+
+const staticLogins: { tool: string; name: string; envVar?: string; authFile?: string }[] =
+  staticLoginRows
 export function secretsDir(env = process.env): string {
   return join(
     env.AICO_DATA_DIR ||

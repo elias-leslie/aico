@@ -9,7 +9,8 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, expect, it } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+
 import { LoginStore } from './logins'
 import { loginCaller } from './logins-cli'
 import {
@@ -22,6 +23,15 @@ import {
   toolEnvironment,
   writePrivate,
 } from './secrets'
+
+// A file-based tool login for the auth-file tests; no built-in login uses one today.
+vi.mock('./static-logins.json', () => ({
+  default: [
+    { tool: 'claude-code', name: 'oauth-token', envVar: 'CLAUDE_CODE_OAUTH_TOKEN' },
+    { tool: 'pi', name: 'opencode-go', envVar: 'OPENCODE_API_KEY' },
+    { tool: 'st', name: 'sample-agent-token', authFile: '.config/agent-tokens/sample' },
+  ],
+}))
 
 let home: string
 let env: NodeJS.ProcessEnv
@@ -55,17 +65,17 @@ it('stores pushed logins privately and supplies them to the tool environment wit
 it('writes an auth file as 0600 and removes a revoked login on the next push', () => {
   const file = {
     tool: 'st',
-    name: 'summitflow-agent-token',
-    file: 'host-tool-st-summitflow-agent-token',
-    authFile: '.config/agent-tokens/summitflow',
+    name: 'sample-agent-token',
+    file: 'host-tool-st-sample-agent-token',
+    authFile: '.config/agent-tokens/sample',
     value: 'fixture-auth',
   }
   mkdirSync(join(home, '.config/agent-tokens'), { recursive: true, mode: 0o755 })
   chmodSync(join(home, '.config/agent-tokens'), 0o755)
   receiveLogins(JSON.stringify({ entries: [file], tools: ['st'] }), env)
-  expect(lstatSync(join(home, '.config/agent-tokens/summitflow')).mode & 0o777).toBe(0o600)
+  expect(lstatSync(join(home, '.config/agent-tokens/sample')).mode & 0o777).toBe(0o600)
   receiveLogins(JSON.stringify({ entries: [], tools: [] }), env)
-  expect(existsSync(join(home, '.config/agent-tokens/summitflow'))).toBe(false)
+  expect(existsSync(join(home, '.config/agent-tokens/sample'))).toBe(false)
   expect(loadToolSecrets(env)).toEqual([])
 })
 it('rejects traversal, malformed or ungranted deliveries without echoing secret input', () => {
@@ -148,7 +158,7 @@ it('refuses rotating logins and a static entry pointing at an arbitrary auth fil
   for (const entry of [
     { tool: 'codex', name: 'login', file: 'codex', authFile: '.codex/auth.json' },
     { tool: 'pi', name: 'oauth', file: 'pi', authFile: '.pi/agent/auth.json' },
-    { tool: 'st', name: 'summitflow-agent-token', file: 'st', authFile: '.ssh/authorized_keys' },
+    { tool: 'st', name: 'sample-agent-token', file: 'st', authFile: '.ssh/authorized_keys' },
   ]) {
     expect(() => parseToolSecrets([entry])).toThrow('Invalid tool login map')
     expect(() =>
@@ -167,9 +177,9 @@ it.skipIf(process.getuid?.() === 0)(
     chmodSync(folder, 0o555)
     const entry = {
       tool: 'st',
-      name: 'summitflow-agent-token',
+      name: 'sample-agent-token',
       file: 'host-tool-st',
-      authFile: '.config/agent-tokens/summitflow',
+      authFile: '.config/agent-tokens/sample',
       value: 'fixture',
     }
     try {

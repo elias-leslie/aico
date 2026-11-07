@@ -194,9 +194,9 @@ it('binds hunter list, enrollment, refresh and selected fields to owner-assigned
         ...injected.metadata,
         tool: {
           tool: 'st',
-          name: 'summitflow-agent-token',
+          name: 'sample-agent-token',
           file: 'host-tool-st',
-          authFile: '.config/agent-tokens/summitflow',
+          authFile: '.config/agent-tokens/sample',
         },
       },
       hunter,
