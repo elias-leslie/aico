@@ -122,7 +122,7 @@ export function registerSharedPageRoutes(
   router: Router,
   options: { shares: () => Promise<Share[]> },
 ): void {
-  router.on('GET', `${SHARED_PAGE_PREFIX}/*path`, async (ctx) => {
+  const serve = async (ctx: RequestContext): Promise<typeof RAW> => {
     let path: string | null = null
     try {
       path = requestedPath(ctx.params.path)
@@ -146,5 +146,8 @@ export function registerSharedPageRoutes(
       if (error instanceof Refused) return refusalPage(ctx, error, path)
       throw error
     }
-  })
+  }
+  // HEAD answers the same headers; Node leaves the body out.
+  router.on('GET', `${SHARED_PAGE_PREFIX}/*path`, serve)
+  router.on('HEAD', `${SHARED_PAGE_PREFIX}/*path`, serve)
 }

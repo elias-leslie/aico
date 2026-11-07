@@ -11,7 +11,7 @@ const share = {
   title: 'Image and prompt',
   createdAt: '2026-10-27T10:00:00.000Z',
   kind: 'files',
-  paths: ['/srv/out/image.png', '/srv/out/run/'],
+  paths: ['/srv/out/image.png', '/srv/out/run/', '/srv/out/mock.html'],
 }
 
 function json(body: unknown, status = 200) {
@@ -133,6 +133,16 @@ describe('FilesDialog', () => {
     expect(onInsertPath).toHaveBeenCalledWith('/srv/out/image.png')
     fireEvent.click(screen.getByRole('button', { name: 'Back to Shared' }))
     expect(await screen.findByText('Image and prompt')).toBeVisible()
+  })
+
+  it('opens a shared web page rendered in its own tab, with Source beside it', async () => {
+    renderDialog({ kind: 'shared' })
+    const page = await screen.findByRole('link', { name: /mock\.html/ })
+    expect(page).toHaveAttribute('href', '/api/files/page/srv/out/mock.html')
+    expect(page).toHaveAttribute('target', '_blank')
+    expect(
+      screen.getByRole('button', { name: 'View source of mock.html' }),
+    ).toBeVisible()
   })
 
   it('browses a shared folder', async () => {

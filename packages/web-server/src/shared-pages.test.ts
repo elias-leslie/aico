@@ -53,6 +53,14 @@ describe('shared pages', () => {
     expect(await res.text()).toContain('style.css')
   })
 
+  it('answers HEAD with the same headers', async () => {
+    const res = await fetch(`${server.base}/api/files/page${join(top, 'mockup', 'index.html')}`, {
+      method: 'HEAD',
+    })
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-security-policy')).toBe(SHARED_PAGE_CSP)
+  })
+
   it('serves the files beside it and under its folder, also sandboxed', async () => {
     const css = await page(join(top, 'mockup', 'style.css'))
     expect(css.status).toBe(200)
