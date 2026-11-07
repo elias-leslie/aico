@@ -110,4 +110,23 @@ ssh_peer 'for i in $(seq 1 30); do curl -fsS -o /dev/null http://127.0.0.1:3002/
   fail "Aico on $HOST did not answer its health check within 30 s"
 running="$(ssh_peer 'basename "$(readlink -f "$HOME/.local/lib/aico/ops")"')"
 [ "$running" = "$SHA" ] || fail "$HOST runs $running, not $SHA"
-echo "$HOST runs Aico $SHA and answers its health check."
+# Keep the peer's disk from filling: the running release plus the newest few (ops.json deploy.keepReleases,
+# as the workstation keeps); unfinished .partial copies go too. Releases its units or processes use stay.
+keep="$(sed -n 's/.*"keepReleases": *\([0-9]*\).*/\1/p' "$release/packages/ops/data/ops.json" | head -n 1)"
+pruned="$(ssh_peer "KEEP='${keep:-3}' RUNNING='$SHA' bash -s" <<'PRUNE'
+set -euo pipefail
+cd "$HOME/.local/lib/aico/releases"
+newest="$(ls -1dt -- [0-9a-f]*/ 2>/dev/null | tr -d / | grep -xE '[0-9a-f]{40}' | head -n "$KEEP" || true)"
+used="$(cat "$HOME"/.config/systemd/user/*.service 2>/dev/null || true; ls -l /proc/[0-9]*/cwd /proc/[0-9]*/exe 2>/dev/null || true)"
+n=0
+for d in $(ls -1A); do
+  [ "$d" = "$RUNNING" ] && continue
+  printf '%s\n' "$newest" | grep -qx -- "$d" && continue
+  printf '%s\n' "$used" | grep -qF -- "releases/$d/" && continue
+  rm -rf -- "$d"
+  n=$((n + 1))
+done
+echo "$n"
+PRUNE
+)" || pruned="?"
+echo "$HOST runs Aico $SHA and answers its health check (old releases removed: $pruned)."
