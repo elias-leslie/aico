@@ -130,6 +130,9 @@ export interface Capabilities {
   nativeAdmin: boolean
   /** Launch settings travel in AICO_ROOT_* environment variables its extension reads. */
   environmentSelection: boolean
+  /** It draws its own status line (context fill, usage) under the session, so
+   * Aico's header leaves the context number out. */
+  statusLine: boolean
   /** How Tether delivers event lines to it. */
   delivery: {
     /** The gated paste into an idle pane. */

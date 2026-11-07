@@ -324,6 +324,21 @@ describe('agent tools API', () => {
       ['shell', false],
     ])
 
+    // Which tools draw their own status line, so the header leaves context out.
+    expect(
+      (list.body as { items: { slug: string; statusLine: boolean }[] }).items.map((t) => [
+        t.slug,
+        t.statusLine,
+      ]),
+    ).toEqual([
+      ['claude-code', true],
+      ['codex', true],
+      ['agy', false],
+      ['pi', false],
+      ['aico-agent', false],
+      ['shell', false],
+    ])
+
     expect((await call('GET', '/v1/tools/claude')).body).toMatchObject({ slug: 'claude-code' })
     expect((await call('GET', '/v1/tools/opencode')).status).toBe(404)
 

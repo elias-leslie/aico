@@ -15,7 +15,7 @@ import { getWidget } from './lifecycle/catalog'
 import { lifecycleStatus } from './lifecycle/engine'
 import { createRootHandlerState, type RootHandlerState } from './lifecycle/root-control'
 import { supportsBlankSlate } from './lifecycle/tui/blank-slate'
-import { isRootCreateTool, supportsInstructions } from './lifecycle/tui/registry'
+import { drawsStatusLine, isRootCreateTool, supportsInstructions } from './lifecycle/tui/registry'
 import { learnProjects, registerLifecycleRoutes } from './lifecycle-api'
 import type { MemoryPolicyService } from './memory-guard'
 import {
@@ -97,13 +97,15 @@ function withoutHost(path: string, query: URLSearchParams): string {
 
 /** `rootCapable`: the tool can be started as a root (`POST /v1/roots`).
  * `blankSlate`: it can start a Blank Slate session. `instructions`: it can
- * take chosen instructions (`instructions` on create). */
+ * take chosen instructions (`instructions` on create). `statusLine`: it draws
+ * its own status line under the session. */
 function toolJson(tool: AgentTool): Record<string, unknown> {
   return {
     ...tool,
     rootCapable: isRootCreateTool(tool.slug),
     blankSlate: supportsBlankSlate(tool.slug),
     instructions: supportsInstructions(tool.slug),
+    statusLine: drawsStatusLine(tool.slug),
   }
 }
 

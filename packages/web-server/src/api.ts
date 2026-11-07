@@ -428,6 +428,7 @@ export function buildApi(deps: ApiDeps): Router {
         enabled: tool.enabled !== false,
         aliases: Array.isArray(tool.aliases) ? tool.aliases : [],
         context_hook: tool.contextHook ?? null,
+        status_line: tool.statusLine === true,
         created_at: iso(tool.createdAt),
         updated_at: iso(tool.updatedAt),
       }))

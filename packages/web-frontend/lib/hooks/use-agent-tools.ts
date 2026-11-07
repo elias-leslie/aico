@@ -29,6 +29,8 @@ export interface AgentTool {
   enabled: boolean
   aliases: string[]
   context_hook: string | null
+  /** The tool draws its own status line (context fill, usage) under the session. */
+  status_line: boolean
   created_at: string | null
   updated_at: string | null
 }

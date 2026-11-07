@@ -87,6 +87,7 @@ export const aicoAgent: TuiAdapter = {
     threadSubagents: false,
     nativeAdmin: false,
     environmentSelection: false,
+    statusLine: false,
     delivery: { idlePaste: true, nextTurn: false, toolResult: false },
   },
   entryApiVersion: null,

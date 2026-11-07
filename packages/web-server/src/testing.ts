@@ -93,6 +93,7 @@ export class FakeTether {
       displayOrder: 1,
       isDefault: true,
       aliases: ['cc'],
+      statusLine: true,
     },
     { slug: 'codex', name: 'Codex', enabled: false, displayOrder: 2, isDefault: false },
   ]

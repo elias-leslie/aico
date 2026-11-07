@@ -810,7 +810,9 @@ describe('projects, tools, health', () => {
       name: 'Claude',
       is_default: true,
       aliases: ['cc'],
+      status_line: true,
     })
+    expect(all[0].status_line).toBe(false)
     const enabled = (await call('GET', '/api/agent-tools?enabled_only=true')).body
     expect(enabled.map((t: { slug: string }) => t.slug)).toEqual(['shell', 'claude'])
   })

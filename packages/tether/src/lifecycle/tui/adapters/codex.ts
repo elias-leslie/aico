@@ -601,6 +601,7 @@ export const codex: TuiAdapter = {
     threadSubagents: true,
     nativeAdmin: true,
     environmentSelection: false,
+    statusLine: true,
     delivery: { idlePaste: true, nextTurn: true, toolResult: true },
   },
   entryApiVersion: 19,

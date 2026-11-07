@@ -17,6 +17,7 @@ const mockTool = (overrides: Partial<AgentTool>): AgentTool => ({
   enabled: true,
   aliases: ['claude'],
   context_hook: null,
+  status_line: false,
   created_at: null,
   updated_at: null,
   ...overrides,

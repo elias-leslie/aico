@@ -1,7 +1,18 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { ContextFillBadge } from './ContextFillBadge'
+
+const registry = vi.hoisted(() => ({
+  tools: [] as Array<{ slug: string; aliases: string[]; status_line: boolean }>,
+  isLoading: false,
+}))
+vi.mock('@/lib/hooks/use-agent-tools', () => ({
+  useAgentTools: () => ({
+    agentTools: registry.tools,
+    isLoading: registry.isLoading,
+  }),
+}))
 
 function show(mode: string, contextTokens: number | null) {
   const fetcher = vi.fn(async (_url: string) =>
@@ -15,10 +26,18 @@ function show(mode: string, contextTokens: number | null) {
   )
   return fetcher
 }
+beforeEach(() => {
+  registry.isLoading = false
+  registry.tools = [
+    { slug: 'claude-code', aliases: ['claude'], status_line: true },
+    { slug: 'codex', aliases: [], status_line: true },
+    { slug: 'pi', aliases: [], status_line: false },
+  ]
+})
 afterEach(() => vi.unstubAllGlobals())
 
-it("shows an agent session's context in use", async () => {
-  const fetcher = show('claude-code', 206_151)
+it("shows a session's context in use for a tool with no status line of its own", async () => {
+  const fetcher = show('pi', 206_151)
   const badge = await screen.findByTestId('context-fill')
   expect(badge).toHaveTextContent('206k')
   expect(badge).toHaveAttribute(
@@ -30,6 +49,24 @@ it("shows an agent session's context in use", async () => {
   )
 })
 
+it.each([['claude-code'], ['claude'], ['codex']])(
+  'leaves it to %s’s own status line, and does not even ask for the count',
+  async (mode) => {
+    const fetcher = show(mode, 133_000)
+    await Promise.resolve()
+    expect(fetcher).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('context-fill')).toBeNull()
+  },
+)
+
+it('shows nothing while the tool registry is loading, rather than flash and hide', async () => {
+  registry.isLoading = true
+  const fetcher = show('pi', 5_000)
+  await Promise.resolve()
+  expect(fetcher).not.toHaveBeenCalled()
+  expect(screen.queryByTestId('context-fill')).toBeNull()
+})
+
 it('shows nothing for a shell, or before a count is read', async () => {
   const shell = show('shell', 5)
   await Promise.resolve()
@@ -38,7 +75,7 @@ it('shows nothing for a shell, or before a count is read', async () => {
 })
 
 it('shows nothing, not zero, when no count is read yet', async () => {
-  const fetcher = show('codex', null)
+  const fetcher = show('pi', null)
   await vi.waitFor(() => expect(fetcher).toHaveBeenCalled())
   await Promise.resolve()
   expect(screen.queryByTestId('context-fill')).toBeNull()

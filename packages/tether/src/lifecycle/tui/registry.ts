@@ -40,6 +40,11 @@ export function supportsInstructions(slug: string): boolean {
   return adapterOf(slug)?.capabilities.instructions ?? false
 }
 
+/** The tool draws its own status line under the session (`capabilities.statusLine`). */
+export function drawsStatusLine(slug: string): boolean {
+  return adapterOf(slug)?.capabilities.statusLine ?? false
+}
+
 /** Tools Tether can start as a root: exactly the slugs with a resume adapter,
  * since a root must be resumable after a crash. Canonical slugs only, as the
  * root digest covers the tool string as sent. */

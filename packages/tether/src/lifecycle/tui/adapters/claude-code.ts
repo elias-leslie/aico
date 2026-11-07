@@ -635,6 +635,7 @@ export const claudeCode: TuiAdapter = {
     threadSubagents: false,
     nativeAdmin: false,
     environmentSelection: false,
+    statusLine: true,
     delivery: { idlePaste: true, nextTurn: true, toolResult: true },
   },
   entryApiVersion: 15,

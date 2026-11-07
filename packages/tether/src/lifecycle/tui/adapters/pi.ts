@@ -301,6 +301,7 @@ export const pi: TuiAdapter = {
     threadSubagents: false,
     nativeAdmin: false,
     environmentSelection: true,
+    statusLine: false,
     delivery: { idlePaste: true, nextTurn: true, toolResult: true },
   },
   entryApiVersion: 20,

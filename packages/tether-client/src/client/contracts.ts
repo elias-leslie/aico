@@ -296,6 +296,8 @@ export interface TetherTool {
   blankSlate?: boolean
   /** It can take chosen instructions (`createSession({ instructions })`). */
   instructions?: boolean
+  /** It draws its own status line (context, usage) under the session. */
+  statusLine?: boolean
 }
 
 export interface TetherProject {
