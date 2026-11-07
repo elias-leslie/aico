@@ -46,6 +46,37 @@ import { run } from './sh'
 const repo = new URL('../../..', import.meta.url).pathname.replace(/\/$/, '')
 const gitAt = (root: string) => (args: string[]) => run('git', ['-C', root, ...args]).out.trim()
 
+/** A pid nothing is running as: a short-lived child's, rechecked in case the number was reused. */
+function deadPid(): number {
+  for (;;) {
+    const pid = spawnSync('true').pid as number
+    try {
+      process.kill(pid, 0)
+    } catch {
+      return pid
+    }
+  }
+}
+
+/** How many `flock` processes hold or are queued on this lock file right now (the holder stays alive beside its command). */
+function lockClaimants(path: string): () => number {
+  return () =>
+    readdirSync('/proc').filter((entry) => {
+      if (!/^\d+$/.test(entry)) return false
+      try {
+        const args = readFileSync(`/proc/${entry}/cmdline`, 'utf8').split('\0')
+        return args[0].endsWith('flock') && args.includes(path)
+      } catch {
+        return false
+      }
+    }).length
+}
+
+/** Polls a real condition; the test's own timeout is the only bound. */
+async function until(condition: () => boolean) {
+  while (!condition()) await new Promise((resolve) => setTimeout(resolve, 2))
+}
+
 it('discovers the user bus for every deploy command, preserving explicit settings', () => {
   const runtime = `/run/user/${process.getuid?.() ?? 0}`
   const env = defaultDeps({}).env
@@ -669,7 +700,7 @@ describe('deploy', () => {
 
   it('removes staging a dead deploy left, under the lock', async () => {
     const { root, deps, lines } = setup()
-    const dead = spawnSync('true').pid as number
+    const dead = deadPid()
     const sha = 'a'.repeat(40)
     mkdirSync(join(deps.releasesDir, `.${sha}.${dead}`), { recursive: true })
     writeFileSync(join(deps.releasesDir, `.${sha}.${dead}.tar`), '')
@@ -685,17 +716,23 @@ describe('deploy', () => {
     const { deps } = setup()
     mkdirSync(deps.releasesDir, { recursive: true })
     const lock = join(deps.releasesDir, '.deploy.pid')
-    const stale = `${spawnSync('true').pid} gone\n`
+    const stale = `${deadPid()} gone\n`
     writeFileSync(lock, stale)
-    deps.sleep = (ms) => new Promise((resolve) => setTimeout(resolve, Math.min(ms, 5)))
+    // Neither waiter sees a live owner, so neither may ever sleep waiting for one.
+    deps.sleep = async () => {
+      throw new Error('a waiter slept on an owner that is not alive')
+    }
     const events: string[] = []
     let working = 0
+    const claimants = lockClaimants(join(deps.releasesDir, '.deploy.flock'))
     const work = (name: string) =>
       withLock(deps, async (held) => {
         expect(++working).toBe(1)
         events.push(`${name} in`)
         expect(held()).toBe(true)
-        await new Promise((resolve) => setTimeout(resolve, 20))
+        // The first holder keeps the lock until the other is really queued on it (the kernel
+        // lock's state, not a delay); the second then runs straight through.
+        if (events.length === 1) await until(() => claimants() === 2)
         events.push(`${name} out`)
         working--
       })
