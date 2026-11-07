@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useServerReach } from '@/lib/frame/server-reach'
 import { useClock } from '@/lib/hooks/use-clock'
 import {
   type ProblemKind,
@@ -104,6 +105,8 @@ export function ProjectList({
   onSearch: (value: string) => void
 }) {
   const now = useClock(30_000)
+  // When the whole server is down the top bar's Retry is the only one.
+  const down = useServerReach().down
   const [archivedOpen, setArchivedOpen] = useState(false)
   const { active, archived } = splitProjects(projects ?? [], search)
   const searching = search.trim() !== ''
@@ -124,16 +127,7 @@ export function ProjectList({
       {staleAt && (
         <div className={`${styles.note} ${styles.stale}`}>
           Couldn’t refresh · as of {staleAt}
-          <button type="button" className="lantern-btn small" onClick={onRetry}>
-            Retry
-          </button>
-        </div>
-      )}
-      <div className={styles.list}>
-        {loading && <Skeleton />}
-        {failed && (
-          <div className={styles.note} role="alert">
-            Couldn’t load projects
+          {!down && (
             <button
               type="button"
               className="lantern-btn small"
@@ -141,6 +135,23 @@ export function ProjectList({
             >
               Retry
             </button>
+          )}
+        </div>
+      )}
+      <div className={styles.list}>
+        {loading && <Skeleton />}
+        {failed && (
+          <div className={styles.note} role="alert">
+            Couldn’t load projects
+            {!down && (
+              <button
+                type="button"
+                className="lantern-btn small"
+                onClick={onRetry}
+              >
+                Retry
+              </button>
+            )}
           </div>
         )}
         {projects && projects.length === 0 && (

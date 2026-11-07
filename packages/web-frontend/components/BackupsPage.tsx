@@ -9,6 +9,7 @@ import {
   groupBySource,
   targetLabel,
 } from '@/lib/backups'
+import { useServerReach } from '@/lib/frame/server-reach'
 import { shortWhen } from '@/lib/short-when'
 import styles from './BackupsPage.module.css'
 
@@ -139,6 +140,8 @@ function Group({
 }
 
 export function BackupsPage() {
+  // When the whole server is down the top bar's Retry is the only one.
+  const down = useServerReach().down
   const [data, setData] = useState<Overview | null>(null),
     [error, setError] = useState(''),
     [loadedAt, setLoadedAt] = useState<number | null>(null),
@@ -203,13 +206,15 @@ export function BackupsPage() {
               ? `Can't refresh the list. Showing what was read at ${new Date(loadedAt ?? Date.now()).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.`
               : `Can't read backups. ${error}`}
           </p>
-          <button
-            type="button"
-            className="lantern-btn ghost small"
-            onClick={load}
-          >
-            Try again
-          </button>
+          {!down && (
+            <button
+              type="button"
+              className="lantern-btn ghost small"
+              onClick={load}
+            >
+              Try again
+            </button>
+          )}
         </div>
       )}
       {!data && !error && <p role="status">Loading backups…</p>}

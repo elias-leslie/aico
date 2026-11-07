@@ -4,6 +4,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { BackupEntry } from '@/lib/backups'
+import { markFailed, resetServerReachForTest } from '@/lib/frame/server-reach'
 import { BackupsPage } from './BackupsPage'
 
 const copy = (over: Partial<BackupEntry>): BackupEntry => ({
@@ -121,5 +122,18 @@ describe('BackupsPage', () => {
       ),
     )
     expect(screen.queryByTestId('backups-summary')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeVisible()
+  })
+
+  it('leaves Retry to the top bar while the whole server is down', async () => {
+    answer('down')
+    markFailed()
+    try {
+      render(<BackupsPage />)
+      await waitFor(() => expect(screen.getByRole('alert')).toBeVisible())
+      expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull()
+    } finally {
+      resetServerReachForTest()
+    }
   })
 })
