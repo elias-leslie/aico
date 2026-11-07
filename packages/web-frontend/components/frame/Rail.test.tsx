@@ -64,26 +64,23 @@ beforeEach(() => {
 })
 
 describe('Rail', () => {
-  it('opens each data icon as a pop-out holding that glance, with its own Open', () => {
+  it('opens each data icon as a pop-out holding that glance, with no Open link', () => {
     render(<Rail slots={[]} onSelect={vi.fn()} />)
-    const cases: [string, string, string, 'wide' | 'full', string][] = [
-      ['Status: 9 problems', 'Status', '/status', 'wide', 'status body'],
-      ['Quota', 'Quota', '/quota', 'wide', 'quota body'],
-      ['Projects', 'Projects', '/projects', 'wide', 'projects body'],
-      ['Backups', 'Backups', '/backups', 'full', 'backups body'],
-      ['Machines', 'Machines', '/machines', 'full', 'machines body'],
-      ['Recent', 'Recent', '/history', 'wide', 'recent body'],
+    const cases: [string, string, string][] = [
+      ['Status: 9 problems', 'Status', 'status body'],
+      ['Quota', 'Quota', 'quota body'],
+      ['Projects', 'Projects', 'projects body'],
+      ['Backups', 'Backups', 'backups body'],
+      ['Machines', 'Machines', 'machines body'],
+      ['Recent', 'Recent', 'recent body'],
     ]
-    for (const [label, title, href, where, body] of cases) {
+    for (const [label, title, body] of cases) {
       const icon = screen.getByRole('button', { name: label })
       expect(icon).toHaveAttribute('aria-haspopup', 'dialog')
       fireEvent.click(icon)
       const dialog = screen.getByRole('dialog', { name: title })
       expect(within(dialog).getByText(body)).toBeVisible()
-      fireEvent.click(
-        within(dialog).getByRole('link', { name: `Open ${title}` }),
-      )
-      expect(state.open).toHaveBeenLastCalledWith(href, where)
+      expect(within(dialog).queryByRole('link')).toBeNull()
       fireEvent.keyDown(dialog, { key: 'Escape' })
       expect(screen.queryByRole('dialog')).toBeNull()
     }
@@ -103,24 +100,20 @@ describe('Rail', () => {
     expect(state.open).not.toHaveBeenCalled()
   })
 
-  it('ends with Notes, Capture, the Settings menu and Hide, which hides the side', () => {
+  it('ends with Notes, Capture and the Settings menu, with no hide or panel button of its own', () => {
     render(<Rail slots={[]} onSelect={vi.fn()} />)
     const names = screen
       .getAllByRole('button')
       .map((button) => button.getAttribute('aria-label') ?? button.textContent)
-    expect(names.slice(-4)).toEqual([
+    expect(names.slice(-3)).toEqual([
       'Notes: opens in its own window',
       'Capture',
       'Settings',
-      'Hide the side · Alt+0',
     ])
+    expect(names.join('|')).not.toMatch(/Hide the side|Open the panel/)
     const settings = screen.getByRole('button', { name: 'Settings' })
     expect(settings).toHaveAttribute('aria-haspopup', 'menu')
     fireEvent.click(settings)
     expect(screen.getByRole('menuitem', { name: /Logins/ })).toBeVisible()
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Hide the side · Alt+0' }),
-    )
-    expect(state.setTier).toHaveBeenCalledWith('hidden')
   })
 })

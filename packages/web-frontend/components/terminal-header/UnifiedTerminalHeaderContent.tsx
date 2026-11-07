@@ -49,8 +49,7 @@ export const UnifiedTerminalHeaderContent = memo(
     // The title only where no list shows this session's row beside it: Rail,
     // a hidden side, a phone. Rename still opens the name field.
     const frame = useFrame()
-    const listShowsRow =
-      !!frame?.docked && (frame.tier === 'panel' || frame.tier === 'wide')
+    const listShowsRow = !!frame?.docked && frame.tier === 'panel'
     const paneId = isPaneSlot(slot) ? slot.paneId : null
     // A session the backend lets us rename keeps its name in Tether (Aico
     // shows it too); a pane name is only for sessions Tether does not own.

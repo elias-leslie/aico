@@ -14,7 +14,11 @@ import {
   resetServerReachForTest,
 } from '@/lib/frame/server-reach'
 import { publishShownSession } from '@/lib/frame/shown-session'
-import { COMPACT_TIER_STORAGE_KEY, TIER_STORAGE_KEY } from '@/lib/frame/tiers'
+import {
+  COMPACT_TIER_STORAGE_KEY,
+  PANEL_WIDTH_STORAGE_KEY,
+  TIER_STORAGE_KEY,
+} from '@/lib/frame/tiers'
 import { FrameProvider, useFrame } from './FrameContext'
 import { LeftSide } from './LeftSide'
 
@@ -66,12 +70,20 @@ function show(page: string | null = null) {
         onNewSession={vi.fn()}
         rail={<p>Rail marks</p>}
         panel={<p>Session list</p>}
-        wideHome={<p>Status home</p>}
       />
       <input aria-label="Somewhere to type" />
     </FrameProvider>,
   )
 }
+
+/** jsdom has no layout: the side is `width` wide when a drag starts, in a 1000px window. */
+const sideWidth = (width: number) =>
+  vi
+    .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+    .mockImplementation(function (this: HTMLElement) {
+      const side = this.dataset.testid === 'frame-side'
+      return { width: side ? width : 1000, height: 0 } as DOMRect
+    })
 
 const tier = () => screen.getByTestId('tier').textContent
 const alt = (code: string) =>
@@ -84,11 +96,14 @@ beforeEach(() => {
   nav.roomy = true
   nav.push.mockClear()
 })
-afterEach(() => resetServerReachForTest())
+afterEach(() => {
+  vi.restoreAllMocks()
+  resetServerReachForTest()
+})
 
 describe('the left side on a desktop', () => {
   it('a desktop window snapped narrow keeps the session with the rail, and remembers its own width', () => {
-    window.localStorage.setItem(TIER_STORAGE_KEY, '"wide"')
+    window.localStorage.setItem(TIER_STORAGE_KEY, '"panel"')
     nav.roomy = false
     const first = show()
     expect(tier()).toBe('rail')
@@ -99,11 +114,11 @@ describe('the left side on a desktop', () => {
     expect(window.localStorage.getItem(COMPACT_TIER_STORAGE_KEY)).toBe(
       '"panel"',
     )
-    expect(window.localStorage.getItem(TIER_STORAGE_KEY)).toBe('"wide"')
+    expect(window.localStorage.getItem(TIER_STORAGE_KEY)).toBe('"panel"')
     first.unmount()
     nav.roomy = true
     show()
-    expect(tier()).toBe('wide')
+    expect(tier()).toBe('panel')
   })
 
   it('opens at Panel and keeps the chosen width on this device, never Full', () => {
@@ -119,32 +134,50 @@ describe('the left side on a desktop', () => {
     expect(tier()).toBe('rail')
   })
 
-  it('steps with Alt+[ and Alt+], and Wide with no page shows the panel and Status', () => {
+  it('an old hidden side opens as the panel, as there is no hidden any more', () => {
+    window.localStorage.setItem(TIER_STORAGE_KEY, '"hidden"')
     show()
-    alt('BracketRight')
-    expect(tier()).toBe('wide')
+    expect(tier()).toBe('panel')
     expect(screen.getByText('Session list')).toBeVisible()
-    expect(screen.getByText('Status home')).toBeVisible()
-    alt('BracketLeft')
-    alt('BracketLeft')
-    expect(tier()).toBe('rail')
-    alt('BracketLeft')
-    expect(tier()).toBe('hidden')
-    expect(screen.queryByText('Rail marks')).toBeNull()
-    expect(screen.queryByText('Session list')).toBeNull()
-    expect(screen.getByTestId('frame-handle')).toBeInTheDocument()
-    alt('BracketLeft')
-    expect(tier()).toBe('hidden')
-    alt('Digit1')
-    expect(tier()).toBe('rail')
   })
 
-  it('Full from home opens Status in place, and Esc comes back to Panel', () => {
+  it('Alt+[ and Alt+] flip between the panel and the rail, and there is no Full by key', () => {
     show()
+    alt('BracketRight')
+    expect(tier()).toBe('rail')
+    alt('BracketLeft')
+    expect(tier()).toBe('panel')
+    alt('Digit1')
+    expect(tier()).toBe('rail')
+    alt('Digit0')
+    alt('Digit3')
     alt('Digit4')
+    expect(tier()).toBe('rail')
+    expect(nav.push).not.toHaveBeenCalled()
+  })
+
+  it('has one toggle at the top left of the rail and of the panel, and no arrows', () => {
+    show()
+    const toggle = screen.getByTestId('frame-toggle')
+    expect(toggle).toHaveAccessibleName('Collapse the side')
+    expect(toggle).toHaveAttribute('title', 'Collapse the side · Alt+[')
+    expect(screen.getAllByRole('button', { name: /side$/ })).toHaveLength(1)
+    expect(screen.queryByTestId('frame-narrower')).toBeNull()
+    expect(screen.queryByTestId('frame-wider')).toBeNull()
+    fireEvent.click(toggle)
+    expect(tier()).toBe('rail')
+    expect(screen.getByText('Rail marks')).toBeVisible()
+    const again = screen.getByTestId('frame-toggle')
+    expect(again).toHaveAccessibleName('Expand the side')
+    expect(screen.getAllByRole('button', { name: /side$/ })).toHaveLength(1)
+    fireEvent.click(again)
+    expect(tier()).toBe('panel')
+  })
+
+  it('Esc leaves a page for the session while typing stays with the field', () => {
+    nav.pathname = '/status'
+    show('Status')
     expect(tier()).toBe('full')
-    expect(nav.push).toHaveBeenCalledWith('/status')
-    // Esc while typing stays with the field.
     fireEvent.keyDown(screen.getByLabelText('Somewhere to type'), {
       key: 'Escape',
     })
@@ -200,41 +233,43 @@ describe('the left side on a desktop', () => {
     expect(tier()).toBe('panel')
   })
 
-  it('the narrower and wider buttons step, and double-clicking the edge resets to Panel', () => {
+  it('double-clicking the edge resets to the default Panel', () => {
+    window.localStorage.setItem(TIER_STORAGE_KEY, '"rail"')
     show()
-    fireEvent.click(screen.getByTestId('frame-wider'))
-    expect(tier()).toBe('wide')
     fireEvent.doubleClick(screen.getByTestId('frame-handle'))
     expect(tier()).toBe('panel')
-    fireEvent.click(screen.getByTestId('frame-narrower'))
-    expect(tier()).toBe('rail')
   })
 
-  it('a drag snaps to the nearest width when let go, not before', () => {
+  it('a drag in lands on the rail when let go, not before', () => {
+    sideWidth(360)
     show()
     const handle = screen.getByTestId('frame-handle')
     fireEvent.pointerDown(handle, { button: 0, clientX: 360 })
-    fireEvent.pointerMove(handle, { clientX: 900 })
+    fireEvent.pointerMove(handle, { clientX: 100 })
     expect(tier()).toBe('panel')
-    expect(screen.getByText('Wide')).toBeInTheDocument()
     expect(screen.getByTestId('snap-target')).toHaveTextContent(
-      'Release for Wide',
+      'Release for the rail',
     )
-    fireEvent.pointerUp(handle, { clientX: 900 })
-    expect(tier()).toBe('wide')
+    fireEvent.pointerUp(handle, { clientX: 100 })
+    expect(tier()).toBe('rail')
     expect(screen.queryByTestId('snap-target')).toBeNull()
   })
 
-  it('names the width a drag in between will snap to', () => {
+  it('a drag out sets the panel wider, kept on this device, and the edge resets it', () => {
+    sideWidth(360)
     show()
     const handle = screen.getByTestId('frame-handle')
     fireEvent.pointerDown(handle, { button: 0, clientX: 360 })
-    fireEvent.pointerMove(handle, { clientX: 600 })
+    fireEvent.pointerMove(handle, { clientX: 520 })
     expect(screen.getByTestId('snap-target')).toHaveTextContent(
-      'Release for Panel',
+      'Release for a 520px panel',
     )
-    fireEvent.pointerUp(handle, { clientX: 600 })
+    fireEvent.pointerUp(handle, { clientX: 520 })
     expect(tier()).toBe('panel')
+    expect(window.localStorage.getItem(PANEL_WIDTH_STORAGE_KEY)).toBe('520')
+    expect(screen.getByTestId('frame-side').style.width).toBe('520px')
+    fireEvent.doubleClick(screen.getByTestId('frame-handle'))
+    expect(screen.getByTestId('frame-side').style.width).toBe('360px')
   })
 
   it('still works when the browser blocks storage', () => {
@@ -245,8 +280,8 @@ describe('the left side on a desktop', () => {
       throw new Error('blocked')
     })
     show()
-    alt('Digit3')
-    expect(tier()).toBe('wide')
+    alt('Digit1')
+    expect(tier()).toBe('rail')
     vi.restoreAllMocks()
   })
 })
@@ -289,13 +324,7 @@ describe('when the server cannot be reached', () => {
   it('keeps what it last knew and stops saying Loading sessions (the offline strip says why)', () => {
     const side = (
       <FrameProvider page={null}>
-        <LeftSide
-          loading
-          onNewSession={vi.fn()}
-          rail={null}
-          panel={null}
-          wideHome={null}
-        />
+        <LeftSide loading onNewSession={vi.fn()} rail={null} panel={null} />
       </FrameProvider>
     )
     render(side)

@@ -1,0 +1,131 @@
+/* Machines in the Panel and the rail pop-out: one column at any width (the pop-out is 380px on a
+   desktop), so layout never reads the window. Lantern tokens only. */
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.plain {
+  margin: 0;
+  color: var(--mist);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+}
+.row:first-child {
+  border-top: 0;
+}
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+.head :global(.status-chip) {
+  flex: none;
+  min-height: 0;
+}
+.name {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border-radius: 4px;
+  color: var(--bone);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+button.name {
+  min-height: 28px;
+  transition: color 0.18s var(--ease-arrival);
+}
+button.name:hover {
+  color: var(--lantern);
+}
+.name:focus-visible {
+  outline: 2px solid var(--lantern);
+  outline-offset: 1px;
+}
+.tag {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border: 1px solid var(--line-2);
+  border-radius: 9px;
+  color: var(--mist);
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.line {
+  margin: 0;
+  color: var(--mist);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 2px;
+}
+.controls:empty {
+  display: none;
+}
+.err {
+  margin: 0;
+  color: var(--ember);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+.note[data-bad] {
+  border-color: var(--ember);
+}
+.note p {
+  flex: 1 1 180px;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.refresh {
+  align-self: flex-start;
+}
+@media (max-width: 1023px) {
+  button.name,
+  .controls :global(.lantern-btn),
+  .note :global(.lantern-btn),
+  .refresh {
+    min-height: 44px;
+  }
+}

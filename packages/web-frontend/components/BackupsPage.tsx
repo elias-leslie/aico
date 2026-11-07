@@ -7,11 +7,15 @@ import {
   type BackupEntry,
   type BackupTarget,
   backupSummary,
+  copyWord,
   groupBySource,
+  runnableTargets,
   spanText,
   targetLabel,
 } from '@/lib/backups'
+import { backupsApi } from '@/lib/backups-api'
 import { useServerReach } from '@/lib/frame/server-reach'
+import { useBackupRun } from '@/lib/hooks/use-backup-run'
 import { shortWhen } from '@/lib/short-when'
 import styles from './BackupsPage.module.css'
 
@@ -36,26 +40,7 @@ interface FileNode {
 }
 const title = targetLabel
 const when = shortWhen
-async function api<T>(path: string, body?: unknown): Promise<T> {
-  const response = await fetch(
-    path,
-    body === undefined
-      ? { cache: 'no-store' }
-      : {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(body),
-        },
-  ).catch(() => {
-    throw new Error('Aico is not answering.')
-  })
-  const value = await response.json().catch(() => ({}))
-  if (!response.ok)
-    throw new Error(
-      value.detail || value.error || `Aico answered ${response.status}.`,
-    )
-  return value as T
-}
+const api = backupsApi
 function Header({ restore = false }: { restore?: boolean }) {
   return (
     <header>
@@ -71,13 +56,7 @@ function Header({ restore = false }: { restore?: boolean }) {
     </header>
   )
 }
-const BADGE: Record<string, string> = {
-  ok: 'Current',
-  failed: 'Failed',
-  off: 'Archived',
-}
-const badgeWord = (row: Entry) =>
-  row.running ? 'Copying…' : (BADGE[row.state] ?? 'Needs a fresh copy')
+const badgeWord = copyWord
 
 function Copy({ row, machine }: { row: Entry; machine: boolean }) {
   return (
@@ -185,8 +164,6 @@ export function BackupsPage() {
   const [data, setData] = useState<Overview | null>(null),
     [error, setError] = useState(''),
     [loadedAt, setLoadedAt] = useState<number | null>(null),
-    [message, setMessage] = useState(''),
-    [busy, setBusy] = useState<Target | null>(null),
     [search, setSearch] = useState('')
   const load = useCallback(() => {
     api<Overview>('/api/backups')
@@ -202,21 +179,7 @@ export function BackupsPage() {
     const timer = setInterval(load, 15000)
     return () => clearInterval(timer)
   }, [load])
-  async function run(target: Target) {
-    setBusy(target)
-    setMessage('')
-    try {
-      const result = await api<{ message: string }>('/api/backups/run', {
-        target,
-      })
-      setMessage(result.message || `${title(target)} is starting a copy.`)
-      load()
-    } catch (error) {
-      setMessage((error as Error).message)
-    } finally {
-      setBusy(null)
-    }
-  }
+  const { busy, message, run } = useBackupRun(load)
   const needle = search.trim().toLowerCase()
   const rows = data?.entries.filter(
     (row) =>
@@ -233,9 +196,7 @@ export function BackupsPage() {
   const away = groups.filter((group) => group.state === 'off' && !group.retired)
   const machines = new Set(data?.entries.map((row) => row.machine))
   const manyMachines = machines.size > 1
-  const runnable = (['native', 'drive', 'append'] as const).filter((target) =>
-    data?.entries.some((row) => row.target === target && row.state !== 'off'),
-  )
+  const runnable = runnableTargets(data?.entries ?? [])
   return (
     <main className={styles.page} data-testid="backups-page">
       <Header />

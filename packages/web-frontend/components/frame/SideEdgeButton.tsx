@@ -1,18 +1,19 @@
 'use client'
 
-import { Menu, PanelLeftOpen } from 'lucide-react'
+import { Menu } from 'lucide-react'
 import { useNeedsYouCounts } from '@/lib/hooks/use-needs-you'
 import { type Frame, useFrame } from './FrameContext'
 
 /** Whether the side is out of sight, so the session's own bar carries the way
- * back to it: hidden beside the session, or (a phone) slid away. */
+ * back to it: only on a phone, where it slides away. On a desktop the side is
+ * always there, as the panel or the rail, with its own toggle. */
 export function sideIsAway(frame: Frame | null): frame is Frame {
-  return !!frame && (!frame.docked || frame.tier === 'hidden')
+  return !!frame && !frame.docked
 }
 
-/** The left edge of the session's bar while the side is out of sight: Show
- * the side (hidden), or the menu on a phone. Needs you waiting shows as an
- * amber count on it, only above 0; an unread count says nothing. */
+/** The left edge of the session's bar while the side is slid away: the menu on
+ * a phone. Needs you waiting shows as an amber count on it, only above 0; an
+ * unread count says nothing. */
 export function SideEdgeButton({
   dockedOnly = false,
 }: {
@@ -26,24 +27,18 @@ export function SideEdgeButton({
 
 function EdgeButton({ frame }: { frame: Frame }) {
   const needs = useNeedsYouCounts()
-  const waiting = needs.count > 0 ? `${needs.count} need you` : null
-  const phone = !frame.docked
-  const label = phone ? 'Sessions and everything else' : 'Show the side'
-  const name = waiting ? `${label} · ${waiting}` : label
+  const label = 'Sessions and everything else'
+  const name = needs.count > 0 ? `${label} · ${needs.count} need you` : label
   return (
     <button
       type="button"
       className="lantern-icon-btn compact relative flex-none"
       aria-label={name}
-      title={phone || waiting ? name : `${label} · Alt+1`}
-      onClick={() => (phone ? frame.setSheetOpen(true) : frame.setTier('rail'))}
-      data-testid={phone ? 'frame-menu' : 'frame-side-restore'}
+      title={name}
+      onClick={() => frame.setSheetOpen(true)}
+      data-testid="frame-menu"
     >
-      {phone ? (
-        <Menu className="h-5 w-5" strokeWidth={1.7} />
-      ) : (
-        <PanelLeftOpen className="h-5 w-5" strokeWidth={1.7} />
-      )}
+      <Menu className="h-5 w-5" strokeWidth={1.7} />
       {needs.count > 0 && (
         <span aria-hidden="true" className="lantern-rail-count">
           {needs.count}

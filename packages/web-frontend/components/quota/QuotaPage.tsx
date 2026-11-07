@@ -99,7 +99,7 @@ export function QuotaPage() {
   )
 }
 
-function detailOf(error: unknown): string {
+export function detailOf(error: unknown): string {
   if (error instanceof ApiError)
     return error.status === 503
       ? `${error.message} It is read every few minutes once Aico has collected it.`
@@ -166,6 +166,22 @@ function ProviderCard({
           <span className={styles.muted}>{provider.plan} plan</span>
         )}
       </div>
+      <ProviderDetails provider={provider} now={now} />
+    </section>
+  )
+}
+
+/** What a provider's card says under its name: the answer, its windows, credits, spend and the project split.
+ * The Panel's Quota row opens to the same thing. */
+export function ProviderDetails({
+  provider,
+  now,
+}: {
+  provider: UsageProvider
+  now: number
+}) {
+  return (
+    <>
       <p className={styles.summary}>{provider.answer}.</p>
       {provider.problem && (
         <p className={styles.problem}>
@@ -188,7 +204,7 @@ function ProviderCard({
       )}
       <Spend provider={provider} now={now} />
       <ByProject provider={provider} />
-    </section>
+    </>
   )
 }
 

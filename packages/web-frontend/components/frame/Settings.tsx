@@ -24,7 +24,7 @@ function openPlace(
 ) {
   if (!frame) return
   event.preventDefault()
-  frame.open(href, 'full')
+  frame.open(href)
 }
 
 /** The gear in the side's footer: a small menu listing the setup places (desktop and snapped windows).

@@ -1,0 +1,325 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { fireEvent, render, screen, within } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { HostChoice } from '@/lib/hooks/use-hosts'
+import type { StatusRow, StatusView } from '@/lib/status'
+import { GlanceMachines, useMachinesGlance } from './GlanceMachines'
+
+const data = vi.hoisted(() => ({
+  status: {} as Record<string, unknown>,
+  hosts: {} as Record<string, unknown>,
+  guests: {} as Record<string, unknown>,
+  power: vi.fn(async () => ({})),
+  machinePower: vi.fn(async () => ({})),
+  autostart: vi.fn(async () => ({})),
+}))
+vi.mock('@/lib/hooks/use-status', () => ({ useStatus: () => data.status }))
+vi.mock('@/lib/hooks/use-hosts', () => ({
+  useHosts: () => data.hosts,
+  isStarting: (h: { wake?: { state?: string } | null }) =>
+    h.wake?.state === 'starting',
+}))
+vi.mock('@/lib/hooks/use-host-admin', () => ({
+  HostCallError: class extends Error {
+    status = 409
+  },
+  powerHost: (...args: unknown[]) =>
+    (data.power as (...a: unknown[]) => unknown)(...args),
+  trustHost: vi.fn(),
+}))
+vi.mock('@/lib/hooks/use-machine-guests', () => ({
+  useMachineGuests: () => data.guests,
+  powerMachine: (...args: unknown[]) =>
+    (data.machinePower as (...a: unknown[]) => unknown)(...args),
+  setAutostart: (...args: unknown[]) =>
+    (data.autostart as (...a: unknown[]) => unknown)(...args),
+}))
+
+const row = (over: Partial<StatusRow>): StatusRow => ({
+  id: 'x/machine',
+  what: 'x',
+  kind: 'machine',
+  machine: 'x',
+  state: 'ok',
+  meaning: 'Up.',
+  updated_at: new Date().toISOString(),
+  shown: 'ok',
+  shown_since: null,
+  ...over,
+})
+const view = (rows: StatusRow[]) =>
+  ({
+    rows,
+    machine: 'davion-sidarli',
+    summary: {},
+    generated_at: '',
+  }) as unknown as StatusView
+const ok = (v: StatusView | null, over: object = {}) => ({
+  view: v,
+  loading: false,
+  failed: v === null,
+  stale: false,
+  readAt: Date.now(),
+  refetch: vi.fn(),
+  refreshing: false,
+  ...over,
+})
+const host = (over: Partial<HostChoice> = {}): HostChoice => ({
+  name: 'agent-work',
+  state: 'connected',
+  canSleep: true,
+  sessions: 0,
+  ...over,
+})
+const guest = (over: Record<string, unknown> = {}) => ({
+  machine: 'ominull-hub',
+  vmid: 150,
+  kind: 'ct',
+  state: 'running',
+  since: null,
+  busy: null,
+  autostart: true,
+  intent: 'always',
+  powerable: true,
+  cpus: 2,
+  memoryMb: 1024,
+  projects: [],
+  ...over,
+})
+const guests = (...list: Record<string, unknown>[]) => {
+  data.guests = {
+    guests: list,
+    failure: null,
+    isLoading: false,
+    refetch: vi.fn(),
+  }
+}
+
+const ROWS = [
+  row({ id: 'davion-sidarli/machine', machine: 'davion-sidarli' }),
+  row({ id: 'ominull.machine', machine: 'ominull-hub' }),
+  row({
+    id: 'fleet/davion-sidarli/agent-work',
+    machine: 'agent-work',
+    shown: 'off',
+  }),
+]
+const render_ = () =>
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <GlanceMachines />
+    </QueryClientProvider>,
+  )
+const Head = () => {
+  const head = useMachinesGlance()
+  return (
+    <p data-testid="head" data-tone={head.tone ?? ''}>
+      {head.value}
+    </p>
+  )
+}
+
+beforeEach(() => {
+  data.power.mockClear()
+  data.machinePower.mockClear()
+  data.autostart.mockClear()
+  data.status = ok(view(ROWS))
+  data.hosts = {
+    hosts: [host()],
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }
+  data.guests = {
+    guests: null,
+    failure: null,
+    isLoading: false,
+    refetch: vi.fn(),
+  }
+})
+
+describe('GlanceMachines', () => {
+  it('lists every machine with its chip and what it is for', () => {
+    guests(guest())
+    render_()
+    expect(screen.getAllByRole('listitem').length).toBeGreaterThanOrEqual(3)
+    const hub = within(screen.getByTestId('glance-machine-ominull-hub'))
+    expect(hub.getByText('On')).toBeVisible()
+    expect(hub.getByText('Always on')).toBeVisible()
+    expect(
+      within(screen.getByTestId('glance-machine-agent-work')).getByText(
+        'Runs sessions',
+      ),
+    ).toBeVisible()
+  })
+
+  it('asks before shutting down, then does it and reports the move', async () => {
+    guests(guest())
+    render_()
+    const hub = within(screen.getByTestId('glance-machine-ominull-hub'))
+    fireEvent.click(hub.getByRole('button', { name: 'Shut down' }))
+    expect(data.machinePower).not.toHaveBeenCalled()
+    expect(screen.getByText('Shut down ominull-hub?')).toBeVisible()
+    fireEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: 'Shut down',
+      }),
+    )
+    await vi.waitFor(() =>
+      expect(data.machinePower).toHaveBeenCalledWith(
+        'ominull-hub',
+        'off',
+        true,
+      ),
+    )
+  })
+
+  it('keeps the dialog and says why when a restart is refused', async () => {
+    guests(guest())
+    data.machinePower.mockRejectedValueOnce(new Error('Proxmox refused.'))
+    render_()
+    fireEvent.click(
+      within(screen.getByTestId('glance-machine-ominull-hub')).getByRole(
+        'button',
+        {
+          name: 'Restart',
+        },
+      ),
+    )
+    fireEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: 'Restart',
+      }),
+    )
+    expect(await screen.findByText('Proxmox refused.')).toBeVisible()
+    expect(screen.getByText('Restart ominull-hub?')).toBeVisible()
+  })
+
+  it('powers on a stopped machine without asking, and shows a start in progress', async () => {
+    guests(guest({ state: 'stopped', intent: 'on-demand', autostart: false }))
+    render_()
+    fireEvent.click(screen.getByRole('button', { name: 'Power on' }))
+    await vi.waitFor(() =>
+      expect(data.machinePower).toHaveBeenCalledWith(
+        'ominull-hub',
+        'on',
+        false,
+      ),
+    )
+    guests(guest({ state: 'stopped', busy: 'start' }))
+    render_()
+    expect(
+      screen.getAllByRole('button', { name: 'Starting…' })[0],
+    ).toBeDisabled()
+  })
+
+  it('writes the autostart toggle and shows a failure in place', async () => {
+    guests(guest({ autostart: false, intent: 'on-demand' }))
+    render_()
+    const toggle = within(
+      screen.getByTestId('glance-machine-ominull-hub'),
+    ).getByRole('switch', { name: 'Autostart' })
+    expect(toggle).not.toBeChecked()
+    fireEvent.click(toggle)
+    await vi.waitFor(() =>
+      expect(data.autostart).toHaveBeenCalledWith('ominull-hub', true),
+    )
+    data.autostart.mockRejectedValueOnce(new Error('Proxmox said no.'))
+    fireEvent.click(toggle)
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Proxmox said no.',
+    )
+  })
+
+  it('offers Power on for a session host that is off', () => {
+    data.hosts = {
+      hosts: [host({ state: 'powered_off' })],
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    }
+    render_()
+    expect(screen.getByRole('button', { name: 'Power on' })).toBeVisible()
+  })
+
+  it('opens a machine to its size and the autostart hint', () => {
+    guests(guest({ autostart: false }))
+    render_()
+    const hub = within(screen.getByTestId('glance-machine-ominull-hub'))
+    expect(hub.queryByText(/2 CPUs/)).toBeNull()
+    fireEvent.click(hub.getByRole('button', { name: /ominull-hub/ }))
+    expect(hub.getByText(/2 CPUs/)).toBeVisible()
+    expect(hub.getByText(/won’t start by itself/)).toBeVisible()
+  })
+
+  it('is partial, not empty, when Status cannot be read, and says it could not load when nothing answers', () => {
+    data.status = ok(null, { view: null, failed: true })
+    const first = render_()
+    expect(screen.getByText(/Couldn’t read the other machines/)).toBeVisible()
+    expect(screen.getByTestId('glance-machine-agent-work')).toBeVisible()
+    first.unmount()
+    data.hosts = {
+      hosts: [],
+      isLoading: false,
+      isError: true,
+      refetch: vi.fn(),
+    }
+    render_()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Couldn’t load machines.',
+    )
+  })
+
+  it('says Proxmox could not be read and keeps session-host power', () => {
+    data.guests = {
+      guests: null,
+      failure: 'Proxmox did not answer.',
+      isLoading: false,
+      refetch: vi.fn(),
+    }
+    render_()
+    expect(screen.getByText(/Couldn’t read Proxmox/)).toBeVisible()
+    expect(screen.queryByRole('switch')).toBeNull()
+    expect(
+      within(screen.getByTestId('glance-machine-agent-work')).getByRole(
+        'button',
+        {
+          name: 'Shut down',
+        },
+      ),
+    ).toBeVisible()
+  })
+
+  it('says it is checking while the first read is under way', () => {
+    data.hosts = {
+      hosts: [],
+      isLoading: true,
+      isError: false,
+      refetch: vi.fn(),
+    }
+    render_()
+    expect(screen.getByText('Checking machines…')).toBeVisible()
+  })
+})
+
+describe('useMachinesGlance', () => {
+  it('counts the machines that are up', () => {
+    render(<Head />)
+    expect(screen.getByTestId('head')).toHaveTextContent(/^\d+ of \d+ up$/)
+  })
+
+  it('is amber when one is not answering, and says why when Status is unread', () => {
+    data.hosts = {
+      hosts: [host({ state: 'offline' })],
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    }
+    const { rerender } = render(<Head />)
+    expect(screen.getByTestId('head')).toHaveAttribute('data-tone', 'warn')
+    data.status = ok(null, { view: null, failed: true })
+    rerender(<Head />)
+    expect(screen.getByTestId('head')).toHaveTextContent('Couldn’t read')
+    expect(screen.getByTestId('head')).toHaveAttribute('data-tone', 'unknown')
+  })
+})

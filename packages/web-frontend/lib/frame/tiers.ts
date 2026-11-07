@@ -1,27 +1,21 @@
-// The left side's widths (mockup 2): hidden (the session takes the whole
-// window; the edge and the session header's side button bring it back), a rail of icons and counts, the
-// panel beside the session (the default), wide (the panel plus a second
-// column) and full (covers the session; Esc or close brings it back).
-// Dragging its edge snaps to the nearest one; the width never decides which
-// session is open.
+// The left side's widths: a rail of icons and counts, or the panel beside the
+// session (the default). One toggle flips between them. Dragging the edge
+// snaps to the rail or sets the panel's width; wider than its default the panel
+// covers part of the session without resizing it. Full is not a width: it is a
+// page (History, a project, Restore files) shown over the session, left with
+// Esc or its close button. An expanded item that needs room widens the panel
+// for as long as it is open (WIDEN_PX), without changing the tier.
 
-export const TIERS = ['hidden', 'rail', 'panel', 'wide', 'full'] as const
+const TIERS = ['rail', 'panel', 'full'] as const
 export type Tier = (typeof TIERS)[number]
 /** The tiers kept on this device: full covers the session, so a reload never opens on it. */
 export type DockedTier = Exclude<Tier, 'full'>
 
-export const TIER_LABEL: Record<Tier, string> = {
-  hidden: 'Hidden',
-  rail: 'Rail',
-  panel: 'Panel',
-  wide: 'Wide',
-  full: 'Full',
-}
-
 export const RAIL_PX = 64
 export const PANEL_PX = 360
-/** Wide takes this share of the window beside the session. */
-const WIDE_SHARE = 0.58
+/** The panel while an expanded item needs more room (capped at this share of the window). */
+export const WIDEN_PX = 560
+export const WIDEN_SHARE = 0.58
 export const DEFAULT_TIER: DockedTier = 'panel'
 /** The kept tier on this device. */
 export const TIER_STORAGE_KEY = 'aico-left-tier'
@@ -30,40 +24,37 @@ export const TIER_STORAGE_KEY = 'aico-left-tier'
 export const COMPACT_DEFAULT_TIER: DockedTier = 'rail'
 export const COMPACT_TIER_STORAGE_KEY = 'aico-left-tier-compact'
 
-const isTier = (value: unknown): value is Tier =>
-  typeof value === 'string' && (TIERS as readonly string[]).includes(value)
-
 export const isDocked = (value: unknown): value is DockedTier =>
-  isTier(value) && value !== 'full'
+  value === 'rail' || value === 'panel'
+
+/** A drag that ends this close to the default width keeps the default. */
+const SNAP_PX = 24
+/** The panel's widest size, as a share of the window. */
+export const PANEL_MAX_SHARE = 0.9
+/** The panel's width kept on this device (px); the default when never dragged. */
+export const PANEL_WIDTH_STORAGE_KEY = 'aico-panel-width'
 
 /** A tier's width in px inside a frame `frameWidth` wide. */
 export function tierWidth(tier: Tier, frameWidth: number): number {
-  if (tier === 'hidden') return 0
   if (tier === 'rail') return RAIL_PX
   if (tier === 'panel') return Math.min(PANEL_PX, frameWidth)
-  if (tier === 'wide')
-    return Math.max(PANEL_PX, Math.round(frameWidth * WIDE_SHARE))
   return frameWidth
 }
 
-/** The tier a drag let go at `width` snaps to: the nearest snap point. */
-export function nearestTier(width: number, frameWidth: number): Tier {
-  let best: Tier = 'panel'
-  let distance = Number.POSITIVE_INFINITY
-  for (const tier of TIERS) {
-    const gap = Math.abs(tierWidth(tier, frameWidth) - width)
-    if (gap < distance) {
-      best = tier
-      distance = gap
-    }
-  }
-  return best
+/** The panel width a drag let go at `width` keeps: the default when close to it, never past the cap. */
+export function panelWidthAt(width: number, frameWidth: number): number {
+  const max = Math.max(PANEL_PX, Math.floor(frameWidth * PANEL_MAX_SHARE))
+  const clamped = Math.min(max, Math.max(PANEL_PX, Math.round(width)))
+  return clamped - PANEL_PX < SNAP_PX ? PANEL_PX : clamped
+}
+/** Where a drag let go at `width` lands: the rail when pulled in past halfway, else the panel. */
+export function nearestTier(width: number): 'rail' | 'panel' {
+  return width < (RAIL_PX + PANEL_PX) / 2 ? 'rail' : 'panel'
 }
 
-/** One step narrower (-1) or wider (+1), stopping at the ends. */
-export function stepTier(tier: Tier, direction: -1 | 1): Tier {
-  const index = TIERS.indexOf(tier) + direction
-  return TIERS[Math.min(TIERS.length - 1, Math.max(0, index))] as Tier
+/** The other one: the rail opens to the panel, the panel folds to the rail. */
+export function toggledTier(tier: Tier): DockedTier {
+  return tier === 'panel' ? 'rail' : 'panel'
 }
 
 type KeyLike = Pick<
@@ -72,21 +63,21 @@ type KeyLike = Pick<
 >
 
 /**
- * The tier keys: Alt+0 hides the side, Alt+1 to Alt+4 jump to a tier, Alt+[ and Alt+] step. By
+ * The tier keys: Alt+1 the rail, Alt+2 the panel, Alt+[ or Alt+] flips between them. By
  * key position (`code`), so a layout where Alt types a symbol still works.
  */
 export function tierKey(
   event: KeyLike,
-): { tier: Tier } | { step: -1 | 1 } | null {
+): { tier: DockedTier } | { toggle: true } | null {
   if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey)
     return null
-  const digit = /^Digit([0-4])$/.exec(event.code)
-  if (digit) return { tier: TIERS[Number(digit[1])] as Tier }
-  if (event.code === 'BracketLeft') return { step: -1 }
-  if (event.code === 'BracketRight') return { step: 1 }
+  if (event.code === 'Digit1') return { tier: 'rail' }
+  if (event.code === 'Digit2') return { tier: 'panel' }
+  if (event.code === 'BracketLeft' || event.code === 'BracketRight')
+    return { toggle: true }
   return null
 }
 
 /** The tooltip on the edge: what dragging does and every key. */
 export const HANDLE_HELP =
-  'Drag to resize; it snaps to Rail, Panel, Wide or Full. Double-click for Panel. Alt+1 to Alt+4 pick one, Alt+[ and Alt+] step, Esc goes back to Panel.'
+  'Drag to resize; pull in to the rail, or out to cover more of the session. Double-click for the default width. Alt+1 rail, Alt+2 panel, Alt+[ flips.'

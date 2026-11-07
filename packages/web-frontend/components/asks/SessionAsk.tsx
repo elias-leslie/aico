@@ -42,13 +42,9 @@ export function SessionAsk({
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset on switch
   useEffect(() => setSent(null), [sessionId])
 
-  // A desktop whose side already lists the questions (Panel, or Wide at home)
-  // does not show this one twice.
+  // A desktop whose side already lists the questions (Panel) does not show this one twice.
   const frame = useFrame()
-  const listed =
-    !isPhone &&
-    !!frame?.docked &&
-    (frame.tier === 'panel' || (frame.tier === 'wide' && !frame.page))
+  const listed = !isPhone && !!frame?.docked && frame.tier === 'panel'
   if (listed) return null
   if (!ask)
     return (

@@ -253,9 +253,7 @@ describe('UnifiedTerminalHeaderContent', () => {
 
   it.each([
     ['panel', true, true],
-    ['wide', true, true],
     ['rail', true, false],
-    ['hidden', true, false],
     ['panel', false, false],
   ])(
     'hides the title only where the list shows its row (%s, docked %s)',

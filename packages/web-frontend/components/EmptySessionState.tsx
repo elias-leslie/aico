@@ -38,8 +38,7 @@ export function EmptySessionState({
   const missing = onHome ? linked : null
   // The side panel already lists the sessions: don't repeat them here.
   const frame = useFrame()
-  const listedBeside =
-    !!frame?.docked && (frame.tier === 'panel' || frame.tier === 'wide')
+  const listedBeside = !!frame?.docked && frame.tier === 'panel'
   return (
     <div
       className="h-full w-full overflow-y-auto p-4"

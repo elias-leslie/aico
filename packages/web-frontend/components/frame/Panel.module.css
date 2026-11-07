@@ -24,6 +24,11 @@
   color: var(--mist);
   font-size: 13px;
 }
+.glances {
+  display: flex;
+  flex-direction: column;
+  border-block: 1px solid var(--line);
+}
 .sessions {
   margin: 0 -8px;
 }

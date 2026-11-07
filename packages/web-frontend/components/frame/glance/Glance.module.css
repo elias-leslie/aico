@@ -2,47 +2,73 @@
    .frame). Amber is the one accent; ember marks a late backup alone; state lives in chips. */
 
 .disclosure {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
   min-width: 0;
+  border-top: 1px solid var(--line);
 }
-.head h2 {
+.disclosure:first-child {
+  border-top: 0;
+}
+.rowHead,
+.popHead {
   margin: 0;
   font: inherit;
-  letter-spacing: inherit;
 }
-.toggle {
-  display: inline-flex;
+/* The collapsed row: chevron, label and one value on a single line; the same height every time. */
+.row {
+  display: flex;
   align-items: center;
-  gap: 4px;
-  min-height: 28px;
-  margin-left: -4px;
-  padding: 0 4px;
-  border-radius: 6px;
-  color: inherit;
-  font: inherit;
-  letter-spacing: inherit;
-  text-transform: inherit;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 8px 0 6px;
+  border-radius: 8px;
+  color: var(--bone);
+  font-size: 13.5px;
+  text-align: left;
   transition:
     background 0.18s var(--ease-arrival),
     color 0.18s var(--ease-arrival);
 }
-.toggle:hover {
+.row:hover {
   background: var(--wash);
-  color: var(--bone);
 }
-.toggle:focus-visible,
+.chevron {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--mist);
+}
+.label {
+  min-width: 0;
+  color: var(--bone);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+.value {
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  color: var(--mist);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chip {
+  flex: none;
+  min-height: 0;
+  margin-left: auto;
+}
+.row:focus-visible,
 .link:focus-visible,
 .rowLink:focus-visible {
   outline: 2px solid var(--lantern);
-  outline-offset: 1px;
+  outline-offset: -2px;
 }
-.headLink {
-  margin-left: auto;
-  text-transform: none;
-  letter-spacing: 0;
-  font-size: 11.5px;
+.popHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
 }
 .link {
   display: inline-block;
@@ -65,59 +91,25 @@
 .body {
   min-width: 0;
 }
-.foldLine,
+/* An open section holds everything and scrolls inside the panel, not past the other sections. */
+.scrolls {
+  padding: 4px 6px 12px;
+  max-height: min(62dvh, 560px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 .note {
   margin: 0;
   color: var(--mist);
   font-size: 13px;
   line-height: 1.4;
 }
-.foldLine {
-  padding-left: 2px;
-}
 .body [data-stale] {
   opacity: 0.62;
 }
 
 /* Rows with a state chip: Status and Recent. */
-.list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin: 0 0 4px;
-  padding: 0;
-  list-style: none;
-}
-.item {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  min-width: 0;
-}
-.item :global(.status-chip) {
-  flex: none;
-  min-height: 0;
-  margin-top: 1px;
-}
-.main {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  gap: 1px;
-}
-.title {
-  font-size: 13.5px;
-  color: var(--bone);
-  overflow-wrap: anywhere;
-}
-.detail {
-  font-size: 11.5px;
-  color: var(--mist);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* Quota: how much is left, with a tick for how far into the window we are. */
 .quotas {
   display: flex;
@@ -165,10 +157,6 @@
   background: var(--bone);
   opacity: 0.7;
 }
-.quota {
-  min-width: 0;
-}
-
 /* Backups: the oldest copy per destination against its own limit. */
 .ages {
   display: grid;
@@ -213,68 +201,10 @@
   color: var(--mist);
 }
 /* Projects. */
-.find {
-  height: 36px;
-  margin-bottom: 8px;
-}
-.projects {
-  display: flex;
-  flex-direction: column;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.projects > li {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 8px 0;
-  border-top: 1px solid var(--line);
-}
-.projects > li:first-child {
-  border-top: none;
-}
-.projects .detail {
-  white-space: normal;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 3px;
-}
-.chips :global(.status-chip) {
-  min-height: 0;
-}
-.projects > li.quietLine {
-  display: block;
-  color: var(--mist);
-  font-size: 12px;
-  line-height: 1.4;
-}
-
 /* Machines: a chip each. */
-.machines {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.machines > li {
-  min-height: 0;
-}
-
 /* Phone and tablet: the heading's tap targets are 44px. */
 @media (max-width: 1023px) {
-  .disclosure {
-    margin-block: -6px;
-  }
-  .toggle {
+  .row {
     min-height: 44px;
   }
   .link {
@@ -289,7 +219,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .toggle,
+  .row,
   .bar span,
   .agesTrack span {
     transition-duration: 0.01s;

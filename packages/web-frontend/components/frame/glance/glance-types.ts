@@ -1,7 +1,17 @@
-/** What a glance tells its heading, whether or not its body is showing. */
+/** The state chips a collapsed row's value can wear (the status-chip classes). */
+export type GlanceTone =
+  | 'ok'
+  | 'warn'
+  | 'failed'
+  | 'late'
+  | 'unknown'
+  | 'off'
+  | 'running'
+
+/** What a glance tells its collapsed row: one short value beside the label. */
 export interface GlanceHead {
-  /** Short and beside the heading ("9 problems", "4 up, 4 off"); null when unread or not wanted. */
-  count: string | null
-  /** The one line shown under a folded heading, or the reason there is no count. Null when the count says it all. */
-  line: string | null
+  /** "60 problems", "72% left", "20 active"; or why there is none ("Checking…", "Couldn’t read"). */
+  value: string | null
+  /** The chip it wears when the value is a state; null for a plain value. */
+  tone: GlanceTone | null
 }

@@ -1,21 +1,25 @@
 'use client'
 
 import { clsx } from 'clsx'
-import { ArrowLeft, ChevronLeft, ChevronRight, Plus, X } from 'lucide-react'
+import { ArrowLeft, Plus, X } from 'lucide-react'
 import { useSearchParams } from 'next/navigation'
 import { type ReactNode, useRef, useState } from 'react'
 import { useServerReach } from '@/lib/frame/server-reach'
 import {
   HANDLE_HELP,
   nearestTier,
-  TIER_LABEL,
-  TIERS,
+  PANEL_MAX_SHARE,
+  PANEL_PX,
+  panelWidthAt,
+  RAIL_PX,
   type Tier,
-  tierWidth,
+  WIDEN_PX,
+  WIDEN_SHARE,
 } from '@/lib/frame/tiers'
 import styles from './Frame.module.css'
 import { type Frame, useFrame } from './FrameContext'
 import { SideList } from './SideList'
+import { SideToggle } from './SideToggle'
 
 /** What fills the side at each width. */
 interface SideSlots {
@@ -23,8 +27,6 @@ interface SideSlots {
   rail: ReactNode
   /** Panel: the session list today (the triage view next). */
   panel: ReactNode
-  /** Wide with no page chosen: the second column beside the panel (Status). */
-  wideHome: ReactNode
 }
 
 interface LeftSideProps extends SideSlots {
@@ -34,7 +36,7 @@ interface LeftSideProps extends SideSlots {
 }
 
 /** The left side: one frame for the session list and every other page. It
- * sits beside the session at Rail, Panel and Wide and covers it at Full; on
+ * sits beside the session at Rail and Panel and covers it at Full; on
  * a narrow window it slides over the session from the session header's menu. */
 export function LeftSide(props: LeftSideProps) {
   const frame = useFrame()
@@ -76,7 +78,6 @@ function Body({
   frame,
   rail,
   panel,
-  wideHome,
   loading,
 }: LeftSideProps & { frame: Frame }) {
   const query = useSearchParams()
@@ -86,7 +87,6 @@ function Body({
       {loading ? <Loading /> : panel}
     </div>
   )
-  if (frame.tier === 'hidden') return null
   if (frame.tier === 'rail')
     return (
       <div className={styles.railBody} data-stale={down ? 'true' : undefined}>
@@ -94,15 +94,6 @@ function Body({
       </div>
     )
   if (frame.tier === 'panel') return panelColumn
-  if (frame.tier === 'wide')
-    return (
-      <div className={styles.wideCols}>
-        {panelColumn}
-        <div className={styles.pageCol} data-testid="frame-page">
-          {frame.page ?? wideHome}
-        </div>
-      </div>
-    )
   return (
     <div className={styles.fullCols}>
       <SideList pathname={frame.pathname} query={query} />
@@ -129,102 +120,87 @@ function DockedSide({
   // resizing it, so the session keeps that width underneath.
   const besideRef = useRef<Tier>('panel')
   if (!full) besideRef.current = tier
-  const spacer = drag ? drag.width : besideRef.current
-  const width = (t: Tier | number) =>
-    typeof t === 'number'
-      ? `${t}px`
-      : t === 'wide'
-        ? '58%'
-        : t === 'full'
-          ? '100%'
-          : `${tierWidth(t, Number.POSITIVE_INFINITY)}px`
-  const near = drag ? nearestTier(drag.width, drag.frameWidth) : null
+  // An expanded item that needs room widens the panel and pushes the session over;
+  // a panel dragged wider covers part of the session instead.
+  const widen = `min(${WIDEN_PX}px, ${WIDEN_SHARE * 100}%)`
+  const panel = frame.widened
+    ? `max(${frame.panelWidth}px, ${widen})`
+    : `${frame.panelWidth}px`
+  const beside =
+    besideRef.current === 'rail'
+      ? `${RAIL_PX}px`
+      : frame.widened
+        ? `max(${PANEL_PX}px, ${widen})`
+        : `${PANEL_PX}px`
+  const spacer = drag ? `${Math.min(drag.width, PANEL_PX)}px` : beside
+  const shown = drag
+    ? `${drag.width}px`
+    : tier === 'rail'
+      ? `${RAIL_PX}px`
+      : full
+        ? '100%'
+        : panel
+  const near = drag ? nearestTier(drag.width) : null
+  const frameWidth = () =>
+    root.current?.parentElement?.getBoundingClientRect().width ||
+    window.innerWidth
 
   return (
     <div
       ref={root}
       className={styles.sideSpacer}
-      style={{ width: width(spacer) }}
+      style={{ width: spacer }}
       data-tier={tier}
     >
       <aside
         className={clsx(styles.side, drag && styles.dragging)}
-        style={{ width: drag ? width(drag.width) : width(tier) }}
+        style={{ width: shown }}
         data-frame-side=""
         data-tier={tier}
         data-testid="frame-side"
         aria-label="Sessions and everything else"
       >
-        {tier !== 'rail' && tier !== 'hidden' && (
-          <div className={styles.sideHead}>
-            <NewSessionButton onClick={onNewSession} />
-            <span className={styles.spacer} />
+        <div className={clsx(styles.sideHead, styles.dockedHead)}>
+          <SideToggle />
+          {tier === 'panel' && <NewSessionButton onClick={onNewSession} />}
+          {full && <NewSessionButton onClick={onNewSession} />}
+          <span className={styles.spacer} />
+          {full && (
             <button
               type="button"
               className="lantern-icon-btn compact"
-              aria-label="Narrower"
-              title="Narrower · Alt+["
-              onClick={() => frame.step(-1)}
-              data-testid="frame-narrower"
+              aria-label="Back to the session"
+              title="Back to the session · Esc"
+              onClick={frame.close}
+              data-testid="frame-close"
             >
-              <ChevronLeft className="h-[18px] w-[18px]" strokeWidth={1.7} />
+              <X className="h-[18px] w-[18px]" strokeWidth={1.7} />
             </button>
-            {!full && (
-              <button
-                type="button"
-                className="lantern-icon-btn compact"
-                aria-label="Wider"
-                title="Wider · Alt+]"
-                onClick={() => frame.step(1)}
-                data-testid="frame-wider"
-              >
-                <ChevronRight className="h-[18px] w-[18px]" strokeWidth={1.7} />
-              </button>
-            )}
-            {full && (
-              <button
-                type="button"
-                className="lantern-icon-btn compact"
-                aria-label="Back to the session"
-                title="Back to the session · Esc"
-                onClick={frame.close}
-                data-testid="frame-close"
-              >
-                <X className="h-[18px] w-[18px]" strokeWidth={1.7} />
-              </button>
-            )}
-          </div>
-        )}
+          )}
+        </div>
         <Body frame={frame} {...slots} />
         {!full && (
           <Handle
             tier={tier}
-            frameWidth={() =>
-              root.current?.parentElement?.getBoundingClientRect().width ||
-              window.innerWidth
-            }
+            width={frame.panelWidth}
+            frameWidth={frameWidth}
             onDrag={setDrag}
-            onSnap={frame.setTier}
+            onTier={frame.setTier}
+            onWidth={frame.setPanelWidth}
           />
         )}
       </aside>
       {drag && (
         <div className={styles.snaps} aria-hidden="true">
-          {TIERS.map((t) => (
+          {[RAIL_PX, PANEL_PX].map((x) => (
             <span
-              key={t}
-              className={clsx(styles.snapLine, near === t && styles.snapNear)}
-              style={{ left: tierWidth(t, drag.frameWidth) }}
+              key={x}
+              className={clsx(
+                styles.snapLine,
+                near === (x === RAIL_PX ? 'rail' : 'panel') && styles.snapNear,
+              )}
+              style={{ left: x }}
             />
-          ))}
-          {TIERS.map((t) => (
-            <span
-              key={t}
-              className={clsx(styles.snap, near === t && styles.snapNear)}
-              style={{ left: tierWidth(t, drag.frameWidth) }}
-            >
-              {TIER_LABEL[t]}
-            </span>
           ))}
           {near && (
             <span
@@ -234,7 +210,9 @@ function DockedSide({
               }}
               data-testid="snap-target"
             >
-              Release for {TIER_LABEL[near]}
+              {near === 'rail'
+                ? 'Release for the rail'
+                : `Release for a ${Math.round(panelWidthAt(drag.width, drag.frameWidth))}px panel`}
             </span>
           )}
         </div>
@@ -243,32 +221,51 @@ function DockedSide({
   )
 }
 
-/** The edge: drag and it snaps to the nearest width when let go; arrow keys
- * step; double-click for Panel. The session refits as it goes (its resize is
- * debounced) and stays the same session. */
+/** Wider by arrow key, in px. */
+const KEY_STEP = 40
+
+/** The edge: drag it in to the rail or out to set the panel's width (it keeps
+ * the default width when let go close to it); arrow keys step; double-click for
+ * the default width. The session refits as it goes (its resize is debounced)
+ * and stays the same session. */
 function Handle({
   tier,
+  width,
   frameWidth,
   onDrag,
-  onSnap,
+  onTier,
+  onWidth,
 }: {
   tier: Tier
+  /** The panel's kept width. */
+  width: number
   frameWidth: () => number
   onDrag: (drag: { width: number; frameWidth: number } | null) => void
-  onSnap: (tier: Tier) => void
+  onTier: (tier: Tier) => void
+  onWidth: (width: number, frameWidth: number) => void
 }) {
   const state = useRef<{ x: number; start: number; frame: number } | null>(null)
   const last = useRef(0)
+  const panel = tier === 'panel'
+  const max = Math.floor(frameWidth() * PANEL_MAX_SHARE)
+  const settle = (next: number) => {
+    const total = frameWidth()
+    if (nearestTier(next) === 'rail') onTier('rail')
+    else {
+      onTier('panel')
+      onWidth(next, total)
+    }
+  }
   return (
     // biome-ignore lint/a11y/useSemanticElements: a focusable splitter, as WAI-ARIA's window splitter
     <div
       role="separator"
       aria-orientation="vertical"
       aria-label="Resize the side"
-      aria-valuetext={TIER_LABEL[tier]}
-      aria-valuenow={TIERS.indexOf(tier) + 1}
-      aria-valuemin={1}
-      aria-valuemax={TIERS.length}
+      aria-valuetext={panel ? `Panel, ${width}px` : 'Rail'}
+      aria-valuenow={panel ? width : RAIL_PX}
+      aria-valuemin={RAIL_PX}
+      aria-valuemax={Math.max(PANEL_PX, max)}
       tabIndex={0}
       title={HANDLE_HELP}
       className={styles.handle}
@@ -285,37 +282,39 @@ function Handle({
       onPointerMove={(event) => {
         const drag = state.current
         if (!drag) return
-        const width = Math.max(
+        const next = Math.max(
           0,
           Math.min(drag.frame, drag.start + event.clientX - drag.x),
         )
-        last.current = width
-        onDrag({ width, frameWidth: drag.frame })
+        last.current = next
+        onDrag({ width: next, frameWidth: drag.frame })
       }}
       onPointerUp={() => {
         const drag = state.current
         state.current = null
         onDrag(null)
-        if (drag && last.current !== drag.start)
-          onSnap(nearestTier(last.current, drag.frame))
+        if (drag && last.current !== drag.start) settle(last.current)
       }}
       onPointerCancel={() => {
         state.current = null
         onDrag(null)
       }}
-      onDoubleClick={() => onSnap('panel')}
+      onDoubleClick={() => {
+        onTier('panel')
+        onWidth(PANEL_PX, frameWidth())
+      }}
       onKeyDown={(event) => {
-        const step = { ArrowLeft: -1, ArrowRight: 1 }[event.key]
-        const index = TIERS.indexOf(tier)
-        if (event.key === 'Home') onSnap('hidden')
-        else if (event.key === 'End') onSnap('full')
-        else if (step)
-          onSnap(
-            TIERS[
-              Math.min(TIERS.length - 1, Math.max(0, index + step))
-            ] as Tier,
-          )
-        else return
+        if (event.key === 'Home') onTier('rail')
+        else if (event.key === 'End') {
+          onTier('panel')
+          onWidth(max, frameWidth())
+        } else if (event.key === 'ArrowLeft') {
+          if (panel && width > PANEL_PX) onWidth(width - KEY_STEP, frameWidth())
+          else onTier('rail')
+        } else if (event.key === 'ArrowRight') {
+          if (panel) onWidth(width + KEY_STEP, frameWidth())
+          else onTier('panel')
+        } else return
         event.preventDefault()
       }}
     >

@@ -4,6 +4,19 @@
 
 ### Added
 
+- Aico web side panel: every section shows all of it, with controls in place.
+  Status, Quota, Backups, Recent, Machines and Projects are one even row each
+  (chevron, name, a short value or status chip) that opens to its full list,
+  scrolling inside the panel or rail pop-out, with no "N more" or "Open". Rows
+  expand in place for detail and the page's actions: Back up now and Verify,
+  start, stop and autostart a machine, fix or acknowledge a Status problem,
+  open or transcript a session, project places and power. An item that needs
+  room widens the panel (or pop-out) while it is open. The Wide column and the
+  Today line are gone (Today is inside Recent). One sidebar toggle sits at the
+  top left, in the rail and the panel, in place of the arrow pairs, the rail's
+  open button and its bottom hide button; Hidden is gone on desktop, and the
+  edge drags the panel wider over the session (Alt+[ flips, Alt+1 rail, Alt+2
+  panel).
 - Launch defaults: `st aico create` without `--model` takes the model, effort,
   Codex Daybreak and (for review, verification and other) Blank Slate from
   Agent Hub's launch table (`st models route --role ROLE --tool TOOL`), and

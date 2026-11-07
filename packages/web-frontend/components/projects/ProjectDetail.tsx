@@ -84,14 +84,46 @@ function PlaceRow({
   )
 }
 
+/** A project's places with their power controls and the confirm sheet a power button opens; the page and
+ * the side's Projects section both use it, so they cannot drift apart. */
+export function Places({ project, now }: { project: Detail; now: number }) {
+  const [index, setIndex] = useState<number | null>(null)
+  const place = index === null ? undefined : project.places[index]
+  const actions = place && powerActions(place)
+  return (
+    <>
+      {project.places.length > 0 && (
+        <div className={styles.places}>
+          {project.places.map((item, i) => (
+            <PlaceRow
+              // biome-ignore lint/suspicious/noArrayIndexKey: a place is its position in the registry list; the power route addresses it by index
+              key={i}
+              place={item}
+              now={now}
+              onOpen={() => setIndex(i)}
+            />
+          ))}
+        </div>
+      )}
+      {index !== null && place && actions && (
+        <PowerSheet
+          projectId={project.id}
+          index={index}
+          place={place}
+          actions={actions}
+          agents={project.agents.length}
+          now={now}
+          onClose={() => setIndex(null)}
+        />
+      )}
+    </>
+  )
+}
+
 /** Rows a popover lists before "+ N more". */
 const MAX_ROWS = 5
 
-type Open =
-  | { type: 'problem'; kind: ProblemKind }
-  | { type: 'agents' }
-  | { type: 'power'; index: number }
-  | null
+type Open = { type: 'problem'; kind: ProblemKind } | { type: 'agents' } | null
 
 export function ProjectDetail({
   id,
@@ -142,19 +174,7 @@ export function ProjectDetail({
           {project.overview && (
             <p className={styles.overview}>{project.overview}</p>
           )}
-          {project.places.length > 0 && (
-            <div className={styles.places}>
-              {project.places.map((place, index) => (
-                <PlaceRow
-                  // biome-ignore lint/suspicious/noArrayIndexKey: a place is its position in the registry list; the power route addresses it by index
-                  key={index}
-                  place={place}
-                  now={now}
-                  onOpen={() => setOpen({ type: 'power', index })}
-                />
-              ))}
-            </div>
-          )}
+          <Places project={project} now={now} />
           {(project.problems.length > 0 || project.agents.length > 0) && (
             <div className={styles.probs}>
               {project.problems.map((problem) => (
@@ -243,23 +263,6 @@ export function ProjectDetail({
             </div>
           )}
           <Timeline project={project} now={now} />
-          {open?.type === 'power' &&
-            (() => {
-              const place = project.places[open.index]
-              const actions = place && powerActions(place)
-              if (!place || !actions) return null
-              return (
-                <PowerSheet
-                  projectId={project.id}
-                  index={open.index}
-                  place={place}
-                  actions={actions}
-                  agents={project.agents.length}
-                  now={now}
-                  onClose={close}
-                />
-              )
-            })()}
         </>
       )}
     </div>

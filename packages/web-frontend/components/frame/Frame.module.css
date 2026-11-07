@@ -68,6 +68,10 @@
   padding: 0 8px 0 10px;
   border-bottom: 1px solid var(--line);
 }
+/* Rail and panel: the toggle sits at the same spot, its left edge 15px in (centred in the 64px rail). */
+.dockedHead {
+  padding-left: 15px;
+}
 .sheetTitle {
   font: 500 16px / 1 var(--font-display);
   padding: 0 4px;
@@ -83,11 +87,6 @@
   min-width: 0;
   flex: 1;
 }
-.wideCols > .col {
-  flex: none;
-  width: 360px;
-  border-right: 1px solid var(--line);
-}
 .col[data-stale] > * {
   opacity: 0.62;
 }
@@ -100,7 +99,6 @@
 .railBody[data-stale] {
   opacity: 0.62;
 }
-.wideCols,
 .fullCols {
   display: flex;
   flex: 1;
@@ -198,20 +196,6 @@
   inset: 0;
   pointer-events: none;
   z-index: 7;
-}
-.snap {
-  position: absolute;
-  bottom: 14px;
-  transform: translateX(-50%);
-  font-size: 11.5px;
-  padding: 2px 8px;
-  border-radius: 6px;
-  background: rgb(var(--umber-rgb));
-  border: 1px solid var(--line-2);
-  color: var(--mist);
-}
-.snap:last-child {
-  transform: translateX(-100%);
 }
 .snapLine {
   position: absolute;

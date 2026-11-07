@@ -17,11 +17,18 @@ import {
 import { useClickOutside } from '@/lib/hooks/use-click-outside'
 import { useFrame } from './FrameContext'
 import styles from './RailPopover.module.css'
+import { type Widen, WidenContext } from './Widen'
 
+/** A pop-out while something in it needs room. */
+const WIDER = 'min(620px, calc(100vw - 96px))'
 const GAP = 8
 const MARGIN = 12
 const TABBABLE =
   'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+/** Any dialog but a pop-out itself: a confirm or sheet the pop-out's content opened. */
+const OTHER_DIALOG =
+  '[role="dialog"]:not([data-rail-popover]), [role="alertdialog"]'
 
 const CloseContext = createContext<(() => void) | null>(null)
 
@@ -102,11 +109,26 @@ export function RailPopover({
   const close = useCallback(() => setOpen(false), [])
   const refs = useMemo(() => [button, dialog], [])
   const place = useBeside(button, open)
+  // Content that needs room while it is expanded widens this pop-out, not the side.
+  const [wanting, setWanting] = useState(0)
+  const widen = useCallback<Widen>(() => {
+    setWanting((count) => count + 1)
+    let given = false
+    return () => {
+      if (given) return
+      given = true
+      setWanting((count) => count - 1)
+    }
+  }, [])
   const giveBack = useCallback(() => {
     setOpen(false)
     button.current?.focus()
   }, [])
-  useClickOutside(refs, giveBack, open)
+  // A confirm or sheet opened from the pop-out's content sits outside it; working in that is not a click away.
+  const leave = useCallback(() => {
+    if (!document.querySelector(OTHER_DIALOG)) giveBack()
+  }, [giveBack])
+  useClickOutside(refs, leave, open)
   // A page opened from inside (or any route change) leaves the pop-out behind.
   const pathname = frame?.pathname
   // biome-ignore lint/correctness/useExhaustiveDependencies: closes on the route changing
@@ -130,6 +152,13 @@ export function RailPopover({
     }
   }, [open])
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    // Keys typed in a dialog the content opened are that dialog's (React bubbles them through its portal).
+    if (
+      event.target instanceof Node &&
+      dialog.current &&
+      !dialog.current.contains(event.target)
+    )
+      return
     if (event.key === 'Escape') {
       event.preventDefault()
       event.stopPropagation()
@@ -173,15 +202,18 @@ export function RailPopover({
         <div
           ref={dialog}
           role="dialog"
+          data-rail-popover=""
           aria-label={panelLabel}
           tabIndex={-1}
           className={`lantern-sheet lantern-enter ${styles.popover}`}
-          style={place}
+          style={wanting > 0 ? { ...place, width: WIDER } : place}
           onKeyDown={onKeyDown}
         >
           <div className={styles.body}>
             <CloseContext.Provider value={close}>
-              {children}
+              <WidenContext.Provider value={widen}>
+                {children}
+              </WidenContext.Provider>
             </CloseContext.Provider>
           </div>
           <p className={styles.hint}>{hint}</p>

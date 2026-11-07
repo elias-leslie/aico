@@ -1,0 +1,189 @@
+/* Status inside the Panel or a pop-out: sized by its own box (300-380px), never by the window.
+   Lantern tokens only; amber is the one accent; state lives in the chips. */
+.status {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.sub,
+.note {
+  margin: 0;
+  color: var(--mist);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.note {
+  font-size: 13px;
+}
+.group {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 4px 0 4px;
+  color: var(--mist);
+  font: 600 11.5px / 1.2 var(--font-ui);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.group span {
+  font-weight: 500;
+}
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.row {
+  border-top: 1px solid var(--line);
+  transition: background 0.18s var(--ease-arrival);
+}
+.row:first-child {
+  border-top: 0;
+}
+.row[data-open] {
+  background: var(--wash);
+}
+.head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 9px 10px;
+  color: inherit;
+  text-align: left;
+  border-radius: 0;
+  transition: background 0.18s var(--ease-arrival);
+}
+.head:hover {
+  background: var(--wash);
+}
+.head:focus-visible,
+.fold:focus-visible {
+  outline: 2px solid var(--lantern);
+  outline-offset: -2px;
+}
+.head :global(.status-chip) {
+  flex: none;
+  min-height: 0;
+  margin-top: 1px;
+}
+.chevron {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 3px;
+  color: var(--mist);
+}
+.main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.what {
+  color: var(--bone);
+  font-size: 13.5px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.why {
+  color: var(--mist);
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.when {
+  flex: none;
+  color: var(--mist);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.when[data-late] {
+  color: var(--lantern);
+  font-weight: 600;
+}
+.more {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 10px 10px 32px;
+}
+.meaning {
+  margin: 0;
+  color: var(--bone);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.meaning :global(.why) {
+  font-weight: 600;
+}
+.facts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 10px;
+  margin: 0;
+  color: var(--mist);
+  font-size: 12px;
+}
+.facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.fold {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 36px;
+  padding: 0 4px;
+  border-radius: 6px;
+  color: var(--bone);
+  font-size: 13px;
+  text-align: left;
+  transition: background 0.18s var(--ease-arrival);
+}
+.fold:hover {
+  background: var(--wash);
+}
+.fold .chevron {
+  margin-top: 0;
+}
+.fold span {
+  color: var(--mist);
+  font-size: 11.5px;
+}
+.status :global(.status-rollup) {
+  margin-bottom: 0;
+}
+.status :global(.lantern-field) {
+  height: 36px;
+}
+@media (max-width: 1023px) {
+  .fold {
+    min-height: 44px;
+  }
+  .acts :global(.lantern-btn),
+  .status :global(.lantern-field) {
+    min-height: 44px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .row,
+  .head,
+  .fold {
+    transition-duration: 0.01s;
+  }
+}

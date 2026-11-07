@@ -117,12 +117,15 @@ export function HistoryTranscript({
   id,
   at = null,
   mark = '',
+  embedded = false,
 }: {
   id: string
   /** A search hit's byte offset: that message is shown first, marked. */
   at?: number | null
   /** The search text: marked in that message. */
   mark?: string
+  /** Inside a row of the side's Recent section: no page header or totals (the row has them), just the reply and the messages. */
+  embedded?: boolean
 }) {
   const detail = useHistorySession(id)
   const newest = useHistoryEvents(id)
@@ -174,41 +177,68 @@ export function HistoryTranscript({
 
   return (
     <>
-      <header className="status-head">
-        <Link
-          href="/history"
-          className="lantern-icon-btn"
-          aria-label="Back to recent sessions"
-          title="Back to recent sessions"
-        >
-          <ArrowLeft className="h-[18px] w-[18px]" strokeWidth={1.7} />
-        </Link>
-        <span className="crumb">
-          <Link href="/history">Recent sessions</Link> /
-        </span>
-        <h1>{session ? labelOf(session) : 'Session'}</h1>
-        {session && state && (
-          <span className={`status-chip ${STANDING_CHIP[state]}`}>
-            {STANDING_TEXT[state]}
-          </span>
-        )}
-        <button
-          type="button"
-          className="lantern-btn ghost small"
-          disabled={newest.isFetching}
-          onClick={() => {
-            void detail.refetch()
-            void newest.refetch()
+      {embedded ? (
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            marginBottom: 8,
           }}
         >
-          <RefreshCw
-            className="h-3.5 w-3.5"
-            strokeWidth={1.7}
-            aria-hidden="true"
-          />
-          {newest.isFetching ? 'Refreshing…' : 'Refresh'}
-        </button>
-      </header>
+          <button
+            type="button"
+            className="lantern-btn ghost small"
+            disabled={newest.isFetching}
+            onClick={() => {
+              void detail.refetch()
+              void newest.refetch()
+            }}
+          >
+            <RefreshCw
+              className="h-3.5 w-3.5"
+              strokeWidth={1.7}
+              aria-hidden="true"
+            />
+            {newest.isFetching ? 'Refreshing…' : 'Refresh'}
+          </button>
+        </div>
+      ) : (
+        <header className="status-head">
+          <Link
+            href="/history"
+            className="lantern-icon-btn"
+            aria-label="Back to recent sessions"
+            title="Back to recent sessions"
+          >
+            <ArrowLeft className="h-[18px] w-[18px]" strokeWidth={1.7} />
+          </Link>
+          <span className="crumb">
+            <Link href="/history">Recent sessions</Link> /
+          </span>
+          <h1>{session ? labelOf(session) : 'Session'}</h1>
+          {session && state && (
+            <span className={`status-chip ${STANDING_CHIP[state]}`}>
+              {STANDING_TEXT[state]}
+            </span>
+          )}
+          <button
+            type="button"
+            className="lantern-btn ghost small"
+            disabled={newest.isFetching}
+            onClick={() => {
+              void detail.refetch()
+              void newest.refetch()
+            }}
+          >
+            <RefreshCw
+              className="h-3.5 w-3.5"
+              strokeWidth={1.7}
+              aria-hidden="true"
+            />
+            {newest.isFetching ? 'Refreshing…' : 'Refresh'}
+          </button>
+        </header>
+      )}
 
       {detail.isPending && (
         <p className="status-muted">Loading this session…</p>
@@ -228,7 +258,7 @@ export function HistoryTranscript({
           </button>
         </div>
       )}
-      {session && (
+      {session && !embedded && (
         <dl className="history-facts" data-testid="history-facts">
           <div>
             <dt>Tool</dt>

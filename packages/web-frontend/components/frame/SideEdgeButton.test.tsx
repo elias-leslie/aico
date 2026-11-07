@@ -15,7 +15,7 @@ vi.mock('@/lib/hooks/use-needs-you', () => ({
 
 const frame = (patch: Partial<Frame> = {}): Partial<Frame> => ({
   docked: true,
-  tier: 'hidden',
+  tier: 'panel',
   setTier: vi.fn(),
   setSheetOpen: vi.fn(),
   ...patch,
@@ -29,33 +29,33 @@ beforeEach(() => {
 
 describe('SideEdgeButton', () => {
   it('shows nothing while the side is beside the session', () => {
-    state.frame = frame({ tier: 'rail' })
-    const { container } = render(<SideEdgeButton />)
-    expect(container).toBeEmptyDOMElement()
-  })
-
-  it('brings a hidden side back as the rail, with the key in its tooltip', () => {
-    render(<SideEdgeButton />)
-    const button = screen.getByRole('button', { name: 'Show the side' })
-    expect(button).toHaveAttribute('title', 'Show the side · Alt+1')
-    fireEvent.click(button)
-    expect(state.frame?.setTier).toHaveBeenCalledWith('rail')
+    for (const tier of ['rail', 'panel'] as const) {
+      state.frame = frame({ tier })
+      const { container } = render(<SideEdgeButton />)
+      expect(container).toBeEmptyDOMElement()
+    }
   })
 
   it('counts what needs you on it, only above 0', () => {
+    state.frame = frame({ docked: false })
     const { rerender } = render(<SideEdgeButton />)
     expect(screen.queryByText('0')).toBeNull()
     state.count = 2
     rerender(<SideEdgeButton />)
     expect(
-      screen.getByRole('button', { name: 'Show the side · 2 need you' }),
+      screen.getByRole('button', {
+        name: 'Sessions and everything else · 2 need you',
+      }),
     ).toHaveTextContent('2')
   })
 
   it('says nothing about the count while it is unread', () => {
+    state.frame = frame({ docked: false })
     state.known = false
     render(<SideEdgeButton />)
-    expect(screen.getByRole('button')).toHaveAccessibleName('Show the side')
+    expect(screen.getByRole('button')).toHaveAccessibleName(
+      'Sessions and everything else',
+    )
     expect(screen.getByRole('button')).toHaveTextContent('')
   })
 

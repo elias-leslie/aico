@@ -1,6 +1,6 @@
 import { Settings, StickyNote } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useLocalStorageState } from '@/lib/hooks/use-local-storage-state'
 import { useSessionAttention } from '@/lib/hooks/use-session-attention'
 import { popOutNotes } from '@/lib/notes-window'
@@ -16,9 +16,9 @@ import { GlanceProjects, useProjectsGlance } from './glance/GlanceProjects'
 import { GlanceQuota, useQuotaGlance } from './glance/GlanceQuota'
 import { GlanceRecent, useRecentGlance } from './glance/GlanceRecent'
 import { GlanceStatus, useStatusGlance } from './glance/GlanceStatus'
+import type { GlanceHead } from './glance/glance-types'
 import styles from './Panel.module.css'
 import { SettingsMenu, SettingsPage } from './Settings'
-import { TodayRow } from './TodayRow'
 
 /** Folds are kept per device, by section; a section nobody folded or opened follows its default. */
 const FOLDS_KEY = 'aico-panel-folds'
@@ -33,13 +33,6 @@ function Glances() {
   // A phone is where the side slides over the session; a snapped desktop window keeps the desktop defaults.
   const frame = useFrame()
   const phone = frame !== null && !frame.docked
-  // Wide shows a page beside the Panel, so each section folds to its one line (opening one lasts
-  // until Wide closes); the remembered folds come back then.
-  const beside = frame?.docked === true && frame.tier === 'wide'
-  const [wideOpen, setWideOpen] = useState<Record<string, boolean>>({})
-  useEffect(() => {
-    if (!beside) setWideOpen({})
-  }, [beside])
   const status = useStatusGlance()
   const quota = useQuotaGlance()
   const backups = useBackupsGlance()
@@ -48,16 +41,12 @@ function Glances() {
   const projects = useProjectsGlance()
   const sections: {
     id: string
-    href: string
-    where: 'wide' | 'full'
-    head: { count: string | null; line: string | null }
+    head: GlanceHead
     open: boolean
     body: ReactNode
   }[] = [
     {
       id: 'Status',
-      href: '/status',
-      where: 'wide',
       head: status,
       // On a phone Status stays open only when something is wrong (or not known yet).
       open: !phone || status.problems !== 0,
@@ -65,76 +54,57 @@ function Glances() {
     },
     {
       id: 'Quota',
-      href: '/quota',
-      where: 'wide',
       head: quota,
       open: !phone,
       body: <GlanceQuota />,
     },
     {
       id: 'Backups',
-      href: '/backups',
-      where: 'full',
       head: backups,
       open: !phone,
       body: <GlanceBackups />,
     },
     {
       id: 'Recent',
-      href: '/history',
-      where: 'wide',
       head: recent,
       open: !phone,
       body: <GlanceRecent />,
     },
     {
       id: 'Machines',
-      href: '/machines',
-      where: 'full',
       head: machines,
       open: false,
       body: <GlanceMachines />,
     },
     {
       id: 'Projects',
-      href: '/projects',
-      where: 'wide',
       head: projects,
       open: false,
       body: <GlanceProjects />,
     },
   ]
   return (
-    <>
+    <div className={styles.glances}>
       {sections.map((section) => {
-        const open = beside
-          ? (wideOpen[section.id] ?? false)
-          : (folds[section.id] ?? section.open)
+        const open = folds[section.id] ?? section.open
         return (
           <Disclosure
             key={section.id}
             title={section.id}
             head={section.head}
-            href={section.href}
-            where={section.where}
             open={open}
             onToggle={() =>
-              beside
-                ? setWideOpen((current) => ({
-                    ...current,
-                    [section.id]: !open,
-                  }))
-                : setStored((current) => ({
-                    ...(current && typeof current === 'object' ? current : {}),
-                    [section.id]: !open,
-                  }))
+              setStored((current) => ({
+                ...(current && typeof current === 'object' ? current : {}),
+                [section.id]: !open,
+              }))
             }
           >
             {section.body}
           </Disclosure>
         )
       })}
-    </>
+    </div>
   )
 }
 
@@ -203,7 +173,6 @@ export function Panel({
           </nav>
         </section>
         <Glances />
-        <TodayRow />
       </div>
       <div className={styles.foot}>
         <NotesButton />

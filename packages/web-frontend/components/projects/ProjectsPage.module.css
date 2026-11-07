@@ -335,8 +335,9 @@
 
 .place {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 4px 10px;
   font-size: 13px;
 }
 
@@ -791,6 +792,13 @@
 
   .detail {
     padding: 12px 16px 40px;
+  }
+}
+
+/* Touch-sized power controls wherever the side is not a wide desktop's. */
+@media (max-width: 1023px) {
+  .powerBtn {
+    min-height: 44px;
   }
 }
 

@@ -2,12 +2,10 @@
 
 import {
   Activity,
-  ChevronRight,
   Clock,
   Database,
   Folder,
   Gauge,
-  PanelLeftClose,
   Plus,
   Server,
   StickyNote,
@@ -21,7 +19,7 @@ import { plural } from '@/lib/status'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
 import { NeedsYouLauncher } from '../asks/NeedsYou'
 import { CaptureLauncher } from '../capture/CaptureLauncher'
-import { SessionRail, sessionsHeading } from '../SessionList'
+import { SessionRail } from '../SessionList'
 import { useFrame } from './FrameContext'
 import { GlanceBackups, useBackupsGlance } from './glance/GlanceBackups'
 import { GlanceMachines, useMachinesGlance } from './glance/GlanceMachines'
@@ -31,7 +29,6 @@ import { GlanceQuota, useQuotaGlance } from './glance/GlanceQuota'
 import { GlanceRecent, useRecentGlance } from './glance/GlanceRecent'
 import { GlanceStatus, useStatusGlance } from './glance/GlanceStatus'
 import type { GlanceHead } from './glance/glance-types'
-import type { OpenWhere } from './glance/OpenLink'
 import { RailPopover } from './RailPopover'
 import { SettingsMenu } from './Settings'
 
@@ -66,8 +63,6 @@ function GlanceButton({
   title,
   count,
   head,
-  href,
-  where,
   children,
 }: {
   icon: Icon
@@ -75,8 +70,6 @@ function GlanceButton({
   title: string
   count?: number | null
   head: GlanceHead
-  href: string
-  where: OpenWhere
   children: ReactNode
 }) {
   return (
@@ -95,7 +88,7 @@ function GlanceButton({
         </>
       }
     >
-      <GlancePopover title={title} head={head} href={href} where={where}>
+      <GlancePopover title={title} head={head}>
         {children}
       </GlancePopover>
     </RailPopover>
@@ -113,18 +106,17 @@ const Divider = () => (
 /** The rail: icons and counts. New session, Needs you, one mark per session
  * with its state (a coordinator's opens its team), then Status, Quota, Projects,
  * Backups, Machines and Recent (each opens its glance beside the rail without
- * widening it), and at the bottom Notes, Capture, Settings and Hide. */
+ * widening it), and at the bottom Notes, Capture and Settings. The side's one toggle
+ * sits above, in the head. */
 export function Rail({
   slots,
   currentId,
   onSelect,
-  onOpenPanel,
   onNewSession,
 }: {
   slots: Array<TerminalSlot | PaneSlot>
   currentId?: string
   onSelect: (slot: TerminalSlot | PaneSlot) => void
-  onOpenPanel?: () => void
   onNewSession?: () => void
 }) {
   const frame = useFrame()
@@ -138,7 +130,6 @@ export function Rail({
   const recent = useRecentGlance()
   const machines = useMachinesGlance()
   const projects = useProjectsGlance()
-  const heading = sessionsHeading(slots.length, attention.needsYouCount)
   return (
     <div
       data-testid="session-sidebar"
@@ -155,17 +146,6 @@ export function Rail({
           data-testid="new-session-btn"
         >
           <Plus className="h-[18px] w-[18px]" strokeWidth={1.7} />
-        </button>
-      )}
-      {onOpenPanel && (
-        <button
-          type="button"
-          className="lantern-icon-btn compact"
-          onClick={onOpenPanel}
-          aria-label={`Open the panel · ${heading} · Alt+2`}
-          title={`Open the panel · ${heading} · Alt+2`}
-        >
-          <ChevronRight className="h-[18px] w-[18px]" strokeWidth={1.7} />
         </button>
       )}
       <NeedsYouLauncher />
@@ -195,8 +175,6 @@ export function Rail({
         }
         count={problems}
         head={status}
-        href="/status"
-        where="wide"
       >
         <GlanceStatus />
       </GlanceButton>
@@ -205,8 +183,6 @@ export function Rail({
         title="Quota"
         label={glances.length ? `Quota: ${quotaLine(glances)}` : 'Quota'}
         head={quota}
-        href="/quota"
-        where="wide"
       >
         <GlanceQuota />
       </GlanceButton>
@@ -215,8 +191,6 @@ export function Rail({
         title="Projects"
         label="Projects"
         head={projects}
-        href="/projects"
-        where="wide"
       >
         <GlanceProjects />
       </GlanceButton>
@@ -225,8 +199,6 @@ export function Rail({
         title="Backups"
         label="Backups"
         head={backups}
-        href="/backups"
-        where="full"
       >
         <GlanceBackups />
       </GlanceButton>
@@ -235,19 +207,10 @@ export function Rail({
         title="Machines"
         label="Machines"
         head={machines}
-        href="/machines"
-        where="full"
       >
         <GlanceMachines />
       </GlanceButton>
-      <GlanceButton
-        icon={Clock}
-        title="Recent"
-        label="Recent"
-        head={recent}
-        href="/history"
-        where="wide"
-      >
+      <GlanceButton icon={Clock} title="Recent" label="Recent" head={recent}>
         <GlanceRecent />
       </GlanceButton>
       <Divider />
@@ -260,11 +223,6 @@ export function Rail({
       />
       <CaptureLauncher variant="icon" />
       <SettingsMenu frame={frame} icon />
-      <RailButton
-        icon={PanelLeftClose}
-        label="Hide the side · Alt+0"
-        onClick={() => frame?.setTier('hidden')}
-      />
     </div>
   )
 }

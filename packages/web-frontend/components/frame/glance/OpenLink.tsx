@@ -5,19 +5,15 @@ import type { ReactNode } from 'react'
 import { useFrame } from '../FrameContext'
 import styles from './Glance.module.css'
 
-/** Where a page opens: Wide beside the session for the daily ones, Full for the long ones. */
-export type OpenWhere = 'wide' | 'full'
-
-/** A link to a full page that opens it in place when there is a frame to open it in. */
+/** A link to a full page that opens it in place (Full) when there is a frame to open it in. For the
+ * one heavy thing a glance cannot hold inline (a restore flow, a transcript), never for what a glance can show. */
 export function OpenLink({
   href,
-  where = 'wide',
   label,
   bare = false,
   children,
 }: {
   href: string
-  where?: OpenWhere
   /** What a screen reader says when the visible text is short ("Open"). */
   label?: string
   /** Quiet text that reads as a row's name, not as an amber link. */
@@ -33,7 +29,7 @@ export function OpenLink({
       onClick={(event) => {
         if (!frame) return
         event.preventDefault()
-        frame.open(href, where)
+        frame.open(href)
       }}
     >
       {children}

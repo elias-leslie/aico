@@ -1,0 +1,130 @@
+/* Backups in the Panel and the rail pop-out: one column whatever the window; Lantern tokens only. */
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.summary {
+  margin: 0;
+  color: var(--mist);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.run {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.message {
+  margin: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+.message[data-failed] {
+  border-color: var(--ember);
+}
+.find {
+  height: 36px;
+}
+.sources {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.source {
+  border-top: 1px solid var(--line);
+}
+.source:first-child {
+  border-top: 0;
+}
+.sourceHead,
+.foldHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 32px;
+  padding: 0;
+  border-radius: 4px;
+  color: var(--bone);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  transition: color 0.18s var(--ease-arrival);
+}
+.sourceHead:hover,
+.foldHead:hover {
+  color: var(--lantern);
+}
+.sourceHead:focus-visible,
+.foldHead:focus-visible {
+  outline: 2px solid var(--lantern);
+  outline-offset: 1px;
+}
+.sourceHead :global(.status-chip) {
+  flex: none;
+  min-height: 0;
+}
+.sourceName {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.foldHead {
+  color: var(--mist);
+  font-size: 12.5px;
+}
+.fold {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+.copies {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 8px 20px;
+  padding: 0;
+  list-style: none;
+}
+.copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.copyHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 12.5px;
+}
+.copyHead b {
+  font-weight: 600;
+}
+.copyHead :global(.status-chip) {
+  min-height: 0;
+}
+.line {
+  margin: 0;
+  color: var(--mist);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 1023px) {
+  .sourceHead,
+  .foldHead,
+  .run :global(.lantern-btn) {
+    min-height: 44px;
+  }
+}

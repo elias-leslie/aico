@@ -189,3 +189,24 @@ export function ageByTarget(
     .sort((a, b) => b.ratio - a.ratio)
     .map(({ ratio: _ratio, ...rest }) => rest)
 }
+
+const COPY_WORD: Record<string, string> = {
+  ok: 'Current',
+  failed: 'Failed',
+  off: 'Archived',
+}
+
+/** One copy's state in a word: "Current", "Copying…", "Needs a fresh copy". */
+export const copyWord = (
+  row: Pick<BackupEntry, 'state' | 'running'>,
+): string =>
+  row.running ? 'Copying…' : (COPY_WORD[row.state] ?? 'Needs a fresh copy')
+
+/** The destinations Back up now can start a copy to: those with a live (not archived) copy. */
+export function runnableTargets(
+  entries: readonly BackupEntry[],
+): ('native' | 'drive' | 'append')[] {
+  return (['native', 'drive', 'append'] as const).filter((target) =>
+    entries.some((row) => row.target === target && row.state !== 'off'),
+  )
+}
