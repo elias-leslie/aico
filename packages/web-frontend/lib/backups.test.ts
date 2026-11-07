@@ -23,7 +23,9 @@ describe('backupSummary', () => {
       entry({ source: 'old', state: 'off', gone: true }),
       entry({ source: 'old', state: 'off', gone: true, target: 'drive' }),
     ]
-    expect(backupSummary(list)).toBe('All 3 current, 1 archived.')
+    expect(backupSummary(list)).toBe(
+      'All 3 sources current (3 copies), 1 archived.',
+    )
   })
 
   it('counts a machine that is off apart from archived sources, one per source', () => {
@@ -34,8 +36,17 @@ describe('backupSummary', () => {
       entry({ source: 'jobs', state: 'off', target: 'external' }),
     ]
     expect(backupSummary(list)).toBe(
-      'All 1 current, 1 archived, 1 on a machine that is off.',
+      'All 1 source current (1 copy), 1 on a machine that is off, 1 archived.',
     )
+  })
+
+  it('counts a source once and its copies beside it', () => {
+    const list = [
+      entry({ source: 'a' }),
+      entry({ source: 'a', target: 'drive' }),
+      entry({ source: 'a', target: 'append' }),
+    ]
+    expect(backupSummary(list)).toBe('All 1 source current (3 copies).')
   })
 
   it('leads with what is wrong', () => {
@@ -45,7 +56,7 @@ describe('backupSummary', () => {
       entry({ source: 'c' }),
     ]
     expect(backupSummary(list)).toBe(
-      '1 failed, 1 needs a fresh copy, 1 current.',
+      '1 failed, 1 needs a fresh copy, 1 source current (1 copy).',
     )
   })
 

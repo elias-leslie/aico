@@ -685,7 +685,7 @@ function since(iso: string | null | undefined, now: number): string {
   return `${Math.round(minutes / 1440)} days ago`
 }
 
-/** `aico backups list` for a person: problems first, each target in one line, retired sources folded. */
+/** `aico backups list` for a person: problems first, each target in one line, archived sources folded. */
 export function listText(
   list: { machine: string; entries: BackupEntry[]; runs: BackupState['runs'] },
   now: number,
@@ -696,11 +696,22 @@ export function listText(
   // A machine that is off is not a problem Status raises: it is counted apart, with its last good copy.
   const away = live.filter((e) => e.state === 'off')
   const problems = live.filter((e) => e.state !== 'ok' && e.state !== 'off')
+  // Counted per source (a source has a copy on T7, Drive and so on), the way the web list counts, with the copies beside it.
+  const sources = new Map<string, BackupEntry[]>()
+  for (const e of list.entries) sources.set(e.source, [...(sources.get(e.source) ?? []), e])
+  const tally = { ok: 0, bad: 0, away: 0, archived: 0 }
+  for (const copies of sources.values()) {
+    const states = copies.filter((e) => e.state !== 'off').map((e) => e.state)
+    if (!states.length) tally[copies.every((e) => e.gone) ? 'archived' : 'away'] += 1
+    else if (states.every((state) => state === 'ok')) tally.ok += 1
+    else tally.bad += 1
+  }
+  const okCopies = live.length - problems.length - away.length
   const parts = [
-    `${live.length - problems.length - away.length} ok`,
-    `${problems.length} need a look`,
-    away.length ? `${away.length} on a machine that is off` : '',
-    gone.length ? `${new Set(gone.map((e) => e.source)).size} retired sources` : '',
+    `${tally.ok} ${tally.ok === 1 ? 'source' : 'sources'} current (${okCopies} ${okCopies === 1 ? 'copy' : 'copies'})`,
+    `${tally.bad} need a look`,
+    tally.away ? `${tally.away} on a machine that is off` : '',
+    tally.archived ? `${tally.archived} archived` : '',
   ].filter(Boolean)
   lines.push(`Backups on ${list.machine}: ${parts.join(', ')}.`)
   if (away.length) {
@@ -742,7 +753,7 @@ export function listText(
   if (gone.length)
     lines.push(
       '',
-      `Retired (path gone; older copies still hold them): ${[...new Set(gone.map((e) => e.name))].join(', ')}.`,
+      `Archived (source gone; older copies still hold them): ${[...new Set(gone.map((e) => e.name))].join(', ')}.`,
     )
   lines.push('', 'Every entry with paths and snapshots: aico backups list --json')
   return lines.join('\n')

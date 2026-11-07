@@ -65,7 +65,7 @@ describe('BackupsPage', () => {
     ])
     render(<BackupsPage />)
     expect(await screen.findByTestId('backups-summary')).toHaveTextContent(
-      'All 1 current, 1 archived, 1 on a machine that is off.',
+      'All 1 source current (2 copies), 1 on a machine that is off, 1 archived.',
     )
     // Sources are counted once, whatever number of places hold a copy: the summary and the
     // folded list agree.
@@ -97,7 +97,7 @@ describe('BackupsPage', () => {
     expect(names).toEqual(['Zulu', 'Alpha'])
     expect(screen.getByText('Drive refused the upload.')).toBeInTheDocument()
     expect(screen.getByTestId('backups-summary')).toHaveTextContent(
-      '1 failed, 1 current.',
+      '1 failed, 1 source current (1 copy).',
     )
   })
 

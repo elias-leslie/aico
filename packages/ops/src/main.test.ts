@@ -31,7 +31,7 @@ it('says what is wrong with aico logs once, without a doubled prefix', async () 
   expect(err).toEqual(['aico logs: unknown option --bogus'])
 })
 
-it('lists backups for a person: problems, one line per target, retired sources folded', () => {
+it('lists backups for a person: problems, one line per target, archived sources folded', () => {
   const now = Date.parse('2026-11-07T02:00:00Z')
   const entry = (over: Record<string, unknown>) => ({
     id: 'x',
@@ -79,14 +79,14 @@ it('lists backups for a person: problems, one line per target, retired sources f
     now,
   )
   expect(text.split('\n')[0]).toBe(
-    'Backups on ws: 2 ok, 0 need a look, 1 on a machine that is off, 1 retired sources.',
+    'Backups on ws: 1 source current (2 copies), 0 need a look, 1 on a machine that is off, 1 archived.',
   )
   expect(text).toContain('On a machine that is off:')
   expect(text).toContain('Owner backups Jobs DB: no good copy date known')
   expect(text).toMatch(
     / {2}T7 +1\/1 ok; newest data 30 min ago; last run 30 min ago, ok; next Nov 7, 12:30 AM EST/,
   )
-  expect(text).toContain('Retired (path gone; older copies still hold them): Old.')
+  expect(text).toContain('Archived (source gone; older copies still hold them): Old.')
   expect(text).not.toContain('{')
 })
 

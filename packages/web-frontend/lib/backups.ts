@@ -68,22 +68,33 @@ function countBackups(groups: readonly BackupGroup[]): BackupCounts {
   return counts
 }
 
-/** "All 47 current, 17 archived, 2 on a machine that is off." or what is wrong first. Counts sources, like the list. */
+/** "All 57 sources current (98 copies), 2 on a machine that is off, 17 archived." or what is wrong first. Counts sources, like the list, with the copies beside it; `aico backups` says the same. */
 export function backupSummary(entries: readonly BackupEntry[]): string {
   if (!entries.length) return 'No backups are registered yet.'
-  const { current, late, failed, archived, away } = countBackups(
-    groupBySource(entries),
-  )
+  const groups = groupBySource(entries)
+  const { current, late, failed, archived, away } = countBackups(groups)
   const live = current + late + failed
+  const copies = groups
+    .filter((group) => group.state === 'ok')
+    .reduce(
+      (sum, group) =>
+        sum +
+        group.copies.filter((copy) => !copy.gone && copy.state === 'ok').length,
+      0,
+    )
   const parts: string[] = []
   if (failed) parts.push(`${failed} failed`)
   if (late) parts.push(`${late} ${late === 1 ? 'needs' : 'need'} a fresh copy`)
-  if (current)
+  if (current) {
+    const noun = current === 1 ? 'source' : 'sources'
+    const lead =
+      !failed && !late ? `All ${current} ${noun}` : `${current} ${noun}`
     parts.push(
-      !failed && !late ? `All ${current} current` : `${current} current`,
+      `${lead} current (${copies} ${copies === 1 ? 'copy' : 'copies'})`,
     )
-  if (archived) parts.push(`${archived} archived`)
+  }
   if (away) parts.push(`${away} on a machine that is off`)
+  if (archived) parts.push(`${archived} archived`)
   if (!live && (archived || away))
     return `Nothing is backed up now; ${parts.join(', ')}.`
   return `${parts.join(', ')}.`
