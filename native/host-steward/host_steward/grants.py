@@ -61,14 +61,28 @@ def post_notice(cfg: dict[str, Any], req: dict[str, Any]) -> bool:
         return False
 
 
+def resolve_notice(cfg: dict[str, Any], req: dict[str, Any]) -> bool:
+    """Ends the request's notice once it is no longer pending (answered, expired or revoked): an unanswered
+    "Open your main Chrome?" would otherwise stay unread in the tray after there was nothing left to answer."""
+    body = {"source": "aico", "key": f"approve:elevate:{req['id']}", "text": f"Access request {req['state']}."}
+    try:
+        request = urllib.request.Request(cfg["notice_url"].removesuffix("/api/notices") + "/api/notices/resolve",
+                                         json.dumps(body).encode(), {"Content-Type": "application/json"})
+        with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(request, timeout=5):
+            return True
+    except OSError:
+        return False
+
+
 # How long a finished (denied, revoked, expired) request keeps its Status row.
 FINISHED_KEEP_S = 86400
 
 
 class Grants:
     def __init__(self, cfg: dict[str, Any], now=time.time, notify=post_notice, report=aico_status.report,
-                 remove=aico_status.remove):
+                 remove=aico_status.remove, resolve=resolve_notice):
         self.cfg, self.now, self.notify, self.report, self.remove = cfg, now, notify, report, remove
+        self.resolve = resolve
         self.folder = Path(cfg["state_dir"])
         self.folder.mkdir(parents=True, exist_ok=True, mode=0o700)
         path = self.folder / "state.json"
@@ -94,6 +108,9 @@ class Grants:
                 req["pushed"] = self.notify(self.cfg, req)
             if req["state"] not in ("pending", "approved"):
                 req.setdefault("ended", min(now, req["expires"]))
+            # Nothing is left to answer once it is not pending: its notice ends (retried until it does).
+            if req["state"] != "pending" and req.get("pushed") and not req.get("resolved"):
+                req["resolved"] = self.resolve(self.cfg, req)
         # A finished request stays a day for the record, then its row and entry go.
         old = [r for r in self.state["requests"] if "ended" in r and now - r["ended"] > FINISHED_KEEP_S]
         self.state["requests"] = [r for r in self.state["requests"] if r not in old]

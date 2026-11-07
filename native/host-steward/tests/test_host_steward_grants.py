@@ -14,7 +14,12 @@ from host_steward import grants, webauthn
 
 
 @pytest.fixture
-def service(tmp_path):
+def resolved():
+    return []
+
+
+@pytest.fixture
+def service(tmp_path, resolved):
     cfg = grants.config()
     cfg.update(state_dir=str(tmp_path), credentials_file=str(tmp_path / "credential.json"),
                site_file=str(tmp_path / "site.json"), owner=pwd.getpwuid(os.getuid()).pw_name)
@@ -27,7 +32,8 @@ def service(tmp_path):
     clock = [1800000000.0]
     notices, rows = [], []
     svc = grants.Grants(cfg, now=lambda: clock[0], notify=lambda _, r: notices.append(r.copy()) or True,
-                        report=lambda batch: rows.extend(batch))
+                        report=lambda batch: rows.extend(batch),
+                        resolve=lambda _, r: resolved.append((r["id"], r["state"])) or True)
     return svc, key, clock, notices, rows
 
 
@@ -135,3 +141,18 @@ def test_finished_requests_leave_status_after_a_day(service):
     svc.refresh()
     assert svc.state["requests"] == [] and not rows
     assert removed and removed[0].endswith(f"/grant-{rid}")
+
+
+def test_a_request_that_is_no_longer_pending_ends_its_notice_once(service, resolved):
+    """The tray counts an unanswered request notice as unread until something ends it."""
+    svc, key, clock, notices, _rows = service
+    answered, lapsed = request(svc), request(svc)
+    svc.refresh()
+    assert [n["id"] for n in notices] == [answered, lapsed] and resolved == []
+    svc.handle(signed(svc, key, answered, "deny"), svc.owner)
+    svc.refresh()
+    assert resolved == [(answered, "denied")]
+    clock[0] += 3600  # the other lapses unanswered
+    svc.refresh()
+    svc.refresh()
+    assert sorted(resolved) == sorted([(answered, "denied"), (lapsed, "expired")])

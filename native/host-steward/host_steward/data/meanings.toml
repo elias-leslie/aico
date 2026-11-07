@@ -509,13 +509,13 @@ impact = "Expected if declared (host-steward declare) or run by a known agent; t
 next = "Don't know one? journalctl -t sudo --since -1d -g NAME shows who ran it"
 
 [signal."sudo.new_family.auto:ok"]
-what = "{n} new kinds of sudo command, all from known services: {by}"
+what = "{n} new kinds of sudo command, all from known services or agent sessions: {by}"
 
 [signal."sudo.family_spike"]
 what = "Sudo command spikes: {spikes}"
 
 [signal."sudo.family_spike.auto:ok"]
-what = "Sudo command spikes, all from known services: {by}"
+what = "Sudo command spikes, all from known services or agent sessions: {by}"
 
 [signal."sudo.failure"]
 what = "A sudo login failed for {user}: {detail} ({when})"

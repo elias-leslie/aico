@@ -69,7 +69,7 @@
   },
   "schedule": {
     "localMinutes": 240,
-    "driveAt": "02:30",
+    "driveAt": "04:00",
     "appendMinutes": 60,
     "snapshotMinutes": 30,
     "guardMinutes": 5,

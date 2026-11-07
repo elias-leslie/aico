@@ -321,6 +321,8 @@ def ingest_sudo(
     hours: dict[str, dict[str, int]] = state.setdefault("hours", {})
     callers: dict[str, dict[str, dict[str, int]]] = state.setdefault("callers", {})
     actors: dict[str, dict[str, float]] = state.setdefault("actors", {})
+    agent_calls: dict[str, dict[str, int]] = state.setdefault("agent_calls", {})
+    actor_of: dict[tuple[str, str], dict[str, Any] | None] = {}
     events: list[dict] = []
     traced: dict[tuple[str, float], dict[str, Any] | None] = {}
     seen_by: set[tuple[str, str]] = set()
@@ -358,19 +360,26 @@ def ingest_sudo(
         fam = command_family(p["command"], rule.subcommand_tools)
         bucket = hours.setdefault(_hour(ts), {})
         bucket[fam] = bucket.get(fam, 0) + 1
-        if who is not None and cgroup and (fam, cgroup) not in seen_by:
-            # who ran this family: the agent session or service in the caller's cgroup, named once per family and
-            # cgroup in a pass (a label only, never the command line)
-            seen_by.add((fam, cgroup))
-            try:
-                actor = who(cgroup, float(ts))
-            except Exception:  # noqa: BLE001 - attribution only ever adds a name
-                actor = None
-            if actor and actor.get("label"):
-                labels = actors.setdefault(fam, {})
-                labels[str(actor["label"])[:80]] = float(ts)
-                for stale in sorted(labels, key=labels.__getitem__)[:-MAX_ACTORS]:
-                    del labels[stale]
+        if who is not None and cgroup:
+            # who ran this family: the agent session or service in the caller's cgroup, asked once per family and
+            # cgroup in a pass (a label only, never the command line); every call of an agent session is counted so
+            # a family run only by agents is told apart from one anyone else ran too
+            if (fam, cgroup) not in seen_by:
+                seen_by.add((fam, cgroup))
+                try:
+                    actor_of[(fam, cgroup)] = who(cgroup, float(ts))
+                except Exception:  # noqa: BLE001 - attribution only ever adds a name
+                    actor_of[(fam, cgroup)] = None
+                actor = actor_of[(fam, cgroup)]
+                if actor and actor.get("label"):
+                    labels = actors.setdefault(fam, {})
+                    labels[str(actor["label"])[:80]] = float(ts)
+                    for stale in sorted(labels, key=labels.__getitem__)[:-MAX_ACTORS]:
+                        del labels[stale]
+            by_agent = actor_of.get((fam, cgroup))
+            if by_agent and by_agent.get("kind") == "agent":
+                agent_calls.setdefault(_hour(ts), {}).setdefault(fam, 0)
+                agent_calls[_hour(ts)][fam] += 1
         if re.fullmatch(r"[\w@.:-]{1,120}\.service", unit):
             byfam = callers.setdefault(_hour(ts), {}).setdefault(fam, {})
             if unit in byfam or len(byfam) < 8:
@@ -391,6 +400,7 @@ def ingest_sudo(
     if cutoff:
         state["hours"] = {h: hours[h] for h in cutoff}
         state["callers"] = {h: callers[h] for h in cutoff if h in callers}
+        state["agent_calls"] = {h: agent_calls[h] for h in cutoff if h in agent_calls}
         known = {fam for bucket in state["hours"].values() for fam in bucket}
         state["actors"] = {fam: labels for fam, labels in actors.items() if fam in known}
     return events
@@ -503,6 +513,16 @@ def automation_callers(
     }
 
 
+def agent_only(state: dict[str, Any], hour_keys: set[str], last24: dict[str, int]) -> set[str]:
+    """Families whose every call in the window came from one of our agent sessions (agents have routine root; a first
+    use is a note, not a warning). A family anyone else ran too, or whose caller was not traced, is not in it."""
+    ran: dict[str, int] = {}
+    for h in hour_keys:
+        for fam, n in (state.get("agent_calls") or {}).get(h, {}).items():
+            ran[fam] = ran.get(fam, 0) + int(n)
+    return {fam for fam, n in ran.items() if n >= last24.get(fam, 0) > 0}
+
+
 def _stats(state: dict[str, Any], now: float, cfg: dict[str, Any]) -> dict[str, Any]:
     hours: dict[str, dict[str, int]] = state.get("hours", {})
     cur_keys = {_hour(now - i * 3600) for i in range(24)}
@@ -544,6 +564,11 @@ def _hour_name(at: float) -> str:
     return datetime.fromtimestamp(at, UTC).astimezone().strftime("%a %H:00")
 
 
+def _agents_of(family: str, state: dict[str, Any]) -> str:
+    labels = (state.get("actors") or {}).get(family) or {}
+    return " or ".join(sorted(labels, key=lambda name: -float(labels[name]))[:2]) or "an agent session"
+
+
 def _with_actor(family: str, state: dict[str, Any]) -> str:
     """"userdel (Agent in session 8e2f1c0a)": the command family and who ran it, newest caller first; the bare
     family when no caller was traced (never the command's arguments)."""
@@ -580,6 +605,7 @@ def evaluate(
         # Families whose every call came from a known automation service (by the journal's caller unit) stay visible
         # but never warn: their volume follows that job's schedule and backlog.
         auto = automation_callers(state, st["keys"], last24, rule)
+        by_agents = agent_only(state, st["keys"], last24) if cfg.get("agent_runs_are_notes", True) else set()
         new = sorted(
             f for f in last24 if f not in seen and not any(fnmatch.fnmatchcase(f, k) for k in known)
         )
@@ -593,7 +619,7 @@ def evaluate(
             ):
                 spikes.append((fam, f"{fam} {n} vs {med:.0f}/day"))
         if new:
-            manual = [f for f in new if f not in auto]
+            manual = [f for f in new if f not in auto and f not in by_agents]
             if manual:
                 out.append(
                     Signal(
@@ -607,16 +633,21 @@ def evaluate(
                     )
                 )
             else:
-                by = "; ".join(f"{f} from {', '.join(auto[f][:2])}" for f in new[:6])
+                by = "; ".join(
+                    f"{f} from {', '.join(auto[f][:2])}" if f in auto else f"{f} from {_agents_of(f, state)}"
+                    for f in new[:6]
+                )
                 out.append(
                     Signal("sudo.new_family.auto", "ok", {"n": len(new), "by": by}, note=True)
                 )
         if spikes:
-            manual_s = [t for f, t in spikes if f not in auto]
+            manual_s = [t for f, t in spikes if f not in auto and f not in by_agents]
             if manual_s:
                 out.append(Signal("sudo.family_spike", "warn", {"spikes": "; ".join(manual_s[:6])}))
             else:
-                by = "; ".join(f"{t} ({', '.join(auto[f][:2])})" for f, t in spikes[:6])
+                by = "; ".join(
+                    f"{t} ({', '.join(auto[f][:2]) if f in auto else _agents_of(f, state)})" for f, t in spikes[:6]
+                )
                 out.append(Signal("sudo.family_spike.auto", "ok", {"by": by}, note=True))
     out += _open_signals(state, now, ctx, host, float(auth["hold_hours"]), cap)
     out += _recorded(state, host, now, float(auth["hold_hours"]), cap)

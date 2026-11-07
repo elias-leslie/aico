@@ -167,9 +167,10 @@ export function nightlyRow(
     kind: 'job',
     machine,
     project: 'aico',
-    // Partial coverage is normal (ended, long or running sessions) and stays in the
-    // meaning; amber is for candidates, or a check that could observe nothing at all.
-    state: unused.length || !deliveries.length || !observed ? 'warn' : 'ok',
+    // Partial coverage is normal (ended, long or running sessions) and stays in the meaning.
+    // Items nobody used are housekeeping candidates for the Agents page, not a problem for the
+    // owner; amber is for a check that could observe nothing at all (unknown is not OK).
+    state: !deliveries.length || !observed ? 'warn' : 'ok',
     meaning,
     last_run: now.toISOString(),
     ...(nextRun ? { next_run: nextRun } : {}),
@@ -192,7 +193,7 @@ export async function checkContext(db: Database, deps: ContextDeps) {
         v: 1,
         source: 'aico',
         kind: 'info',
-        severity: 'warning',
+        severity: 'info',
         push: 'tray',
         key: 'context-unused',
         title: `${unused.length} context items have no recorded use`,

@@ -122,7 +122,7 @@
         "command": ["../../web-server/scripts/aico", "backups", "run", "drive", "--scheduled"]
       },
       "lease_s": 300,
-      "at": "02:30"
+      "at": "04:00"
     },
     {
       "kind": "backups-append",

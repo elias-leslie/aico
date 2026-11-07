@@ -121,7 +121,10 @@ export interface SpendInput {
 }
 
 /** The one row of a provider. */
-export function spendRow(provider: { id: string; name: string }, input: SpendInput): StatusRow {
+export function spendRow(
+  provider: { id: string; name: string; warn_when_used_up?: boolean },
+  input: SpendInput,
+): StatusRow {
   const usage = optionUsage(
     provider.id,
     windowFacts(input.facts.readings, input.now),
@@ -142,7 +145,10 @@ export function spendRow(provider: { id: string; name: string }, input: SpendInp
   const plan = currentPlan(input.plans.plans, provider.id, input.now)
   if (plan && meaning.length + plan.plan.length < 280) meaning += ` Plan: ${plan.plan}.`
   const fine =
-    usage.status === 'ok' || usage.status === 'partly_unknown' || usage.status === 'on_credits'
+    usage.status === 'ok' ||
+    usage.status === 'partly_unknown' ||
+    usage.status === 'on_credits' ||
+    (usage.status === 'used_up' && provider.warn_when_used_up === false)
   return {
     id: `usage/${provider.id}`,
     what: `${provider.name} usage`,

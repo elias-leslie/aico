@@ -470,6 +470,8 @@ def test_a_new_family_names_who_ran_it_and_never_the_command_line(tmp_path):
         entry(NOW, f" u : PWD=/ ; USER=root ; COMMAND=/usr/sbin/userdel {secret} olduser", "", SCOPE),
         entry(NOW, " u : PWD=/ ; USER=root ; COMMAND=/usr/bin/lsof -i", "", SCOPE),
         entry(NOW, " u : PWD=/ ; USER=root ; COMMAND=/usr/bin/whoami", "", ""),
+        # also run by a caller nobody traced, so the family is not agent-only and still warns
+        entry(NOW, " u : PWD=/ ; USER=root ; COMMAND=/usr/sbin/userdel other", "", ""),
     ]
     calls = []
 
@@ -584,6 +586,34 @@ def test_new_family_from_a_known_automation_service_is_only_a_note(tmp_path):
         codes(out)["sudo.new_family.auto"] == "ok"
         and next(s for s in out if s.code == "sudo.new_family.auto").note
     )
+
+
+def test_new_family_run_only_by_agent_sessions_is_a_note_but_mixed_callers_still_warn(tmp_path):
+    """Agents have routine root: a command family only traced agent sessions ran is a note. One call from anyone else
+    (or an untraced caller) keeps the warning, so a stranger using sudo is still seen."""
+    agent = {"kind": "agent", "label": "Agent in session abcd1234"}
+    state = hours_state(5)
+    sudo.ingest_sudo(
+        state,
+        [entry(NOW, " u : PWD=/ ; USER=root ; COMMAND=/usr/sbin/dmidecode -t memory", "", SCOPE)] * 2,
+        RULES,
+        who=lambda cg, at: agent,
+    )
+    out = evaluate(state, tmp_path)
+    assert "sudo.new_family" not in codes(out)
+    note = next(s for s in out if s.code == "sudo.new_family.auto")
+    assert note.state == "ok" and note.note and "Agent in session abcd1234" in note.fields["by"]
+    mixed = hours_state(5)
+    sudo.ingest_sudo(
+        mixed,
+        [entry(NOW, " u : PWD=/ ; USER=root ; COMMAND=/usr/sbin/dmidecode -t memory", "", SCOPE)],
+        RULES,
+        who=lambda cg, at: agent,
+    )
+    sudo.ingest_sudo(
+        mixed, [entry(NOW, " u : PWD=/ ; USER=root ; COMMAND=/usr/sbin/dmidecode -t bios", "", "")], RULES
+    )
+    assert codes(evaluate(mixed, tmp_path))["sudo.new_family"] == "warn"
 
 
 def test_backup_guard_volume_from_aicos_backup_units_is_only_a_note(tmp_path):

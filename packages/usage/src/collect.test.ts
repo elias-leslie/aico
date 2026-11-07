@@ -11,7 +11,7 @@ import { openUsage } from './db'
 import { latestReadings, loadFacts } from './facts'
 import { localDay } from './plans'
 import { storeReading } from './readings'
-import { brief, spendRows } from './spend'
+import { brief, spendRow, spendRows } from './spend'
 
 const NOW = Date.parse('2026-11-04T12:00:00.000Z')
 const HOUR = 3600_000
@@ -725,6 +725,10 @@ describe('a used-up subscription', () => {
       /^Used up until Nov \d+, [^.]+ E[SD]T \(weekly\)\. Windows: 5h 100% left; weekly used up until Nov \d+, [^.]+ E[SD]T; monthly 5% left, resets Nov \d+, [^.]+ E[SD]T\.$/,
     )
     expect(row?.meaning).not.toContain('Used up.')
+    // The fallback subscription's used-up week is information (usage.json says so), not a problem;
+    // the same facts on a provider with no such flag are a warning.
+    expect(row?.state).toBe('ok')
+    expect(spendRow({ id: 'opencode-go', name: 'OpenCode Go' }, input).state).toBe('warn')
     expect(brief({ id: 'opencode-go', name: 'OpenCode Go' }, input)).toMatch(
       /^OpenCode Go weekly used up until Nov \d+/,
     )

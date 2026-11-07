@@ -72,16 +72,22 @@ it('writes one nightly row and one tray-only info notice when items qualify', as
     ({ rows: [{ id: 'jobs/context-unused', next_run: '2026-11-05T09:10:00Z' }] }) as never
   try {
     const result = await checkContext(db, d.options)
-    expect(result.state).toBe('warn')
+    // Unused items are housekeeping candidates: an ok row and an info notice, never a problem.
+    expect(result.state).toBe('ok')
     expect(d.rows).toHaveLength(1)
     expect(parseRow(d.rows[0])).toMatchObject({
       id: 'jobs/context-unused',
       kind: 'job',
-      state: 'warn',
+      state: 'ok',
       next_run: '2026-11-05T09:10:00.000Z',
     })
     expect(d.notices).toHaveLength(1)
-    expect(d.notices[0]).toMatchObject({ push: 'tray', kind: 'info', key: 'context-unused' })
+    expect(d.notices[0]).toMatchObject({
+      push: 'tray',
+      kind: 'info',
+      severity: 'info',
+      key: 'context-unused',
+    })
     expect(d.notices[0]!.body).toContain('Guide')
     expect(d.notices[0]).not.toHaveProperty('if_ignored')
   } finally {
@@ -253,7 +259,7 @@ it('judges absence from observed sessions; one unobserved session does not hide 
     expect(recentDeliveries(db, now).filter((r) => r.observed)).toHaveLength(
       COST.minObservedSessions,
     )
-    expect(result.state).toBe('warn')
+    expect(result.state).toBe('ok')
     expect(d.notices[0]!.body).toContain('Guide')
     expect(result.message).toContain('1 sessions unavailable')
   } finally {

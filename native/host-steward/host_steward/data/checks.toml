@@ -637,6 +637,9 @@ family_spike_min = 150
 known_families = [
   "host-steward check", "host-steward check *", "host-steward collect-usage",
 ]
+# A family every call of which came from one of our agent sessions (agents have routine root) is a note when new or
+# spiking, not a warning. Calls from anyone else, or with no traced caller, still warn.
+agent_runs_are_notes = true
 # Extra exact caller unit names that are scheduled automation (the site's trusted units always count).
 automation_units = []
 # Commands that touch these are sensitive (a write is a problem unless an agent or a declaration explains it).
