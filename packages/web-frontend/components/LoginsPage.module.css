@@ -121,8 +121,19 @@
 }
 /* Remove is the one destructive button: apart from Reveal, Copy and Replace, edged in ember. */
 .remove {
-  margin-inline-start: 20px;
-  border-color: var(--term-danger-border);
+  margin-inline-start: auto;
+  border-color: color-mix(in srgb, var(--ember) 60%, transparent);
+}
+/* On a phone Remove drops to its own line, right-aligned, away from Reveal and Copy. */
+.apart {
+  display: none;
+}
+@media (max-width: 600px) {
+  .apart {
+    display: block;
+    flex-basis: 100%;
+    height: 0;
+  }
 }
 .badge {
   flex: none;

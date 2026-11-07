@@ -2391,17 +2391,10 @@ a.lantern-ask-attached {
     -webkit-box-orient: vertical;
   }
 
-  /* A problem's meaning gets a third line: the part that says what to do often comes last. */
+  /* A problem's meaning gets more lines: the part that says what to do often comes last,
+     and tapping the row opens the whole sentence in the sheet. */
   .status-row:not(.healthy) .meaning {
-    -webkit-line-clamp: 3;
-  }
-
-  /* Tapping a row opens it, and the whole sentence with it: nothing stays cut. */
-  .status-row.open .meaning,
-  .status-row.open:not(.healthy) .meaning {
-    display: block;
-    -webkit-line-clamp: unset;
-    overflow: visible;
+    -webkit-line-clamp: 5;
   }
 
   .status-row .meta-m {

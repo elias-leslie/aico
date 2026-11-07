@@ -508,6 +508,7 @@ function LoginRow({
           >
             Access
           </button>
+          <span className={styles.apart} aria-hidden="true" />
           <button
             className={`lantern-btn ghost small ${styles.remove}`}
             disabled={readOnly}
