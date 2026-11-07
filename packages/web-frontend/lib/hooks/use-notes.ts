@@ -24,6 +24,7 @@ import {
   putLabels,
 } from '../api/notes'
 import { ApiError, isPermanentRefusal } from '../api-fetch'
+import { loadState } from './load-state'
 
 export const NOTES_KEY = ['notes'] as const
 /** As often as the captures list, so a change from another device shows up. */
@@ -45,12 +46,7 @@ export function useNotes(q: string, archived: boolean) {
     notes: query.data?.notes ?? [],
     total: query.data?.total ?? 0,
     loaded: query.data !== undefined,
-    isLoading: query.isLoading,
-    isError: query.isError && !query.data,
-    isStale: query.isError && query.data !== undefined,
-    error: query.error instanceof Error ? query.error.message : null,
-    updatedAt: query.dataUpdatedAt,
-    refetch: () => void query.refetch(),
+    ...loadState(query, query.data !== undefined),
   }
 }
 
@@ -66,13 +62,8 @@ export function useNote(id: string | null) {
   })
   return {
     note: query.data ?? null,
-    isLoading: query.isLoading,
     gone: query.error instanceof ApiError && query.error.status === 404,
-    isError: query.isError && !query.data,
-    isStale: query.isError && query.data !== undefined,
-    error: query.error instanceof Error ? query.error.message : null,
-    updatedAt: query.dataUpdatedAt,
-    refetch: () => void query.refetch(),
+    ...loadState(query, query.data !== undefined),
   }
 }
 

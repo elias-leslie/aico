@@ -1,9 +1,11 @@
 'use client'
 
 import { ArrowDown } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
-
-type XtermTerminal = InstanceType<typeof import('@xterm/xterm').Terminal>
+import { useCallback, useRef, useState } from 'react'
+import {
+  useTerminalViewport,
+  type XtermTerminal,
+} from '../lib/hooks/use-terminal-viewport'
 
 interface ScrollToBottomPillProps {
   terminalRef: React.RefObject<XtermTerminal | null>
@@ -59,28 +61,21 @@ export function ScrollToBottomPill({
   const [state, setState] = useState<ReadingState>(AT_BOTTOM)
   const trackerRef = useRef<Tracker | null>(null)
 
-  useEffect(() => {
-    const term = terminalRef.current
-    if (!isReady || !term) return
-    const update = () => {
+  useTerminalViewport(
+    terminalRef,
+    isReady,
+    (term) => {
       const next = readViewport(term, trackerRef)
       setState((prev) =>
         prev.scrolledUp === next.scrolledUp && prev.newOutput === next.newOutput
           ? prev
           : next,
       )
-    }
-    update()
-    const subscriptions = [
-      term.onScroll(update),
-      term.onWriteParsed(update),
-      term.onResize(update),
-    ]
-    return () => {
-      for (const subscription of subscriptions) subscription.dispose()
+    },
+    () => {
       trackerRef.current = null
-    }
-  }, [terminalRef, isReady])
+    },
+  )
 
   const jump = useCallback(() => {
     terminalRef.current?.scrollToBottom()

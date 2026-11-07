@@ -21,6 +21,7 @@ import {
 } from '../api/captures'
 import { ApiError, isPermanentRefusal } from '../api-fetch'
 import { setCaptureLimits } from '../capture-queue'
+import { loadState } from './load-state'
 
 const CAPTURES_KEY = ['captures'] as const
 const LIMITS_KEY = ['capture-limits'] as const
@@ -64,13 +65,7 @@ export function useCaptures() {
     captures: pages ? pages.flatMap((page) => page.captures) : [],
     total: pages?.[0]?.total ?? 0,
     loaded: pages !== undefined,
-    isLoading: query.isLoading,
-    /** The first load failed; nothing to show. */
-    isError: query.isError && !pages,
-    /** A refresh failed while an earlier list is on screen. */
-    isStale: query.isError && pages !== undefined,
-    error: query.error instanceof Error ? query.error.message : null,
-    updatedAt: query.dataUpdatedAt,
+    ...loadState(query, pages !== undefined),
     hasMore: query.hasNextPage,
     loadingMore: query.isFetchingNextPage,
     loadMore: () => void query.fetchNextPage(),
@@ -88,13 +83,8 @@ export function useCapture(id: string | null) {
   })
   return {
     capture: query.data ?? null,
-    isLoading: query.isLoading,
     gone: query.error instanceof ApiError && query.error.status === 404,
-    isError: query.isError && !query.data,
-    isStale: query.isError && query.data !== undefined,
-    error: query.error instanceof Error ? query.error.message : null,
-    updatedAt: query.dataUpdatedAt,
-    refetch: () => void query.refetch(),
+    ...loadState(query, query.data !== undefined),
   }
 }
 

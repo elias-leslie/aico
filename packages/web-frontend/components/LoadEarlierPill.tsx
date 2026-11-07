@@ -1,10 +1,12 @@
 'use client'
 
 import { ArrowUp } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import {
+  useTerminalViewport,
+  type XtermTerminal,
+} from '../lib/hooks/use-terminal-viewport'
 import type { HistoryFrame } from '../lib/hooks/use-websocket-connection'
-
-type XtermTerminal = InstanceType<typeof import('@xterm/xterm').Terminal>
 
 interface LoadEarlierPillProps {
   terminalRef: React.RefObject<XtermTerminal | null>
@@ -43,20 +45,7 @@ export function LoadEarlierPill({
 }: LoadEarlierPillProps) {
   const [top, setTop] = useState(false)
 
-  useEffect(() => {
-    const term = terminalRef.current
-    if (!isReady || !term) return
-    const update = () => setTop(atTop(term))
-    update()
-    const subscriptions = [
-      term.onScroll(update),
-      term.onWriteParsed(update),
-      term.onResize(update),
-    ]
-    return () => {
-      for (const subscription of subscriptions) subscription.dispose()
-    }
-  }, [terminalRef, isReady])
+  useTerminalViewport(terminalRef, isReady, (term) => setTop(atTop(term)))
 
   const more = history ? history.total - history.lines : 0
   if (!history || (!loading && (more <= 0 || !top))) return null
