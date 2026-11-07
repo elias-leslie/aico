@@ -399,195 +399,194 @@ function check(verb: string, args: string[]): void {
   }
 }
 
-export async function backups(argv: string[], env = process.env): Promise<number> {
-  // Bare `aico backups` (or only --json) lists.
-  const [verb, ...args] =
-    !argv[0] || (argv[0].startsWith('-') && !['--help', '-h'].includes(argv[0]))
-      ? ['list', ...argv]
-      : argv
-  if (['help', '--help', '-h'].includes(verb as string)) {
-    console.log(USAGE)
-    return 0
-  }
-  // Mistakes and help are answered before any configuration or host is read.
-  if (!VERBS.includes(verb as string)) {
-    const near = nearest(verb as string, VERBS)
-    throw new Refusal(
-      `unknown command ${verb}${near ? ` (did you mean ${near}?)` : ''}; aico backups --help lists them`,
-      2,
-    )
-  }
-  if (args.includes('--help') || args.includes('-h')) {
-    console.log(backupsUsage(verb))
-    return 0
-  }
-  if (verb !== 'recover' && verb !== 'drill') check(verb as string, args)
-  const cfg = config(env),
-    machine = env.AICO_BACKUP_MACHINE || machineId()
-  const rt: Runtime = { cfg, run: execute, now: () => new Date() }
-  if (verb === 'recover' || verb === 'drill') return recovery([verb, ...args], cfg, env)
-  if (verb === 'rollback') {
-    for (const [scope, unit] of Object.values(cfg.legacyTimers))
-      console.log(
-        `${scope === '--user' ? '' : 'sudo -n '}systemctl --no-ask-password ${scope === '--user' ? '--user ' : ''}enable --now ${scope === '--user' ? unit : scope}`,
-      )
+/** `aico backups rollback`: the commands that put the old timers back. */
+function rollbackNote(cfg: Runtime['cfg']): void {
+  for (const [scope, unit] of Object.values(cfg.legacyTimers))
     console.log(
-      'Remove backup jobs from the Aico jobs file before enabling both schedules together. No units or backup data were deleted.',
+      `${scope === '--user' ? '' : 'sudo -n '}systemctl --no-ask-password ${scope === '--user' ? '--user ' : ''}enable --now ${scope === '--user' ? unit : scope}`,
     )
-    return 0
+  console.log(
+    'Remove backup jobs from the Aico jobs file before enabling both schedules together. No units or backup data were deleted.',
+  )
+}
+
+/** `aico backups request TARGET`: ask for a backup to run now. */
+async function requestCommand(rt: Runtime, machine: string, args: string[]): Promise<number> {
+  const target = args[0]
+  if (!['native', 'drive', 'append'].includes(target ?? '')) throw new Error(USAGE)
+  await requestBackup(rt, machine, target as string)
+  console.log(
+    JSON.stringify({
+      message: 'Backup is due now. Its last good data age updates when it finishes.',
+    }),
+  )
+  return 0
+}
+
+/** `aico backups run TARGET` outside its unit: start it as a transient user
+ * unit so it outlives this process. */
+async function runInUnit(
+  cfg: Runtime['cfg'],
+  env: NodeJS.ProcessEnv,
+  args: string[],
+): Promise<number> {
+  const target = args[0]
+  validateScheduledTarget(target)
+  // A backup survives the scheduler or web app restarting. Keep the previous CPU/IO/memory policy.
+  const kept = [
+    'HOME',
+    'PATH',
+    'XDG_RUNTIME_DIR',
+    'DBUS_SESSION_BUS_ADDRESS',
+    'AICO_BACKUPS_CONFIG',
+    'AICO_WEB_URL',
+    'AICO_BACKUP_MACHINE',
+    'AICO_DATA_DIR',
+    'AICO_WEB_DB',
+    'XDG_STATE_HOME',
+  ].flatMap((key) => (env[key] ? [`--setenv=${key}=${env[key]}`] : []))
+  const unit = `aico-backup-${target}${args.includes('--pressure') ? '-pressure' : ''}`
+  const live = async () =>
+    (await execute(['systemctl', '--user', 'is-active', '--quiet', unit])).code === 0
+  // One run of a backup at a time: a second finds the live unit and says so, it does not fail.
+  const busy = () => {
+    console.log(`Already running: the ${target} backup is in progress, so this run did nothing.`)
+    return BUSY_EXIT
   }
-  if (verb === 'request') {
-    const target = args[0]
-    if (!['native', 'drive', 'append'].includes(target ?? '')) throw new Error(USAGE)
-    await requestBackup(rt, machine, target as string)
-    console.log(
-      JSON.stringify({
-        message: 'Backup is due now. Its last good data age updates when it finishes.',
-      }),
-    )
-    return 0
-  }
-  if (verb === 'run' && env.AICO_BACKUPS_UNIT !== '1') {
-    const target = args[0]
-    validateScheduledTarget(target)
-    // A backup survives the scheduler or web app restarting. Keep the previous CPU/IO/memory policy.
-    const kept = [
-      'HOME',
-      'PATH',
-      'XDG_RUNTIME_DIR',
-      'DBUS_SESSION_BUS_ADDRESS',
-      'AICO_BACKUPS_CONFIG',
-      'AICO_WEB_URL',
-      'AICO_BACKUP_MACHINE',
-      'AICO_DATA_DIR',
-      'AICO_WEB_DB',
-      'XDG_STATE_HOME',
-    ].flatMap((key) => (env[key] ? [`--setenv=${key}=${env[key]}`] : []))
-    const unit = `aico-backup-${target}${args.includes('--pressure') ? '-pressure' : ''}`
-    const live = async () =>
-      (await execute(['systemctl', '--user', 'is-active', '--quiet', unit])).code === 0
-    // One run of a backup at a time: a second finds the live unit and says so, it does not fail.
-    const busy = () => {
-      console.log(`Already running: the ${target} backup is in progress, so this run did nothing.`)
-      return BUSY_EXIT
-    }
-    if (await live()) return busy()
-    const result = await execute([
-      'systemd-run',
-      '--user',
-      '--no-ask-password',
-      '--quiet',
-      '--collect',
-      '--wait',
-      `--unit=${unit}`,
-      ...cfg.runProperties.flatMap((p) => ['--property', p]),
-      ...kept,
-      '--setenv=AICO_BACKUPS_UNIT=1',
-      process.execPath,
-      ...process.execArgv,
-      ...process.argv.slice(1),
-    ])
-    // Two starters raced for the unit name and the other won: the same answer.
-    if (
-      result.code !== 0 &&
-      /already exists|already loaded/i.test(`${result.out}${result.err}`) &&
-      (await live())
-    )
-      return busy()
-    if (result.out) process.stdout.write(result.out)
-    if (result.err) process.stderr.write(result.err)
-    if (result.code === BUSY_EXIT) return busy()
-    console.log(
-      result.code === 0
-        ? 'Backup finished.'
-        : 'The backup did not finish cleanly. Check its Status row and log.',
-    )
-    return result.code
-  }
-  // Work snapshots and the read-only guard keep their original independent schedules.
-  // Only native/Drive/append data operations share the old host-recovery lock.
-  const lockFiles =
-    args[0] === 'snapshots'
-      ? [join(homePath('~/.local/share/st/snaps'), 'physical.lock')]
-      : args[0] === 'guard'
-        ? []
-        : [homePath(cfg.sharedLock)]
+  if (await live()) return busy()
+  const result = await execute([
+    'systemd-run',
+    '--user',
+    '--no-ask-password',
+    '--quiet',
+    '--collect',
+    '--wait',
+    `--unit=${unit}`,
+    ...cfg.runProperties.flatMap((p) => ['--property', p]),
+    ...kept,
+    '--setenv=AICO_BACKUPS_UNIT=1',
+    process.execPath,
+    ...process.execArgv,
+    ...process.argv.slice(1),
+  ])
+  // Two starters raced for the unit name and the other won: the same answer.
   if (
-    !['list', 'snapshots', 'browse'].includes(verb) &&
-    lockFiles.length &&
-    env.AICO_BACKUPS_LOCKED !== '1'
-  ) {
-    for (const path of lockFiles) mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
-    const chain = lockFiles.flatMap((path) => [
-      'flock',
-      ...(args.includes('--scheduled') ? [] : ['-n', '-E', String(BUSY_EXIT)]),
-      path,
-    ])
-    const result = await execute(
-      [...chain, process.execPath, ...process.execArgv, ...process.argv.slice(1)],
-      { env: { ...env, AICO_BACKUPS_LOCKED: '1' } },
-    )
-    if (result.out) process.stdout.write(result.out)
-    if (result.err) process.stderr.write(result.err)
-    if (result.code === BUSY_EXIT)
-      console.error(
-        'Another backup is running. Its data is left alone; run again after it finishes.',
-      )
-    return result.code
+    result.code !== 0 &&
+    /already exists|already loaded/i.test(`${result.out}${result.err}`) &&
+    (await live())
+  )
+    return busy()
+  if (result.out) process.stdout.write(result.out)
+  if (result.err) process.stderr.write(result.err)
+  if (result.code === BUSY_EXIT) return busy()
+  console.log(
+    result.code === 0
+      ? 'Backup finished.'
+      : 'The backup did not finish cleanly. Check its Status row and log.',
+  )
+  return result.code
+}
+
+/** Run this same command again under the shared backup lock (flock). */
+async function runUnderLock(
+  env: NodeJS.ProcessEnv,
+  args: string[],
+  lockFiles: string[],
+): Promise<number> {
+  for (const path of lockFiles) mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
+  const chain = lockFiles.flatMap((path) => [
+    'flock',
+    ...(args.includes('--scheduled') ? [] : ['-n', '-E', String(BUSY_EXIT)]),
+    path,
+  ])
+  const result = await execute(
+    [...chain, process.execPath, ...process.execArgv, ...process.argv.slice(1)],
+    { env: { ...env, AICO_BACKUPS_LOCKED: '1' } },
+  )
+  if (result.out) process.stdout.write(result.out)
+  if (result.err) process.stderr.write(result.err)
+  if (result.code === BUSY_EXIT)
+    console.error('Another backup is running. Its data is left alone; run again after it finishes.')
+  return result.code
+}
+
+/** `aico backups list`. */
+async function listCommand(
+  rt: Runtime,
+  state: BackupState,
+  machine: string,
+  args: string[],
+): Promise<number> {
+  const { cfg } = rt
+  const list = {
+    machine,
+    entries: await scheduledEntries(state, cfg, machine, rt.run),
+    runs: state.runs,
+    cutover: state.cutover,
   }
-  const state = readState(cfg)
-  if (verb === 'list') {
-    const list = {
-      machine,
-      entries: await scheduledEntries(state, cfg, machine, rt.run),
-      runs: state.runs,
-      cutover: state.cutover,
-    }
-    console.log(args.includes('--json') ? JSON.stringify(list) : listText(list, Date.now()))
+  console.log(args.includes('--json') ? JSON.stringify(list) : listText(list, Date.now()))
+  return 0
+}
+
+/** `aico backups run TARGET`, inside its unit. */
+async function runCommand(
+  rt: Runtime,
+  state: BackupState,
+  machine: string,
+  args: string[],
+): Promise<number> {
+  const { cfg } = rt
+  const target = args[0]
+  if (!['native', 'drive', 'append', 'snapshots', 'guard', 'verify'].includes(target ?? ''))
+    throw new Error(USAGE)
+  if (machine !== cfg.workstation && ['native', 'snapshots', 'guard'].includes(target as string))
+    throw new Error('Btrfs backup jobs run on the workstation only.')
+  if (args.includes('--pressure')) {
+    if (target !== 'snapshots') throw new Error('Only snapshots thin under --pressure.')
+    // The space guard's reclaim tier: thin now, take no new point, leave the schedule's record alone.
+    const deleted = await snapshotSweep(rt, true, true)
+    console.log(JSON.stringify({ ok: true, target, pressure: true, deleted }))
     return 0
   }
-  if (verb === 'run') {
-    const target = args[0]
-    if (!['native', 'drive', 'append', 'snapshots', 'guard', 'verify'].includes(target ?? ''))
-      throw new Error(USAGE)
-    if (machine !== cfg.workstation && ['native', 'snapshots', 'guard'].includes(target as string))
-      throw new Error('Btrfs backup jobs run on the workstation only.')
-    if (args.includes('--pressure')) {
-      if (target !== 'snapshots') throw new Error('Only snapshots thin under --pressure.')
-      // The space guard's reclaim tier: thin now, take no new point, leave the schedule's record alone.
-      const deleted = await snapshotSweep(rt, true, true)
-      console.log(JSON.stringify({ ok: true, target, pressure: true, deleted }))
-      return 0
-    }
-    const ok = await runBackup(
-      rt,
-      state,
-      target as BackupTarget | 'snapshots' | 'guard' | 'verify',
-      machine,
-      args.includes('--scheduled'),
-    )
-    if (machine === cfg.workstation && target !== 'snapshots' && target !== 'guard') {
-      await observeExternal(rt, state)
-      saveState(cfg, state)
-    }
-    await report(cfg, readState(cfg), machine)
-    console.log(
-      JSON.stringify({
-        ok,
-        target,
-        message: ok
-          ? 'Backup finished.'
-          : 'Some backup sources failed. Check Backups for the last good data age.',
-      }),
-    )
-    return ok ? 0 : 1
+  const ok = await runBackup(
+    rt,
+    state,
+    target as BackupTarget | 'snapshots' | 'guard' | 'verify',
+    machine,
+    args.includes('--scheduled'),
+  )
+  if (machine === cfg.workstation && target !== 'snapshots' && target !== 'guard') {
+    await observeExternal(rt, state)
+    saveState(cfg, state)
   }
-  if (verb === 'cutover') {
-    if (!['host', 'snapshots', 'guard', 'verify'].includes(args[0] ?? '')) throw new Error(USAGE)
-    await cutover(rt, state, args[0] as 'host' | 'snapshots' | 'guard' | 'verify')
-    console.log('The old timer is disabled. Aico owns its schedule.')
-    return 0
-  }
+  await report(cfg, readState(cfg), machine)
+  console.log(
+    JSON.stringify({
+      ok,
+      target,
+      message: ok
+        ? 'Backup finished.'
+        : 'Some backup sources failed. Check Backups for the last good data age.',
+    }),
+  )
+  return ok ? 0 : 1
+}
+
+/** `aico backups cutover WHAT`. */
+async function cutoverCommand(rt: Runtime, state: BackupState, args: string[]): Promise<number> {
+  if (!['host', 'snapshots', 'guard', 'verify'].includes(args[0] ?? '')) throw new Error(USAGE)
+  await cutover(rt, state, args[0] as 'host' | 'snapshots' | 'guard' | 'verify')
+  console.log('The old timer is disabled. Aico owns its schedule.')
+  return 0
+}
+
+/** `aico backups snapshots|browse|restore SOURCE ...`: read or restore one source's snapshots. */
+async function sourceCommand(
+  rt: Runtime,
+  state: BackupState,
+  verb: string,
+  args: string[],
+): Promise<number> {
   const at = args.indexOf('--target'),
     target = at >= 0 ? args[at + 1] : 'drive'
   if (target !== 'drive' && target !== 'append' && target !== 'native')
@@ -667,6 +666,60 @@ export async function backups(argv: string[], env = process.env): Promise<number
     return 0
   }
   throw new Error(USAGE)
+}
+
+export async function backups(argv: string[], env = process.env): Promise<number> {
+  // Bare `aico backups` (or only --json) lists.
+  const [verb, ...args] =
+    !argv[0] || (argv[0].startsWith('-') && !['--help', '-h'].includes(argv[0]))
+      ? ['list', ...argv]
+      : argv
+  if (['help', '--help', '-h'].includes(verb as string)) {
+    console.log(USAGE)
+    return 0
+  }
+  // Mistakes and help are answered before any configuration or host is read.
+  if (!VERBS.includes(verb as string)) {
+    const near = nearest(verb as string, VERBS)
+    throw new Refusal(
+      `unknown command ${verb}${near ? ` (did you mean ${near}?)` : ''}; aico backups --help lists them`,
+      2,
+    )
+  }
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(backupsUsage(verb))
+    return 0
+  }
+  if (verb !== 'recover' && verb !== 'drill') check(verb as string, args)
+  const cfg = config(env),
+    machine = env.AICO_BACKUP_MACHINE || machineId()
+  const rt: Runtime = { cfg, run: execute, now: () => new Date() }
+  if (verb === 'recover' || verb === 'drill') return recovery([verb, ...args], cfg, env)
+  if (verb === 'rollback') {
+    rollbackNote(cfg)
+    return 0
+  }
+  if (verb === 'request') return requestCommand(rt, machine, args)
+  if (verb === 'run' && env.AICO_BACKUPS_UNIT !== '1') return runInUnit(cfg, env, args)
+  // Work snapshots and the read-only guard keep their original independent schedules.
+  // Only native/Drive/append data operations share the old host-recovery lock.
+  const lockFiles =
+    args[0] === 'snapshots'
+      ? [join(homePath('~/.local/share/st/snaps'), 'physical.lock')]
+      : args[0] === 'guard'
+        ? []
+        : [homePath(cfg.sharedLock)]
+  if (
+    !['list', 'snapshots', 'browse'].includes(verb) &&
+    lockFiles.length &&
+    env.AICO_BACKUPS_LOCKED !== '1'
+  )
+    return runUnderLock(env, args, lockFiles)
+  const state = readState(cfg)
+  if (verb === 'list') return listCommand(rt, state, machine, args)
+  if (verb === 'run') return runCommand(rt, state, machine, args)
+  if (verb === 'cutover') return cutoverCommand(rt, state, args)
+  return sourceCommand(rt, state, verb as string, args)
 }
 
 const TARGET_NAME: Record<string, string> = {
