@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sys
 import time
 from collections.abc import Callable, Mapping, Sequence
@@ -83,7 +84,8 @@ def run_checks(
 
 
 def main(argv: Sequence[str] | None = None, post: Callable[..., bool] = aico_status.report) -> int:
-    parser = argparse.ArgumentParser(prog="host-steward")
+    # Run as `aico declare` (the CLI exports its name), help and errors say aico, not host-steward.
+    parser = argparse.ArgumentParser(prog=os.environ.get("AICO_CLI_NAME") or "host-steward")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("grants-serve", help="serve the root access-grant socket")
     rules = sub.add_parser("rules", help="run deterministic host rules")

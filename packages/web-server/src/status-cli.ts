@@ -3,7 +3,7 @@
 
 import { counted, type ShownRow, type StatusView } from '@aico/status'
 
-const STATUS_USAGE = `Usage: st status [options]
+const STATUS_USAGE = `Usage: ${process.env.AICO_CLI_NAME || 'aico'} status [options]
 
 Shows every check, job, backup, service, VM and machine that reports to Aico on this
 machine: problems first (failed, late, unknown, warn), healthy rows folded into a count.
@@ -169,7 +169,9 @@ export async function runStatusCli(argv: string[], io: StatusCliIo): Promise<num
       query.set(FILTERS[arg] as string, argv[index + 1] as string)
       index += 1
     } else {
-      io.err(`st status: unknown or incomplete option '${arg}'\n\n${STATUS_USAGE}`)
+      io.err(
+        `${process.env.AICO_CLI_NAME || 'aico'} status: unknown or incomplete option '${arg}'\n\n${STATUS_USAGE}`,
+      )
       return 2
     }
   }

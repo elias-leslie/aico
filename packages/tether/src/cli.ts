@@ -481,7 +481,10 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
           const generation = (current.body as Record<string, unknown> | null)?.generation
           if (current.status !== 200 || typeof generation !== 'string')
             return render(io, json, current.status, current.body)
-          return api(io, paths, json, 'POST', `${path}/end`, { generation })
+          const ended = await callSocket(paths.socket, 'POST', `${path}/end`, { generation })
+          if (json || ended.status !== 200) return render(io, json, ended.status, ended.body)
+          io.out(`Ended ${rest[0]}.`)
+          return 0
         }
         break
       case 'reboot':
