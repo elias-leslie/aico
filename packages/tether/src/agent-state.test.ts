@@ -483,6 +483,64 @@ describe('AgentStatePoller', () => {
     expect(panePidCalls).toBe(1)
   })
 
+  it('reads a Claude without its session file past the grace as blocked on a startup dialog', async () => {
+    // stat after the name: state ppid … starttime (field 22) = 1000 ticks = 10 s after boot.
+    const stat = (pid: number, ppid: number) =>
+      `${pid} (claude) S ${ppid} ${Array.from({ length: 17 }, () => '0').join(' ')} 1000 0`
+    const files: Record<string, string> = {
+      '/proc/10/task/10/children': '20 30',
+      '/proc/20/task/20/children': '',
+      '/proc/30/task/30/children': '',
+      '/proc/20/stat': stat(20, 10),
+      '/proc/20/cmdline': 'claude\0--dangerously-skip-permissions\0',
+      // A `claude -p` beside it is never the session's agent.
+      '/proc/30/stat': stat(30, 10),
+      '/proc/30/cmdline': 'claude\0-p\0hi\0',
+      '/proc/uptime': '15.00 1.00',
+    }
+    const { t } = tracker()
+    const poller = new AgentStatePoller(
+      t,
+      { sessions: () => [{ id: 'a', generation: 'g1', panePid: async () => 10 }] },
+      procfs(files),
+      '/h',
+      { now: () => 0 },
+    )
+    await poller.poll()
+    expect(t.get('a').state).toBe('unknown') // 5 s old: still starting
+    files['/proc/uptime'] = '21.00 1.00'
+    await poller.poll()
+    expect(t.get('a')).toMatchObject({
+      state: 'blocked',
+      stateSource: 'claude-process',
+      stateDetail: 'startup dialog',
+    })
+    // The owner answers the dialog: Claude writes its file and the real state follows.
+    files['/h/.claude/sessions/20.json'] = claudeFile('idle', 2)
+    await poller.poll()
+    expect(t.get('a')).toMatchObject({ state: 'idle', stateSource: 'claude-status' })
+  })
+
+  it('does not take a pane child `claude -p` for a startup dialog', async () => {
+    const files: Record<string, string> = {
+      '/proc/10/task/10/children': '30',
+      '/proc/30/task/30/children': '',
+      '/proc/30/stat': `30 (claude) S 10 ${Array.from({ length: 17 }, () => '0').join(' ')} 0 0`,
+      '/proc/30/cmdline': 'claude\0--print\0hi\0',
+      '/proc/uptime': '500.00 1.00',
+    }
+    const { t } = tracker()
+    const poller = new AgentStatePoller(
+      t,
+      { sessions: () => [{ id: 'a', generation: 'g1', panePid: async () => 10 }] },
+      procfs(files),
+      '/h',
+      { now: () => 0 },
+    )
+    await poller.poll()
+    expect(t.get('a').state).toBe('unknown')
+  })
+
   it('forgets sessions that stop running', async () => {
     const { t } = tracker()
     let sessions = [{ id: 'a', generation: 'g', panePid: async () => null as number | null }]

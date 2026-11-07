@@ -510,6 +510,79 @@ class ClaudeProbe implements AgentProbe {
 }
 
 /** The probe already reading this status file keeps its place in the transcript. */
+/** Claude Code shows its first-run dialogs (folder trust, theme, sign-in)
+ * before it writes ~/.claude/sessions/<pid>.json, which a normal start writes
+ * within a second. The pane's own `claude` (the pane process or its child, not
+ * `claude -p`) without that file after this long is waiting on the owner. */
+const CLAUDE_STARTUP_GRACE_MS = 10_000
+/** Linux's USER_HZ: /proc/<pid>/stat start times are in these ticks. */
+const CLOCK_TICKS = 100
+const STARTUP_DIALOG = 'startup dialog'
+
+/** The pane's interactive Claude process and its start (seconds since boot). */
+function claudeStartup(fs: ProcFs, pids: number[]): { pid: number; startedS: number } | null {
+  const pane = pids[0]
+  for (const pid of pids) {
+    let stat: string
+    try {
+      stat = fs.readFile(`/proc/${pid}/stat`)
+    } catch {
+      continue
+    }
+    const close = stat.lastIndexOf(')')
+    if (stat.slice(stat.indexOf('(') + 1, close) !== 'claude') continue
+    // After the name: state, ppid, … starttime (stat field 22).
+    const fields = stat.slice(close + 2).split(' ')
+    const ppid = Number(fields[1])
+    const start = Number(fields[19])
+    if ((pid !== pane && ppid !== pane) || !Number.isFinite(start) || fields.length < 20) continue
+    let argv: string[]
+    try {
+      argv = fs.readFile(`/proc/${pid}/cmdline`).split('\0')
+    } catch {
+      continue
+    }
+    if (argv.some((arg) => arg === '-p' || arg === '--print')) continue
+    return { pid, startedS: start / CLOCK_TICKS }
+  }
+  return null
+}
+
+/** A Claude process that has not written its session file yet: blocked on a
+ * startup dialog once past the grace; the real probe once the file appears. */
+class ClaudeStartupProbe implements AgentProbe {
+  constructor(
+    readonly pid: number,
+    private readonly startedS: number,
+    private readonly fs: ProcFs,
+    private readonly home: string,
+    private readonly tail?: FileTail,
+  ) {}
+
+  poll(): AgentSignal | null {
+    let uptimeS: number
+    try {
+      uptimeS = Number.parseFloat(this.fs.readFile('/proc/uptime'))
+    } catch {
+      return null
+    }
+    if (!Number.isFinite(uptimeS) || (uptimeS - this.startedS) * 1000 < CLAUDE_STARTUP_GRACE_MS)
+      return null
+    return {
+      source: 'claude-process',
+      state: 'blocked',
+      detail: STARTUP_DIALOG,
+      at: null,
+      agentSessionId: null,
+    }
+  }
+
+  follow(): AgentProbe {
+    const session = readClaudeSession(this.fs, this.home, this.pid)
+    return session ? new ClaudeProbe(this.pid, session.file, this.fs, this.home, this.tail) : this
+  }
+}
+
 function keptProbe(previous: AgentProbe | null, pid: number, file: string): ClaudeProbe | null {
   return previous instanceof ClaudeProbe && previous.pid === pid && previous.file === file
     ? previous
@@ -575,7 +648,11 @@ export const claudeCode: TuiAdapter = {
         return (
           keptProbe(previous, pid, file) ?? new ClaudeProbe(pid, file, ctx.fs, ctx.home, ctx.tail)
         )
-      return null
+      const startup = claudeStartup(ctx.fs, ctx.pids)
+      if (!startup) return null
+      return previous instanceof ClaudeStartupProbe && previous.pid === startup.pid
+        ? previous
+        : new ClaudeStartupProbe(startup.pid, startup.startedS, ctx.fs, ctx.home, ctx.tail)
     },
     findInEntry: ({ entry, readers }, previous) => {
       const session = entryClaudeSession(readers.fs, readers.home)

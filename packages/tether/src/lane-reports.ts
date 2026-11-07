@@ -74,7 +74,11 @@ export type LaneOutcome = (typeof LANE_OUTCOMES)[number]
 
 /** Blocked details that report `blocked`. `dialog open` (the owner opening
  * `/model` in the lane) does not. */
-export const BLOCKING_DETAILS: ReadonlySet<string> = new Set(['permission prompt', 'input needed'])
+export const BLOCKING_DETAILS: ReadonlySet<string> = new Set([
+  'permission prompt',
+  'input needed',
+  'startup dialog',
+])
 
 const SESSION_ID = /^[0-9a-f]{8}$/
 const REQUEST_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/
