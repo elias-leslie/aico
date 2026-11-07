@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run a command of the Aico web server bundle (packages/web-server/dist/aico-web.mjs):
+# Run a command of the Aico web server CLI bundle (packages/web-server/dist/aico-web-cli.mjs):
 # tsession, tclaude, tcodex, tnotes, status, memory, prompt, models, context, usage. The bundle is
 # rebuilt first when it is missing or older than its sources, so a fresh checkout works
 # without a deploy.
@@ -10,7 +10,8 @@ set -euo pipefail
 AICO_WEB_LIB_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 AICO_REPO_ROOT="$(cd "$AICO_WEB_LIB_DIR/../../../.." && pwd)"
 AICO_WEB_SERVER="$AICO_REPO_ROOT/packages/web-server"
-AICO_WEB_BUNDLE="$AICO_WEB_SERVER/dist/aico-web.mjs"
+# The commands run from their own small bundle (no server, no agent harness to load).
+AICO_WEB_BUNDLE="$AICO_WEB_SERVER/dist/aico-web-cli.mjs"
 
 aico_web_node() {
   local candidate

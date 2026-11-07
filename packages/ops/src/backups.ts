@@ -767,6 +767,8 @@ export async function scheduledEntries(
 ) {
   // Read the current guest state on each listing; restarting a guest must remove the off state.
   const observed = { ...state, copies: { ...state.copies } }
+  // The job list and the guest probes are independent; run them together.
+  const jobsRun = run(['aico', 'jobs', 'list', '--json'])
   if (machine === cfg.workstation)
     await observeExternal(
       { cfg, run, now: () => new Date() },
@@ -783,7 +785,7 @@ export async function scheduledEntries(
       return true
     }
   })
-  const result = await run(['aico', 'jobs', 'list', '--json'])
+  const result = await jobsRun
   let jobs: {
     kind: string
     state: { nextRun: number; leaseId: string | null; leaseExpires: number | null } | null
