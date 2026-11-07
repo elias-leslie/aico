@@ -41,3 +41,13 @@ export function expectedOffSince(m: MachineIntent): number | null {
   // the expectation began.
   return m.intent === 'on-demand' && m.power === 'off' ? (m.powerSince ?? m.since) : m.since
 }
+
+/**
+ * Whether a machine row, posted after a machine was marked off, shows the machine is back: it
+ * reports itself (not off), or a link to it says it is connected. A link that only says it is
+ * disconnected (written by the machine watching it) is not the machine reporting.
+ */
+export function showsBack(row: { id: string; kind: string; state: string }): boolean {
+  if (row.kind !== 'machine' || row.state === 'off') return false
+  return !row.id.startsWith('fleet/') || row.state === 'ok'
+}

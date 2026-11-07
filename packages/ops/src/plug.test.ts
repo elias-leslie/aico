@@ -10,6 +10,7 @@ import {
   type PlugDef,
   type PlugDeps,
   PlugSilent,
+  parseCountdown,
   parseStatus,
   plug,
   socketSend,
@@ -29,6 +30,9 @@ const house: PlugDef = {
 }
 const cfg: PlugConfig = { timeoutSeconds: 5, cycleSeconds: 10, plugs: [shed, house] }
 
+/** Countdown rules the fake plugs hold, by plug and child id; a test may fill it before it runs. */
+type Rule = { enable: number; delay: number; act: number; name: string; remain?: number }
+
 const sysinfo = (states: [number, number], onTime = [594, 7300]) => ({
   system: {
     get_sysinfo: {
@@ -46,9 +50,23 @@ const sysinfo = (states: [number, number], onTime = [594, 7300]) => ({
 /** Two plugs that are only lists of states: records every request, never touches the network. */
 function fakePlugs(states: Record<string, [number, number]>, silent: string[] = []) {
   const requests: { plug: string; request: unknown }[] = []
+  const rules: Record<string, Rule[]> = {}
   const send: PlugDeps['send'] = async (plug, request) => {
     requests.push({ plug: plug.name, request })
     if (silent.includes(plug.name)) throw new PlugSilent(plug.address)
+    const count = (request as { count_down?: Record<string, unknown> }).count_down
+    if (count) {
+      const child = `${plug.name}/${(request as { context: { child_ids: string[] } }).context.child_ids[0]}`
+      if ('get_rules' in count)
+        return { count_down: { get_rules: { rule_list: rules[child] ?? [], err_code: 0 } } }
+      if ('delete_all_rules' in count) {
+        rules[child] = []
+        return { count_down: { delete_all_rules: { err_code: 0 } } }
+      }
+      const added = count.add_rule as Rule
+      rules[child] = [{ ...added, remain: added.delay }]
+      return { count_down: { add_rule: { id: 'RULE1', err_code: 0 } } }
+    }
     const r = request as {
       context?: { child_ids: string[] }
       system: { set_relay_state?: { state: number } }
@@ -60,7 +78,7 @@ function fakePlugs(states: Record<string, [number, number]>, silent: string[] = 
     }
     return sysinfo(mine)
   }
-  return { send, requests }
+  return { send, requests, rules }
 }
 
 function harness(
@@ -79,8 +97,14 @@ function harness(
     out: (line) => void lines.push(line),
   }
   const switches = () =>
-    fake.requests.filter((r) => 'set_relay_state' in (r.request as { system: object }).system)
-  return { deps, lines, slept, switches, states }
+    fake.requests.filter(
+      (r) => 'set_relay_state' in ((r.request as { system?: object }).system ?? {}),
+    )
+  const countdowns = () =>
+    fake.requests.filter(
+      (r) => 'add_rule' in ((r.request as { count_down?: object }).count_down ?? {}),
+    )
+  return { deps, lines, slept, switches, countdowns, states, rules: fake.rules }
 }
 
 let server: Server | undefined
@@ -260,5 +284,106 @@ it('reports a plug that refuses the switch', async () => {
       : before(p, request)
   await expect(plug(['off', 'davion-sidarli'], h.deps)).rejects.toThrow(
     'refused to switch davion-sidarli off',
+  )
+})
+
+it('sets the plug countdown on the right socket and never switches it now', async () => {
+  const h = harness('aico')
+  expect(await plug(['off', 'davion-sidarli', '--in', '120'], h.deps)).toBe(0)
+  expect(h.lines.at(-1)).toBe('davion-sidarli (shed:0) will switch off in 2 min')
+  expect(h.switches()).toEqual([])
+  expect(h.countdowns().map((r) => [r.plug, JSON.stringify(r.request)])).toEqual([
+    [
+      'shed',
+      '{"context":{"child_ids":["ID00"]},"count_down":{"add_rule":{"enable":1,"delay":120,"act":0,"name":"aico"}}}',
+    ],
+  ])
+  expect(h.rules['shed/ID00']).toHaveLength(1)
+  await plug(['on', 'house:1', '--in', '30'], h.deps)
+  expect(h.rules['house/ID01']?.[0]).toMatchObject({ delay: 30, act: 1 })
+})
+
+it('replaces an earlier countdown instead of adding a second', async () => {
+  const h = harness('aico')
+  await plug(['off', 'davion-sidarli', '--in', '300'], h.deps)
+  await plug(['off', 'davion-sidarli', '--in', '60'], h.deps)
+  expect(h.rules['shed/ID00']).toHaveLength(1)
+  expect(h.rules['shed/ID00']?.[0]?.delay).toBe(60)
+})
+
+it('refuses a countdown on its own socket without --force, like switching it off', async () => {
+  const h = harness('aico')
+  const refusal = await plug(['off', 'davion-gem', '--in', '60'], h.deps).catch((e) => e)
+  expect(refusal.message).toContain('davion-gem is this computer')
+  expect(h.countdowns()).toEqual([])
+  await plug(['off', 'davion-gem', '--in', '60', '--force'], h.deps)
+  expect(h.countdowns()).toHaveLength(1)
+})
+
+it('shows a pending countdown in status and in json, and unreadable when the plug will not say', async () => {
+  const h = harness('davion-sidarli')
+  await plug(['off', 'house:0', '--in', '45'], h.deps)
+  h.lines.length = 0
+  await plug([], h.deps)
+  expect(h.lines).toContain('  0  davion-gem      on   for 9 min  off in 45 s')
+  h.lines.length = 0
+  await plug(['--json'], h.deps)
+  const parsed = JSON.parse(h.lines[0] as string)
+  expect(parsed.plugs[1].sockets[0].countdown).toEqual({ action: 'off', seconds: 45 })
+  expect(parsed.plugs[1].sockets[1].countdown).toBeNull()
+  const before = h.deps.send
+  h.deps.send = async (p, request) =>
+    (request as { count_down?: object }).count_down ? { error: 1 } : before(p, request)
+  h.lines.length = 0
+  await plug([], h.deps)
+  expect(h.lines).toContain('  0  davion-gem      on   for 9 min  countdown unreadable')
+})
+
+it('cancels a countdown', async () => {
+  const h = harness('aico')
+  await plug(['off', 'davion-sidarli', '--in', '120'], h.deps)
+  await plug(['cancel', 'davion-sidarli'], h.deps)
+  expect(h.rules['shed/ID00']).toEqual([])
+  expect(h.lines.at(-1)).toBe('davion-sidarli (shed:0): countdown cancelled')
+})
+
+it('reads the plug countdown reply: enabled rules only, remaining time first', () => {
+  const reply = (rule_list: unknown[], err_code = 0) => ({
+    count_down: { get_rules: { rule_list, err_code } },
+  })
+  expect(parseCountdown(reply([]))).toBeNull()
+  expect(parseCountdown(reply([{ enable: 0, delay: 9, act: 0 }]))).toBeNull()
+  expect(parseCountdown(reply([{ enable: 1, delay: 120, act: 0, remain: 80 }]))).toEqual({
+    action: 'off',
+    seconds: 80,
+  })
+  expect(parseCountdown(reply([{ enable: 1, delay: 120, act: 1 }]))).toEqual({
+    action: 'on',
+    seconds: 120,
+  })
+  expect(parseCountdown(reply([], -1))).toBe('unknown')
+  expect(parseCountdown({})).toBe('unknown')
+})
+
+it('rejects a bad --in and --in with cycle or status', async () => {
+  const h = harness('aico')
+  const code = async (argv: string[]) =>
+    ((await plug(argv, h.deps).catch((e) => e)) as Refusal).code
+  expect(await code(['off', 'shed:0', '--in', '0'])).toBe(2)
+  expect(await code(['off', 'shed:0', '--in', 'x'])).toBe(2)
+  expect(await code(['off', 'shed:0', '--in', '1.5'])).toBe(2)
+  expect(await code(['cycle', 'shed:0', '--in', '30'])).toBe(2)
+  expect(h.countdowns()).toEqual([])
+})
+
+it('reports a plug that refuses the countdown', async () => {
+  const h = harness('aico')
+  const before = h.deps.send
+  h.deps.send = async (p, request) =>
+    (request as { count_down?: { add_rule?: unknown } }).count_down?.add_rule
+      ? { count_down: { add_rule: { err_code: -1 } } }
+      : before(p, request)
+  await expect(plug(['off', 'davion-sidarli', '--in', '60'], h.deps)).rejects.toThrow(
+    'refused the countdown for davion-sidarli',
   )
 })

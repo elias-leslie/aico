@@ -19,6 +19,7 @@
 // known wrong yet.
 
 import { byTier } from '@aico/shared/status-order'
+import { showsBack } from './intent'
 import type { Kind, StatusRow } from './row'
 
 /** A row as stored: what the writer posted and when the server took it. */
@@ -143,10 +144,12 @@ export function show(
   }
   const stopped = new Map<string, number>()
   for (const [machine, at] of expectedOff) {
-    if (rows.some((r) => r.row.kind === 'machine' && r.row.machine === machine && r.updatedAt > at))
+    if (rows.some((r) => r.row.machine === machine && showsBack(r.row) && r.updatedAt > at))
       continue
-    stopped.set(machine, at)
-    silent.set(machine, { since: at, why: 'off' })
+    // A planned outage can be dated slightly ahead (see StatusStore.planOutage): never "since" the future.
+    const since = Math.min(at, now)
+    stopped.set(machine, since)
+    silent.set(machine, { since, why: 'off' })
   }
   return rows.map((stored) => {
     const base = { ...stored.row, updated_at: iso(stored.updatedAt) }

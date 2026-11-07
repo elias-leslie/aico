@@ -72,18 +72,34 @@
         "port": 9999,
         "sockets": [
           { "machine": "davion-sidarli", "hostnames": ["davion-sidarli"] },
-          { "machine": null }
+          { "machine": "davion-gem", "hostnames": ["davion-gem", "aico"] }
         ]
       },
       {
-        "name": "house",
+        "name": "shed-network",
         "address": "192.168.87.193",
         "port": 9999,
-        "sockets": [
-          { "machine": "davion-gem", "hostnames": ["davion-gem", "aico"] },
-          { "machine": null }
-        ]
+        "sockets": [{ "machine": null, "label": "shed network" }, { "machine": null }]
       }
     ]
+  },
+  "away": {
+    "countdownSeconds": 120,
+    "settleSeconds": 120,
+    "statusUrl": "http://127.0.0.1:3002",
+    "peers": ["aico-gem"],
+    "hosts": {
+      "davion-gem": {
+        "countdownSeconds": 300,
+        "coversGuests": true,
+        "shutdown": {
+          "ssh": "davion-gem",
+          "command": ["systemctl", "poweroff", "--no-ask-password"]
+        }
+      },
+      "davion-sidarli": {
+        "shutdown": { "sudo": true, "command": ["systemctl", "poweroff", "--no-ask-password"] }
+      }
+    }
   }
 }

@@ -14,8 +14,8 @@ export interface PlugDef {
   name: string
   address: string
   port: number
-  /** Index = socket number; machine null is an empty socket. */
-  sockets: { machine: string | null; hostnames?: string[] }[]
+  /** Index = socket number; machine null is an empty socket, or one with a `label` (gear that is not a machine). */
+  sockets: { machine: string | null; hostnames?: string[]; label?: string }[]
 }
 
 export interface PlugConfig {
@@ -98,9 +98,17 @@ export interface Socket {
   id: string
   /** The machine it powers; null for an empty socket. */
   machine: string | null
+  /** What a socket with no machine feeds, when the settings say. */
+  label?: string
   on: boolean
   /** Seconds it has been on; null when it is off or the plug did not say. */
   onSeconds: number | null
+}
+
+/** The plug's own countdown on a socket: it switches the socket `action` in `seconds`. */
+export interface Countdown {
+  action: 'on' | 'off'
+  seconds: number
 }
 
 /** One plug's sockets from a get_sysinfo reply, named by the configured machines. */
@@ -117,10 +125,28 @@ export function parseStatus(reply: unknown, plug: PlugDef): { model: string; soc
       index,
       id: String(child.id ?? ''),
       machine: plug.sockets[index]?.machine ?? null,
+      ...(plug.sockets[index]?.label ? { label: plug.sockets[index].label } : {}),
       on: child.state === 1,
       onSeconds: child.state === 1 && typeof child.on_time === 'number' ? child.on_time : null,
     })),
   }
+}
+
+/**
+ * The running countdown in a count_down get_rules reply: null when none is set, 'unknown' when
+ * the reply is not one the plug is known to send. The plug keeps one rule per socket; `remain`
+ * is what is left, `delay` what it was set to.
+ */
+export function parseCountdown(reply: unknown): Countdown | null | 'unknown' {
+  const got = (reply as { count_down?: { get_rules?: { err_code?: number; rule_list?: unknown } } })
+    ?.count_down?.get_rules
+  if (!got || got.err_code !== 0 || !Array.isArray(got.rule_list)) return 'unknown'
+  for (const rule of got.rule_list as Record<string, unknown>[]) {
+    if (rule.enable !== 1 || (rule.act !== 0 && rule.act !== 1)) continue
+    const seconds = typeof rule.remain === 'number' ? rule.remain : rule.delay
+    if (typeof seconds === 'number') return { action: rule.act === 1 ? 'on' : 'off', seconds }
+  }
+  return null
 }
 
 export function duration(seconds: number): string {
@@ -169,10 +195,41 @@ export function plugDeps(out: (line: string) => void, cfg: PlugConfig = ops.plug
 const read = async (deps: PlugDeps, plug: PlugDef) =>
   parseStatus(await deps.send(plug, { system: { get_sysinfo: {} } }), plug)
 
+/** One plug's sockets with the countdown on each. */
+async function readAll(deps: PlugDeps, plug: PlugDef) {
+  const status = await read(deps, plug)
+  const countdowns = await readCountdowns(deps, plug, status.sockets)
+  return {
+    ...status,
+    sockets: status.sockets.map((socket, i) => ({
+      ...socket,
+      countdown: countdowns[i] as Countdown | null | 'unknown',
+    })),
+  }
+}
+
+/** Each socket's countdown; one the plug will not read shows unknown, never none. */
+async function readCountdowns(
+  deps: PlugDeps,
+  plug: PlugDef,
+  sockets: Socket[],
+): Promise<(Countdown | null | 'unknown')[]> {
+  return await Promise.all(
+    sockets.map((socket) =>
+      deps
+        .send(plug, { context: { child_ids: [socket.id] }, count_down: { get_rules: {} } })
+        .then(parseCountdown, () => 'unknown' as const),
+    ),
+  )
+}
+
 const label = (plug: PlugDef) => `${plug.name[0]?.toUpperCase()}${plug.name.slice(1)} plug`
 
 /** The configured socket a command word names: a machine, or PLUG:SOCKET for any (also an empty one). */
-function find(cfg: PlugConfig, what: string | undefined): { plug: PlugDef; index: number } {
+export function findSocket(
+  cfg: PlugConfig,
+  what: string | undefined,
+): { plug: PlugDef; index: number } {
   if (!what) throw new Refusal('aico plug needs a machine, or PLUG:SOCKET', 2)
   const lower = what.toLowerCase()
   for (const plug of cfg.plugs) {
@@ -183,13 +240,15 @@ function find(cfg: PlugConfig, what: string | undefined): { plug: PlugDef; index
   const plug = cfg.plugs.find((p) => p.name.toLowerCase() === plugName)
   if (plug && Number(number) < plug.sockets.length) return { plug, index: Number(number) }
   const known = cfg.plugs.flatMap((p) =>
-    p.sockets.map((s, i) => (s.machine ? `${s.machine} (${p.name}:${i})` : `${p.name}:${i}`)),
+    p.sockets.map((s, i) =>
+      s.machine || s.label ? `${s.machine ?? s.label} (${p.name}:${i})` : `${p.name}:${i}`,
+    ),
   )
   throw new Refusal(`No socket for "${what}"; the sockets are ${known.join(', ')}`, 2)
 }
 
 async function set(deps: PlugDeps, socket: Socket, plug: PlugDef, on: boolean) {
-  const name = socket.machine ?? `${plug.name}:${socket.index}`
+  const name = socket.machine ?? socket.label ?? `${plug.name}:${socket.index}`
   if (!socket.id)
     throw new Refusal(`The power plug at ${plug.address} has no socket ${socket.index}`)
   const reply = (await deps.send(plug, {
@@ -203,18 +262,82 @@ async function set(deps: PlugDeps, socket: Socket, plug: PlugDef, on: boolean) {
     )
 }
 
-const line = (s: Socket, own: Where | null, widest: number) =>
-  `  ${s.index}  ${(s.machine ?? '(empty)').padEnd(widest)}  ${s.on ? 'on ' : 'off'}  ${
+/** The plug's reply to one count_down command on a socket; anything but err_code 0 is a refusal. */
+async function countdownCall(
+  deps: PlugDeps,
+  plug: PlugDef,
+  socket: Socket,
+  command: 'delete_all_rules' | 'add_rule',
+  args: unknown,
+): Promise<void> {
+  const reply = (await deps.send(plug, {
+    context: { child_ids: [socket.id] },
+    count_down: { [command]: args },
+  })) as { count_down?: Record<string, { err_code?: number }> }
+  const code = reply.count_down?.[command]?.err_code
+  if (code !== 0)
+    throw new Refusal(
+      `The power plug at ${plug.address} refused the countdown for ${socket.machine ?? socket.label ?? `${plug.name}:${socket.index}`} (error ${code ?? 'none'})`,
+    )
+}
+
+/** Sets the socket's one countdown: it switches `action` in `seconds`, replacing any earlier one. */
+export async function setCountdown(
+  deps: PlugDeps,
+  plug: PlugDef,
+  socket: Socket,
+  action: 'on' | 'off',
+  seconds: number,
+): Promise<void> {
+  await countdownCall(deps, plug, socket, 'delete_all_rules', {})
+  await countdownCall(deps, plug, socket, 'add_rule', {
+    enable: 1,
+    delay: seconds,
+    act: action === 'on' ? 1 : 0,
+    name: 'aico',
+  })
+}
+
+/** Takes the socket's countdown away. */
+export async function clearCountdown(deps: PlugDeps, plug: PlugDef, socket: Socket): Promise<void> {
+  await countdownCall(deps, plug, socket, 'delete_all_rules', {})
+}
+
+/** The configured socket for a machine or PLUG:SOCKET, read live. */
+export async function socketOf(
+  deps: PlugDeps,
+  what: string,
+): Promise<{ plug: PlugDef; socket: Socket }> {
+  const { plug: def, index } = findSocket(deps.cfg, what)
+  const socket = (await read(deps, def)).sockets[index]
+  if (!socket) throw new Refusal(`The power plug at ${def.address} has no socket ${index}`)
+  return { plug: def, socket }
+}
+
+const countdownText = (c: Countdown | null | 'unknown' | undefined) =>
+  c === undefined || c === null
+    ? ''
+    : c === 'unknown'
+      ? '  countdown unreadable'
+      : `  ${c.action} in ${duration(c.seconds)}`
+
+const line = (
+  s: Socket,
+  own: Where | null,
+  widest: number,
+  countdown?: Countdown | null | 'unknown',
+) =>
+  `  ${s.index}  ${(s.machine ?? s.label ?? '(empty)').padEnd(widest)}  ${s.on ? 'on ' : 'off'}  ${
     s.on ? (s.onSeconds === null ? 'for ?' : `for ${duration(s.onSeconds)}`) : ''
-  }${own && own.plug === s.plug && own.index === s.index ? '  (this computer)' : ''}`.trimEnd()
+  }${countdownText(countdown)}${own && own.plug === s.plug && own.index === s.index ? '  (this computer)' : ''}`.trimEnd()
 
 /** Every plug once; one that does not answer shows that and the others still show. */
 async function show(deps: PlugDeps, json: boolean): Promise<number> {
   const own = ownSocket(deps.cfg, deps.host)
-  const reads = await Promise.allSettled(deps.cfg.plugs.map((plug) => read(deps, plug)))
+  const reads = await Promise.allSettled(deps.cfg.plugs.map((plug) => readAll(deps, plug)))
   const widest = Math.max(
     '(empty)'.length,
-    ...deps.cfg.plugs.flatMap((p) => p.sockets.map((s) => s.machine?.length ?? 0)),
+    ...deps.cfg.plugs.flatMap((p) => p.sockets.map((s) => (s.machine ?? s.label)?.length ?? 0)),
   )
   const failed = (reason: unknown) => (reason as Error).message
   if (json) {
@@ -222,7 +345,7 @@ async function show(deps: PlugDeps, json: boolean): Promise<number> {
       JSON.stringify({
         own,
         plugs: deps.cfg.plugs.map((plug, i) => {
-          const result = reads[i] as PromiseSettledResult<Awaited<ReturnType<typeof read>>>
+          const result = reads[i] as PromiseSettledResult<Awaited<ReturnType<typeof readAll>>>
           return result.status === 'fulfilled'
             ? { name: plug.name, address: plug.address, ...result.value }
             : { name: plug.name, address: plug.address, error: failed(result.reason) }
@@ -231,13 +354,13 @@ async function show(deps: PlugDeps, json: boolean): Promise<number> {
     )
   } else {
     for (const [i, plug] of deps.cfg.plugs.entries()) {
-      const result = reads[i] as PromiseSettledResult<Awaited<ReturnType<typeof read>>>
+      const result = reads[i] as PromiseSettledResult<Awaited<ReturnType<typeof readAll>>>
       if (result.status === 'rejected') {
         deps.out(`${label(plug)} (${plug.address}): ${failed(result.reason)}`)
         continue
       }
       deps.out(`${label(plug)} (${plug.address}, ${result.value.model})`)
-      for (const s of result.value.sockets) deps.out(line(s, own, widest))
+      for (const s of result.value.sockets) deps.out(line(s, own, widest, s.countdown))
     }
     if (own === null)
       deps.out(`This computer (${deps.host}) is not wired to a socket in the plug settings.`)
@@ -248,12 +371,17 @@ async function show(deps: PlugDeps, json: boolean): Promise<number> {
 export async function plug(argv: string[], deps: PlugDeps): Promise<number> {
   const flags = new Set(['--force', '--json'])
   let wait = deps.cfg.cycleSeconds
+  let inSeconds: number | null = null
   const words: string[] = []
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i] as string
     if (arg === '--wait') {
       wait = Number(argv[++i])
       if (!(wait >= 0)) throw new Refusal('--wait needs a number of seconds', 2)
+    } else if (arg === '--in') {
+      inSeconds = Number(argv[++i])
+      if (!Number.isInteger(inSeconds) || inSeconds < 1)
+        throw new Refusal('--in needs a whole number of seconds, 1 or more', 2)
     } else if (arg.startsWith('--') && !flags.has(arg)) {
       throw new Refusal(`unknown option ${arg}; aico plug --help shows how`, 2)
     } else words.push(arg)
@@ -266,12 +394,20 @@ export async function plug(argv: string[], deps: PlugDeps): Promise<number> {
     if (target || extra.length) throw new Refusal('aico plug status takes no arguments', 2)
     return await show(deps, json)
   }
-  if (verb !== 'on' && verb !== 'off' && verb !== 'cycle')
+  if (verb !== 'on' && verb !== 'off' && verb !== 'cycle' && verb !== 'cancel')
     throw new Refusal(`unknown command ${verb}; aico plug --help shows how`, 2)
   if (extra.length) throw new Refusal(`unexpected ${extra[0]}`, 2)
-  const { plug: def, index } = find(deps.cfg, target)
+  if (inSeconds !== null && verb !== 'on' && verb !== 'off')
+    throw new Refusal('--in goes with on or off: aico plug off MACHINE --in SECONDS', 2)
+  const { plug: def, index } = findSocket(deps.cfg, target)
   const own = ownSocket(deps.cfg, deps.host)
-  if (verb !== 'on' && !force && own?.plug === def.name && own.index === index) {
+  if (
+    verb !== 'on' &&
+    verb !== 'cancel' &&
+    !force &&
+    own?.plug === def.name &&
+    own.index === index
+  ) {
     const machine = def.sockets[index]?.machine
     throw new Refusal(
       `${machine} is this computer, and ${def.name}:${index} is what powers it. ` +
@@ -280,7 +416,17 @@ export async function plug(argv: string[], deps: PlugDeps): Promise<number> {
   }
   const socket = (await read(deps, def)).sockets[index]
   if (!socket) throw new Refusal(`The power plug at ${def.address} has no socket ${index}`)
-  const name = `${socket.machine ?? 'empty socket'} (${def.name}:${index})`
+  const name = `${socket.machine ?? socket.label ?? 'empty socket'} (${def.name}:${index})`
+  if (verb === 'cancel') {
+    await clearCountdown(deps, def, socket)
+    deps.out(`${name}: countdown cancelled`)
+    return 0
+  }
+  if (inSeconds !== null) {
+    await setCountdown(deps, def, socket, verb as 'on' | 'off', inSeconds)
+    deps.out(`${name} will switch ${verb} in ${duration(inSeconds)}`)
+    return 0
+  }
   if (verb !== 'cycle') {
     await set(deps, socket, def, verb === 'on')
     deps.out(`${name} is ${verb}`)

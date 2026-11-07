@@ -5,7 +5,7 @@ import { hostname } from 'node:os'
 import { join } from 'node:path'
 import { type Database, type Migration, openDatabase, transaction } from '@aico/store'
 import { type AlertBatch, type AlertHook, transitions } from './alerts'
-import { expectedOffSince, type Intent, type MachineIntent } from './intent'
+import { expectedOffSince, type Intent, type MachineIntent, showsBack } from './intent'
 import { parseRow, type StatusRow } from './row'
 import {
   type Filter,
@@ -75,6 +75,13 @@ function migrations(now: () => number): Migration[] {
       db.exec('ALTER TABLE machine_intent ADD COLUMN power_since INTEGER')
       db.exec('ALTER TABLE machine_intent ADD COLUMN power_at INTEGER')
     },
+    // Planned outages (`aico away`): a machine meant to be off for a while. It need not be a
+    // declared place (the two computers are not). `at` is the moment after which a report
+    // from the machine means it is back; until then it shows off.
+    `CREATE TABLE planned_outage (
+       machine TEXT PRIMARY KEY,
+       at INTEGER NOT NULL
+     ) STRICT`,
   ]
 }
 
@@ -109,6 +116,7 @@ export class StatusStore {
     const checked = rows.map(parseRow)
     const at = this.now()
     const before = this.db.prepare('SELECT doc, back_at FROM status_rows WHERE id = ?')
+    const ended = this.db.prepare('DELETE FROM planned_outage WHERE machine = ? AND at < ?')
     const put = this.db.prepare(
       `INSERT INTO status_rows (id, doc, updated_at, back_at) VALUES (?, ?, ?, ?)
        ON CONFLICT (id) DO UPDATE SET
@@ -127,6 +135,8 @@ export class StatusStore {
           backAt = row.state === 'off' ? null : away ? at : (old?.back_at ?? null)
         }
         put.run(row.id, JSON.stringify(row), at, backAt)
+        // A planned outage ends when the machine reports again after it was due to be gone.
+        if (showsBack(row)) ended.run(row.machine, at)
       }
     })
     if (this.alertHook) this.checkAlerts()
@@ -166,7 +176,43 @@ export class StatusStore {
       const since = expectedOffSince(m)
       if (since !== null) off.set(m.machine, since)
     }
+    for (const [machine, at] of this.plannedOutages())
+      off.set(machine, Math.max(at, off.get(machine) ?? at))
     return off
+  }
+
+  /** Machines with a planned outage, with the moment after which a report means they are back. */
+  plannedOutages(): Map<string, number> {
+    const rows = this.db.prepare('SELECT machine, at FROM planned_outage').all() as {
+      machine: string
+      at: number
+    }[]
+    return new Map(rows.map((r) => [r.machine, r.at]))
+  }
+
+  /**
+   * Plans an outage for `machines`: they show off, and their rows with them, and never page,
+   * until one reports after `at` (default now). Give `at` a little ahead of now so a report sent
+   * while the machine is still shutting down does not end it.
+   */
+  planOutage(machines: readonly string[], at: number = this.now()): void {
+    const put = this.db.prepare(
+      `INSERT INTO planned_outage (machine, at) VALUES (?, ?)
+       ON CONFLICT (machine) DO UPDATE SET at = excluded.at`,
+    )
+    transaction(this.db, () => {
+      for (const machine of machines) put.run(machine, at)
+    })
+    if (this.alertHook) this.checkAlerts()
+  }
+
+  /** Takes back a planned outage (the plan failed, or the machine stays on). */
+  clearOutage(machines: readonly string[]): void {
+    const drop = this.db.prepare('DELETE FROM planned_outage WHERE machine = ?')
+    transaction(this.db, () => {
+      for (const machine of machines) drop.run(machine)
+    })
+    if (this.alertHook) this.checkAlerts()
   }
 
   /** Whether `machine` is meant to be off now. */

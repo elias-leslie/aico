@@ -9,6 +9,7 @@ import { useClock } from '@/lib/hooks/use-clock'
 import { HostCallError, powerHost, trustHost } from '@/lib/hooks/use-host-admin'
 import { isStarting, useHosts } from '@/lib/hooks/use-hosts'
 import {
+  awayAll,
   powerMachine,
   setAutostart,
   useMachineGuests,
@@ -66,6 +67,25 @@ export function MachinesPage() {
   }, [settling, moving, refetchHosts])
   const now = useClock()
   const queryClient = useQueryClient()
+  const [askAway, setAskAway] = useState(false)
+  const [awayState, setAwayState] = useState<'idle' | 'starting' | 'started'>(
+    'idle',
+  )
+  const [awayError, setAwayError] = useState<string | null>(null)
+
+  async function leave() {
+    setAwayState('starting')
+    setAwayError(null)
+    try {
+      await awayAll()
+      setAskAway(false)
+      setAwayState('started')
+      setSettling(true)
+    } catch (failure) {
+      setAwayState('idle')
+      setAwayError(messageOf(failure, 'Couldn’t start the shutdown.'))
+    }
+  }
 
   // The hosts are read when this opens; a failed read with nothing earlier is unknown, not none.
   const hostsKnown = !hosts.isError || hosts.hosts.length > 0
@@ -130,6 +150,18 @@ export function MachinesPage() {
           <h1>Machines</h1>
           <button
             type="button"
+            className="lantern-btn small"
+            disabled={loading || bothFailed || awayState !== 'idle'}
+            title="Shut down the Workstation and the Proxmox host so you can leave. Start them again from the Kasa app."
+            onClick={() => {
+              setAwayError(null)
+              setAskAway(true)
+            }}
+          >
+            {awayState === 'idle' ? 'Shut down all' : 'Shutting down…'}
+          </button>
+          <button
+            type="button"
             className="lantern-btn ghost small"
             disabled={refreshing}
             onClick={refresh}
@@ -149,6 +181,14 @@ export function MachinesPage() {
               ? 'Not loaded'
               : machinesLine(list)}
         </p>
+        {awayState === 'started' && (
+          <div className={styles.notice} role="status">
+            <p>
+              <b>Shutting down.</b> Aico stops in a minute or two. To start the
+              machines again, switch their sockets on in the Kasa app.
+            </p>
+          </div>
+        )}
         {!loading && !bothFailed && list.machines.length > 0 && (
           <ul className={mine.legend} aria-label="What the labels mean">
             {MACHINES_LEGEND.map((line) => (
@@ -232,6 +272,21 @@ export function MachinesPage() {
         )}
         {body}
       </div>
+      <ConfirmationDialog
+        isOpen={askAway}
+        title="Shut down all machines?"
+        message="The Workstation and the Proxmox host shut down cleanly, then their plugs cut the power. Sessions running on them end and Aico goes offline. Status won’t flag them while they are off. To start them again, switch their sockets on in the Kasa app."
+        confirmText="Shut down all"
+        pendingText="Shutting down…"
+        variant="danger"
+        isPending={awayState === 'starting'}
+        error={awayError}
+        onConfirm={() => void leave()}
+        onCancel={() => {
+          setAskAway(false)
+          setAwayError(null)
+        }}
+      />
     </main>
   )
 }

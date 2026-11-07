@@ -105,3 +105,20 @@ export const setAutostart = (machine: string, on: boolean) =>
     { on },
     `Couldn’t turn autostart ${on ? 'on' : 'off'} for ${machine}`,
   )
+
+/** Shuts down the machines for leaving (`aico away --all` on the Workstation). Resolves once it has started; a refusal is thrown in the server's words. */
+export async function awayAll(): Promise<void> {
+  const res = await fetch('/api/machines/away', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  })
+  if (res.ok) return
+  const parsed = (await res.json().catch(() => null)) as {
+    detail?: string
+  } | null
+  throw new HostCallError(
+    parsed?.detail || 'Couldn’t start the shutdown.',
+    res.status,
+  )
+}

@@ -16,6 +16,7 @@ import { buildApi } from './api'
 import { AppApi } from './app-api'
 import { PhoneRegistry } from './app-phones'
 import { Asks, validateAsk } from './asks'
+import { registerAwayRoutes } from './away'
 import { Background } from './background'
 import { registerBackupRoutes } from './backups'
 import { CanaryEvents, createCanaryServer, registerCanaryRoutes } from './canary'
@@ -217,7 +218,12 @@ function serve(): void {
       activityMs: config.projects.activityMs,
     }),
   )
-  registerMachineRoutes(api, new MachinesService(places, registry, tether))
+  const machines = new MachinesService(places, registry, tether)
+  registerMachineRoutes(api, machines)
+  registerAwayRoutes(api, {
+    status,
+    guestMachines: async () => (await machines.guestsNow()).items.map((guest) => guest.machine),
+  })
   places.start()
   registerGrantRoutes(api)
   const canaryFolder = join(config.dataDir, 'canary')

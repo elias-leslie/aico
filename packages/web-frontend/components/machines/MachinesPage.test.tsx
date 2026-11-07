@@ -12,6 +12,7 @@ const data = vi.hoisted(() => ({
   guests: {} as Record<string, unknown>,
   machinePower: vi.fn(async () => ({})),
   autostart: vi.fn(async () => ({})),
+  away: vi.fn(async () => {}),
 }))
 vi.mock('@/lib/hooks/use-status', () => ({ useStatus: () => data.status }))
 vi.mock('@/lib/hooks/use-hosts', () => ({
@@ -34,6 +35,7 @@ vi.mock('@/lib/hooks/use-machine-guests', () => ({
     (data.machinePower as (...a: unknown[]) => unknown)(...args),
   setAutostart: (...args: unknown[]) =>
     (data.autostart as (...a: unknown[]) => unknown)(...args),
+  awayAll: () => data.away(),
 }))
 
 const row = (over: Partial<StatusRow>): StatusRow => ({
@@ -95,6 +97,7 @@ describe('MachinesPage', () => {
     data.power.mockClear()
     data.machinePower.mockClear()
     data.autostart.mockClear()
+    data.away.mockClear()
     data.guests = {
       guests: null,
       failure: null,
@@ -135,6 +138,41 @@ describe('MachinesPage', () => {
     expect(screen.getByText('Shut down agent-work?')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(data.power).not.toHaveBeenCalled()
+  })
+
+  it('asks plainly before shutting everything down for leaving, then says how to start again', async () => {
+    renderPage()
+    fireEvent.click(screen.getByRole('button', { name: 'Shut down all' }))
+    expect(data.away).not.toHaveBeenCalled()
+    expect(screen.getByText('Shut down all machines?')).toBeInTheDocument()
+    expect(screen.getByText(/Kasa app/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(data.away).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Shut down all' }))
+    fireEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: 'Shut down all',
+      }),
+    )
+    expect(await screen.findByText('Shutting down.')).toBeInTheDocument()
+    expect(data.away).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the dialog open with the reason when the shutdown is refused', async () => {
+    data.away.mockRejectedValueOnce(
+      new Error('The power plug at 192.168.87.217 didn’t answer'),
+    )
+    renderPage()
+    fireEvent.click(screen.getByRole('button', { name: 'Shut down all' }))
+    fireEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: 'Shut down all',
+      }),
+    )
+    expect(
+      await screen.findByText('The power plug at 192.168.87.217 didn’t answer'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Shut down all machines?')).toBeInTheDocument()
   })
 
   it('offers Power on for a host that is off', () => {

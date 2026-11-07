@@ -1,7 +1,8 @@
-// aico-ops: `aico deploy`, `aico logs`, `aico snapshots`, `aico vm` and `aico plug` (the launcher routes those here).
+// aico-ops: `aico deploy`, `aico logs`, `aico snapshots`, `aico vm`, `aico plug` and `aico away` (the launcher routes those here).
 
 import { existsSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
+import { away, awayDeps } from './away'
 import { backups } from './backups'
 import {
   canonical,
@@ -43,8 +44,13 @@ const USAGE = `Usage:
   aico plug [status] [--json]                        every power plug: its sockets, machine, on or off, how long on
   aico plug on|off MACHINE|PLUG:SOCKET [--force]     switch one socket (PLUG:SOCKET, e.g. shed:1, also for an empty one)
   aico plug cycle MACHINE|PLUG:SOCKET [--wait S] [--force]  off, wait (default 10 s), on
+  aico plug on|off MACHINE|PLUG:SOCKET --in SECONDS [--force]  the plug switches the socket itself after that long
+  aico plug cancel MACHINE|PLUG:SOCKET               take the countdown away (status shows a pending one)
       the Kasa plugs on the lab network, no login; a computer will not switch off its own socket
-      (that would cut its own power) unless --force`
+      (that would cut its own power) unless --force
+  aico away MACHINE... | --all [--dry-run]           shut hosts down cleanly and leave: marks the outage so Status does not page,
+                                                     sets the plug countdown, powers off (remote host first, this one last)
+      --dry-run prints the steps and changes nothing; start again from the Kasa app (socket on)`
 
 /** One verb's part of USAGE (`aico logs --help` shows logs, not deploy). */
 export function verbUsage(verb: string): string {
@@ -78,7 +84,7 @@ export async function main(argv: string[], env = process.env): Promise<number> {
     if (verb === 'wip') return await wip(rest, env)
     // Help before anything reads the project, git or a host: `aico deploy --help` works anywhere.
     if (
-      ['deploy', 'logs', 'snapshots', 'vm', 'plug'].includes(verb as string) &&
+      ['deploy', 'logs', 'snapshots', 'vm', 'plug', 'away'].includes(verb as string) &&
       (HELP.has(rest[0] ?? '') || rest.includes('--help'))
     ) {
       console.log(verbUsage(verb as string))
@@ -125,6 +131,11 @@ export async function main(argv: string[], env = process.env): Promise<number> {
       return await plug(
         rest,
         plugDeps((line) => console.log(line)),
+      )
+    if (verb === 'away')
+      return await away(
+        rest,
+        awayDeps((line) => console.log(line)),
       )
     if (verb === 'help' || verb === '--help' || verb === '-h' || !verb) {
       console.log(USAGE)

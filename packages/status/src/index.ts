@@ -16,6 +16,7 @@ export {
   INTENTS,
   type Intent,
   type MachineIntent,
+  showsBack,
 } from './intent'
 export { drainOutbox, type OutboxOptions, outboxDir, postOrKeep } from './outbox'
 export {

@@ -68,6 +68,7 @@ const NATIVE = new Set([
   'snapshots',
   'vm',
   'plug',
+  'away',
   'backups',
   'web',
   'video',
