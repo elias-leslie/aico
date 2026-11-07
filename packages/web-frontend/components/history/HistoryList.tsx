@@ -26,7 +26,13 @@ import styles from './HistoryList.module.css'
 import { HistorySearchResults } from './HistorySearchResults'
 
 /** The list of recent sessions, newest first, one link each to its transcript. */
-export function HistoryList({ failedOnly = false }: { failedOnly?: boolean }) {
+export function HistoryList({
+  failedOnly = false,
+  search = '',
+}: {
+  failedOnly?: boolean
+  search?: string
+}) {
   const [tool, setTool] = useState('')
   const [onlyFailed, setOnlyFailed] = useState(failedOnly)
   useEffect(() => setOnlyFailed(failedOnly), [failedOnly])
@@ -49,8 +55,8 @@ export function HistoryList({ failedOnly = false }: { failedOnly?: boolean }) {
     [...live.bySession.values()].find((item) => item.conversation === id)
   const [showTests, setShowTests] = useState(false)
   // The search box: results replace the list once two characters are typed.
-  const [text, setText] = useState('')
-  const [query, setQuery] = useState('')
+  const [text, setText] = useState(search)
+  const [query, setQuery] = useState(search.trim())
   const [searchTests, setSearchTests] = useState(0)
   useEffect(() => {
     const timer = setTimeout(() => setQuery(text.trim()), 300)

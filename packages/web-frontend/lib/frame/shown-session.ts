@@ -95,7 +95,8 @@ export function shownSessionLine(
   if (status !== 'session_dead') {
     if (group === 'needs-you') parts.push('needs you')
     else if (group === 'working') {
-      parts.push('working')
+      // A phone has room for one: what it is doing says it is working.
+      if (withSize || !session.doing) parts.push('working')
       if (session.doing) parts.push(session.doing)
     } else if (group === 'finished') parts.push('finished')
     else if (group === 'idle')

@@ -7,11 +7,14 @@ import { HistoryTranscript } from './HistoryTranscript'
 export function HistoryPage({
   session = '',
   at = null,
+  search = '',
   failedOnly = false,
 }: {
   session?: string
   /** A search hit's byte offset: the transcript opens on that message. */
   at?: number | null
+  /** Text to search for when the list opens. */
+  search?: string
   failedOnly?: boolean
 }) {
   return (
@@ -20,7 +23,7 @@ export function HistoryPage({
         {session ? (
           <HistoryTranscript id={session} at={at} />
         ) : (
-          <HistoryList failedOnly={failedOnly} />
+          <HistoryList failedOnly={failedOnly} search={search} />
         )}
       </div>
     </main>

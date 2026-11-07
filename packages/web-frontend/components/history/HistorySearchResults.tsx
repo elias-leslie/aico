@@ -99,8 +99,7 @@ export function HistorySearchResults({
         <p className="status-muted history-scope">
           {countOf(shown.length, 'session')} with “{page.query}”
           {page.more && ' so far'} · searched {covers}
-          {page.covers.length < 4 &&
-            ' (agy and Aico agent chats are not searchable yet)'}
+          {' (agy and Aico agent chats are not searchable yet)'}
           {page.more && ' · newest first, older ones not read'}
         </p>
       )}
