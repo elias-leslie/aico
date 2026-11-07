@@ -36,6 +36,8 @@
   outline-offset: -2px;
 }
 .row :global(.meta) :global(.status-chip) {
+  /* Under 1024px wide every chip grows to a touch target; these are not controls. */
+  min-height: 0;
   height: 18px;
   padding: 0 7px;
   font-size: 11px;

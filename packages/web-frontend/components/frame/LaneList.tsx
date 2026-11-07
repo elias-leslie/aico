@@ -97,7 +97,7 @@ export function LaneList({
               <span className="when">{row.age}</span>
               <span className="meta">
                 {row.depth === 0 ? (
-                  <CoordinatorBadge badge={row.badge} />
+                  <CoordinatorBadge badge={row.badge} ownLine />
                 ) : (
                   row.chip && (
                     <span className={`status-chip ${row.chip.kind}`}>
