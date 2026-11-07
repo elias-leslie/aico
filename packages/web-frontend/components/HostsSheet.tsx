@@ -33,6 +33,7 @@ import {
   useSyncStatus,
 } from '@/lib/hooks/use-sync-status'
 import { sessionHostLabel } from '@/lib/machines'
+import { plural } from '@/lib/status'
 import { ConfirmationDialog } from './ConfirmationDialog'
 
 const LOGIN_LABELS: Record<LoginState, string> = {
@@ -54,9 +55,6 @@ const LOGIN_TONE: Record<LoginState, Tone> = {
   expired: 'wait',
   unknown: 'quiet',
 }
-
-const plural = (count: number, one: string) =>
-  `${count} ${one}${count === 1 ? '' : 's'}`
 
 /** The host's state, led by what the owner needs to know. */
 function hostStatus(host: HostChoice): { text: string; tone: Tone } {

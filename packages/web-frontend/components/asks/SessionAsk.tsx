@@ -7,7 +7,8 @@ import { openNeedsYou } from '@/lib/frame/needs-you-request'
 import { openAsks, useOwnerAsks } from '@/lib/hooks/use-asks'
 import { useMediaQuery } from '@/lib/hooks/use-media-query'
 import { useFrame } from '../frame/FrameContext'
-import { AskCard } from './NeedsYou'
+import { AskCard } from './AskCard'
+import { useSentNote } from './ask-shared'
 
 /** Ask ids are a session's short id; slots carry the full one. */
 const sameSession = (a: string, b: string) => a.startsWith(b) || b.startsWith(a)
@@ -36,12 +37,7 @@ export function SessionAsk({
   /** Folded or opened by hand, per question; else open while blocking. */
   const [opened, setOpened] = useState<Record<string, boolean>>({})
   /** What the last Send said, once the question has left. */
-  const [sent, setSent] = useState<string | null>(null)
-  useEffect(() => {
-    if (!sent) return
-    const timer = window.setTimeout(() => setSent(null), 8000)
-    return () => window.clearTimeout(timer)
-  }, [sent])
+  const [sent, setSent] = useSentNote()
   // A different session: what was sent there is not this one's news.
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset on switch
   useEffect(() => setSent(null), [sessionId])
