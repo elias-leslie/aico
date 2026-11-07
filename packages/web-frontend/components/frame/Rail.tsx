@@ -13,6 +13,7 @@ import type { ComponentType } from 'react'
 import { quotaGlances, quotaLine } from '@/lib/frame/quota'
 import { useSessionAttention } from '@/lib/hooks/use-session-attention'
 import { useStatus } from '@/lib/hooks/use-status'
+import { useUsage } from '@/lib/hooks/use-usage'
 import { popOutNotes } from '@/lib/notes-window'
 import { plural } from '@/lib/status'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
@@ -79,7 +80,8 @@ export function Rail({
   const attention = useSessionAttention()
   const { view } = useStatus()
   const problems = view?.summary.problems
-  const glances = quotaGlances(view?.rows ?? [])
+  const { report } = useUsage()
+  const glances = quotaGlances(report)
   const heading = sessionsHeading(slots.length, attention.needsYouCount)
   return (
     <div

@@ -1,52 +1,105 @@
 import { describe, expect, it } from 'vitest'
-import type { StatusRow } from '../status'
-import { quotaGlances, quotaLine } from './quota'
+import type { UsageProvider, UsageReport, UsageWindow } from '../quota-usage'
+import { quotaGlances, quotaLine, quotaTitle } from './quota'
 
-const row = (id: string, what: string, meaning: string, state = 'ok') =>
-  ({ id, what, meaning, state, shown: state }) as unknown as StatusRow
+const win = (over: Partial<UsageWindow>): UsageWindow => ({
+  label: 'weekly',
+  state: 'ok',
+  left_percent: 80,
+  resets_at: null,
+  length_seconds: 1000,
+  resets_in_seconds: 400,
+  text: 'weekly 80% left, resets Nov 13',
+  ...over,
+})
+const provider = (over: Partial<UsageProvider>): UsageProvider => ({
+  id: 'claude',
+  name: 'Claude',
+  status: 'ok',
+  summary: null,
+  plan: null,
+  windows: [win({})],
+  credits: null,
+  problem: null,
+  spend: { unit: null, recorded_since: null, days: [] },
+  ...over,
+})
+const report = (...providers: UsageProvider[]): UsageReport => ({
+  as_of: '',
+  collected_at: '',
+  providers,
+})
 
 describe('quota glance', () => {
-  it('reads each subscription row and says one line, tightest window first', () => {
-    const glances = quotaGlances([
-      row(
-        'usage/claude',
-        'Claude usage',
-        '82% left this week; 95% left in 5 hours.',
+  it('reads the share left in the tightest window, with how much of its time is gone', () => {
+    const [claude] = quotaGlances(
+      report(
+        provider({
+          windows: [
+            win({ label: '5h', left_percent: 95, text: '5h 95% left' }),
+            win({ left_percent: 79, resets_in_seconds: 600 }),
+          ],
+        }),
       ),
-      row(
-        'usage/codex',
-        'Codex usage',
-        'Running on credits. 5h unknown; weekly used up until Nov 11, 5:35 AM; 4.6K credits left.',
-      ),
-      row(
-        'usage/opencode-go',
-        'OpenCode Go usage',
-        'Weekly used up until Nov 8, 7:00 PM. 5h 100% left, resets Nov 7, 1:52 AM; monthly 5% left.',
-        'warn',
-      ),
-      row('usage/old', 'Old usage', 'Used up. Resets Friday.', 'warn'),
-      row('jobs/usage-collect', 'Usage collect', 'Ran.'),
-    ])
-    expect(glances.map((g) => [g.name, g.state, g.left])).toEqual([
-      ['Claude', 'left', 82],
-      ['Codex', 'credits', null],
-      ['OpenCode Go', 'used_up', null],
-      ['Old', 'used_up', null],
-    ])
-    expect(quotaLine(glances)).toBe(
-      'Claude 82% · Codex on credits · OpenCode Go, Old used up',
     )
+    expect(claude).toMatchObject({
+      state: 'left',
+      left: 79,
+      gone: 40,
+      line: 'Weekly 80% left, resets Nov 13',
+    })
   })
 
-  it('says unknown, not zero, when a row has no numbers', () => {
-    const glances = quotaGlances([
-      row('usage/claude', 'Claude usage', 'Unknown. Not read yet.', 'unknown'),
+  it('says each provider in one line: left, on credits, used up', () => {
+    const glances = quotaGlances(
+      report(
+        provider({}),
+        provider({
+          id: 'codex',
+          name: 'Codex',
+          status: 'on_credits',
+          credits: { balance: 4571.7, lasts_days: 2.9, text: '4.6K credits' },
+          windows: [
+            win({ state: 'used_up', left_percent: 0, text: 'weekly used up' }),
+          ],
+        }),
+        provider({
+          id: 'opencode-go',
+          name: 'OpenCode Go',
+          status: 'used_up',
+          windows: [
+            win({ label: '5h', left_percent: 100 }),
+            win({ state: 'used_up', left_percent: 0, text: 'weekly used up' }),
+          ],
+        }),
+      ),
+    )
+    expect(glances.map((g) => [g.name, g.state, g.left])).toEqual([
+      ['Claude', 'left', 80],
+      ['Codex', 'credits', 0],
+      ['OpenCode Go', 'used_up', 0],
     ])
-    expect(glances[0]).toMatchObject({
-      state: 'unknown',
-      left: null,
-      warn: true,
-    })
-    expect(quotaLine(glances)).toBe('Claude unknown')
+    expect(glances[1]?.line).toBe('On credits, 4.6K credits left')
+    expect(quotaLine(glances)).toBe(
+      'Claude 80% · Codex on credits · OpenCode Go used up',
+    )
+    expect(quotaTitle(glances)).toContain('Bar: share left')
+  })
+
+  it('says unknown, not zero, when nothing was read', () => {
+    const [glance] = quotaGlances(
+      report(
+        provider({
+          status: 'unknown',
+          windows: [win({ state: 'unknown', left_percent: null })],
+        }),
+      ),
+    )
+    expect(glance).toMatchObject({ state: 'unknown', left: null, warn: true })
+    expect(quotaLine([glance as never])).toBe('Claude unknown')
+  })
+
+  it('has no glances before the first read', () => {
+    expect(quotaGlances(null)).toEqual([])
   })
 })

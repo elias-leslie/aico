@@ -217,3 +217,26 @@
     transition: none;
   }
 }
+
+.legend {
+  display: flex;
+  gap: 12px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--mist);
+}
+.legend i {
+  display: inline-block;
+  width: 10px;
+  height: 4px;
+  margin-right: 5px;
+  border-radius: 2px;
+  background: var(--lantern);
+  vertical-align: middle;
+}
+.legend i.legendTick {
+  width: 2px;
+  height: 10px;
+  background: var(--bone);
+  opacity: 0.7;
+}

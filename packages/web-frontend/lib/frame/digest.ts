@@ -26,6 +26,8 @@ export interface Digest {
 }
 
 const LAST_LOOK_KEY = 'aico:last-look'
+/** Where this visit's digest starts, kept so a reload does not restart it. */
+const DIGEST_START_KEY = 'aico:digest-start'
 /** Without a last look (a new device), the digest covers this long. */
 const FIRST_LOOK_MS = 12 * 60 * 60 * 1000
 /** Away this long counts as a break: the next look starts a new digest. */
@@ -59,6 +61,40 @@ function write(ms: number) {
   }
 }
 
+function readStart(): number | null {
+  try {
+    const raw = Number(localStorage.getItem(DIGEST_START_KEY))
+    return Number.isFinite(raw) && raw > 0 ? raw : null
+  } catch {
+    return null
+  }
+}
+
+function writeStart(ms: number | null) {
+  if (ms === null) return
+  try {
+    localStorage.setItem(DIGEST_START_KEY, String(ms))
+  } catch {
+    // Storage blocked: the digest then restarts with each load.
+  }
+}
+
+/**
+ * Where the digest starts on a load: a reload within the break keeps the start the visit already
+ * had (the last look is only a minute old then), so the line doesn't fall back to "nothing". A
+ * longer absence starts a new digest at the last look.
+ */
+export function resolveDigestStart(
+  lastLook: number | null,
+  keptStart: number | null,
+  now: number,
+): number | null {
+  if (lastLook === null) return null
+  if (now - lastLook <= BREAK_MS && keptStart !== null && keptStart <= lastLook)
+    return keptStart
+  return lastLook
+}
+
 function emit() {
   for (const listener of listeners) listener()
 }
@@ -67,7 +103,8 @@ function emit() {
 function start() {
   if (started || typeof window === 'undefined') return
   started = true
-  look = { since: read() }
+  look = { since: resolveDigestStart(read(), readStart(), Date.now()) }
+  writeStart(look.since)
   write(Date.now())
   window.setInterval(() => {
     if (document.visibilityState === 'visible') write(Date.now())
@@ -80,6 +117,7 @@ function start() {
     }
     if (hiddenAt && Date.now() - hiddenAt > BREAK_MS) {
       look = { since: hiddenAt }
+      writeStart(hiddenAt)
       emit()
     }
     hiddenAt = 0
@@ -133,6 +171,10 @@ export function useDigest(since: number) {
 export interface DigestParts {
   /** "3 finished, 1 of them failed", "nothing finished": the line that leads. */
   finished: string
+  /** `finished` up to the failed phrase (the whole of it when none failed). */
+  finishedLead: string
+  /** "1 of them failed", "all failed": the part that opens the failed sessions; null when none failed. */
+  failedPhrase: string | null
   /** Plain pieces after it: stuck sessions, new questions still waiting. */
   rest: string[]
   /** What it could not read, in words, or null. */
@@ -150,15 +192,27 @@ const UNREAD_WORD: Record<string, string> = {
 }
 
 /** The digest in the owner's words. A part that couldn't be read is never a zero. */
-export function digestParts(digest: Digest): DigestParts {
+export function digestParts(digest: Digest, waiting?: number): DigestParts {
   const skipped = (name: string) => digest.unavailable.includes(name)
-  const finished = skipped('history')
+  const unreadHistory = skipped('history')
+  const failedPhrase =
+    unreadHistory || digest.finished === 0 || digest.failed <= 0
+      ? null
+      : digest.failed === digest.finished
+        ? digest.failed === 1
+          ? 'and it failed'
+          : 'all failed'
+        : `${digest.failed} of them failed`
+  const finishedLead = unreadHistory
     ? 'finished sessions not read'
     : digest.finished === 0
       ? 'nothing finished'
-      : digest.failed > 0
-        ? `${digest.finished} finished, ${digest.failed === digest.finished ? (digest.failed === 1 ? 'and it failed' : 'all failed') : `${digest.failed} of them failed`}`
+      : failedPhrase
+        ? `${digest.finished} finished,`
         : `${digest.finished} finished`
+  const finished = failedPhrase
+    ? `${finishedLead} ${failedPhrase}`
+    : finishedLead
   const rest: string[] = []
   const stuck = digest.stuck.quiet + digest.stuck.waiting
   if (!skipped('sessions') && stuck > 0)
@@ -170,8 +224,15 @@ export function digestParts(digest: Digest): DigestParts {
         .filter(Boolean)
         .join(', ')} (stuck)`,
     )
-  if (!skipped('asks') && digest.asks > 0)
-    rest.push(`${plural(digest.asks, 'new question')} waiting`)
+  // What waits on the owner now, not just what is new since the last look: a reload
+  // must not hide a question that is still open.
+  const questions = waiting ?? digest.asks
+  if (waiting !== undefined || !skipped('asks')) {
+    if (questions > 0)
+      rest.push(
+        `${plural(questions, waiting === undefined ? 'new question' : 'question')} waiting`,
+      )
+  }
   const unread = digest.unavailable.length
     ? `Couldn’t read ${digest.unavailable.map((name) => UNREAD_WORD[name] ?? name).join(', ')}.`
     : null
@@ -179,8 +240,8 @@ export function digestParts(digest: Digest): DigestParts {
     digest.unavailable.length === 0 &&
     digest.finished === 0 &&
     stuck === 0 &&
-    digest.asks === 0
-  return { finished, rest, unread, quiet }
+    questions === 0
+  return { finished, finishedLead, failedPhrase, rest, unread, quiet }
 }
 
 /** "Since 11:40 PM", "Since yesterday 11:40 PM"; for a device that never
@@ -195,13 +256,13 @@ export function sinceText(
     : `Since ${at(since, now)}`
 }
 
-/** The credits line: "Codex 1.5K credits". Null when none were spent or it wasn't read. */
+/** The credits line: "Codex spent 1.5K credits". Null when none were spent or it wasn't read. */
 export function spendText(digest: Digest): string | null {
   if (!digest.spend || digest.spend.items.length === 0) return null
   return digest.spend.items
     .map(
       (item) =>
-        `${item.provider.charAt(0).toUpperCase()}${item.provider.slice(1)} ${creditCount(item.credits)} credits`,
+        `${item.provider.charAt(0).toUpperCase()}${item.provider.slice(1)} spent ${creditCount(item.credits)} credits`,
     )
     .join(', ')
 }

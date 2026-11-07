@@ -114,20 +114,53 @@
   font-weight: 600;
 }
 .bar {
+  position: relative;
   height: 5px;
   margin-top: 5px;
   border-radius: 3px;
   background: var(--wash-2);
-  overflow: hidden;
+}
+.bar[data-unknown] {
+  background: none;
+  border: 1px dashed var(--line-2);
 }
 .bar span {
-  display: block;
-  height: 100%;
+  position: absolute;
+  inset: 0 auto 0 0;
   border-radius: 3px;
   background: var(--lantern);
 }
-.bar span[data-out] {
-  background: var(--mist);
+.tick {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--bone);
+  opacity: 0.7;
+}
+.legend {
+  display: flex;
+  gap: 12px;
+  margin: 8px 0 0;
+  font-size: 11.5px;
+  color: var(--mist);
+}
+.legend i {
+  display: inline-block;
+  width: 10px;
+  height: 4px;
+  margin-right: 5px;
+  border-radius: 2px;
+  background: var(--lantern);
+  vertical-align: middle;
+}
+.legend i.legendTick {
+  width: 2px;
+  height: 10px;
+  background: var(--bone);
+  opacity: 0.7;
 }
 .else {
   display: grid;

@@ -29,6 +29,38 @@ vi.mock('@/lib/hooks/use-asks', () => ({
   useApprovals: () => ({ approvals: { taps: [{ id: 't' }] } }),
   openAsks: (asks: unknown[]) => asks,
 }))
+vi.mock('@/lib/hooks/use-usage', () => ({
+  useUsage: () => ({
+    report: {
+      as_of: '',
+      collected_at: '',
+      providers: [
+        {
+          id: 'claude',
+          name: 'Claude',
+          status: 'ok',
+          summary: null,
+          plan: null,
+          windows: [
+            {
+              label: 'weekly',
+              state: 'ok',
+              left_percent: 82,
+              resets_at: null,
+              length_seconds: 1000,
+              resets_in_seconds: 400,
+              text: 'weekly 82% left',
+            },
+          ],
+          credits: null,
+          problem: null,
+          spend: { unit: null, recorded_since: null, days: [] },
+        },
+      ],
+    },
+    stale: false,
+  }),
+}))
 vi.mock('@/lib/hooks/use-status', () => ({
   useStatus: () => ({
     view: {

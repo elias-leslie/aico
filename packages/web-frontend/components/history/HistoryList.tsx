@@ -2,7 +2,7 @@
 
 import { RefreshCw } from 'lucide-react'
 import Link from 'next/link'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLiveSessions } from '@/lib/frame/live'
 import {
   agoAt,
@@ -22,8 +22,10 @@ import { useClock } from '@/lib/hooks/use-clock'
 import { useHistory } from '@/lib/hooks/use-history'
 
 /** The list of recent sessions, newest first, one link each to its transcript. */
-export function HistoryList() {
+export function HistoryList({ failedOnly = false }: { failedOnly?: boolean }) {
   const [tool, setTool] = useState('')
+  const [onlyFailed, setOnlyFailed] = useState(failedOnly)
+  useEffect(() => setOnlyFailed(failedOnly), [failedOnly])
   const {
     items,
     loading,
@@ -42,7 +44,13 @@ export function HistoryList() {
     [...live.bySession.values()].find((item) => item.conversation === id)
   const [showTests, setShowTests] = useState(false)
   const tests = items?.filter((session) => session.test).length ?? 0
-  const shown = showTests ? items : items?.filter((session) => !session.test)
+  const visible = showTests ? items : items?.filter((session) => !session.test)
+  // Failed means the session's last turn ended in an error (a running session is never failed).
+  const shown = onlyFailed
+    ? visible?.filter(
+        (session) => standing(session, now, liveOf(session.id)) === 'failed',
+      )
+    : visible
 
   const sub = loading
     ? 'Loading…'
@@ -74,6 +82,16 @@ export function HistoryList() {
             </option>
           ))}
         </select>
+        {onlyFailed && (
+          <button
+            type="button"
+            className="lantern-btn ghost small"
+            aria-pressed="true"
+            onClick={() => setOnlyFailed(false)}
+          >
+            Failed only · Show all
+          </button>
+        )}
         {tests > 0 && (
           <button
             type="button"
@@ -167,8 +185,13 @@ export function HistoryList() {
         <div className="status-rows">
           <div className="status-empty">
             <h3>
-              {tool ? `No ${toolName(tool)} sessions yet` : 'No sessions yet'}
+              {onlyFailed
+                ? 'No failed sessions'
+                : tool
+                  ? `No ${toolName(tool)} sessions yet`
+                  : 'No sessions yet'}
             </h3>
+            {onlyFailed && 'None of the recent sessions ended in an error. '}
             {tests > 0 && `${countOf(tests, 'test run')} hidden. `}
             Aico reads the sessions Claude Code, Codex and Pi keep on this host
             about every 15 seconds. None has turned up in the recent days it

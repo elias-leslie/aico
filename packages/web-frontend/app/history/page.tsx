@@ -4,9 +4,16 @@ import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
 import { HistoryPage } from '@/components/history/HistoryPage'
 
-/** /history lists recent sessions; /history?session=<id> shows one session's transcript. */
+/** /history lists recent sessions; /history?session=<id> shows one session's transcript;
+ * /history?standing=failed lists only the sessions that failed. */
 function History() {
-  return <HistoryPage session={useSearchParams().get('session') ?? ''} />
+  const params = useSearchParams()
+  return (
+    <HistoryPage
+      session={params.get('session') ?? ''}
+      failedOnly={params.get('standing') === 'failed'}
+    />
+  )
 }
 
 export default function HistoryRoute() {

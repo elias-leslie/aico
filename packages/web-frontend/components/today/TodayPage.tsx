@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useMemo } from 'react'
 import {
   digestParts,
@@ -9,6 +10,7 @@ import {
   useDigest,
   useLastLook,
 } from '@/lib/frame/digest'
+import { openAsks, useOwnerAsks } from '@/lib/hooks/use-asks'
 import { useClock } from '@/lib/hooks/use-clock'
 import { TodayTimeline } from './TodayTimeline'
 
@@ -18,7 +20,9 @@ export function TodayPage() {
   const now = useClock(60_000)
   const start = useMemo(() => digestStart(lastLook, Date.now()), [lastLook])
   const { digest, loading, failed, refetch } = useDigest(start)
-  const parts = digest ? digestParts(digest) : null
+  const { asks, isLoading: asksLoading, isError: asksFailed } = useOwnerAsks()
+  const waiting = asksLoading || asksFailed ? undefined : openAsks(asks).length
+  const parts = digest ? digestParts(digest, waiting) : null
   const spend = digest ? spendText(digest) : null
   return (
     <main className="status-page">
@@ -53,7 +57,16 @@ export function TodayPage() {
               <span style={{ color: 'var(--mist)', marginRight: 8 }}>
                 {sinceText(start, now, lastLook === null)}
               </span>
-              {parts.finished}
+              {parts.failedPhrase ? (
+                <>
+                  {parts.finishedLead}{' '}
+                  <Link href="/history?standing=failed" className="underline">
+                    {parts.failedPhrase}
+                  </Link>
+                </>
+              ) : (
+                parts.finished
+              )}
               {parts.rest.length > 0 && `, ${parts.rest.join(', ')}`}
               {digest.problems.count > 0 &&
                 `, ${digest.problems.count} ${digest.problems.count === 1 ? 'problem' : 'problems'}`}

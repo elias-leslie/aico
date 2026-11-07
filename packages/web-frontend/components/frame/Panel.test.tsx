@@ -16,6 +16,13 @@ const state = vi.hoisted(() => ({
     failed: false,
     stale: false,
   },
+  usage: {
+    report: null as unknown,
+    loading: false,
+    failed: false,
+    stale: false,
+  },
+  asks: { asks: [{ id: 'a' }, { id: 'b' }], isLoading: false, isError: false },
   open: vi.fn(),
   lastLook: null as number | null,
 }))
@@ -28,7 +35,10 @@ vi.mock('@/lib/frame/digest', async (importOriginal) => ({
   useDigest: () => state.digest,
 }))
 vi.mock('@/lib/hooks/use-status', () => ({ useStatus: () => state.status }))
+vi.mock('@/lib/hooks/use-usage', () => ({ useUsage: () => state.usage }))
 vi.mock('@/lib/hooks/use-asks', () => ({
+  useOwnerAsks: () => state.asks,
+  openAsks: (asks: unknown[]) => asks,
   useApprovals: () => ({ approvals: { state: 'ok', taps: [{ id: 't' }] } }),
 }))
 vi.mock('@/lib/hooks/use-session-attention', () => ({
@@ -71,18 +81,47 @@ beforeEach(() => {
     stale: false,
     refetch: vi.fn(),
   }
+  state.usage = {
+    report: {
+      as_of: '',
+      collected_at: '',
+      providers: [
+        {
+          id: 'claude',
+          name: 'Claude',
+          status: 'ok',
+          summary: null,
+          plan: null,
+          windows: [
+            {
+              label: 'weekly',
+              state: 'ok',
+              left_percent: 82,
+              resets_at: null,
+              length_seconds: 1000,
+              resets_in_seconds: 400,
+              text: 'weekly 82% left',
+            },
+          ],
+          credits: null,
+          problem: null,
+          spend: { unit: null, recorded_since: null, days: [] },
+        },
+      ],
+    },
+    loading: false,
+    failed: false,
+    stale: false,
+  }
+  state.asks = {
+    asks: [{ id: 'a' }, { id: 'b' }],
+    isLoading: false,
+    isError: false,
+  }
   state.status = {
     view: {
       summary: { problems: 3, top: [row()] },
-      rows: [
-        {
-          id: 'usage/claude',
-          what: 'Claude usage',
-          meaning: '82% left this week.',
-          state: 'ok',
-          shown: 'ok',
-        },
-      ],
+      rows: [],
     },
     loading: false,
     failed: false,
@@ -99,13 +138,17 @@ describe('Panel', () => {
     render(<Panel slots={slots} onSelect={vi.fn()} />)
     const since = screen.getByTestId('since-line')
     expect(since).toHaveTextContent(
-      /Since .*3 finished, 1 of them failed, 1 quiet \(stuck\), 2 new questions waiting/,
+      /Since .*3 finished, 1 of them failed, 1 quiet \(stuck\), 2 questions waiting/,
     )
     expect(
       screen
         .getAllByRole('heading', { level: 2 })
         .map((heading) => heading.textContent),
     ).toEqual(['Sessions', 'Worst problem', 'Quota', 'Everything else'])
+    // "1 of them failed" opens the failed sessions.
+    expect(
+      screen.getByRole('link', { name: '1 of them failed' }),
+    ).toHaveAttribute('href', '/history?standing=failed')
     fireEvent.click(screen.getByRole('link', { name: 'See the day' }))
     expect(state.open).toHaveBeenCalledWith('/today', 'wide')
   })
@@ -139,7 +182,11 @@ describe('Panel', () => {
 
   it('shows a quota bar with what is used, and glance values only where read', () => {
     render(<Panel slots={slots} onSelect={vi.fn()} />)
-    expect(screen.getByRole('img', { name: 'Claude: 18% used' })).toBeVisible()
+    expect(
+      screen.getByRole('img', {
+        name: 'Claude: 82% left, 60% of the window gone',
+      }),
+    ).toBeVisible()
     expect(
       screen.getByRole('link', { name: /Status.*3 problems/ }),
     ).toBeVisible()
@@ -153,12 +200,14 @@ describe('Panel', () => {
   it('has its own copy for loading, failed and quiet states, never a zero for unknown', () => {
     state.digest = { ...state.digest, digest: null, loading: true }
     state.status = { view: null, loading: true, failed: false, stale: false }
+    state.usage = { ...state.usage, report: null, loading: true }
     const { rerender } = render(<Panel slots={slots} onSelect={vi.fn()} />)
     expect(screen.getByText('Checking what happened…')).toBeVisible()
     expect(screen.getByText('Checking Status…')).toBeVisible()
 
     state.digest = { ...state.digest, loading: false, failed: true }
     state.status = { view: null, loading: false, failed: true, stale: false }
+    state.usage = { ...state.usage, loading: false, failed: true }
     rerender(<Panel slots={slots} onSelect={vi.fn()} />)
     expect(screen.getByText(/Couldn’t read what happened/)).toBeVisible()
     expect(screen.getByText('Status couldn’t be read.')).toBeVisible()

@@ -1,8 +1,8 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
-import { ApiError, apiFetch } from '@/lib/api-fetch'
+import { ApiError } from '@/lib/api-fetch'
 import { useClock } from '@/lib/hooks/use-clock'
+import { useUsage } from '@/lib/hooks/use-usage'
 import {
   barHeights,
   COLLECTION_OLD_MS,
@@ -14,7 +14,6 @@ import {
   sentence,
   summarize,
   type UsageProvider,
-  type UsageReport,
   type UsageWindow,
   unitCaption,
   windowGone,
@@ -27,15 +26,7 @@ const POLL_MS = 60_000
 /** Quota: what each provider has left, when it resets, and what was spent per day (#24). */
 export function QuotaPage() {
   const now = useClock(POLL_MS)
-  const query = useQuery({
-    queryKey: ['usage'],
-    queryFn: () =>
-      apiFetch<UsageReport>('/api/usage', undefined, 'Aico did not answer'),
-    refetchInterval: POLL_MS,
-    refetchOnWindowFocus: true,
-    retry: 1,
-  })
-  const report = query.data ?? null
+  const { query, report } = useUsage()
   const collectedMs = report ? Date.parse(report.collected_at) : null
   const old = collectedMs !== null && now - collectedMs > COLLECTION_OLD_MS
 
@@ -81,6 +72,18 @@ export function QuotaPage() {
             numbers may be out of date.
           </p>
         </div>
+      )}
+      {report && (
+        <p className={styles.legend}>
+          <span>
+            <i />
+            share left
+          </span>
+          <span>
+            <i className={styles.legendTick} />
+            time gone in the window
+          </span>
+        </p>
       )}
       {report && (
         <div className={styles.cards}>

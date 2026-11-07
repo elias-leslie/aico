@@ -12,6 +12,7 @@ import { shownSessionLine, useShownSession } from '@/lib/frame/shown-session'
 import { openAsks, useApprovals, useOwnerAsks } from '@/lib/hooks/use-asks'
 import { useClock } from '@/lib/hooks/use-clock'
 import { useStatus } from '@/lib/hooks/use-status'
+import { useUsage } from '@/lib/hooks/use-usage'
 import { popOutNotes } from '@/lib/notes-window'
 import { PRODUCT_NAME } from '@/lib/project-branding'
 import { at, plural, summaryLine } from '@/lib/status'
@@ -65,7 +66,8 @@ export function TopBar() {
   const { view, failed, stale } = useStatus()
   const docked = frame?.docked ?? true
   const summary = view?.summary
-  const glances = quotaGlances(view?.rows ?? [])
+  const { report, stale: usageStale } = useUsage()
+  const glances = quotaGlances(report)
   const down = reach.down
   const since = at(reach.since, now)
 
@@ -259,7 +261,7 @@ export function TopBar() {
       {docked && glances.length > 0 && (
         <button
           type="button"
-          className={clsx(styles.tbBtn, down && styles.stale)}
+          className={clsx(styles.tbBtn, (down || usageStale) && styles.stale)}
           onClick={() => frame?.open(QUOTA_HREF, 'wide')}
           aria-label={`Quota: ${quotaLine(glances)}`}
           title={quotaTitle(glances)}

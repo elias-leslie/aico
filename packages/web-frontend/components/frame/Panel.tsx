@@ -26,10 +26,11 @@ import {
   useLastLook,
 } from '@/lib/frame/digest'
 import { type QuotaGlance, quotaGlances, quotaTitle } from '@/lib/frame/quota'
-import { useApprovals } from '@/lib/hooks/use-asks'
+import { openAsks, useApprovals, useOwnerAsks } from '@/lib/hooks/use-asks'
 import { useClock } from '@/lib/hooks/use-clock'
 import { useSessionAttention } from '@/lib/hooks/use-session-attention'
 import { useStatus } from '@/lib/hooks/use-status'
+import { useUsage } from '@/lib/hooks/use-usage'
 import { popOutNotes } from '@/lib/notes-window'
 import { plural, reason, type StatusRow, WORD } from '@/lib/status'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
@@ -112,6 +113,9 @@ function MoreLink({
   )
 }
 
+/** Recent, narrowed to the sessions that failed (what "1 of them failed" opens). */
+const FAILED_RECENT_HREF = '/history?standing=failed'
+
 /** The line at the top: what happened since this device last looked. */
 function SinceLine({ frame }: { frame: Frame | null }) {
   const lastLook = useLastLook()
@@ -119,6 +123,9 @@ function SinceLine({ frame }: { frame: Frame | null }) {
   // The start is fixed for the visit; the clock only words it.
   const start = useMemo(() => digestStart(lastLook, Date.now()), [lastLook])
   const { digest, loading, failed, stale, refetch } = useDigest(start)
+  const { asks, isLoading: asksLoading, isError: asksFailed } = useOwnerAsks()
+  // Questions open now, whatever the digest's window: a reload keeps the one still waiting.
+  const waiting = asksLoading || asksFailed ? undefined : openAsks(asks).length
   const head = sinceText(start, now, lastLook === null)
   if (loading)
     return (
@@ -141,7 +148,7 @@ function SinceLine({ frame }: { frame: Frame | null }) {
         </button>
       </p>
     )
-  const parts = digestParts(digest)
+  const parts = digestParts(digest, waiting)
   const spend = spendText(digest)
   return (
     <div
@@ -151,8 +158,17 @@ function SinceLine({ frame }: { frame: Frame | null }) {
     >
       <p>
         <span className={styles.sinceHead}>{head}</span>
-        <span className={digest.failed > 0 ? styles.bad : undefined}>
-          {parts.finished}
+        <span>
+          {parts.failedPhrase ? (
+            <>
+              {parts.finishedLead}{' '}
+              <MoreLink frame={frame} href={FAILED_RECENT_HREF}>
+                <span className={styles.bad}>{parts.failedPhrase}</span>
+              </MoreLink>
+            </>
+          ) : (
+            parts.finished
+          )}
         </span>
         {parts.rest.length > 0 && `, ${parts.rest.join(', ')}`}
         {parts.quiet && '; nothing else'}
@@ -215,34 +231,26 @@ function WorstProblem({ frame }: { frame: Frame | null }) {
 }
 
 function QuotaBar({ glance }: { glance: QuotaGlance }) {
-  const out = glance.state === 'used_up'
-  const used =
-    glance.state === 'left' && glance.left !== null
-      ? 100 - glance.left
-      : out
-        ? 100
-        : null
-  const sentence = glance.meaning.split(/\.(?:\s|$)/)[0] ?? glance.meaning
+  const unknown = glance.left === null
   return (
     <li className={styles.quota} title={glance.meaning}>
       <div className={styles.quotaLine}>
         <b>{glance.name}</b>
-        <span>{sentence}</span>
+        <span>{glance.line}</span>
       </div>
       <div
         className={styles.bar}
+        data-unknown={unknown ? 'true' : undefined}
         role="img"
         aria-label={
-          used === null
+          unknown
             ? `${glance.name}: not known`
-            : `${glance.name}: ${used}% used`
+            : `${glance.name}: ${glance.left}% left${glance.gone === null ? '' : `, ${glance.gone}% of the window gone`}`
         }
       >
-        {used !== null && (
-          <span
-            data-out={out ? 'true' : undefined}
-            style={{ width: `${used}%` }}
-          />
+        {!unknown && <span style={{ width: `${glance.left}%` }} />}
+        {!unknown && glance.gone !== null && (
+          <i className={styles.tick} style={{ left: `${glance.gone}%` }} />
         )}
       </div>
     </li>
@@ -250,8 +258,8 @@ function QuotaBar({ glance }: { glance: QuotaGlance }) {
 }
 
 function Quota({ frame }: { frame: Frame | null }) {
-  const { view, loading, failed, stale } = useStatus()
-  const glances = quotaGlances(view?.rows ?? [])
+  const { report, loading, failed, stale } = useUsage()
+  const glances = quotaGlances(report)
   return (
     <section className={styles.section} aria-label="Quota">
       <SectionHead
@@ -269,15 +277,27 @@ function Quota({ frame }: { frame: Frame | null }) {
       ) : glances.length === 0 ? (
         <p className={styles.note}>No quota reports yet.</p>
       ) : (
-        <ul
-          className={styles.quotas}
-          title={quotaTitle(glances)}
-          data-stale={stale ? 'true' : undefined}
-        >
-          {glances.map((glance) => (
-            <QuotaBar key={glance.id} glance={glance} />
-          ))}
-        </ul>
+        <>
+          <ul
+            className={styles.quotas}
+            title={quotaTitle(glances)}
+            data-stale={stale ? 'true' : undefined}
+          >
+            {glances.map((glance) => (
+              <QuotaBar key={glance.id} glance={glance} />
+            ))}
+          </ul>
+          <p className={styles.legend}>
+            <span>
+              <i />
+              share left
+            </span>
+            <span>
+              <i className={styles.legendTick} />
+              time gone in the window
+            </span>
+          </p>
+        </>
       )}
     </section>
   )
