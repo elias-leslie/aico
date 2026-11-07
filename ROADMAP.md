@@ -2,9 +2,7 @@
 Aico is a Linux companion for people working with terminal AI tools. Agent sessions keep running in the background and open in a browser or on the phone, owned by Tether, the session daemon. It also runs the owner's status, backups, notes and project tooling.
 
 ## Now
-- Enroll VMs 200 and 201 (Aico fleet and OmniNull agent), CT 190 automatic updates, end the stuck dev test session
-- Codebase cleanup: prune summitflow, agent-hub and nightshift and fold what is needed into Aico (plan: docs/plans/codebase-cleanup/plan.md)
-- Projects page: runtime places, power actions and the page itself, then verify on phone and desktop (plan: docs/plans/projects-page/plan.md)
+- Confirm the nightly GitHub publication runs clean and the morning digest reaches the phone (Nov 8)
 ## Next
 - Split the session engine and move fleet code out of Tether
 - Failover: copy active repos to the peer host and let jobs move when their home is down
