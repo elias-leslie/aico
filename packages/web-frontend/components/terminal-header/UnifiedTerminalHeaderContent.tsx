@@ -76,7 +76,7 @@ export const UnifiedTerminalHeaderContent = memo(
       <div
         data-testid={`terminal-header-${getSlotPanelId(slot)}`}
         className={clsx(
-          'relative flex h-12 flex-shrink-0 items-center gap-1',
+          '@container relative flex h-12 flex-shrink-0 items-center gap-1',
           isMobile ? 'pr-1 pl-1.5' : 'pr-1.5 pl-2.5',
         )}
       >
@@ -140,11 +140,11 @@ export const UnifiedTerminalHeaderContent = memo(
               style={{ height: 34, padding: '0 10px' }}
             >
               <Pencil className="h-4 w-4" strokeWidth={1.7} />
-              <span className="hidden min-[1100px]:inline">Compose</span>
+              <span className="hidden @min-[760px]:inline">Compose</span>
             </button>
           )}
 
-          {/* Icon only on a phone and below ~1100px, so the bar fits. */}
+          {/* Icon only on a phone and when the session pane is under 760px, so the bar fits. */}
           {onFiles &&
             (isMobile ? (
               <HeaderIconButton
@@ -165,7 +165,7 @@ export const UnifiedTerminalHeaderContent = memo(
                 style={{ height: 34, padding: '0 10px' }}
               >
                 <Folder className="h-4 w-4" strokeWidth={1.7} />
-                <span className="hidden min-[1100px]:inline">Files</span>
+                <span className="hidden @min-[760px]:inline">Files</span>
               </button>
             ))}
 
