@@ -209,7 +209,7 @@ function optionLines(row: LaunchRow): string[] {
 export function formatOptions(payload: RoutePayload, role: string, project?: string): string {
   const where = project ? ` project=${project}` : ''
   const lines = [
-    `OPTIONS[${role}${where}] policy=v${payload.version} facts as of ${when(payload.facts_as_of)}; you choose, then ${cliName()} aico create --work-role ${role}${project ? ` --project ${project}` : ''} --tool T [--model M]`,
+    `OPTIONS[${role}${where}] policy=v${payload.version} facts as of ${when(payload.facts_as_of)}; you choose, then ${cliName() === 'aico' ? 'aico' : 'st aico'} create --work-role ${role}${project ? ` --project ${project}` : ''} --tool T [--model M]`,
   ]
   if (payload.facts_error || !payload.facts_as_of)
     lines.push(

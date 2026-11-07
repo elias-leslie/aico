@@ -199,7 +199,7 @@ describe('route', () => {
     expect(text).toContain('facts as of Nov 6, 7:00 AM EST;')
     expect(text).toContain('then st aico create')
     vi.stubEnv('AICO_CLI_NAME', 'aico')
-    expect(formatOptions(payload, 'testing')).toContain('then aico aico create')
+    expect(formatOptions(payload, 'testing')).toContain('then aico create')
     vi.unstubAllEnvs()
   })
 })
