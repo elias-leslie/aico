@@ -23,6 +23,10 @@ const WIDE_SHARE = 0.58
 export const DEFAULT_TIER: DockedTier = 'panel'
 /** The kept tier on this device. */
 export const TIER_STORAGE_KEY = 'aico-left-tier'
+/** A desktop window too narrow for Panel beside the session (snapped to part
+ * of a screen) keeps its own tier, Rail unless chosen otherwise. */
+export const COMPACT_DEFAULT_TIER: DockedTier = 'rail'
+export const COMPACT_TIER_STORAGE_KEY = 'aico-left-tier-compact'
 
 const isTier = (value: unknown): value is Tier =>
   typeof value === 'string' && (TIERS as readonly string[]).includes(value)

@@ -14,7 +14,7 @@ import {
   resetServerReachForTest,
 } from '@/lib/frame/server-reach'
 import { publishShownSession } from '@/lib/frame/shown-session'
-import { TIER_STORAGE_KEY } from '@/lib/frame/tiers'
+import { COMPACT_TIER_STORAGE_KEY, TIER_STORAGE_KEY } from '@/lib/frame/tiers'
 import { FrameProvider, useFrame } from './FrameContext'
 import { LeftSide } from './LeftSide'
 
@@ -22,6 +22,7 @@ const nav = vi.hoisted(() => ({
   pathname: '/',
   push: vi.fn(),
   docked: true,
+  roomy: true,
 }))
 vi.mock('next/navigation', () => ({
   usePathname: () => nav.pathname,
@@ -29,7 +30,8 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }))
 vi.mock('@/lib/hooks/use-media-query', () => ({
-  useMediaQuery: () => nav.docked,
+  useMediaQuery: (query: string) =>
+    query === '(min-width: 1024px)' ? nav.roomy : nav.docked,
 }))
 vi.mock('./SideList', () => ({
   SideList: () => <nav aria-label="Everything else">Side list</nav>,
@@ -79,11 +81,31 @@ beforeEach(() => {
   window.localStorage.clear()
   nav.pathname = '/'
   nav.docked = true
+  nav.roomy = true
   nav.push.mockClear()
 })
 afterEach(() => resetServerReachForTest())
 
 describe('the left side on a desktop', () => {
+  it('a desktop window snapped narrow keeps the session with the rail, and remembers its own width', () => {
+    window.localStorage.setItem(TIER_STORAGE_KEY, '"wide"')
+    nav.roomy = false
+    const first = show()
+    expect(tier()).toBe('rail')
+    expect(screen.getByText('Rail marks')).toBeVisible()
+    expect(screen.queryByTestId('frame-sheet')).toBeNull()
+    alt('Digit2')
+    expect(tier()).toBe('panel')
+    expect(window.localStorage.getItem(COMPACT_TIER_STORAGE_KEY)).toBe(
+      '"panel"',
+    )
+    expect(window.localStorage.getItem(TIER_STORAGE_KEY)).toBe('"wide"')
+    first.unmount()
+    nav.roomy = true
+    show()
+    expect(tier()).toBe('wide')
+  })
+
   it('opens at Panel and keeps the chosen width on this device, never Full', () => {
     const first = show()
     expect(tier()).toBe('panel')

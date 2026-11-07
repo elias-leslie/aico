@@ -14,6 +14,8 @@ import {
 import { useNeedsYouRequests } from '@/lib/frame/needs-you-request'
 import { homeHref } from '@/lib/frame/shown-session'
 import {
+  COMPACT_DEFAULT_TIER,
+  COMPACT_TIER_STORAGE_KEY,
   DEFAULT_TIER,
   type DockedTier,
   isDocked,
@@ -25,9 +27,14 @@ import {
 import { useLocalStorageState } from '@/lib/hooks/use-local-storage-state'
 import { useMediaQuery } from '@/lib/hooks/use-media-query'
 
-/** Wide enough for the left side beside a readable session; narrower windows
- * slide it over the session, as a phone does. */
-const DOCKED_QUERY = '(min-width: 1024px)'
+/** The left side sits beside the session: any window this wide, and a desktop
+ * window (fine pointer) down to a snapped part of the screen. Narrower windows
+ * and phones slide it over the session. */
+const DOCKED_QUERY =
+  '(min-width: 1024px), (pointer: fine) and (min-width: 560px)'
+/** Room for Panel beside a readable session; a narrower docked window starts
+ * on Rail and keeps its own choice. */
+const ROOMY_QUERY = '(min-width: 1024px)'
 /** Where Full opens when no page is chosen yet. */
 const DEFAULT_FULL_PAGE = '/status'
 
@@ -88,11 +95,19 @@ export function FrameProvider({
   const pathname = usePathname() ?? '/'
   const onPage = pathname !== '/'
   const docked = useMediaQuery(DOCKED_QUERY)
-  const [stored, setStored] = useLocalStorageState<DockedTier>(
+  const roomy = useMediaQuery(ROOMY_QUERY)
+  const [roomyStored, setRoomyStored] = useLocalStorageState<DockedTier>(
     TIER_STORAGE_KEY,
     DEFAULT_TIER,
   )
-  const kept: DockedTier = isDocked(stored) ? stored : DEFAULT_TIER
+  const [compactStored, setCompactStored] = useLocalStorageState<DockedTier>(
+    COMPACT_TIER_STORAGE_KEY,
+    COMPACT_DEFAULT_TIER,
+  )
+  const stored = roomy ? roomyStored : compactStored
+  const setStored = roomy ? setRoomyStored : setCompactStored
+  const restTier: DockedTier = roomy ? DEFAULT_TIER : COMPACT_DEFAULT_TIER
+  const kept: DockedTier = isDocked(stored) ? stored : restTier
   // Full is never kept: a reload opens on the session, not over it. A page
   // opened by its link (/status) shows Full.
   const [full, setFull] = useState(onPage)
@@ -141,12 +156,12 @@ export function FrameProvider({
     [pathname, router, setStored],
   )
   const close = useCallback(() => {
-    if (docked) setTier('panel')
+    if (docked) setTier(restTier)
     else {
       setSheetOpen(false)
       if (onPage) router.push(homeHref())
     }
-  }, [docked, onPage, router, setTier])
+  }, [docked, onPage, restTier, router, setTier])
   const home = useCallback(() => {
     if (onPage) router.push(homeHref())
   }, [onPage, router])
@@ -186,7 +201,7 @@ export function FrameProvider({
       const side = document.querySelector('[data-frame-side]')
       if (tier === 'wide' && !side?.contains(document.activeElement)) return
       event.preventDefault()
-      setTier('panel')
+      setTier(restTier)
     }
     window.addEventListener('keydown', onKeyDown, true)
     window.addEventListener('keydown', onEscape)
@@ -194,7 +209,7 @@ export function FrameProvider({
       window.removeEventListener('keydown', onKeyDown, true)
       window.removeEventListener('keydown', onEscape)
     }
-  }, [docked, setTier, step, tier])
+  }, [docked, restTier, setTier, step, tier])
 
   const value = useMemo<Frame>(
     () => ({
