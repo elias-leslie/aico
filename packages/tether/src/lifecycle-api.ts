@@ -8,7 +8,7 @@ import { agentStateOf, type HookReport, reportAgentState } from './agent-state'
 import { type AskDelivery, AskStore, sessionAsks, transferAskNotices } from './asks'
 import type { TetherPaths } from './config'
 import type { EventBus } from './events'
-import { HttpError, type Router, readJsonObject, sendError, sendJson } from './http'
+import { type Handler, HttpError, type Router, readJsonObject, sendError, sendJson } from './http'
 import type { Hub } from './hub/hub'
 import {
   AUTO_HOST,
@@ -624,26 +624,274 @@ export function learnProjects(
     for (const row of listSessions()) notifySessionChanged(row.id, { force: true })
 }
 
-const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/
+function createSession(context: LifecycleApiContext): Handler {
+  const { store } = context
+  return async (req, res) => {
+    const body = await readJsonObject(req)
+    only(body, [
+      'tool',
+      'projectId',
+      'projectRoot',
+      'blankSlate',
+      'instructions',
+      'name',
+      'origin',
+      'aTermSessionId',
+      'size',
+      'host',
+    ])
+    if (body.host !== undefined && body.host !== null) {
+      if (!context.hub) throw new HttpError(400, 'unknown_host', { host: body.host })
+      await context.hub.create(res, '/v1/sessions', body)
+      return
+    }
+    const origin = body.origin
+    if (typeof origin !== 'string' || !ORIGINS.includes(origin as SessionOrigin)) {
+      throw new HttpError(400, 'invalid_body', { field: 'origin' })
+    }
+    let aTermSessionId: string | null = null
+    if (body.aTermSessionId !== undefined && body.aTermSessionId !== null) {
+      if (
+        origin !== 'a-term' ||
+        typeof body.aTermSessionId !== 'string' ||
+        !UUID_RE.test(body.aTermSessionId)
+      )
+        throw new HttpError(400, 'invalid_body', { field: 'aTermSessionId' })
+      aTermSessionId = body.aTermSessionId
+    }
+    const grid = size(body.size)
+    let name: string | null = null
+    if (body.name !== undefined && body.name !== null) {
+      name = parseLabel(body.name)
+      if (name === null) throw new HttpError(400, 'invalid_body', { field: 'name' })
+    }
+    if (body.tool !== undefined && typeof body.tool !== 'string')
+      throw new HttpError(400, 'invalid_body', { field: 'tool' })
+    const tool =
+      body.tool === undefined ? store.defaultTool() : store.resolveTool(body.tool as string)
+    if (!tool?.enabled) throw new HttpError(400, 'unknown_tool')
+    let projectId: string | null = null
+    let projectRoot: string | null = null
+    if (body.projectId !== undefined && body.projectId !== null) {
+      if (typeof body.projectId !== 'string' || !body.projectId)
+        throw new HttpError(400, 'invalid_body', { field: 'projectId' })
+      projectId = body.projectId
+    }
+    if (body.projectRoot !== undefined && body.projectRoot !== null)
+      projectRoot = requireProjectRoot(body.projectRoot)
+    if (projectId && !projectRoot) {
+      projectRoot = await resolveProject(context, projectId)
+      if (!projectRoot) throw new HttpError(400, 'unknown_project')
+    }
+    // Blank Slate: a fresh empty workspace instead of a project (blank-slate.ts).
+    if (body.blankSlate !== undefined && body.blankSlate !== false) {
+      if (body.blankSlate !== true || projectId || projectRoot)
+        throw new HttpError(400, 'invalid_body', { field: 'blankSlate' })
+      if (!supportsBlankSlate(tool.slug)) throw new HttpError(400, 'blank_slate_unsupported')
+    }
+    // A prompt revision the caller resolved (tui/instructions.ts).
+    const instructions =
+      body.instructions === undefined || body.instructions === null
+        ? null
+        : parseInstructions(body.instructions)
+    if (body.instructions != null && !instructions)
+      throw new HttpError(400, 'invalid_body', { field: 'instructions' })
+    if (instructions && !supportsInstructions(tool.slug))
+      throw new HttpError(400, 'instructions_unsupported')
+    await whenReady()
+    if (!lingerEnabled()) throw new HttpError(503, 'linger_required')
 
-export function registerLifecycleRoutes(router: Router, context: LifecycleApiContext): void {
-  if (context.continuity) registerRebootRoutes(router, context.continuity)
-  if (context.recovery) registerRecoveryRoutes(router, context.recovery)
-  if (context.wakes) registerWakeRoutes(router, context.wakes)
-  registerLaneRoutes(
-    router,
-    () => context.lanes ?? null,
-    (id) => getWidget(id) !== undefined,
-  )
-  registerWaitRoutes(
-    router,
-    () => context.waits ?? null,
-    (id) => getWidget(id) !== undefined,
-  )
-  const { store, events } = context
-  const rootHandler = createRootHandler(rootOperations(context), undefined, context.rootState)
-  const root = (req: IncomingMessage, res: ServerResponse) => rootHandler(req, res)
+    if (body.blankSlate === true) projectRoot = createBlankSlateWorkspace()
+    const id = allocateWidgetId()
+    insertWidget(id, tool.slug, Date.now(), { origin: origin as SessionOrigin, aTermSessionId })
+    if (projectId || projectRoot) setWidgetProject(id, projectId, projectRoot)
+    if (name) setWidgetName(id, name)
+    if (instructions) saveInstructions(id, instructions)
+    const started = await ensureSessionSerialized(id, grid)
+    if (!started) {
+      const failure = lastEnsureFailure(id)
+      if (failure?.code === 'admission_denied' || failure?.code === 'linger_required') {
+        // Refused before allocation: nothing exists, so nothing is kept.
+        if (discardNeverAllocated(id)) notifySessionChanged(id, { ended: true })
+        const refusalStatus = failure.code === 'linger_required' ? 503 : 409
+        throw new HttpError(refusalStatus, failure.code, {
+          reason: failure.reason,
+        })
+      }
+    }
+    const settled = await settleRunning(id)
+    if (!settled) throw new HttpError(409, 'outcome_uncertain')
+    const result = descriptor(settled.row, settled.status)
+    if (!started) result.failure = lastEnsureFailure(id) ?? null
+    sendJson(res, settled.status === 'running' ? 201 : 202, result)
+  }
+}
 
+function transferSession(context: LifecycleApiContext): Handler {
+  const { store } = context
+  return async (req, res, params) => {
+    const body = await readJsonObject(req)
+    only(body, ['generation', 'coordinatorId', 'coordinatorGeneration', 'fromCoordinatorId'])
+    const generation = requireGeneration(body)
+    if (
+      typeof body.coordinatorId !== 'string' ||
+      !/^[0-9a-f]{8}$/.test(body.coordinatorId) ||
+      typeof body.fromCoordinatorId !== 'string' ||
+      !/^[0-9a-f]{8}$/.test(body.fromCoordinatorId) ||
+      typeof body.coordinatorGeneration !== 'string' ||
+      !GENERATION_RE.test(body.coordinatorGeneration)
+    )
+      throw new HttpError(400, 'invalid_body')
+    const lane = requireSession(params.id),
+      lead = requireSession(body.coordinatorId)
+    fence(lane, generation)
+    fence(lead, body.coordinatorGeneration)
+    const members = coordinatorSubtree(lane.id)
+    const locks: {
+      id: string
+      owner: NonNullable<ReturnType<typeof lifecycleOwners.acquire>>
+    }[] = []
+    try {
+      for (const id of [...new Set([lead.id, ...members.map((row) => row.id)])].sort()) {
+        const owner = lifecycleOwners.acquire(id)
+        if (!owner) throw new HttpError(409, 'busy')
+        locks.push({ id, owner })
+      }
+      // Verify both exact runtimes under ownership. A transfer never launches,
+      // injects into, ends, rebooks or replaces either session.
+      for (const row of [lane, lead]) {
+        if (
+          row.launchState !== 'dispatched' ||
+          (await rootManagedGateState(row)) !== 'active-workload'
+        )
+          throw new HttpError(409, 'workload_unavailable')
+        fence(requireSession(row.id), generationOf(row))
+      }
+      const current = requireSession(lane.id),
+        target = requireSession(lead.id)
+      fence(current, generation)
+      fence(target, body.coordinatorGeneration)
+      if (
+        !target.coordinator ||
+        target.coordinatorId !== null ||
+        target.parentId !== null ||
+        target.id === current.id
+      )
+        throw new HttpError(409, 'not_top_level_coordinator')
+      if (current.coordinator || !current.launched || !current.coordinatorId)
+        throw new HttpError(409, 'lane_not_linked')
+      const already = current.coordinatorId === target.id && current.parentId === target.id
+      if (!already && current.coordinatorId !== body.fromCoordinatorId)
+        throw new HttpError(409, 'lineage_changed')
+      const previous = getWidget(body.fromCoordinatorId)
+      if (
+        !already &&
+        (!previous?.coordinator || previous.coordinatorId !== null || previous.parentId !== null)
+      )
+        throw new HttpError(409, 'not_top_level_coordinator')
+      const latest = coordinatorSubtree(current.id)
+      if (
+        latest.length !== members.length ||
+        latest.some(
+          (row, i) =>
+            row.id !== members[i].id ||
+            generationOf(row) !== generationOf(members[i]) ||
+            row.coordinatorId !== current.coordinatorId,
+        )
+      )
+        throw new HttpError(409, 'lineage_changed')
+      const asks = new AskStore(store.db)
+      store.transaction(() => {
+        transferCoordinator(current.id, target, latest)
+        const movedAsks = latest
+          .filter((row) => row.launched)
+          .flatMap((row) =>
+            asks.transferLineage(
+              row.id,
+              row.id === current.id ? target.id : row.parentId,
+              target.id,
+            ),
+          )
+        if (context.asks && !already) transferAskNotices(movedAsks, context.asks)
+      })
+      for (const row of latest) {
+        // Update report routing before yielding to delivery timers, rather
+        // than waiting for the asynchronous descriptor publication.
+        const view = laneView(descriptor(requireSession(row.id), cachedSessionStatus(row)), null)
+        if (view) context.lanes?.observe(view)
+        notifySessionChanged(row.id, { force: true })
+      }
+      sendJson(res, 200, {
+        ...descriptor(requireSession(current.id), 'running'),
+        transferred: latest.map((row) => row.id),
+      })
+    } finally {
+      for (const { id, owner } of locks.reverse()) releaseLifecycleOwner(id, owner)
+    }
+  }
+}
+
+function endSessionRoute(context: LifecycleApiContext): Handler {
+  return async (req, res, params) => {
+    const body = await readJsonObject(req)
+    only(body, ['generation', 'keepWakes', 'endedBy'])
+    const generation = requireGeneration(body)
+    if (body.keepWakes !== undefined && typeof body.keepWakes !== 'boolean')
+      throw new HttpError(400, 'invalid_body', { field: 'keepWakes' })
+    // The session asking for this End (`st aico root end` from a lane's
+    // coordinator): it gets no lane `ended` line for it (API 21).
+    if (
+      body.endedBy !== undefined &&
+      (typeof body.endedBy !== 'string' || !/^[0-9a-f]{8}$/.test(body.endedBy))
+    )
+      throw new HttpError(400, 'invalid_body', { field: 'endedBy' })
+    const endedBy = body.endedBy as string | undefined
+    const row = requireSession(params.id)
+    await whenReady()
+    // Kept wakes outlive the row (the End trigger drops every other one);
+    // an End that does not happen takes the mark back.
+    let kept = 0
+    let keptWaits = 0
+    if (body.keepWakes === true && context.wakes && generationOf(row) === generation) {
+      const wakes = context.wakes
+      const armed = context.waits?.store.countArmed(row.id) ?? 0
+      if (wakes.store.checkIns(row.id).length || armed) {
+        const snapshot = await wakes.endedSnapshot(row)
+        kept = wakes.store.keep(row.id, snapshot)
+        if (armed) keptWaits = context.waits?.keep(row.id, snapshot) ?? 0
+      }
+    }
+    const lanes = context.lanes
+    const marked =
+      endedBy !== undefined && endedBy !== row.id && lanes
+        ? lanes.store.markEnd(row.id, endedBy, Date.now())
+        : false
+    let result: Awaited<ReturnType<typeof endSession>>
+    // A kept wake relaunches the coordinator and rejoins its lanes, so End does not promote them.
+    if ((kept || keptWaits) && row.coordinator) holdPromotion(row.id)
+    try {
+      result = await endSession(params.id as string, generation)
+    } finally {
+      if (marked) lanes?.store.unmarkEnd(row.id)
+      releasePromotion(row.id)
+    }
+    if (kept || keptWaits) {
+      if (result.status === 'ended') context.wakes?.changed(null)
+      else if (getWidget(row.id)) {
+        context.wakes?.store.unkeep(row.id)
+        context.waits?.unkeep(row.id)
+      }
+    }
+    if (result.status === 'ended') sendJson(res, 200, { ...result, keptWakes: kept, keptWaits })
+    else if (result.status === 'absent') throw new HttpError(404, 'not_found')
+    else if (result.status === 'stale') throw new HttpError(409, 'stale_generation')
+    else if (result.status === 'busy') throw new HttpError(409, 'busy')
+    else throw new HttpError(409, 'blocked', { reason: result.reason })
+  }
+}
+
+/** `GET /v1/placement`: where `host: "auto"` would put these needs now. */
+function registerPlacementRoutes(router: Router, context: LifecycleApiContext): void {
   router
     // Where `host: "auto"` would put these needs now; reserves nothing.
     .add('GET', '/v1/placement', async (_req, res, _params, query) => {
@@ -668,6 +916,11 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
         reservations: context.placement.list(),
       })
     })
+}
+
+/** List, create, read and rename sessions. */
+function registerSessionCatalogRoutes(router: Router, context: LifecycleApiContext): void {
+  router
     .add('GET', '/v1/sessions', async (_req, res, _params, query) => {
       const project = query.get('project')
       const origin = query.get('origin')
@@ -694,105 +947,7 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
       )
       sendJson(res, 200, { items: [...items, ...remoteItems] })
     })
-    .add('POST', '/v1/sessions', async (req, res) => {
-      const body = await readJsonObject(req)
-      only(body, [
-        'tool',
-        'projectId',
-        'projectRoot',
-        'blankSlate',
-        'instructions',
-        'name',
-        'origin',
-        'aTermSessionId',
-        'size',
-        'host',
-      ])
-      if (body.host !== undefined && body.host !== null) {
-        if (!context.hub) throw new HttpError(400, 'unknown_host', { host: body.host })
-        await context.hub.create(res, '/v1/sessions', body)
-        return
-      }
-      const origin = body.origin
-      if (typeof origin !== 'string' || !ORIGINS.includes(origin as SessionOrigin)) {
-        throw new HttpError(400, 'invalid_body', { field: 'origin' })
-      }
-      let aTermSessionId: string | null = null
-      if (body.aTermSessionId !== undefined && body.aTermSessionId !== null) {
-        if (
-          origin !== 'a-term' ||
-          typeof body.aTermSessionId !== 'string' ||
-          !UUID_RE.test(body.aTermSessionId)
-        )
-          throw new HttpError(400, 'invalid_body', { field: 'aTermSessionId' })
-        aTermSessionId = body.aTermSessionId
-      }
-      const grid = size(body.size)
-      let name: string | null = null
-      if (body.name !== undefined && body.name !== null) {
-        name = parseLabel(body.name)
-        if (name === null) throw new HttpError(400, 'invalid_body', { field: 'name' })
-      }
-      if (body.tool !== undefined && typeof body.tool !== 'string')
-        throw new HttpError(400, 'invalid_body', { field: 'tool' })
-      const tool =
-        body.tool === undefined ? store.defaultTool() : store.resolveTool(body.tool as string)
-      if (!tool?.enabled) throw new HttpError(400, 'unknown_tool')
-      let projectId: string | null = null
-      let projectRoot: string | null = null
-      if (body.projectId !== undefined && body.projectId !== null) {
-        if (typeof body.projectId !== 'string' || !body.projectId)
-          throw new HttpError(400, 'invalid_body', { field: 'projectId' })
-        projectId = body.projectId
-      }
-      if (body.projectRoot !== undefined && body.projectRoot !== null)
-        projectRoot = requireProjectRoot(body.projectRoot)
-      if (projectId && !projectRoot) {
-        projectRoot = await resolveProject(context, projectId)
-        if (!projectRoot) throw new HttpError(400, 'unknown_project')
-      }
-      // Blank Slate: a fresh empty workspace instead of a project (blank-slate.ts).
-      if (body.blankSlate !== undefined && body.blankSlate !== false) {
-        if (body.blankSlate !== true || projectId || projectRoot)
-          throw new HttpError(400, 'invalid_body', { field: 'blankSlate' })
-        if (!supportsBlankSlate(tool.slug)) throw new HttpError(400, 'blank_slate_unsupported')
-      }
-      // A prompt revision the caller resolved (tui/instructions.ts).
-      const instructions =
-        body.instructions === undefined || body.instructions === null
-          ? null
-          : parseInstructions(body.instructions)
-      if (body.instructions != null && !instructions)
-        throw new HttpError(400, 'invalid_body', { field: 'instructions' })
-      if (instructions && !supportsInstructions(tool.slug))
-        throw new HttpError(400, 'instructions_unsupported')
-      await whenReady()
-      if (!lingerEnabled()) throw new HttpError(503, 'linger_required')
-
-      if (body.blankSlate === true) projectRoot = createBlankSlateWorkspace()
-      const id = allocateWidgetId()
-      insertWidget(id, tool.slug, Date.now(), { origin: origin as SessionOrigin, aTermSessionId })
-      if (projectId || projectRoot) setWidgetProject(id, projectId, projectRoot)
-      if (name) setWidgetName(id, name)
-      if (instructions) saveInstructions(id, instructions)
-      const started = await ensureSessionSerialized(id, grid)
-      if (!started) {
-        const failure = lastEnsureFailure(id)
-        if (failure?.code === 'admission_denied' || failure?.code === 'linger_required') {
-          // Refused before allocation: nothing exists, so nothing is kept.
-          if (discardNeverAllocated(id)) notifySessionChanged(id, { ended: true })
-          const refusalStatus = failure.code === 'linger_required' ? 503 : 409
-          throw new HttpError(refusalStatus, failure.code, {
-            reason: failure.reason,
-          })
-        }
-      }
-      const settled = await settleRunning(id)
-      if (!settled) throw new HttpError(409, 'outcome_uncertain')
-      const result = descriptor(settled.row, settled.status)
-      if (!started) result.failure = lastEnsureFailure(id) ?? null
-      sendJson(res, settled.status === 'running' ? 201 : 202, result)
-    })
+    .add('POST', '/v1/sessions', createSession(context))
     .add('GET', '/v1/sessions/:id', async (_req, res, params) => {
       const row = requireSession(params.id)
       const generation = generationOf(row)
@@ -824,162 +979,13 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
       const latest = requireSession(row.id)
       sendJson(res, 200, descriptor(latest, cachedSessionStatus(latest)))
     })
-    .add('POST', '/v1/sessions/:id/transfer', async (req, res, params) => {
-      const body = await readJsonObject(req)
-      only(body, ['generation', 'coordinatorId', 'coordinatorGeneration', 'fromCoordinatorId'])
-      const generation = requireGeneration(body)
-      if (
-        typeof body.coordinatorId !== 'string' ||
-        !/^[0-9a-f]{8}$/.test(body.coordinatorId) ||
-        typeof body.fromCoordinatorId !== 'string' ||
-        !/^[0-9a-f]{8}$/.test(body.fromCoordinatorId) ||
-        typeof body.coordinatorGeneration !== 'string' ||
-        !GENERATION_RE.test(body.coordinatorGeneration)
-      )
-        throw new HttpError(400, 'invalid_body')
-      const lane = requireSession(params.id),
-        lead = requireSession(body.coordinatorId)
-      fence(lane, generation)
-      fence(lead, body.coordinatorGeneration)
-      const members = coordinatorSubtree(lane.id)
-      const locks: {
-        id: string
-        owner: NonNullable<ReturnType<typeof lifecycleOwners.acquire>>
-      }[] = []
-      try {
-        for (const id of [...new Set([lead.id, ...members.map((row) => row.id)])].sort()) {
-          const owner = lifecycleOwners.acquire(id)
-          if (!owner) throw new HttpError(409, 'busy')
-          locks.push({ id, owner })
-        }
-        // Verify both exact runtimes under ownership. A transfer never launches,
-        // injects into, ends, rebooks or replaces either session.
-        for (const row of [lane, lead]) {
-          if (
-            row.launchState !== 'dispatched' ||
-            (await rootManagedGateState(row)) !== 'active-workload'
-          )
-            throw new HttpError(409, 'workload_unavailable')
-          fence(requireSession(row.id), generationOf(row))
-        }
-        const current = requireSession(lane.id),
-          target = requireSession(lead.id)
-        fence(current, generation)
-        fence(target, body.coordinatorGeneration)
-        if (
-          !target.coordinator ||
-          target.coordinatorId !== null ||
-          target.parentId !== null ||
-          target.id === current.id
-        )
-          throw new HttpError(409, 'not_top_level_coordinator')
-        if (current.coordinator || !current.launched || !current.coordinatorId)
-          throw new HttpError(409, 'lane_not_linked')
-        const already = current.coordinatorId === target.id && current.parentId === target.id
-        if (!already && current.coordinatorId !== body.fromCoordinatorId)
-          throw new HttpError(409, 'lineage_changed')
-        const previous = getWidget(body.fromCoordinatorId)
-        if (
-          !already &&
-          (!previous?.coordinator || previous.coordinatorId !== null || previous.parentId !== null)
-        )
-          throw new HttpError(409, 'not_top_level_coordinator')
-        const latest = coordinatorSubtree(current.id)
-        if (
-          latest.length !== members.length ||
-          latest.some(
-            (row, i) =>
-              row.id !== members[i].id ||
-              generationOf(row) !== generationOf(members[i]) ||
-              row.coordinatorId !== current.coordinatorId,
-          )
-        )
-          throw new HttpError(409, 'lineage_changed')
-        const asks = new AskStore(store.db)
-        store.transaction(() => {
-          transferCoordinator(current.id, target, latest)
-          const movedAsks = latest
-            .filter((row) => row.launched)
-            .flatMap((row) =>
-              asks.transferLineage(
-                row.id,
-                row.id === current.id ? target.id : row.parentId,
-                target.id,
-              ),
-            )
-          if (context.asks && !already) transferAskNotices(movedAsks, context.asks)
-        })
-        for (const row of latest) {
-          // Update report routing before yielding to delivery timers, rather
-          // than waiting for the asynchronous descriptor publication.
-          const view = laneView(descriptor(requireSession(row.id), cachedSessionStatus(row)), null)
-          if (view) context.lanes?.observe(view)
-          notifySessionChanged(row.id, { force: true })
-        }
-        sendJson(res, 200, {
-          ...descriptor(requireSession(current.id), 'running'),
-          transferred: latest.map((row) => row.id),
-        })
-      } finally {
-        for (const { id, owner } of locks.reverse()) releaseLifecycleOwner(id, owner)
-      }
-    })
-    .add('POST', '/v1/sessions/:id/end', async (req, res, params) => {
-      const body = await readJsonObject(req)
-      only(body, ['generation', 'keepWakes', 'endedBy'])
-      const generation = requireGeneration(body)
-      if (body.keepWakes !== undefined && typeof body.keepWakes !== 'boolean')
-        throw new HttpError(400, 'invalid_body', { field: 'keepWakes' })
-      // The session asking for this End (`st aico root end` from a lane's
-      // coordinator): it gets no lane `ended` line for it (API 21).
-      if (
-        body.endedBy !== undefined &&
-        (typeof body.endedBy !== 'string' || !/^[0-9a-f]{8}$/.test(body.endedBy))
-      )
-        throw new HttpError(400, 'invalid_body', { field: 'endedBy' })
-      const endedBy = body.endedBy as string | undefined
-      const row = requireSession(params.id)
-      await whenReady()
-      // Kept wakes outlive the row (the End trigger drops every other one);
-      // an End that does not happen takes the mark back.
-      let kept = 0
-      let keptWaits = 0
-      if (body.keepWakes === true && context.wakes && generationOf(row) === generation) {
-        const wakes = context.wakes
-        const armed = context.waits?.store.countArmed(row.id) ?? 0
-        if (wakes.store.checkIns(row.id).length || armed) {
-          const snapshot = await wakes.endedSnapshot(row)
-          kept = wakes.store.keep(row.id, snapshot)
-          if (armed) keptWaits = context.waits?.keep(row.id, snapshot) ?? 0
-        }
-      }
-      const lanes = context.lanes
-      const marked =
-        endedBy !== undefined && endedBy !== row.id && lanes
-          ? lanes.store.markEnd(row.id, endedBy, Date.now())
-          : false
-      let result: Awaited<ReturnType<typeof endSession>>
-      // A kept wake relaunches the coordinator and rejoins its lanes, so End does not promote them.
-      if ((kept || keptWaits) && row.coordinator) holdPromotion(row.id)
-      try {
-        result = await endSession(params.id as string, generation)
-      } finally {
-        if (marked) lanes?.store.unmarkEnd(row.id)
-        releasePromotion(row.id)
-      }
-      if (kept || keptWaits) {
-        if (result.status === 'ended') context.wakes?.changed(null)
-        else if (getWidget(row.id)) {
-          context.wakes?.store.unkeep(row.id)
-          context.waits?.unkeep(row.id)
-        }
-      }
-      if (result.status === 'ended') sendJson(res, 200, { ...result, keptWakes: kept, keptWaits })
-      else if (result.status === 'absent') throw new HttpError(404, 'not_found')
-      else if (result.status === 'stale') throw new HttpError(409, 'stale_generation')
-      else if (result.status === 'busy') throw new HttpError(409, 'busy')
-      else throw new HttpError(409, 'blocked', { reason: result.reason })
-    })
+}
+
+/** Hand a lane to another coordinator, end, respawn, and swap a session's tool or project. */
+function registerSessionLifecycleRoutes(router: Router, context: LifecycleApiContext): void {
+  router
+    .add('POST', '/v1/sessions/:id/transfer', transferSession(context))
+    .add('POST', '/v1/sessions/:id/end', endSessionRoute(context))
     .add('POST', '/v1/sessions/:id/respawn', async (req, res, params) => {
       const body = await readJsonObject(req)
       only(body, ['generation'])
@@ -998,7 +1004,7 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
       only(body, ['generation', 'tool'])
       const generation = requireGeneration(body)
       if (typeof body.tool !== 'string') throw new HttpError(400, 'invalid_body', { field: 'tool' })
-      const tool = store.resolveTool(body.tool)
+      const tool = context.store.resolveTool(body.tool)
       const spec = tool?.enabled ? getTui(tool.slug) : undefined
       if (!spec) throw new HttpError(400, 'unknown_tool')
       // A chat has no terminal to put in a pane.
@@ -1050,6 +1056,11 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
         }),
       )
     })
+}
+
+/** Diagnostics, agent-state hooks and the context-hook check. */
+function registerSessionStateRoutes(router: Router, context: LifecycleApiContext): void {
+  router
     .add('GET', '/v1/sessions/:id/diagnostics', async (_req, res, params) => {
       const row = requireSession(params.id)
       sendJson(res, 200, { ...(await sessionDiagnostics(row.id)), agent: agentStateOf(row.id) })
@@ -1069,6 +1080,11 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
       const latest = requireSession(row.id)
       sendJson(res, 200, { generation: generationOf(latest), contextHook: contextHookOf(latest) })
     })
+}
+
+/** Read a session's terminal: pane mode, attach recipe, capture, scrollback, sign-in link. */
+function registerTerminalReadRoutes(router: Router, context: LifecycleApiContext): void {
+  router
     .add('GET', '/v1/sessions/:id/pane-mode', async (_req, res, params) => {
       const row = requireSession(params.id)
       if (isNeverAllocatedWidget(row)) throw new HttpError(409, 'workload_unavailable')
@@ -1156,6 +1172,12 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
         throw new HttpError(409, 'workload_unavailable')
       }
     })
+}
+
+/** Write to a session's terminal: inject, rewind, and the viewer size claim. */
+function registerTerminalInputRoutes(router: Router, context: LifecycleApiContext): void {
+  const { events } = context
+  router
     .add('POST', '/v1/sessions/:id/inject', async (req, res, params) => {
       const body = await readJsonObject(req)
       only(body, ['generation', 'text', 'mode', 'submit', 'model', 'thinkingLevel', 'from'])
@@ -1304,7 +1326,13 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
       const generation = generationOf(row)
       sendJson(res, 200, { generation, holder: sizeHolderOf(row.id, generation) })
     })
-    // Roots and the compact widget routes share Aico's one handler.
+}
+
+/** Roots and the compact widget routes share Aico's one handler. */
+function registerRootRoutes(router: Router, context: LifecycleApiContext): void {
+  const rootHandler = createRootHandler(rootOperations(context), undefined, context.rootState)
+  const root = (req: IncomingMessage, res: ServerResponse) => rootHandler(req, res)
+  router
     .add('GET', '/v1/roots', root)
     .add('POST', '/v1/roots', root)
     .add('GET', '/v1/roots/:requestId', root)
@@ -1312,6 +1340,29 @@ export function registerLifecycleRoutes(router: Router, context: LifecycleApiCon
     .add('GET', '/v1/roots/:requestId/:action', root)
     .add('GET', '/v1/widgets/:id', root)
     .add('POST', '/v1/widgets/:id/:action', root)
+}
+
+export function registerLifecycleRoutes(router: Router, context: LifecycleApiContext): void {
+  if (context.continuity) registerRebootRoutes(router, context.continuity)
+  if (context.recovery) registerRecoveryRoutes(router, context.recovery)
+  if (context.wakes) registerWakeRoutes(router, context.wakes)
+  registerLaneRoutes(
+    router,
+    () => context.lanes ?? null,
+    (id) => getWidget(id) !== undefined,
+  )
+  registerWaitRoutes(
+    router,
+    () => context.waits ?? null,
+    (id) => getWidget(id) !== undefined,
+  )
+  registerPlacementRoutes(router, context)
+  registerSessionCatalogRoutes(router, context)
+  registerSessionLifecycleRoutes(router, context)
+  registerSessionStateRoutes(router, context)
+  registerTerminalReadRoutes(router, context)
+  registerTerminalInputRoutes(router, context)
+  registerRootRoutes(router, context)
 }
 
 async function answerReplacement(
