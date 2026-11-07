@@ -77,12 +77,6 @@
     "freshDriveHours": 36,
     "freshAppendHours": 2
   },
-  "legacyTimers": {
-    "host": ["--user", "summitflow-host-backup.timer"],
-    "snapshots": ["--user", "btrfs-autosnapshot.timer"],
-    "guard": ["summitflow-backup-window-guard.timer"],
-    "verify": ["--user", "summitflow-host-verify.timer"]
-  },
   "pve": {
     "alias": "proxmox-gem",
     "backupKey": "~/.local/state/summitflow/backup-keys/pve-backup.ed25519",

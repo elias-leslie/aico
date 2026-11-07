@@ -60,7 +60,7 @@ data. A missing file leaves a standalone machine. Required fields:
 Listeners must name an existing local private IPv4 or loopback address. Public
 addresses, wildcard binds, DNS names and IPv6 are refused. Peer addresses are
 also literal private IPv4/loopback addresses. Declare live listeners with
-Nightshift before starting them. There is no internet ingress path.
+host-steward (`aico declare`) before starting them. There is no internet ingress path.
 
 The `hosts.json` catalog still owns presentation, wake and placement metadata.
 Only names present in the fleet configuration are federated. Use the actual

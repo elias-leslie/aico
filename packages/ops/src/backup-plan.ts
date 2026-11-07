@@ -38,10 +38,9 @@ export interface BackupState {
     >
   >
   points: BackupPoint[]
-  cutover: Record<string, string>
   goodDriveRuns?: number
 }
-export const emptyState = (): BackupState => ({ copies: {}, runs: {}, points: [], cutover: {} })
+export const emptyState = (): BackupState => ({ copies: {}, runs: {}, points: [] })
 export const homePath = (path: string) => path.replace(/^~(?=\/|$)/, homedir())
 export const copyKey = (source: string, target: BackupTarget) => `${target}/${source}`
 export function config(env = process.env): BackupConfig {

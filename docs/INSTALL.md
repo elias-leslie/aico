@@ -34,8 +34,6 @@ scripts/install.sh --start
   (`aico-web`, `tether@default`) plus
   the `tether@.service` template into `${XDG_CONFIG_HOME:-~/.config}/systemd/user/`,
   then reloads the user manager;
-- links `~/.pi/agent/extensions/st-coord.ts` to SummitFlow's Pi coordination
-  extension, only when SummitFlow is installed;
 - turns on user linger so sessions survive logout.
 
 `--start` also enables and restarts `tether@default` and `aico-web`, the web
@@ -136,15 +134,15 @@ restrict,from="<container ip>",command="/usr/local/sbin/aico-push" ssh-ed25519 A
 ```
 
 The script reads one Aico notice on stdin, checks every field, and sends it with the dead-man alarm's own sender
-(`nightshift.deadman.send`, so the app route and Web Push, with credentials only root holds there), once per key.
+(the Aico PVE sender, `native/pve-sender`, with credentials only root holds there), once per key.
 The notice's optional `open` link (Aico origin only, plain, at most 300 characters) is what a tap or the Open button opens.
 The key opens no shell and takes no arguments from the caller. The host firewall must let the container reach port 22
-(one rule in the node's `host.fw`). Such a push has no Nightshift item (it shows in the Proxmox push log, tag
+(one rule in the node's `host.fw`). Such a push has no Aico notice row (it shows in the Proxmox push log, tag
 `aico-push`) and cannot be resolved afterwards.
 
 Another guest uses the same script with its own key: the forced command carries the caller's name
 (`command="/usr/local/sbin/aico-push portfolio"`; no name means `aico`). `CALLERS` in the script holds each caller's
-allowed `source`, key form, link host (`aico.` or `port.` in Nightshift's `open_hosts`), size limits, severities and
+allowed `source`, key form, link origin and path, size limits, severities and
 dedupe window, so one caller's key cannot send another's notices. `portfolio` (Portfolio-AI on VM 180, key line
 `restrict,from="<vm ip>",command="/usr/local/sbin/aico-push portfolio" ... portfolio-vm180-push`) takes the notice
 Portfolio-AI builds as notice v1 (contracts/notice.schema.json): kinds alert/todo/info, keys `portfolio-ai:...`, `actions` and
@@ -178,4 +176,4 @@ native/host-steward/.venv/bin/pytest -q            # their tests, from the repo 
 ## Optional integrations
 
 - Agent CLIs: install and authenticate `claude`, `codex`, `agy` (Antigravity), or `pi` separately; Tether's tool registry also accepts other TUI commands.
-- Project catalog: Aico lists the projects Tether serves (Tether's local list, or the author's SummitFlow catalog when it is running).
+- Project catalog: Aico lists the projects Tether serves (Aico's project registry, or Tether's local list until one is registered).

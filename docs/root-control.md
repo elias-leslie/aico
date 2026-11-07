@@ -495,7 +495,7 @@ running; the command does not start it.
 `--host NAME` starts the root on a host from `~/.config/tether/hosts.json`.
 `--host auto --needs mem=6G,cpu=2[,cap=live-ready]` lets Tether pick the host:
 the first in placement order with room for those needs from live readings
-(Nightshift's admission file here; a VM's own memory, PSI and CPUs plus its
+(host-steward's admission file here; a VM's own memory, PSI and CPUs plus its
 Proxmox node's memory and storage), less the owner's reserve and what earlier
 placed roots still hold. The output's `host` names where it went (`local` is
 this computer). When nothing fits it is refused with `reason: at_capacity` and

@@ -44,8 +44,6 @@ import {
 } from './backup-retention'
 import { copyRootAuth, type Runtime, readState, restic, saveState } from './backup-runtime'
 import {
-  cutover,
-  cutoverReady,
   nativePath,
   report,
   requestBackup,
@@ -263,31 +261,6 @@ it('retention safeguards keep unexpected large native expiry plans untouched', (
   const existing = Array.from({ length: 14 }, (_, i) => `home.${i}`)
   expect(preserveNative(existing, existing.slice(0, 2))).toBe(false)
   expect(preserveNative(existing, existing.slice(0, 8))).toBe(true)
-})
-it('keeps SummitFlow schedules until all replacement backend runs finish cleanly', async () => {
-  const c = cfg(),
-    state = emptyState(),
-    run = vi.fn(ok),
-    rt: Runtime = { cfg: c, run, now: () => new Date(now) }
-  await expect(cutover(rt, state, 'host')).rejects.toThrow('stays enabled')
-  expect(run).not.toHaveBeenCalled()
-  for (const target of ['native', 'drive', 'append'] as const)
-    state.runs[target] = {
-      started: new Date(now).toISOString(),
-      finished: new Date(now).toISOString(),
-      ok: true,
-    }
-  expect(cutoverReady(state, 'host')).toBe(true)
-  await cutover(rt, state, 'host')
-  expect(run.mock.calls[0]?.[0]).toEqual([
-    'systemctl',
-    '--no-ask-password',
-    '--user',
-    'disable',
-    '--now',
-    'summitflow-host-backup.timer',
-  ])
-  expect(readState(c).cutover.host).toBe(new Date(now).toISOString())
 })
 it('restores only to a new scratch path, refusing traversal, symlinks and existing destinations', () => {
   const root = temp(),

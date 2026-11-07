@@ -174,38 +174,6 @@ export async function nativePath(rt: Runtime, point: BackupPoint, path: string):
     throw new Error('Choose a path contained in this snapshot.')
   return from
 }
-/** Required clean receipts must precede any timer change, even after a failed or interrupted run. */
-export function cutoverReady(
-  state: BackupState,
-  kind: 'host' | 'snapshots' | 'guard' | 'verify',
-): boolean {
-  const good = (key: keyof BackupState['runs']) =>
-    !!state.runs[key]?.ok && !!state.runs[key]?.finished
-  return kind === 'host' ? good('native') && good('drive') && good('append') : good(kind)
-}
-export async function cutover(
-  rt: Runtime,
-  state: BackupState,
-  kind: 'host' | 'snapshots' | 'guard' | 'verify',
-) {
-  if (!cutoverReady(state, kind))
-    throw new Error(
-      'The replacement has not completed a clean Aico run; the SummitFlow timer stays enabled.',
-    )
-  const [scope, unit] = rt.cfg.legacyTimers[kind]
-  const system = scope !== '--user'
-  await checked(rt.run, [
-    ...(system ? ['sudo', '-n'] : []),
-    'systemctl',
-    '--no-ask-password',
-    ...(system ? [] : ['--user']),
-    'disable',
-    '--now',
-    system ? scope : (unit as string),
-  ])
-  state.cutover[kind] = rt.now().toISOString()
-  saveState(rt.cfg, state)
-}
 export async function report(
   cfg: BackupConfig,
   state: BackupState,
@@ -347,23 +315,10 @@ const USAGE = `Usage:
   aico backups snapshots SOURCE [--target native|drive|append]       copies available to restore
   aico backups browse SOURCE SNAPSHOT PATH [--target native|drive|append]
   aico backups restore SOURCE SNAPSHOT PATH --to /srv/scratch/NEW_FOLDER [--target native|drive|append]
-  aico backups cutover host|snapshots|guard|verify      disable the old timer after clean Aico runs
-  aico backups rollback                                 print how to restore the old schedules
 Run commands hold the existing backup lock. Restores only create a new scratch folder.
 No key setup, prune or forget commands. Settings: AICO_BACKUPS_CONFIG.`
 
-const VERBS = [
-  'list',
-  'request',
-  'recover',
-  'drill',
-  'run',
-  'snapshots',
-  'browse',
-  'restore',
-  'cutover',
-  'rollback',
-]
+const VERBS = ['list', 'request', 'recover', 'drill', 'run', 'snapshots', 'browse', 'restore']
 
 /** The usage lines of one backups command ("aico backups restore ..."), or all of them. */
 export function backupsUsage(verb?: string): string {
@@ -387,8 +342,6 @@ function check(verb: string, args: string[]): void {
     !['native', 'drive', 'append', 'snapshots', 'guard', 'verify'].includes(first ?? '')
   )
     need('what to run: native, drive, append, snapshots, guard or verify')
-  else if (verb === 'cutover' && !['host', 'snapshots', 'guard', 'verify'].includes(first ?? ''))
-    need('host, snapshots, guard or verify')
   else if (verb === 'snapshots' && !first) need('a SOURCE (aico backups list names them)')
   else if (verb === 'browse' && !(first && second && third)) need('SOURCE SNAPSHOT PATH')
   else if (verb === 'restore') {
@@ -397,17 +350,6 @@ function check(verb: string, args: string[]): void {
     if (!args[args.indexOf('--to') + 1] || args.indexOf('--to') < 0)
       need('--to FOLDER (a new scratch folder)')
   }
-}
-
-/** `aico backups rollback`: the commands that put the old timers back. */
-function rollbackNote(cfg: Runtime['cfg']): void {
-  for (const [scope, unit] of Object.values(cfg.legacyTimers))
-    console.log(
-      `${scope === '--user' ? '' : 'sudo -n '}systemctl --no-ask-password ${scope === '--user' ? '--user ' : ''}enable --now ${scope === '--user' ? unit : scope}`,
-    )
-  console.log(
-    'Remove backup jobs from the Aico jobs file before enabling both schedules together. No units or backup data were deleted.',
-  )
 }
 
 /** `aico backups request TARGET`: ask for a backup to run now. */
@@ -522,7 +464,6 @@ async function listCommand(
     machine,
     entries: await scheduledEntries(state, cfg, machine, rt.run),
     runs: state.runs,
-    cutover: state.cutover,
   }
   console.log(args.includes('--json') ? JSON.stringify(list) : listText(list, Date.now()))
   return 0
@@ -570,14 +511,6 @@ async function runCommand(
     }),
   )
   return ok ? 0 : 1
-}
-
-/** `aico backups cutover WHAT`. */
-async function cutoverCommand(rt: Runtime, state: BackupState, args: string[]): Promise<number> {
-  if (!['host', 'snapshots', 'guard', 'verify'].includes(args[0] ?? '')) throw new Error(USAGE)
-  await cutover(rt, state, args[0] as 'host' | 'snapshots' | 'guard' | 'verify')
-  console.log('The old timer is disabled. Aico owns its schedule.')
-  return 0
 }
 
 /** `aico backups snapshots|browse|restore SOURCE ...`: read or restore one source's snapshots. */
@@ -695,10 +628,6 @@ export async function backups(argv: string[], env = process.env): Promise<number
     machine = env.AICO_BACKUP_MACHINE || machineId()
   const rt: Runtime = { cfg, run: execute, now: () => new Date() }
   if (verb === 'recover' || verb === 'drill') return recovery([verb, ...args], cfg, env)
-  if (verb === 'rollback') {
-    rollbackNote(cfg)
-    return 0
-  }
   if (verb === 'request') return requestCommand(rt, machine, args)
   if (verb === 'run' && env.AICO_BACKUPS_UNIT !== '1') return runInUnit(cfg, env, args)
   // Work snapshots and the read-only guard keep their original independent schedules.
@@ -718,7 +647,6 @@ export async function backups(argv: string[], env = process.env): Promise<number
   const state = readState(cfg)
   if (verb === 'list') return listCommand(rt, state, machine, args)
   if (verb === 'run') return runCommand(rt, state, machine, args)
-  if (verb === 'cutover') return cutoverCommand(rt, state, args)
   return sourceCommand(rt, state, verb as string, args)
 }
 

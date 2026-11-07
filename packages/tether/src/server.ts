@@ -45,7 +45,7 @@ export interface ServerContext {
   projects: ProjectProvider
   /** Project-root cache shared with the lifecycle engine. */
   projectRoots: Map<string, string>
-  /** SummitFlow's active-project pointer file, or null to ignore it. */
+  /** st's active-project pointer file, or null to ignore it. */
   activeProjectFile?: string | null
   startedAt: number
   heartbeatMs?: number

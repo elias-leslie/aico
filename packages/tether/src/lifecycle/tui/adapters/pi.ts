@@ -196,8 +196,6 @@ export function piModelEvents(line: string): ModelEvent[] {
 
 // --- context ---------------------------------------------------------------------
 
-/** SummitFlow's deployed Pi coordination extension: `$ST_PI_COORD_EXTENSION`,
- * else the current SummitFlow release under ~/.summitflow. */
 /** Pi's Aico extension delivers context and coordinates this native session. */
 function piExtension(): ContextStatus {
   const extension = join(homedir(), '.pi', 'agent', 'extensions', 'aico-hook.ts')

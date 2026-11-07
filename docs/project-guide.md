@@ -8,7 +8,7 @@
 - **Lifecycle diagnostics** — Tether keeps a report for each session: ownership, tmux target, command, scope, age, CPU time, memory, swap, process/task counts, and containment warnings.
 - **Agent launcher** — start any tool Tether has enabled (Claude Code, Codex, Antigravity, Pi, a plain shell, …) from New session, choosing the tool and the project to launch it into.
 - **Native scrollback** — each session is attached in tmux control mode, so the terminal itself holds the pane's history: scroll, select and copy reach as far back as it goes.
-- **Project picker** — the projects Tether serves (SummitFlow's catalog when installed, else Tether's local list). Claude Code, Codex and Pi also offer a blank slate: a new empty workspace with no first-party context ([root-control.md](root-control.md#blank-slate)).
+- **Project picker** — the projects Tether serves (Aico's project registry, else Tether's local list). Claude Code, Codex and Pi also offer a blank slate: a new empty workspace with no first-party context ([root-control.md](root-control.md#blank-slate)).
 - **Every session, one list** — the session list shows every Tether session, whether started from the web app, the `tether` CLI or a SummitFlow root.
 
 ## Requirements

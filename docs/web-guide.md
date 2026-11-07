@@ -144,7 +144,7 @@ The web app answers on `localhost`, plus one public hostname through a Cloudflar
 
 All core features work without any external service.
 
-**SummitFlow project catalog** — Tether reads SummitFlow's projects when SummitFlow is installed, and the web app shows those. Without SummitFlow, Tether uses its local list.
+**Project list** — the web app shows Aico's project registry (`aico projects`). Until a project is registered, Tether uses its local list (`~/.config/tether/projects.json`).
 
 </details>
 
