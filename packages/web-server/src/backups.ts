@@ -61,6 +61,8 @@ export function registerBackupRoutes(
       })
     return refreshing
   }
+  // The first page view finds a listing already read (not when a test gives its own command).
+  if (run === backupCommand) refresh().catch(() => {})
   router.on('GET', '/api/backups', async () => {
     if (!cached) return refresh()
     if (now() - cached.at > FRESH_MS) {
