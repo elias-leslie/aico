@@ -60,6 +60,9 @@ export interface WebSession {
   activity_previous: string
   activity_at: number | null
   activity_detail: string | null
+  /** What a working agent is doing now, one short line (the tool it runs, the file it edits, or its
+   * last sentence); null when it is not working or nothing is known. */
+  doing: string | null
   /** When the owner last had it open in any browser or the phone app (ms), or null. */
   seen_at: number | null
   can_rename: boolean
@@ -180,7 +183,9 @@ export function fromTether(
   const mode = descriptor.tool || SHELL_MODE
   const status = typeof descriptor.status === 'string' ? descriptor.status : null
   const title = descriptor.displayTitle?.trim()
-  const task = typeof descriptor.name === 'string' ? descriptor.name.trim() || null : null
+  // The typed name, else what the tool calls the conversation, else its first prompt (Tether words it).
+  const typed = typeof descriptor.name === 'string' ? descriptor.name.trim() || null : null
+  const task = (typeof descriptor.taskName === 'string' ? descriptor.taskName.trim() : '') || typed
   const { name, project } = nameAndProject(title, task)
   const state = agentStateFor(mode, status)
   const isRoot = !!descriptor.rootRequestId
@@ -235,6 +240,8 @@ export function fromTether(
     activity_previous: activity(descriptor.statePrevious),
     activity_at: typeof descriptor.stateAt === 'number' ? descriptor.stateAt : null,
     activity_detail: typeof descriptor.stateDetail === 'string' ? descriptor.stateDetail : null,
+    doing:
+      typeof descriptor.doing === 'string' && descriptor.doing.trim() ? descriptor.doing : null,
     seen_at: seenAt,
     can_rename: true,
     can_respawn: !isRoot,

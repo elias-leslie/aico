@@ -64,6 +64,13 @@ export interface SessionDescriptor {
   available: boolean
   tool: string
   name: string | null
+  /** What the tool running in it calls the conversation (or its first prompt), used when no name was
+   * typed; absent from an older Tether. */
+  autoName?: string | null
+  /** The task part of `displayTitle` (the typed name, else `autoName`...), without the project. */
+  taskName?: string | null
+  /** What a working agent is doing now, one line; null when it is not working. */
+  doing?: string | null
   label: string
   projectId: string | null
   projectRoot: string | null
@@ -414,6 +421,38 @@ export interface HistorySession {
   contextTokens?: number | null
   toolCalls: number
   filesWritten: number
+  /** What the conversation is called: the tool's own name for it, else the first prompt (trimmed).
+   * Absent from an older Tether; null when none is known yet. */
+  title?: string | null
+  /** What the agent was doing at its last record, one line; absent from an older Tether. */
+  doing?: string | null
+}
+
+/** A match in a past conversation (`GET /v1/history/search`). */
+export interface HistorySearchHit {
+  /** Byte offset of the transcript line: `historyEvents(id, { from })` opens at it. */
+  offset: number
+  at: number | null
+  role: 'user' | 'assistant' | 'tool' | 'system'
+  kind: 'text' | 'thinking' | 'tool_call' | 'tool_result' | 'note'
+  tool?: string
+  snippet: string
+}
+
+export interface HistorySearchResult {
+  session: HistorySession
+  matches: number
+  hits: HistorySearchHit[]
+}
+
+export interface HistorySearchPage {
+  query: string
+  items: HistorySearchResult[]
+  /** The tools read; the Aico agent and agy keep nothing a search can read yet. */
+  covers: HistorySession['tool'][]
+  searched: { sessions: number; since: number | null; bytes: number; ms: number }
+  /** Stopped at the limit: older conversations were not read. */
+  more: boolean
 }
 
 /** One turn of an Aico agent run and the model that ran it. */

@@ -278,6 +278,17 @@ export class FakeTether {
     return { items: [], older: null, newer: null, size: 0 }
   }
 
+  async historySearch(text: string, options: unknown = {}) {
+    this.record('historySearch', text, options)
+    return {
+      query: text,
+      items: this.historyItems.map((session) => ({ session, matches: 1, hits: [] })),
+      covers: ['claude-code', 'codex', 'pi'],
+      searched: { sessions: this.historyItems.length, since: null, bytes: 0, ms: 1 },
+      more: false,
+    }
+  }
+
   async version() {
     return { name: 'tether', version: '0.0.0-test', apiVersion: 3, minApiVersion: 1 }
   }

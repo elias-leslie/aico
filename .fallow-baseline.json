@@ -175,6 +175,7 @@
     "unused-class-member:packages/web-server/src/testing.ts:FakeTether:getSession",
     "unused-class-member:packages/web-server/src/testing.ts:FakeTether:history",
     "unused-class-member:packages/web-server/src/testing.ts:FakeTether:historyEvents",
+    "unused-class-member:packages/web-server/src/testing.ts:FakeTether:historySearch",
     "unused-class-member:packages/web-server/src/testing.ts:FakeTether:historySession",
     "unused-class-member:packages/web-server/src/testing.ts:FakeTether:hosts",
     "unused-class-member:packages/web-server/src/testing.ts:FakeTether:loadTui",

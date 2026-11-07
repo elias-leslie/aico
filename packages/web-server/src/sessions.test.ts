@@ -100,4 +100,21 @@ describe("a session's name", () => {
     expect(session.name).toBe('ux-test')
     expect(session.project_name).toBe('Aico')
   })
+
+  it('is the conversation name when none was typed, never the project alone', () => {
+    const session = fromTether(
+      descriptor({
+        displayTitle: 'Aico — Login form fix',
+        name: null,
+        taskName: 'Login form fix',
+        doing: 'Editing LoginForm.tsx',
+      } as never),
+      null,
+    )
+    expect(session.name).toBe('Login form fix')
+    expect(session.project_name).toBe('Aico')
+    expect(session.task).toBe('Login form fix')
+    expect(session.doing).toBe('Editing LoginForm.tsx')
+    expect(fromTether(descriptor({ doing: ' ' } as never), null).doing).toBeNull()
+  })
 })

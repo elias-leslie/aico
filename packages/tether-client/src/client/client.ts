@@ -15,6 +15,7 @@ import {
   EXPECTED_TETHER_API_VERSION,
   type HistoryDetail,
   type HistoryEventPage,
+  type HistorySearchPage,
   type HistorySession,
   type HostInfo,
   parseAttachAnswer,
@@ -206,6 +207,18 @@ export class TetherClient {
     if (options.project) query.set('project', options.project)
     if (options.session) query.set('session', options.session)
     return this.json('GET', `/v1/history${query.size ? `?${query}` : ''}`)
+  }
+
+  /** Text search through past Claude Code, Codex and Pi sessions, newest first. */
+  historySearch(
+    text: string,
+    options: { limit?: number; tool?: string; project?: string } = {},
+  ): Promise<HistorySearchPage> {
+    const query = new URLSearchParams({ q: text })
+    if (options.limit) query.set('limit', String(options.limit))
+    if (options.tool) query.set('tool', options.tool)
+    if (options.project) query.set('project', options.project)
+    return this.json('GET', `/v1/history/search?${query}`, undefined, { timeoutMs: 60_000 })
   }
 
   /** The Aico agent's run, pushed at its start and end; `kept` is false in a skipped folder. */
