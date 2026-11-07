@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
   "entry": ["packages/checks/src/guards.ts"],
-  "ignorePatterns": ["docs/plans/**/*.html"],
+  "ignorePatterns": ["docs/plans/**/*.html", "evidence/**"],
   "ignoreDependencies": ["node:sqlite"],
   "audit": {
     "gate": "new-only"
