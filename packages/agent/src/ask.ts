@@ -233,6 +233,32 @@ function failed(model: string, detail: string, tokens = NO_TOKENS): Answer {
   return { outcome: { kind: 'error', model, detail }, tokens }
 }
 
+/**
+ * A stream that goes quiet is aborted after `ms`: call `arm()` on each sign of life, read
+ * `silent` to tell the watchdog's abort from another failure, and `stop()` when done.
+ */
+function silenceWatch(ms: number) {
+  const controller = new AbortController()
+  let silent = false
+  let timer: NodeJS.Timeout | undefined
+  return {
+    signal: controller.signal,
+    arm() {
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        silent = true
+        controller.abort()
+      }, ms)
+    },
+    get silent() {
+      return silent
+    },
+    stop() {
+      clearTimeout(timer)
+    },
+  }
+}
+
 function silentOutcome(model: string, ms: number): Answer {
   return { outcome: { kind: 'silent', model, seconds: Math.round(ms / 1000) }, tokens: NO_TOKENS }
 }
@@ -374,21 +400,13 @@ async function viaOllama(
   const base = env.AICO_OLLAMA_URL || harness.ask.ollama_url
   const denied = transportRefusal(egress, model, base)
   if (denied) return { outcome: denied, tokens: NO_TOKENS }
-  const controller = new AbortController()
-  let silent = false
-  let timer: NodeJS.Timeout | undefined
-  const arm = () => {
-    clearTimeout(timer)
-    timer = setTimeout(() => {
-      silent = true
-      controller.abort()
-    }, silenceMs)
-  }
+  const watch = silenceWatch(silenceMs)
+  const arm = watch.arm
   arm()
   try {
     const res = await fetch(new URL('/api/chat', base), {
       method: 'POST',
-      signal: controller.signal,
+      signal: watch.signal,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: model.replace(/^local\//, ''),
@@ -436,9 +454,9 @@ async function viaOllama(
       tokens: { input: num(last.prompt_eval_count), output: num(last.eval_count) },
     }
   } catch (error) {
-    return silent ? silentOutcome(model, silenceMs) : failed(model, (error as Error).message)
+    return watch.silent ? silentOutcome(model, silenceMs) : failed(model, (error as Error).message)
   } finally {
-    clearTimeout(timer)
+    watch.stop()
   }
 }
 
@@ -474,16 +492,8 @@ async function viaPi(
       tokens: NO_TOKENS,
     }
   const level = thinking(model, req.effort ?? 'medium')
-  const controller = new AbortController()
-  let silent = false
-  let timer: NodeJS.Timeout | undefined
-  const arm = () => {
-    clearTimeout(timer)
-    timer = setTimeout(() => {
-      silent = true
-      controller.abort()
-    }, silenceMs)
-  }
+  const watch = silenceWatch(silenceMs)
+  const arm = watch.arm
   arm()
   try {
     const stream = models.streamSimple(
@@ -504,14 +514,14 @@ async function viaPi(
         ],
       },
       {
-        signal: controller.signal,
+        signal: watch.signal,
         headers: sessionHeaders(provider, randomUUID()),
         ...(level !== 'off' && { reasoning: level }),
       },
     )
     for await (const _event of stream) arm()
     const message = await stream.result()
-    if (silent) return silentOutcome(entry.id, silenceMs)
+    if (watch.silent) return silentOutcome(entry.id, silenceMs)
     const tokens = {
       input: message.usage.input + message.usage.cacheRead,
       output: message.usage.output,
@@ -528,10 +538,10 @@ async function viaPi(
       .join('')
     return { outcome: { text }, tokens }
   } catch (error) {
-    if (silent) return silentOutcome(entry.id, silenceMs)
+    if (watch.silent) return silentOutcome(entry.id, silenceMs)
     return failed(entry.id, (error as Error).message)
   } finally {
-    clearTimeout(timer)
+    watch.stop()
   }
 }
 
