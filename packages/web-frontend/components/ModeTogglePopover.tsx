@@ -28,7 +28,7 @@ function modeNote(current: TerminalMode, option: TerminalMode): string | null {
 /** The line under the heading: what switching does to what is running. */
 function modeExplanation(current: TerminalMode, currentLabel: string): string {
   return current === 'shell'
-    ? 'Picking an agent starts it in this project. The shell keeps running.'
+    ? 'Picking an agent starts it in this project. The shell keeps running; pick Shell to go back to it.'
     : `Picking another agent stops ${currentLabel} and starts the new one here. Shell opens the shell and leaves ${currentLabel} running.`
 }
 

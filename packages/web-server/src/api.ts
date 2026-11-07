@@ -189,13 +189,18 @@ export function buildApi(deps: ApiDeps): Router {
       )
       store.updateLink(agent.id, { mode: descriptor.tool || slug })
     } else {
-      if (agent) await endSession(agent.id)
       const shell = pane.sessions.find((session) => session.mode === SHELL_MODE)
+      // The row is named for the session on screen: the new agent takes that name, so the
+      // switch doesn't rename the row (the shell's name would otherwise vanish from the list).
+      const shown = pane.sessions.find((session) => session.mode === pane.active_mode) ?? shell
+      const keep = shown ? (shown.task ?? (shown.name !== shown.id ? shown.name : null)) : null
+      if (agent) await endSession(agent.id)
       await newSession({
         paneId: id,
         mode: slug,
         projectId: pane.project_id,
         workingDir: shell?.working_dir ?? null,
+        name: keep,
       })
     }
     store.updatePane(id, { activeMode: slug })

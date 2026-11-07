@@ -673,6 +673,18 @@ describe('panes', () => {
     expect(body.active_mode).toBe('claude')
   })
 
+  it('starts a new agent under the name the row already has, leaving the shell running', async () => {
+    const pane = store.createPane({ projectId: 'aico', name: 'Aico', activeMode: 'shell' })
+    const shell = tether.add({ name: 'ux-test' })
+    store.link(shell.id, pane.id, 'shell')
+    const { body } = await call('PUT', `/api/panes/${pane.id}/agent-tool`, {
+      agent_tool_slug: 'cc',
+    })
+    expect(body.sessions.map((s: { mode: string }) => s.mode).sort()).toEqual(['claude', 'shell'])
+    expect(body.sessions.find((s: { mode: string }) => s.mode === 'claude').task).toBe('ux-test')
+    expect(tether.sessions.has(shell.id)).toBe(true)
+  })
+
   it('deletes a tab by ending its sessions', async () => {
     const pane = store.createPane({ projectId: null, name: 'x', activeMode: 'shell' })
     const shell = tether.add()
