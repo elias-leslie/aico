@@ -17,15 +17,14 @@ import styles from './Frame.module.css'
 import { type Frame, useFrame } from './FrameContext'
 import { SideList } from './SideList'
 
-/** What fills the side at each width. Part 2 replaces `panel` (the triage
- * view) and `wideExtra` (the second column at home); `rail` keeps its marks. */
+/** What fills the side at each width. */
 interface SideSlots {
   /** Rail: icons, counts and one mark per session. */
   rail: ReactNode
   /** Panel: the session list today (the triage view next). */
   panel: ReactNode
-  /** Wide at home: the second column beside the panel. */
-  wideExtra: ReactNode
+  /** Wide with no page chosen: the second column beside the panel (Status). */
+  wideHome: ReactNode
 }
 
 interface LeftSideProps extends SideSlots {
@@ -77,7 +76,7 @@ function Body({
   frame,
   rail,
   panel,
-  wideExtra,
+  wideHome,
   loading,
 }: LeftSideProps & { frame: Frame }) {
   const query = useSearchParams()
@@ -100,7 +99,7 @@ function Body({
       <div className={styles.wideCols}>
         {panelColumn}
         <div className={styles.pageCol} data-testid="frame-page">
-          {frame.page ?? wideExtra}
+          {frame.page ?? wideHome}
         </div>
       </div>
     )

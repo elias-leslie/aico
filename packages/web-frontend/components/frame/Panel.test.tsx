@@ -32,6 +32,7 @@ const state = vi.hoisted(() => ({
   },
   open: vi.fn(),
   phone: false,
+  tier: 'panel',
   notes: vi.fn((_path: string) => true),
   backups: {
     entries: [] as unknown[] | null,
@@ -61,7 +62,11 @@ const state = vi.hoisted(() => ({
   lastLook: null as number | null,
 }))
 vi.mock('./FrameContext', () => ({
-  useFrame: () => ({ open: state.open, docked: !state.phone }),
+  useFrame: () => ({
+    open: state.open,
+    docked: !state.phone,
+    tier: state.tier,
+  }),
 }))
 vi.mock('@/lib/frame/digest', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/frame/digest')>()),
@@ -201,6 +206,7 @@ describe('Panel', () => {
   beforeEach(() => {
     localStorage.clear()
     state.phone = false
+    state.tier = 'panel'
     state.notes.mockClear()
   })
 
@@ -287,6 +293,49 @@ describe('Panel', () => {
     expect(state.open).toHaveBeenLastCalledWith('/backups', 'full')
     fireEvent.click(screen.getByRole('link', { name: 'Open Machines' }))
     expect(state.open).toHaveBeenLastCalledWith('/machines', 'full')
+  })
+
+  it('beside a page in Wide folds every section to its line, lets one open for now, and brings the remembered folds back after', () => {
+    localStorage.setItem(FOLDS_KEY, JSON.stringify({ Quota: false }))
+    state.tier = 'wide'
+    const { rerender } = render(<Panel slots={slots} onSelect={vi.fn()} />)
+    for (const name of ['Status', 'Quota', 'Backups', 'Recent', 'Projects'])
+      expect(expanded(name)).toBe('false')
+    expect(screen.getByText('3 problems')).toBeVisible()
+    expect(screen.getByText('Claude 82% left')).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Projects' }))
+    expect(expanded('Projects')).toBe('true')
+    expect(JSON.parse(localStorage.getItem(FOLDS_KEY) ?? '{}')).toEqual({
+      Quota: false,
+    })
+    state.tier = 'panel'
+    rerender(<Panel slots={slots} onSelect={vi.fn()} />)
+    expect(expanded('Status')).toBe('true')
+    expect(expanded('Quota')).toBe('false')
+    expect(expanded('Projects')).toBe('false')
+  })
+
+  it('keeps Today as one line, how many sessions ran and the way to the day', () => {
+    state.history = {
+      items: [
+        { id: 'a', endedAt: Date.now() - 60_000 },
+        { id: 'b', endedAt: Date.now() - 1000, test: true },
+        { id: 'c', endedAt: 1000 },
+      ],
+      loading: false,
+      failed: false,
+      stale: false,
+    }
+    render(<Panel slots={slots} onSelect={vi.fn()} />)
+    expect(screen.getByText('Today: 1 session')).toBeVisible()
+    fireEvent.click(screen.getByRole('link', { name: 'See the day' }))
+    expect(state.open).toHaveBeenLastCalledWith('/today', 'wide')
+  })
+
+  it('says when Today could not be read instead of counting zero', () => {
+    state.history = { items: null, loading: false, failed: true, stale: false }
+    render(<Panel slots={slots} onSelect={vi.fn()} />)
+    expect(screen.getByText('Today couldn’t be read.')).toBeVisible()
   })
 
   it('has no Everything else grid: the setup places live under Settings, and nothing else is listed twice', () => {

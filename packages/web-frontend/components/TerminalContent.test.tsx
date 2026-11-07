@@ -20,7 +20,7 @@ vi.mock('./frame/LeftSide', () => ({
   LeftSide: ({ rail, panel }: { rail: ReactNode; panel: ReactNode }) =>
     frame.current?.tier === 'rail' ? rail : panel,
 }))
-vi.mock('./frame/WideOverview', () => ({ WideOverview: () => null }))
+vi.mock('./frame/WideStatus', () => ({ WideStatus: () => null }))
 vi.mock('@/lib/hooks/use-session-attention', () => ({
   useSessionAttention: () => ({
     forSlot: () => null,

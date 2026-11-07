@@ -6,7 +6,7 @@ import styles from './Glance.module.css'
 import type { GlanceHead } from './glance-types'
 
 /** One subscription: its name and short line, and a bar of how much is left with a tick for how far into the window we are. */
-export function QuotaBar({ glance }: { glance: QuotaGlance }) {
+function QuotaBar({ glance }: { glance: QuotaGlance }) {
   const unknown = glance.left === null
   return (
     <li className={styles.quota} title={glance.meaning}>

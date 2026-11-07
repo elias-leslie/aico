@@ -6,7 +6,7 @@ import { PRODUCT_NAME } from '@/lib/project-branding'
 import { at } from '@/lib/status'
 import { useFrame } from './FrameContext'
 import { LeftSide } from './LeftSide'
-import { WideOverview } from './WideOverview'
+import { WideStatus } from './WideStatus'
 
 /** The session side before the first session list arrives: the left side
  * still opens pages, and the session area says plainly whether it is
@@ -26,7 +26,7 @@ export function SessionWaiting({
         loading
         rail={null}
         panel={null}
-        wideExtra={<WideOverview />}
+        wideHome={<WideStatus />}
       />
       <div
         className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center"

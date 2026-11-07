@@ -1,19 +1,9 @@
-import { useQueryClient } from '@tanstack/react-query'
 import { Settings, StickyNote } from 'lucide-react'
-import { useRouter } from 'next/navigation'
 import type { ReactNode } from 'react'
-import { useState } from 'react'
-import { apiFetch } from '@/lib/api-fetch'
-import { useHosts } from '@/lib/hooks/use-hosts'
+import { useEffect, useState } from 'react'
 import { useLocalStorageState } from '@/lib/hooks/use-local-storage-state'
 import { useSessionAttention } from '@/lib/hooks/use-session-attention'
-import { useStatus } from '@/lib/hooks/use-status'
-import {
-  RECOVERY_QUERY_KEY,
-  useStatusSessions,
-} from '@/lib/hooks/use-status-sessions'
 import { popOutNotes } from '@/lib/notes-window'
-import { rowButtons, type StatusRow } from '@/lib/status'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
 import { NeedsYouSection } from '../asks/NeedsYou'
 import { CaptureLauncher } from '../capture/CaptureLauncher'
@@ -28,63 +18,7 @@ import { GlanceRecent, useRecentGlance } from './glance/GlanceRecent'
 import { GlanceStatus, useStatusGlance } from './glance/GlanceStatus'
 import styles from './Panel.module.css'
 import { SettingsMenu, SettingsPage } from './Settings'
-
-/** The session button a Status row offers (Resume for one that stopped, else Open), and what
- * pressing it does. Shared by the Worst problem card and Wide's Status rows. */
-export function useRowSessionAction(top: StatusRow | undefined) {
-  const sessions = useStatusSessions()
-  const { view } = useStatus()
-  const { hosts } = useHosts()
-  const router = useRouter()
-  const queryClient = useQueryClient()
-  const [note, setNote] = useState<string | null>(null)
-  const session = top
-    ? rowButtons(top, {
-        here: view?.machine,
-        hosts: new Set(hosts.map((host) => host.name)),
-        sessions,
-      }).buttons.find(
-        (button) => button.kind === 'resume' || button.kind === 'open',
-      )
-    : undefined
-  const sessionName = session ? sessions.names?.get(session.ref) : undefined
-  const resume = async (id: string) => {
-    try {
-      const answer = await apiFetch<{
-        results: { ok: boolean; reason: string | null }[]
-      }>(
-        '/api/recovery/resume',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id }),
-        },
-        'Couldn’t resume it',
-      )
-      const refused = answer.results.find((result) => !result.ok)
-      if (refused) return setNote(refused.reason ?? 'Tether refused it.')
-      router.push(`/?session=${encodeURIComponent(id)}`)
-    } catch (error) {
-      setNote((error as Error).message)
-    } finally {
-      await queryClient.invalidateQueries({ queryKey: RECOVERY_QUERY_KEY })
-      await queryClient.invalidateQueries({ queryKey: ['terminal-sessions'] })
-    }
-  }
-  const act = () => {
-    if (!session) return
-    if (session.kind === 'resume') void resume(session.ref)
-    else router.push(`/?session=${encodeURIComponent(session.ref)}`)
-  }
-  const title = session
-    ? session.kind === 'resume'
-      ? `Resume “${sessionName ?? 'the session'}”, which stopped`
-      : `Open “${sessionName ?? 'the session'}”`
-    : undefined
-  return { session, sessionName, note, act, title, names: sessions.names }
-}
-
-export { QuotaBar } from './glance/GlanceQuota'
+import { TodayRow } from './TodayRow'
 
 /** Folds are kept per device, by section; a section nobody folded or opened follows its default. */
 const FOLDS_KEY = 'aico-panel-folds'
@@ -99,6 +33,13 @@ function Glances() {
   // A phone is where the side slides over the session; a snapped desktop window keeps the desktop defaults.
   const frame = useFrame()
   const phone = frame !== null && !frame.docked
+  // Wide shows a page beside the Panel, so each section folds to its one line (opening one lasts
+  // until Wide closes); the remembered folds come back then.
+  const beside = frame?.docked === true && frame.tier === 'wide'
+  const [wideOpen, setWideOpen] = useState<Record<string, boolean>>({})
+  useEffect(() => {
+    if (!beside) setWideOpen({})
+  }, [beside])
   const status = useStatusGlance()
   const quota = useQuotaGlance()
   const backups = useBackupsGlance()
@@ -166,7 +107,9 @@ function Glances() {
   return (
     <>
       {sections.map((section) => {
-        const open = folds[section.id] ?? section.open
+        const open = beside
+          ? (wideOpen[section.id] ?? false)
+          : (folds[section.id] ?? section.open)
         return (
           <Disclosure
             key={section.id}
@@ -176,10 +119,15 @@ function Glances() {
             where={section.where}
             open={open}
             onToggle={() =>
-              setStored((current) => ({
-                ...(current && typeof current === 'object' ? current : {}),
-                [section.id]: !open,
-              }))
+              beside
+                ? setWideOpen((current) => ({
+                    ...current,
+                    [section.id]: !open,
+                  }))
+                : setStored((current) => ({
+                    ...(current && typeof current === 'object' ? current : {}),
+                    [section.id]: !open,
+                  }))
             }
           >
             {section.body}
@@ -255,6 +203,7 @@ export function Panel({
           </nav>
         </section>
         <Glances />
+        <TodayRow />
       </div>
       <div className={styles.foot}>
         <NotesButton />

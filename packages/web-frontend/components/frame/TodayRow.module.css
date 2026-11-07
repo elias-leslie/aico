@@ -1,0 +1,13 @@
+/* Today's one line under the Panel's sections: Lantern tokens only. */
+.row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  color: var(--mist);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.row[data-stale] {
+  opacity: 0.62;
+}

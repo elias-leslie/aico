@@ -66,7 +66,7 @@ function show(page: string | null = null) {
         onNewSession={vi.fn()}
         rail={<p>Rail marks</p>}
         panel={<p>Session list</p>}
-        wideExtra={<p>Overview</p>}
+        wideHome={<p>Status home</p>}
       />
       <input aria-label="Somewhere to type" />
     </FrameProvider>,
@@ -119,12 +119,12 @@ describe('the left side on a desktop', () => {
     expect(tier()).toBe('rail')
   })
 
-  it('steps with Alt+[ and Alt+], and Wide at home shows the panel and the overview', () => {
+  it('steps with Alt+[ and Alt+], and Wide with no page shows the panel and Status', () => {
     show()
     alt('BracketRight')
     expect(tier()).toBe('wide')
     expect(screen.getByText('Session list')).toBeVisible()
-    expect(screen.getByText('Overview')).toBeVisible()
+    expect(screen.getByText('Status home')).toBeVisible()
     alt('BracketLeft')
     alt('BracketLeft')
     expect(tier()).toBe('rail')
@@ -267,7 +267,7 @@ describe('when the server cannot be reached', () => {
           onNewSession={vi.fn()}
           rail={null}
           panel={null}
-          wideExtra={null}
+          wideHome={null}
         />
       </FrameProvider>
     )

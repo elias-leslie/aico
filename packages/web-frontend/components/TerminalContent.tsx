@@ -15,7 +15,7 @@ import { useFrame } from './frame/FrameContext'
 import { LeftSide } from './frame/LeftSide'
 import { Panel } from './frame/Panel'
 import { Rail } from './frame/Rail'
-import { WideOverview } from './frame/WideOverview'
+import { WideStatus } from './frame/WideStatus'
 import { NativeKeyboardInput } from './keyboard/NativeKeyboardInput'
 import { getShownSlot } from './SessionView'
 import { TerminalFileSection } from './terminal-content/TerminalFileSection'
@@ -144,7 +144,7 @@ function TerminalContentBody({
             onSelect={select}
           />
         }
-        wideExtra={<WideOverview />}
+        wideHome={<WideStatus />}
       />
       <div
         className="flex min-h-0 min-w-0 flex-1 flex-col overflow-visible"
