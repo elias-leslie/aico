@@ -11,6 +11,9 @@ import type { DatabaseSync } from 'node:sqlite'
 import { DEFAULT_NOTE_REVISION_MINUTES } from './config'
 import { baseOf } from './sync/engine'
 
+/** What the project registry's ids look like (a slug), bounded. */
+export const PROJECT_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
+
 export const NOTE_KINDS = ['note', 'list', 'prompt'] as const
 export type NoteKind = (typeof NOTE_KINDS)[number]
 
@@ -37,6 +40,8 @@ export interface NoteRow extends Sync {
   pinned: number
   archived: number
   scope: string | null
+  /** The project it belongs to (the project registry's id), or null: a global note. */
+  project: string | null
   source: string | null
   created_at: number
   edited_at: number
@@ -109,6 +114,8 @@ export interface NoteQuery {
   reminders?: boolean
   /** false (default): live notes only; true: archived only; 'all': both. */
   archived?: boolean | 'all'
+  /** Only this project's notes; left out: every note, global ones too. */
+  project?: string
   q?: string
   limit?: number
   offset?: number
@@ -121,6 +128,7 @@ export interface NewNote {
   pinned?: boolean
   archived?: boolean
   scope?: string | null
+  project?: string | null
   source?: string | null
   labels?: string[]
   items?: { text: string; checked?: boolean; hint?: string | null }[]
@@ -138,6 +146,8 @@ export interface NotePatch {
   archived?: boolean
   kind?: NoteKind
   scope?: string | null
+  /** Move the note to a project, or null to make it global. */
+  project?: string | null
   /** ms to remind the owner, or null for none. A new time sends again. */
   remindAt?: number | null
   /** ms; with a title or text change, the edit time to keep instead of now (imports). */
@@ -313,6 +323,7 @@ export class NoteStore {
       pinned: bit(input.pinned ?? false),
       archived: bit(input.archived ?? false),
       scope: input.scope ?? null,
+      project: input.project ?? null,
       source: input.source ?? null,
       created_at: input.createdAt ?? now,
       edited_at: input.editedAt ?? input.createdAt ?? now,
@@ -349,6 +360,8 @@ export class NoteStore {
         edited = true
       }
       if (patch.scope !== undefined && patch.scope !== current.scope) fields.scope = patch.scope
+      if (patch.project !== undefined && patch.project !== current.project)
+        fields.project = patch.project
       if (patch.remindAt !== undefined && patch.remindAt !== current.remind_at) {
         fields.remind_at = patch.remindAt
         fields.reminded_at = null
@@ -722,6 +735,10 @@ export class NoteStore {
       where.push('n.pinned = ?')
       args.push(bit(query.pinned))
     }
+    if (query.project !== undefined) {
+      where.push('n.project = ?')
+      args.push(query.project)
+    }
     if (query.label) {
       where.push(
         `EXISTS (SELECT 1 FROM note_labels l WHERE l.note_id = n.id AND l.deleted = 0
@@ -774,15 +791,21 @@ export class NoteStore {
   }
 
   /** Each label in use on live notes with how many notes carry it (one casing per label). */
-  labelCounts(archived: boolean | 'all' = false): { label: string; count: number }[] {
+  labelCounts(
+    archived: boolean | 'all' = false,
+    project?: string,
+  ): { label: string; count: number }[] {
+    const args: Value[] = archived === 'all' ? [] : [bit(archived)]
+    if (project !== undefined) args.push(project)
     const rows = this.db
       .prepare(
         `SELECT min(l.label) AS label, count(DISTINCT l.note_id) AS count
            FROM note_labels l JOIN notes n ON n.id = l.note_id
           WHERE l.deleted = 0 AND n.deleted = 0 ${archived === 'all' ? '' : 'AND n.archived = ?'}
+            ${project === undefined ? '' : 'AND n.project = ?'}
           GROUP BY lower(l.label) ORDER BY lower(l.label)`,
       )
-      .all(...(archived === 'all' ? [] : [bit(archived)])) as Row[]
+      .all(...args) as Row[]
     return rows.map((row) => ({ label: String(row.label), count: Number(row.count) }))
   }
 
@@ -861,7 +884,7 @@ export class NoteStore {
    */
   fileNote(
     file: { captureId: string; hash: string; name: string; mime: string; size: number },
-    content: { title: string; body: string },
+    content: { title: string; body: string; project?: string | null },
   ): string {
     return this.core.transaction(() => {
       const source = `capture:${file.captureId}`
@@ -871,6 +894,7 @@ export class NoteStore {
         kind: 'note',
         title: content.title,
         body: content.body,
+        project: content.project ?? null,
         source,
       })
       this.attachNow(note.id, file)

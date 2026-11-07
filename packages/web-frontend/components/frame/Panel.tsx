@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { useState } from 'react'
 import { useLocalStorageState } from '@/lib/hooks/use-local-storage-state'
 import { useSessionAttention } from '@/lib/hooks/use-session-attention'
-import { popOutNotes } from '@/lib/notes-window'
+import { openNotes } from '@/lib/notes-window'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
 import { NeedsYouSection } from '../asks/NeedsYou'
 import { CaptureLauncher } from '../capture/CaptureLauncher'
@@ -115,9 +115,7 @@ function NotesButton() {
       type="button"
       className="lantern-btn ghost small"
       title="Notes open in their own window"
-      onClick={() => {
-        if (!popOutNotes('/notes')) window.location.assign('/notes')
-      }}
+      onClick={() => openNotes()}
     >
       <StickyNote className="h-4 w-4" strokeWidth={1.7} aria-hidden="true" />
       Notes

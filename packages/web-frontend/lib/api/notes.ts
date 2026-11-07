@@ -35,6 +35,8 @@ interface NoteBase {
   pinned: boolean
   archived: boolean
   source: string | null
+  /** The project it belongs to (the project registry's id), or null: a global note. */
+  project: string | null
   createdAt: number
   editedAt: number
   updatedAt: number
@@ -76,11 +78,55 @@ const NOTE_ID = /^([0-9a-f]{12}|groceries)$/
 export const isNoteId = (value: string | null): value is string =>
   value !== null && NOTE_ID.test(value)
 
-export const noteHref = (id: string) => `/notes?id=${id}`
+/** Which notes a Notes screen shows, and what a New note belongs to. `project` is the project the
+ * screen was opened for (a session's); `all` widens the list to every note. Without a project there
+ * is nothing to narrow to, so the list is All. It rides in the link, so the popped-out window,
+ * Back and a reload keep it. */
+export interface NotesScope {
+  project: string | null
+  all: boolean
+}
+
+/** What the project registry's ids look like (a slug); the server holds the same line. */
+const PROJECT_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
+
+export const NO_SCOPE: NotesScope = { project: null, all: false }
+
+/** A scope the link carries; a project that is not an id is ignored. */
+export function readScope(params: URLSearchParams): NotesScope {
+  const project = params.get('project')
+  return {
+    project: project && PROJECT_ID.test(project) ? project : null,
+    all: params.get('scope') === 'all',
+  }
+}
+
+function scopeQuery(
+  scope: Partial<NotesScope> | undefined,
+  first: string[] = [],
+) {
+  const params = new URLSearchParams(
+    first.map((pair) => pair.split('=') as [string, string]),
+  )
+  if (scope?.project) params.set('project', scope.project)
+  if (scope?.project && scope.all) params.set('scope', 'all')
+  const text = params.toString()
+  return text ? `?${text}` : ''
+}
+
+/** The Notes list. */
+export const notesHref = (scope?: Partial<NotesScope>) =>
+  `/notes${scopeQuery(scope)}`
+
+export const noteHref = (id: string, scope?: Partial<NotesScope>) =>
+  `/notes${scopeQuery(scope, [`id=${id}`])}`
 
 /** A New note (or list) screen: nothing is saved until something is put in it. */
 export type NewNoteKind = 'note' | 'list'
-export const newNoteHref = (kind: NewNoteKind = 'note') => `/notes?new=${kind}`
+export const newNoteHref = (
+  kind: NewNoteKind = 'note',
+  scope?: Partial<NotesScope>,
+) => `/notes${scopeQuery(scope, [`new=${kind}`])}`
 export const newNoteKind = (value: string | null): NewNoteKind | null =>
   value === 'note' || value === 'list' ? value : null
 
@@ -170,6 +216,8 @@ function send<T>(
 }
 
 export interface NoteQuery {
+  /** Only this project's notes; left out: every note. */
+  project?: string
   q?: string
   archived?: boolean
   /** Only notes with a reminder, soonest first (archived ones too). */
@@ -180,6 +228,7 @@ export interface NoteQuery {
 export function fetchNotes(query: NoteQuery = {}) {
   const params = new URLSearchParams({ limit: '500' })
   if (query.q) params.set('q', query.q)
+  if (query.project) params.set('project', query.project)
   if (query.reminders) params.set('reminders', 'true')
   else if (query.archived) params.set('archived', 'true')
   return apiFetch<unknown>(
@@ -197,11 +246,15 @@ export interface NoteLabelCount {
 /** Every label in use, over all notes (not just the newest 500). */
 export function fetchNoteLabels(
   archived: boolean | 'all',
+  project?: string,
   signal?: AbortSignal,
 ): Promise<NoteLabelCount[]> {
-  const params = archived === false ? '' : `?archived=${archived}`
+  const params = new URLSearchParams()
+  if (archived !== false) params.set('archived', String(archived))
+  if (project) params.set('project', project)
+  const text = params.toString()
   return apiFetch<{ labels?: NoteLabelCount[] }>(
-    `/api/notes/labels${params}`,
+    `/api/notes/labels${text ? `?${text}` : ''}`,
     { signal, cache: 'no-store' },
     "Couldn't load labels",
   ).then((page) => (Array.isArray(page.labels) ? page.labels : []))
@@ -223,6 +276,8 @@ export interface NoteCreate {
   pinned?: boolean
   labels?: string[]
   remindAt?: number | null
+  /** The project it belongs to; left out or null: a global note. */
+  project?: string | null
 }
 
 export function createNote(input: NoteCreate = { kind: 'note' }) {
@@ -240,6 +295,8 @@ export interface NotePatch {
   pinned?: boolean
   archived?: boolean
   kind?: NoteKind
+  /** Move it to a project; null makes it a global note. */
+  project?: string | null
   /** When to remind the owner (ms); null takes the reminder off. */
   remindAt?: number | null
   /** A restore: the server keeps the text it replaces. */

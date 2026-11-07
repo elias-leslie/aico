@@ -121,6 +121,7 @@ interface NoteRecord {
   pinned: boolean
   archived: boolean
   scope: string | null
+  project: string | null
   source: string | null
   createdAt: number
   editedAt: number
@@ -191,6 +192,7 @@ function readSnapshot(notesDb: string): Snapshot {
         pinned: row.pinned === 1,
         archived: row.archived === 1,
         scope: typeof row.scope === 'string' ? row.scope : null,
+        project: typeof row.project === 'string' ? row.project : null,
         source: typeof row.source === 'string' ? row.source : null,
         createdAt: num(row.created_at),
         editedAt: num(row.edited_at),
@@ -293,6 +295,7 @@ function renderNote(
     `archived: ${note.archived}`,
     `labels: [${note.labels.map(quote).join(', ')}]`,
     ...(note.scope ? [`scope: ${quote(note.scope)}`] : []),
+    ...(note.project ? [`project: ${quote(note.project)}`] : []),
     ...(note.source ? [`source: ${quote(note.source)}`] : []),
     `created: ${iso(note.createdAt)}`,
     `edited: ${iso(note.editedAt)}`,

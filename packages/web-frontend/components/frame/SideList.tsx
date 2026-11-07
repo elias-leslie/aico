@@ -14,7 +14,7 @@ import {
 import Link from 'next/link'
 import type { ComponentType } from 'react'
 import { useStatus } from '@/lib/hooks/use-status'
-import { popOutNotes } from '@/lib/notes-window'
+import { openNotes } from '@/lib/notes-window'
 import { plural } from '@/lib/status'
 import styles from './Frame.module.css'
 
@@ -137,9 +137,7 @@ export function SideList({
             <button
               type="button"
               className={styles.sideItem}
-              onClick={() => {
-                if (!popOutNotes('/notes')) window.location.assign('/notes')
-              }}
+              onClick={() => openNotes()}
               title="Notes open in their own window"
             >
               <StickyNote className="h-4 w-4" strokeWidth={1.7} />

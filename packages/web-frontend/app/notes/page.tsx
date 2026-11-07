@@ -12,7 +12,16 @@ import {
 } from '@/components/notes/NoteEditor'
 import { NoteList } from '@/components/notes/NoteList'
 import { OfflineBanner, ReadOnlyScope } from '@/components/ReadOnly'
-import { isNoteId, newNoteKind, noteHref } from '@/lib/api/notes'
+import {
+  isNoteId,
+  type NotesScope,
+  newNoteHref,
+  newNoteKind,
+  noteHref,
+  notesHref,
+  readScope,
+} from '@/lib/api/notes'
+import { setCapturePage } from '@/lib/capture-queue'
 import { useMediaQuery } from '@/lib/hooks/use-media-query'
 import { popOutNotes, useIsNotesWindow } from '@/lib/notes-window'
 
@@ -20,7 +29,7 @@ const POP_OUT = 'Pop out into its own window'
 
 /** Moves notes into their own window, to snap beside other work; this window
  * goes back to the sessions. Desktop only: a phone has no side window. */
-function PopOut({ id }: { id: string | null }) {
+function PopOut({ id, scope }: { id: string | null; scope: NotesScope }) {
   const router = useRouter()
   const desktop = useMediaQuery('(pointer: fine)')
   const [blocked, setBlocked] = useState(false)
@@ -43,7 +52,9 @@ function PopOut({ id }: { id: string | null }) {
         title={blocked ? 'Allow pop-ups for Aico, then try again' : POP_OUT}
         data-testid="notes-pop-out"
         onClick={() => {
-          if (!popOutNotes(id ? noteHref(id) : undefined)) {
+          if (
+            !popOutNotes(id ? noteHref(id, scope) : newNoteHref('note', scope))
+          ) {
             setBlocked(true)
             return
           }
@@ -70,6 +81,14 @@ function Notes() {
   const fresh = id === null ? newNoteKind(params.get('new')) : null
   // The popped-out window is only notes: no way back to the sessions here.
   const popped = useIsNotesWindow()
+  // The project this was opened for (a session's) and whether the list is widened to All.
+  const scope = readScope(params)
+  const listHref = notesHref(scope)
+  // A photo taken here belongs to that project too.
+  useEffect(() => {
+    setCapturePage(scope.project)
+    return () => setCapturePage(null)
+  }, [scope.project])
   // Closing the window or switching away ends the edit in hand: an item or
   // label being typed saves when its box loses focus.
   useEffect(() => {
@@ -91,7 +110,7 @@ function Notes() {
         <header className="flex flex-none items-center gap-2 py-3">
           {(detail || fresh || !popped) && (
             <Link
-              href={detail || fresh ? '/notes' : '/'}
+              href={detail || fresh ? listHref : '/'}
               className="lantern-icon-btn"
               aria-label={
                 detail || fresh ? 'Back to notes' : 'Back to sessions'
@@ -113,25 +132,32 @@ function Notes() {
                   ? 'New note'
                   : 'Notes'}
           </h1>
-          {!popped && <PopOut id={detail ? id : null} />}
+          {!popped && <PopOut id={detail ? id : null} scope={scope} />}
           <CaptureLauncher variant="row" />
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-6">
           {detail ? (
-            <NoteEditor key={noteScreenKey(id)} id={id} />
+            <NoteEditor key={noteScreenKey(id)} id={id} listHref={listHref} />
           ) : fresh ? (
             <NoteEditor
               key={noteScreenKey(null)}
               id={null}
               kind={fresh}
-              onMade={(made) => router.replace(noteHref(made))}
+              project={scope.project}
+              listHref={listHref}
+              onMade={(made) => router.replace(noteHref(made, scope))}
             />
           ) : id !== null ? (
             <p className="py-3 text-[13px]" style={{ color: 'var(--mist)' }}>
               That isn&apos;t a note link.
             </p>
           ) : (
-            <NoteList />
+            <NoteList
+              scope={scope}
+              onScope={(all) =>
+                router.replace(notesHref({ project: scope.project, all }))
+              }
+            />
           )}
         </div>
       </ReadOnlyScope>

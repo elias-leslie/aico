@@ -274,6 +274,7 @@ describe('capture routes', () => {
     const response = await upload(PNG, 'receipt.png', 'image/png', {
       caption: 'milk receipt',
       group_id: 'group-0001',
+      project: 'aico',
     })
     expect(response.status).toBe(201)
     const body = await created(response)
@@ -288,6 +289,7 @@ describe('capture routes', () => {
       size: PNG.length,
       hash: sha256(PNG),
       caption: 'milk receipt',
+      project: 'aico',
       status: 'new',
       type: null,
       text: null,
@@ -307,6 +309,7 @@ describe('capture routes', () => {
         'size',
         'hash',
         'caption',
+        'project',
         'status',
         'type',
         'text',
@@ -469,6 +472,12 @@ describe('capture routes', () => {
       expect(await (await fetch(`${server.base}/api/captures/${id}`)).json()).toEqual({
         detail: 'That capture is gone',
       })
+  })
+
+  it('keeps the project a capture was taken in, and refuses one that is not an id', async () => {
+    const plain = await created(await upload(PNG, 'a.png', 'image/png'))
+    expect(plain.project).toBeNull()
+    expect((await upload(PNG, 'b.png', 'image/png', { project: '../x' })).status).toBe(422)
   })
 
   it('changes the caption only, and deletes as a tombstone', async () => {

@@ -32,6 +32,10 @@ describe('tether note', () => {
             hint: null,
           })
         }
+        if (req.method === 'POST' && req.url === '/api/notes')
+          return reply(201, { id: 'aaaaaaaaaaaa', ...JSON.parse(text) })
+        if (req.method === 'PATCH' && req.url === '/api/notes/aaaaaaaaaaaa')
+          return reply(200, { id: 'aaaaaaaaaaaa', ...JSON.parse(text) })
         if (req.url === '/api/notes/groceries')
           return reply(200, {
             id: '0123456789ab',
@@ -119,6 +123,52 @@ describe('tether note', () => {
         labels: [],
       }),
     ).toContain('(untitled)')
+  })
+
+  it('makes a note in the session project, or the one named, or none', async () => {
+    const post = () => requests.filter((r) => r.startsWith('POST /api/notes ')).at(-1)
+    const inSession = { ...env(), AICO_PROJECT_ID: 'aico' }
+    expect(await runNote(capture().io, false, ['add', 'Idea'], inSession)).toBe(0)
+    expect(post()).toContain('"project":"aico"')
+    expect(
+      await runNote(capture().io, false, ['add', 'Idea', '--project', 'portfolio-ai'], inSession),
+    ).toBe(0)
+    expect(post()).toContain('"project":"portfolio-ai"')
+    expect(await runNote(capture().io, false, ['add', 'Idea', '--global'], inSession)).toBe(0)
+    expect(post()).not.toContain('project')
+    expect(await runNote(capture().io, false, ['add', 'Idea'], env())).toBe(0)
+    expect(post()).not.toContain('project')
+    const both = capture()
+    expect(
+      await runNote(both.io, false, ['add', 'Idea', '--global', '--project', 'aico'], env()),
+    ).toBe(2)
+    expect(both.err[0]).toMatch(/cannot be used together/)
+  })
+
+  it('filters by project, shows it, and moves a note', async () => {
+    const list = capture()
+    expect(await runNote(list.io, false, ['list', '--project', 'aico'], env())).toBe(0)
+    expect(requests.at(-1)).toBe('GET /api/notes?project=aico')
+    const move = capture()
+    expect(await runNote(move.io, false, ['move', 'aaaaaaaaaaaa', 'aico'], env())).toBe(0)
+    expect(requests.at(-1)).toBe('PATCH /api/notes/aaaaaaaaaaaa {"project":"aico"}')
+    expect(move.out[0]).toBe('aaaaaaaaaaaa  moved to aico')
+    const none = capture()
+    expect(await runNote(none.io, false, ['move', 'aaaaaaaaaaaa', 'none'], env())).toBe(0)
+    expect(requests.at(-1)).toBe('PATCH /api/notes/aaaaaaaaaaaa {"project":null}')
+    expect(none.out[0]).toBe('aaaaaaaaaaaa  no project now')
+    expect(
+      formatNote({
+        id: 'x',
+        kind: 'note',
+        title: 't',
+        pinned: false,
+        archived: false,
+        editedAt: 0,
+        labels: [],
+        project: 'aico',
+      }),
+    ).toContain('project: aico')
   })
 
   it('prints the edit time in local time', () => {

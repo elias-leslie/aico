@@ -6,13 +6,17 @@ import { type Answer, type CaptureIo, DEFAULT_URL, parseFlags, problem } from '.
 import { stamp } from './recovery-facts'
 
 export const NOTE_USAGE = `Usage:
-  tether note list [--kind note|list|prompt] [--label L] [--q TEXT] [--limit N] [--json]
+  tether note list [--kind note|list|prompt] [--label L] [--project P] [--q TEXT] [--limit N] [--json]
       The owner's notes, pinned first then newest. Lists show how many items
       are open and done. --q searches titles, text, items and labels.
+      --project P shows only that project's notes (without it: all notes).
   tether note get <id> [--json]
       One note: text, labels, items (with their ids) and attached files.
-  tether note add "title" [--body TEXT] [--list] [--json]
-      Make a note; --list makes it a checklist.
+  tether note add "title" [--body TEXT] [--list] [--project P | --global] [--json]
+      Make a note; --list makes it a checklist. It belongs to project P, else to
+      this session's project ($AICO_PROJECT_ID); --global makes it a note of no project.
+  tether note move <id> <project|none> [--json]
+      Move a note to another project, or to none (a global note).
   tether note item add <id> "text" [--json]
       Add an item to a checklist.
   tether note item check <id> <item-id> [--json]
@@ -40,6 +44,7 @@ interface NoteJson {
   archived: boolean
   editedAt: number
   labels: string[]
+  project?: string | null
   unchecked?: number
   checked?: number
   snippet?: string
@@ -57,8 +62,9 @@ function listLine(note: NoteJson): string {
       ? `  [${note.unchecked ?? 0} open, ${note.checked ?? 0} done]`
       : ''
   const labels = note.labels.length ? `  #${note.labels.join(' #')}` : ''
+  const where = note.project ? `  @${note.project}` : ''
   const flags = `${note.pinned ? '*' : ' '}${note.archived ? 'a' : ' '}`
-  return `${note.id}  ${note.kind.padEnd(6)} ${flags} ${note.title || '(untitled)'}${counts}${labels}`
+  return `${note.id}  ${note.kind.padEnd(6)} ${flags} ${note.title || '(untitled)'}${counts}${labels}${where}`
 }
 
 export function formatNote(note: NoteJson): string {
@@ -66,6 +72,7 @@ export function formatNote(note: NoteJson): string {
   lines.push(
     `  ${note.kind}${note.pinned ? ' · pinned' : ''}${note.archived ? ' · archived' : ''} · edited ${when(note.editedAt)}`,
   )
+  if (note.project) lines.push(`  project: ${note.project}`)
   if (note.labels.length) lines.push(`  labels: ${note.labels.join(', ')}`)
   for (const line of (note.body ?? '').split('\n')) if (line) lines.push(`  | ${line}`)
   const items = note.items ?? []
@@ -117,9 +124,15 @@ export async function runNote(
   // `--list` takes no value, but parseFlags wants one for every named flag.
   const isList = sub === 'add' && words.includes('--list')
   if (isList) words = words.filter((word) => word !== '--list')
+  const isGlobal = sub === 'add' && words.includes('--global')
+  if (isGlobal) words = words.filter((word) => word !== '--global')
   const flags = parseFlags(
     words,
-    sub === 'list' ? ['kind', 'label', 'q', 'limit'] : sub === 'add' ? ['body'] : [],
+    sub === 'list'
+      ? ['kind', 'label', 'project', 'q', 'limit']
+      : sub === 'add'
+        ? ['body', 'project']
+        : [],
   )
   if (typeof flags === 'string') return fail(flags)
   const asJson = json || flags.json
@@ -133,7 +146,7 @@ export async function runNote(
   if (sub === 'list') {
     if (positional.length) return fail(`unexpected ${positional[0]}`)
     const query = new URLSearchParams()
-    for (const name of ['kind', 'label', 'q', 'limit'] as const)
+    for (const name of ['kind', 'label', 'project', 'q', 'limit'] as const)
       if (flags.values[name] !== undefined) query.set(name, flags.values[name] as string)
     path = `/api/notes${query.size ? `?${query}` : ''}`
     print = (answer) => {
@@ -150,14 +163,29 @@ export async function runNote(
   } else if (sub === 'add') {
     const title = positional[0]
     if (positional.length !== 1 || !title) return fail('add takes one title')
+    if (isGlobal && flags.values.project !== undefined)
+      return fail('--global and --project cannot be used together')
+    // A note made in a session belongs to that session's project unless told otherwise.
+    const project = isGlobal ? undefined : flags.values.project || env.AICO_PROJECT_ID?.trim()
     method = 'POST'
     path = '/api/notes'
     body = {
       title,
+      ...(project ? { project } : {}),
       ...(flags.values.body !== undefined ? { body: flags.values.body } : {}),
       kind: isList ? 'list' : 'note',
     }
     print = (answer) => `${(answer as NoteJson).id}  ${(answer as NoteJson).title}`
+  } else if (sub === 'move') {
+    if (positional.length !== 2) return fail('move takes a note id and a project (or none)')
+    const [id, project] = positional as [string, string]
+    method = 'PATCH'
+    path = `/api/notes/${enc(id)}`
+    body = { project: project === 'none' ? null : project }
+    print = (answer) => {
+      const moved = answer as NoteJson
+      return `${moved.id}  ${moved.project ? `moved to ${moved.project}` : 'no project now'}`
+    }
   } else if (sub === 'item' && group === 'add') {
     if (positional.length !== 2) return fail('item add takes a note id and the item text')
     method = 'POST'

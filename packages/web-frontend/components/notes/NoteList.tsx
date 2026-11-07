@@ -16,13 +16,17 @@ import { useEffect, useState } from 'react'
 import {
   GROCERIES_ID,
   GROCERIES_SOURCE,
+  NO_SCOPE,
   type NoteSummary,
+  type NotesScope,
   newNoteHref,
   noteHref,
 } from '@/lib/api/notes'
 import { formatAge } from '@/lib/attention'
 import { formatWhen } from '@/lib/capture-format'
+import { useNoteProjects } from '@/lib/hooks/use-note-projects'
 import { useNoteLabels, useNotes } from '@/lib/hooks/use-notes'
+import { NoteScope, ProjectTag } from './NoteScope'
 
 const MUTED = { color: 'var(--mist)' } as const
 
@@ -142,13 +146,22 @@ function Due({ note }: { note: NoteSummary }) {
   )
 }
 
-function Card({ note }: { note: NoteSummary }) {
+function Card({
+  note,
+  scope,
+  showProject,
+}: {
+  note: NoteSummary
+  scope: NotesScope
+  /** The list is All: say which project each note belongs to. */
+  showProject: boolean
+}) {
   const isList = note.kind === 'list' || note.unchecked + note.checked > 0
   const count = counts(note)
   return (
     <li>
       <Link
-        href={noteHref(note.id)}
+        href={noteHref(note.id, scope)}
         data-testid="note-card"
         className="flex flex-col gap-1 rounded-lg px-3 py-2.5 outline-none focus-visible:outline-2 focus-visible:outline-[var(--lantern)]"
         style={{ background: 'var(--paper)', color: 'var(--bone)' }}
@@ -200,6 +213,7 @@ function Card({ note }: { note: NoteSummary }) {
               {note.attachmentCount}
             </span>
           )}
+          {showProject && note.project && <ProjectTag project={note.project} />}
           <Labels labels={note.labels} />
           {note.remindAt !== null && <Due note={note} />}
         </span>
@@ -212,9 +226,11 @@ function Card({ note }: { note: NoteSummary }) {
 function GroceriesShortcut({
   note,
   known,
+  scope,
 }: {
   note: NoteSummary | null
   known: boolean
+  scope: NotesScope
 }) {
   const photos = note?.attachmentCount ?? 0
   const text = !known
@@ -226,7 +242,7 @@ function GroceriesShortcut({
         : 'Nothing on it yet'
   return (
     <Link
-      href={noteHref(GROCERIES_ID)}
+      href={noteHref(GROCERIES_ID, scope)}
       data-testid="groceries-shortcut"
       className="flex items-center gap-3 rounded-lg px-3 py-3 outline-none focus-visible:outline-2 focus-visible:outline-[var(--lantern)]"
       style={{
@@ -266,16 +282,27 @@ function useDebounced<T>(value: T, ms: number): T {
   return settled
 }
 
-/** Notes, pinned first and then by latest activity, with search, a label
- * filter, the archive, and Groceries on top. */
-export function NoteList() {
+/** Notes, pinned first and then by latest activity, with the scope switch (this project or
+ * All), search, a label filter, the archive, and Groceries on top. `scope` is what the page was
+ * opened for; `onScope` widens it to All or narrows it back. */
+export function NoteList({
+  scope = NO_SCOPE,
+  onScope = () => {},
+}: {
+  scope?: NotesScope
+  onScope?: (all: boolean) => void
+}) {
   const [text, setText] = useState('')
   const [archived, setArchived] = useState(false)
   const [label, setLabel] = useState<string | null>(null)
   const [reminders, setReminders] = useState(false)
   const q = useDebounced(text.trim(), 250)
-  const list = useNotes(q, archived, reminders)
-  const allLabels = useNoteLabels(reminders ? 'all' : archived)
+  // The project the list is narrowed to; undefined: every note.
+  const project = scope.project && !scope.all ? scope.project : undefined
+  const { nameOf } = useNoteProjects()
+  const where = project ? nameOf(project) : null
+  const list = useNotes(q, archived, reminders, project)
+  const allLabels = useNoteLabels(reminders ? 'all' : archived, project)
 
   // Every label in use (the server's list), else the ones on the notes loaded;
   // the chosen label stays a chip even where no note has it, so the filter can
@@ -311,10 +338,11 @@ export function NoteList() {
 
   return (
     <div className="flex flex-col gap-3">
+      <NoteScope scope={scope} onChange={onScope} />
       <div className="flex gap-2">
         {/* Nothing is saved until something is put in it. */}
         <Link
-          href={newNoteHref('note')}
+          href={newNoteHref('note', scope)}
           className="lantern-btn primary min-h-11 flex-1"
           data-testid="new-note"
         >
@@ -322,7 +350,7 @@ export function NoteList() {
           New note
         </Link>
         <Link
-          href={newNoteHref('list')}
+          href={newNoteHref('list', scope)}
           className="lantern-btn min-h-11 flex-1"
           data-testid="new-list"
         >
@@ -335,7 +363,13 @@ export function NoteList() {
         </Link>
       </div>
 
-      {!filtering && <GroceriesShortcut note={groceries} known={list.loaded} />}
+      {!filtering && (
+        <GroceriesShortcut
+          note={groceries}
+          known={list.loaded && project === undefined}
+          scope={scope}
+        />
+      )}
 
       <div className="flex gap-2">
         <label className="lantern-field min-w-0 flex-1" style={{ height: 44 }}>
@@ -402,14 +436,24 @@ export function NoteList() {
           {shown.length === 0 ? (
             <Message testId="notes-empty">
               {q
-                ? `Nothing matches "${q}".`
+                ? `Nothing${where ? ` in ${where}` : ''} matches "${q}".`
                 : label
-                  ? `No notes labelled ${label}.`
+                  ? `No notes labelled ${label}${where ? ` in ${where}` : ''}.`
                   : reminders
-                    ? 'No reminders. Open a note and tap Remind me.'
+                    ? `No reminders${where ? ` in ${where}` : ''}. Open a note and tap Remind me.`
                     : archived
-                      ? 'Nothing archived.'
-                      : 'No notes yet. Tap New note or New list.'}
+                      ? `Nothing archived${where ? ` in ${where}` : ''}.`
+                      : where
+                        ? `No notes in ${where} yet. Tap New note or New list.`
+                        : 'No notes yet. Tap New note or New list.'}
+              {where && (
+                <>
+                  {' '}
+                  <TextButton onClick={() => onScope(true)}>
+                    Show all notes
+                  </TextButton>
+                </>
+              )}
             </Message>
           ) : (
             <>
@@ -418,7 +462,12 @@ export function NoteList() {
                   <h2 className="lantern-sec">Due</h2>
                   <ul className="flex flex-col gap-2">
                     {dueNow.map((note) => (
-                      <Card key={note.id} note={note} />
+                      <Card
+                        key={note.id}
+                        note={note}
+                        scope={scope}
+                        showProject={project === undefined}
+                      />
                     ))}
                   </ul>
                 </section>
@@ -431,7 +480,12 @@ export function NoteList() {
                   <h2 className="lantern-sec">Coming up</h2>
                   <ul className="flex flex-col gap-2">
                     {coming.map((note) => (
-                      <Card key={note.id} note={note} />
+                      <Card
+                        key={note.id}
+                        note={note}
+                        scope={scope}
+                        showProject={project === undefined}
+                      />
                     ))}
                   </ul>
                 </section>
@@ -444,7 +498,12 @@ export function NoteList() {
                   <h2 className="lantern-sec">Pinned</h2>
                   <ul className="flex flex-col gap-2">
                     {pinned.map((note) => (
-                      <Card key={note.id} note={note} />
+                      <Card
+                        key={note.id}
+                        note={note}
+                        scope={scope}
+                        showProject={project === undefined}
+                      />
                     ))}
                   </ul>
                 </section>
@@ -454,7 +513,12 @@ export function NoteList() {
                   {pinned.length > 0 && <h2 className="lantern-sec">Others</h2>}
                   <ul className="flex flex-col gap-2">
                     {others.map((note) => (
-                      <Card key={note.id} note={note} />
+                      <Card
+                        key={note.id}
+                        note={note}
+                        scope={scope}
+                        showProject={project === undefined}
+                      />
                     ))}
                   </ul>
                 </section>

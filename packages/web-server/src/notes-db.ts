@@ -13,7 +13,7 @@ import { NoteStore } from './notes-data'
 import { baseOf, type SyncHandle } from './sync/engine'
 import { NOTES_SYNC_TABLES } from './sync/registry'
 
-export const SCHEMA_VERSION = 6
+export const SCHEMA_VERSION = 7
 
 /** Which column names the note a synced row belongs to (to refresh its search entry). */
 const NOTE_ID_COLUMN: Record<string, string> = {
@@ -131,6 +131,12 @@ const MIGRATIONS: Record<number, string> = {
   5: `ALTER TABLE notes ADD COLUMN remind_at INTEGER;
       ALTER TABLE notes ADD COLUMN reminded_at INTEGER;
       CREATE INDEX IF NOT EXISTS notes_remind ON notes (remind_at) WHERE remind_at IS NOT NULL;`,
+  // The project a note (and a capture, which can become one) belongs to: the id the project
+  // registry gives it. NULL is a global note; old notes stay NULL, nobody guesses their project.
+  6: `ALTER TABLE notes ADD COLUMN project TEXT;
+      ALTER TABLE captures ADD COLUMN project TEXT;
+      CREATE INDEX IF NOT EXISTS notes_project
+        ON notes (project, deleted, archived, pinned, edited_at DESC) WHERE project IS NOT NULL;`,
 }
 
 const SCHEMA = `
@@ -216,6 +222,8 @@ export interface CaptureRow {
   route_state: RouteState | null
   /** A plain sentence about the route: why it waits or failed, or what is not built yet. */
   route_note: string | null
+  /** The project it was taken in (a session's), or null. A note made from it starts there. */
+  project: string | null
 }
 
 export interface NewCapture {
@@ -228,6 +236,7 @@ export interface NewCapture {
   size: number
   hash: string
   caption?: string
+  project?: string | null
 }
 
 export interface CaptureQuery {
@@ -387,8 +396,8 @@ export class NotesStore {
         .prepare(
           `INSERT INTO captures
              (id, client_id, group_id, ask_id, kind, name, mime, size, hash, caption,
-              created_at, updated_at, origin, prev, deleted, seq)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 0, ?)`,
+              project, created_at, updated_at, origin, prev, deleted, seq)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 0, ?)`,
         )
         .run(
           id,
@@ -401,6 +410,7 @@ export class NotesStore {
           input.size,
           input.hash,
           input.caption ?? '',
+          input.project ?? null,
           this.now(),
           stamp.updated_at,
           stamp.origin,

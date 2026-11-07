@@ -20,6 +20,7 @@ const note = (id: string, over: Partial<NoteSummary> = {}): NoteSummary => ({
   pinned: false,
   archived: false,
   source: null,
+  project: null,
   createdAt: 1,
   editedAt: 1,
   updatedAt: 1,

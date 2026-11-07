@@ -14,7 +14,7 @@ import type { ComponentType, ReactNode } from 'react'
 import { quotaGlances, quotaLine } from '@/lib/frame/quota'
 import { useSessionAttention } from '@/lib/hooks/use-session-attention'
 import { useUsage } from '@/lib/hooks/use-usage'
-import { popOutNotes } from '@/lib/notes-window'
+import { openNotes } from '@/lib/notes-window'
 import { plural } from '@/lib/status'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
 import { NeedsYouLauncher } from '../asks/NeedsYou'
@@ -217,9 +217,7 @@ export function Rail({
       <RailButton
         icon={StickyNote}
         label="Notes: opens in its own window"
-        onClick={() => {
-          if (!popOutNotes('/notes')) window.location.assign('/notes')
-        }}
+        onClick={() => openNotes()}
       />
       <CaptureLauncher variant="icon" />
       <SettingsMenu frame={frame} icon />

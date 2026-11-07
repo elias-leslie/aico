@@ -25,6 +25,7 @@ import {
 } from './capture-router'
 import type { CaptureConfig } from './config'
 import { objectBody, RAW, type RequestContext, type Router, sendJson } from './http'
+import { PROJECT_ID } from './notes-data'
 import { CAPTURE_STATUSES, type CaptureRow, type CaptureStatus, type NotesStore } from './notes-db'
 import { HttpError } from './tether'
 import { RateLimiter, readUploadForm } from './uploads'
@@ -79,6 +80,8 @@ export interface CaptureJson {
   size: number
   hash: string | null
   caption: string
+  /** The project it was taken in, or null. */
+  project: string | null
   status: CaptureStatus
   type: string | null
   text: string | null
@@ -258,6 +261,7 @@ export function registerCaptureRoutes(
       size: row.size,
       hash: row.hash,
       caption: row.caption,
+      project: row.project,
       status: row.status,
       type: row.type,
       text: row.text,
@@ -339,6 +343,7 @@ export function registerCaptureRoutes(
     const askId = formText(form, 'ask_id', 12, /^[0-9a-f]{12}$/)
     seen.askId = askId ?? undefined
     const caption = formText(form, 'caption', CAPTION_MAX) ?? ''
+    const project = formText(form, 'project', 128, PROJECT_ID)
 
     const earlier = store.findByClientId(clientId)
     if (earlier?.deleted) throw new HttpError(409, 'That file was removed')
@@ -363,6 +368,7 @@ export function registerCaptureRoutes(
       size: content.length,
       hash,
       caption,
+      project,
     })
     if (created && needsPreview(type.mime)) previews.schedule(hash)
     if (created) deps.reader?.kick()

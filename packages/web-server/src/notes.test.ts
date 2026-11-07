@@ -81,7 +81,7 @@ describe('notes', () => {
     raw.exec(
       `DROP TABLE notes_fts; DROP TABLE notes; DROP TABLE note_items; DROP TABLE note_labels;
        DROP TABLE attachments; DROP TABLE note_revisions; ALTER TABLE captures DROP COLUMN prev_origin;
-       UPDATE meta SET value = '3' WHERE key = 'schema_version'`,
+       ALTER TABLE captures DROP COLUMN project; UPDATE meta SET value = '3' WHERE key = 'schema_version'`,
     )
     raw.close()
     store = open({ path })
@@ -340,6 +340,88 @@ describe('notes', () => {
     } finally {
       await api.close()
     }
+  })
+
+  it('gives notes a project: create, filter, move, clear, and keep the rest global', async () => {
+    const api = await serveRoutes((r) =>
+      registerNoteRoutes(r, { store, blobsDir: join(dir, 'blobs') }),
+    )
+    const call = async (method: string, path: string, body?: unknown) => {
+      const response = await fetch(`${api.base}${path}`, {
+        method,
+        headers: { 'content-type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      })
+      // biome-ignore lint/suspicious/noExplicitAny: test responses are read loosely
+      return { status: response.status, body: (await response.json()) as Record<string, any> }
+    }
+    const titles = async (query = '') =>
+      ((await call('GET', `/api/notes${query}`)).body.notes as { title: string }[])
+        .map((n) => n.title)
+        .sort()
+    try {
+      const global = await call('POST', '/api/notes', { title: 'Global' })
+      expect(global.body.project).toBeNull()
+      const mine = await call('POST', '/api/notes', {
+        title: 'Mine',
+        project: 'portfolio-ai',
+        labels: ['plan'],
+      })
+      expect(mine.status).toBe(201)
+      expect(mine.body.project).toBe('portfolio-ai')
+      await call('POST', '/api/notes', { title: 'Other', project: 'aico', labels: ['idea'] })
+
+      // The All scope has no project filter; a project scope shows only that project.
+      expect(await titles()).toEqual(['Global', 'Mine', 'Other'])
+      expect(await titles('?project=portfolio-ai')).toEqual(['Mine'])
+      expect((await call('GET', '/api/notes?project=nobody')).body.total).toBe(0)
+      // Labels follow the scope.
+      const labels = async (query: string) =>
+        ((await call('GET', `/api/notes/labels${query}`)).body.labels as { label: string }[]).map(
+          (l) => l.label,
+        )
+      expect(await labels('')).toEqual(['idea', 'plan'])
+      expect(await labels('?project=aico')).toEqual(['idea'])
+
+      // Move it to another project, then to none.
+      const moved = await call('PATCH', `/api/notes/${mine.body.id}`, { project: 'aico' })
+      expect(moved.body.project).toBe('aico')
+      expect(await titles('?project=aico')).toEqual(['Mine', 'Other'])
+      const cleared = await call('PATCH', `/api/notes/${mine.body.id}`, { project: null })
+      expect(cleared.body.project).toBeNull()
+      expect(await titles('?project=aico')).toEqual(['Other'])
+      expect(await titles()).toEqual(['Global', 'Mine', 'Other'])
+      // A save that leaves the project out keeps it.
+      await call('PATCH', `/api/notes/${mine.body.id}`, { project: 'aico' })
+      expect(
+        (await call('PATCH', `/api/notes/${mine.body.id}`, { title: 'Mine 2' })).body,
+      ).toMatchObject({ project: 'aico', title: 'Mine 2' })
+
+      // Not a project id.
+      expect((await call('POST', '/api/notes', { project: '../etc' })).status).toBe(422)
+      expect((await call('PATCH', `/api/notes/${mine.body.id}`, { project: 7 })).status).toBe(422)
+      expect((await call('GET', '/api/notes?project=a b')).status).toBe(422)
+    } finally {
+      await api.close()
+    }
+  })
+
+  it('files a capture as a note in the project it was taken in', () => {
+    const row = store.insertCapture({
+      clientId: 'client-90000',
+      kind: 'image',
+      name: 'page.jpg',
+      mime: 'image/jpeg',
+      size: 10,
+      hash: HASH,
+      project: 'aico',
+    }).capture
+    const noteId = store.notes.fileNote(
+      { captureId: row.id, hash: HASH, name: 'page.jpg', mime: 'image/jpeg', size: 10 },
+      { title: 'Page', body: 'text', project: row.project },
+    )
+    expect(store.notes.getNote(noteId)?.project).toBe('aico')
+    expect(store.notes.groceries().project).toBeNull()
   })
 
   it('hides secret-looking text in list previews, not in the note itself', async () => {

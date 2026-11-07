@@ -17,6 +17,7 @@ import {
   type NotePatch,
   type NoteRow,
   type NoteSummary,
+  PROJECT_ID,
   REVISED_FIELDS,
   type RevisedField,
   type RevisionRow,
@@ -43,8 +44,17 @@ const PAGE_DEFAULT = 100
 const SNIPPET = 200
 /** Read past the cut, so a token crossing it is still recognised and hidden whole. */
 const SNIPPET_MARGIN = 400
-const CREATE_KEYS = ['kind', 'title', 'body', 'pinned', 'labels', 'items', 'remindAt']
-const PATCH_KEYS = ['title', 'body', 'pinned', 'archived', 'kind', 'keepRevision', 'remindAt']
+const CREATE_KEYS = ['kind', 'title', 'body', 'pinned', 'labels', 'items', 'remindAt', 'project']
+const PATCH_KEYS = [
+  'title',
+  'body',
+  'pinned',
+  'archived',
+  'kind',
+  'keepRevision',
+  'remindAt',
+  'project',
+]
 /** A reminder time is a date between 2000 and 2100 (ms). */
 const REMIND_MIN = Date.UTC(2000, 0, 1)
 const REMIND_MAX = Date.UTC(2100, 0, 1)
@@ -79,6 +89,8 @@ interface NoteJson {
   pinned: boolean
   archived: boolean
   scope: string | null
+  /** The project it belongs to (the project registry's id), or null: a global note. */
+  project: string | null
   source: string | null
   createdAt: number
   /** When the title or text was last changed (item changes do not move it). */
@@ -140,6 +152,7 @@ function noteJson(row: NoteRow, labels: string[]): NoteJson {
     pinned: row.pinned === 1,
     archived: row.archived === 1,
     scope: row.scope,
+    project: row.project,
     source: row.source,
     createdAt: row.created_at,
     editedAt: row.edited_at,
@@ -240,6 +253,17 @@ function remindAt(body: Record<string, unknown>): number | null | undefined {
   return value
 }
 
+/** `project`: a project id, null for a global note, undefined when the body leaves it out. Only the
+ * shape is checked: a project can leave the registry, or live on the other host, and its notes stay. */
+function projectField(body: Record<string, unknown>): string | null | undefined {
+  if (!('project' in body)) return undefined
+  const value = body.project
+  if (value === null) return null
+  if (typeof value !== 'string' || !PROJECT_ID.test(value))
+    throw new HttpError(422, 'project must be a project id, or null for no project')
+  return value
+}
+
 function optionalKind(body: Record<string, unknown>): NoteKind | undefined {
   const kind = optionalString(body, 'kind', { max: 20 })
   if (kind === undefined) return undefined
@@ -276,6 +300,14 @@ function boolQuery(value: string | null, name: string): boolean | undefined {
   return value === 'true'
 }
 
+/** `?project=ID` shows one project's notes; left out, every note (the All scope). */
+function projectQuery(query: URLSearchParams): string | undefined {
+  const value = query.get('project')
+  if (value === null || value === '') return undefined
+  if (!PROJECT_ID.test(value)) throw new HttpError(422, 'project must be a project id')
+  return value
+}
+
 function created(res: ServerResponse, payload: unknown): typeof RAW {
   sendJson(res, 201, payload)
   return RAW
@@ -304,7 +336,7 @@ export function registerNoteRoutes(router: Router, deps: NoteDeps): void {
   router.on('GET', '/api/notes/labels', (ctx) => {
     const archivedText = ctx.query.get('archived')
     const archived = archivedText === 'all' ? 'all' : boolQuery(archivedText, 'archived')
-    return { labels: deps.store.notes.labelCounts(archived) }
+    return { labels: deps.store.notes.labelCounts(archived, projectQuery(ctx.query)) }
   })
 
   router.on('GET', '/api/notes', (ctx) => {
@@ -327,6 +359,7 @@ export function registerNoteRoutes(router: Router, deps: NoteDeps): void {
       kind: kind as NoteKind | undefined,
       label: ctx.query.get('label') || undefined,
       pinned: boolQuery(ctx.query.get('pinned'), 'pinned'),
+      project: projectQuery(ctx.query),
       reminders: boolQuery(ctx.query.get('reminders'), 'reminders'),
       archived,
       q,
@@ -361,6 +394,7 @@ export function registerNoteRoutes(router: Router, deps: NoteDeps): void {
       title,
       body: text,
       pinned: optionalBool(body, 'pinned'),
+      project: projectField(body) ?? null,
       labels: body.labels === undefined ? undefined : labelList(body.labels),
       items,
       remindAt: remindAt(body),
@@ -382,6 +416,7 @@ export function registerNoteRoutes(router: Router, deps: NoteDeps): void {
       kind: optionalKind(body),
       keepRevision: optionalBool(body, 'keepRevision'),
       remindAt: remindAt(body),
+      project: projectField(body),
     }
     if (!notes.update(row.id, patch)) throw new HttpError(404, 'That note is gone')
     return detail(row.id)

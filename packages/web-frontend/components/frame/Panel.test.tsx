@@ -6,7 +6,7 @@ const state = vi.hoisted(() => ({
   open: vi.fn(),
   phone: false,
   tier: 'panel',
-  notes: vi.fn((_path: string) => true),
+  notes: vi.fn((..._args: unknown[]) => true),
   status: { value: '3 problems', tone: 'failed' as string | null, problems: 3 },
 }))
 vi.mock('./FrameContext', () => ({
@@ -52,7 +52,7 @@ vi.mock('../asks/NeedsYou', () => ({
 vi.mock('../SessionList', () => ({ SessionList: () => <p>rows</p> }))
 vi.mock('../capture/CaptureLauncher', () => ({ CaptureLauncher: () => null }))
 vi.mock('@/lib/notes-window', () => ({
-  popOutNotes: (path: string) => state.notes(path),
+  openNotes: (...args: unknown[]) => state.notes(...args),
 }))
 
 const slots = [] as never[]
@@ -181,7 +181,8 @@ describe('Panel', () => {
   it('pins Notes, Capture and Settings in a footer, Notes opening in its own window', () => {
     render(<Panel slots={slots} onSelect={vi.fn()} />)
     fireEvent.click(screen.getByRole('button', { name: 'Notes' }))
-    expect(state.notes).toHaveBeenCalledWith('/notes')
+    // With no argument, openNotes takes the project of the session on screen.
+    expect(state.notes).toHaveBeenCalledWith()
     expect(screen.getByRole('button', { name: 'Settings' })).toHaveAttribute(
       'aria-haspopup',
       'menu',

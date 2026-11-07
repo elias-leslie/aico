@@ -12,6 +12,8 @@ export interface Capture {
   clientId: string
   groupId: string | null
   askId: string | null
+  /** The project it was taken in, or null. */
+  project?: string | null
   kind: string
   name: string
   mime: string
@@ -239,6 +241,8 @@ export interface CaptureUpload {
   clientId: string
   groupId?: string
   askId?: string
+  /** The project it was taken in; a note made from it starts there. */
+  project?: string
   caption?: string
   onProgress?: (percent: number) => void
   signal?: AbortSignal
@@ -263,6 +267,7 @@ export function uploadCapture(upload: CaptureUpload): Promise<Capture> {
     form.append('client_id', upload.clientId)
     if (upload.groupId) form.append('group_id', upload.groupId)
     if (upload.askId) form.append('ask_id', upload.askId)
+    if (upload.project) form.append('project', upload.project)
     if (upload.caption) form.append('caption', upload.caption)
     form.append('file', upload.file, upload.file.name)
 

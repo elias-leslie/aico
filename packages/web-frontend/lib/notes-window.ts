@@ -1,7 +1,8 @@
 'use client'
 
 import { useSyncExternalStore } from 'react'
-import { newNoteHref } from './api/notes'
+import { newNoteHref, notesHref } from './api/notes'
+import { shownProject } from './frame/shown-project'
 
 /** The name of the popped-out notes window. A window keeps its name across
  * page loads, so the notes page can tell it is in that window. */
@@ -28,4 +29,12 @@ export function useIsNotesWindow(): boolean {
     () => window.name === NOTES_WINDOW,
     () => false,
   )
+}
+
+/** The Notes entry (the button in the panel, the rail and the side list, and later the session
+ * bar): Notes in its own window, on `project`'s notes, defaulting to the project of the session on
+ * screen. null opens All. Where the browser blocks the window, Notes opens in this one. */
+export function openNotes(project: string | null = shownProject()): void {
+  const href = notesHref({ project })
+  if (!popOutNotes(href)) window.location.assign(href)
 }

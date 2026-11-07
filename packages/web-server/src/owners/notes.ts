@@ -70,6 +70,7 @@ export class NotesOwner implements OwnerAdapter {
       ref: this.store.notes.fileNote(file, {
         title: words(reading.title) || fallbackTitle(text, row.name),
         body: text || row.caption,
+        project: row.project,
       }),
     }
   }

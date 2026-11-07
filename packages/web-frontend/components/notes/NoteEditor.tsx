@@ -20,6 +20,7 @@ import {
   type NoteDetail,
   type NoteKind,
   type NotePatch,
+  notesHref,
 } from '@/lib/api/notes'
 import { formatAge } from '@/lib/attention'
 import { formatWhen } from '@/lib/capture-format'
@@ -36,6 +37,7 @@ import { NoteAttachments } from './NoteAttachments'
 import { NoteHistory } from './NoteHistory'
 import { type NoteActions, NoteItems } from './NoteItems'
 import { NoteReminder } from './NoteReminder'
+import { ProjectPicker } from './NoteScope'
 
 const MUTED = { color: 'var(--mist)' } as const
 
@@ -188,6 +190,8 @@ function Editor({
   stale,
   ensure,
   onDraftKind,
+  onDraftProject,
+  listHref,
 }: {
   /** null: a New note, made on its first change. */
   id: string | null
@@ -195,6 +199,9 @@ function Editor({
   stale: string | null
   ensure?: EnsureNote
   onDraftKind?: (kind: NoteKind) => void
+  onDraftProject?: (project: string | null) => void
+  /** Where Back and a deleted note go: the list, in the scope this note was opened from. */
+  listHref: string
 }) {
   const router = useRouter()
   const actions = useNoteActions(id, ensure)
@@ -263,6 +270,13 @@ function Editor({
     // A New note's kind is only a choice until something is in it.
     if (draft && onDraftKind && patch.kind && Object.keys(patch).length === 1)
       return onDraftKind(patch.kind)
+    if (
+      draft &&
+      onDraftProject &&
+      'project' in patch &&
+      Object.keys(patch).length === 1
+    )
+      return onDraftProject(patch.project ?? null)
     void actions
       .save(patch)
       .catch((failure) =>
@@ -420,6 +434,11 @@ function Editor({
         ))}
       </div>
 
+      <ProjectPicker
+        project={note.project}
+        onChange={(project) => change({ project })}
+      />
+
       <Labels note={note} actions={actions} onError={setError} />
 
       <NoteReminder
@@ -490,7 +509,7 @@ function Editor({
           remove.mutate(note.id, {
             onSuccess: () => {
               handOffNote(note.id) // deleted already: leaving needs no blank delete
-              router.replace('/notes')
+              router.replace(listHref)
             },
           })
         }
@@ -500,9 +519,10 @@ function Editor({
 }
 
 /** A note screen with nothing saved yet: what the editor shows for a New note. */
-const blankNote = (kind: NoteKind): NoteDetail => ({
+const blankNote = (kind: NoteKind, project: string | null): NoteDetail => ({
   id: '',
   kind,
+  project,
   title: '',
   pinned: false,
   archived: false,
@@ -526,10 +546,16 @@ const blankNote = (kind: NoteKind): NoteDetail => ({
 export function NoteEditor({
   id: given,
   kind: newKind = 'note',
+  project: newProject = null,
+  listHref = notesHref(),
   onMade,
 }: {
   id: string | null
   kind?: NoteKind
+  /** A New note starts in this project (the one Notes was opened for); the owner can change it. */
+  project?: string | null
+  /** The list Back returns to, keeping the scope it was opened in. */
+  listHref?: string
   /** The New note was made: its link can become the note's. */
   onMade?: (id: string) => void
 }) {
@@ -540,6 +566,9 @@ export function NoteEditor({
   const making = useRef<Promise<string> | null>(null)
   const kindNow = useRef(kind)
   kindNow.current = kind
+  const [project, setProject] = useState<string | null>(newProject)
+  const projectNow = useRef(project)
+  projectNow.current = project
   const onMadeNow = useRef(onMade)
   onMadeNow.current = onMade
   const shown = useRef(true)
@@ -553,20 +582,22 @@ export function NoteEditor({
   const ensure: EnsureNote = async (seed = {}) => {
     if (making.current) return { id: await making.current, seeded: false }
     const key = draftSerial
-    making.current = createNote({ ...seed, kind: kindNow.current }).then(
-      (note) => {
-        client.setQueryData([...NOTES_KEY, 'one', note.id], note)
-        void client.invalidateQueries({ queryKey: [...NOTES_KEY, 'list'] })
-        madeFromDraft.set(note.id, `new-${key}`)
-        draftSerial = key + 1
-        // Left already (Back while the first words were saving): stay gone.
-        if (shown.current) {
-          setMade(note.id)
-          onMadeNow.current?.(note.id)
-        }
-        return note.id
-      },
-    )
+    making.current = createNote({
+      ...seed,
+      kind: kindNow.current,
+      ...(projectNow.current ? { project: projectNow.current } : {}),
+    }).then((note) => {
+      client.setQueryData([...NOTES_KEY, 'one', note.id], note)
+      void client.invalidateQueries({ queryKey: [...NOTES_KEY, 'list'] })
+      madeFromDraft.set(note.id, `new-${key}`)
+      draftSerial = key + 1
+      // Left already (Back while the first words were saving): stay gone.
+      if (shown.current) {
+        setMade(note.id)
+        onMadeNow.current?.(note.id)
+      }
+      return note.id
+    })
     making.current.catch(() => {
       making.current = null
     })
@@ -578,10 +609,12 @@ export function NoteEditor({
     return (
       <Editor
         id={null}
-        note={blankNote(kind)}
+        note={blankNote(kind, project)}
         stale={null}
         ensure={ensure}
         onDraftKind={setKind}
+        onDraftProject={setProject}
+        listHref={listHref}
       />
     )
   if (view.isLoading)
@@ -600,7 +633,7 @@ export function NoteEditor({
       >
         That note is gone. It may have been deleted.{' '}
         <Link
-          href="/notes"
+          href={listHref}
           className="underline underline-offset-2"
           style={{ color: 'var(--lantern)' }}
         >
@@ -630,6 +663,7 @@ export function NoteEditor({
   return (
     <Editor
       id={id}
+      listHref={listHref}
       note={view.note}
       stale={
         view.isStale

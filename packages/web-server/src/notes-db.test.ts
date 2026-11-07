@@ -77,7 +77,8 @@ describe('NotesStore', () => {
     raw.exec(
       `DROP TABLE notes_fts; DROP TABLE notes; DROP TABLE note_items; DROP TABLE note_labels;
        DROP TABLE attachments; DROP TABLE note_revisions;
-       DROP INDEX captures_route; ALTER TABLE captures DROP COLUMN prev_origin;
+       DROP INDEX captures_route; ALTER TABLE captures DROP COLUMN project;
+       ALTER TABLE captures DROP COLUMN prev_origin;
        ALTER TABLE captures DROP COLUMN owner;
        ALTER TABLE captures DROP COLUMN owner_ref; ALTER TABLE captures DROP COLUMN route_state;
        ALTER TABLE captures DROP COLUMN route_note;
@@ -105,9 +106,8 @@ describe('NotesStore', () => {
     raw.exec(
       `${['captures', 'notes', 'note_items', 'note_labels', 'attachments', 'note_revisions']
         .map((table) => `ALTER TABLE ${table} DROP COLUMN prev_origin;`)
-        .join(
-          ' ',
-        )} DROP INDEX notes_remind; ALTER TABLE notes DROP COLUMN remind_at; ALTER TABLE notes DROP COLUMN reminded_at; UPDATE meta SET value = '4' WHERE key = 'schema_version'`,
+        .join(' ')} DROP INDEX notes_project; ALTER TABLE notes DROP COLUMN project;
+       ALTER TABLE captures DROP COLUMN project; DROP INDEX notes_remind; ALTER TABLE notes DROP COLUMN remind_at; ALTER TABLE notes DROP COLUMN reminded_at; UPDATE meta SET value = '4' WHERE key = 'schema_version'`,
     )
     raw.close()
     const store = open(path)
@@ -125,7 +125,9 @@ describe('NotesStore', () => {
     first.close()
     const raw = new DatabaseSync(path)
     raw.exec(
-      `DROP INDEX notes_remind; ALTER TABLE notes DROP COLUMN remind_at;
+      `DROP INDEX notes_project; ALTER TABLE notes DROP COLUMN project;
+       ALTER TABLE captures DROP COLUMN project; DROP INDEX notes_remind;
+       ALTER TABLE notes DROP COLUMN remind_at;
        ALTER TABLE notes DROP COLUMN reminded_at; UPDATE meta SET value = '5' WHERE key = 'schema_version'`,
     )
     raw.close()
@@ -138,6 +140,32 @@ describe('NotesStore', () => {
     })
     store.notes.update(note.id, { remindAt: wall })
     expect(store.notes.getNote(note.id)?.remind_at).toBe(wall)
+    store.close()
+  })
+
+  it('migrates a schema 6 file by adding the project columns: old notes stay global', () => {
+    const path = join(dir, 'notes.db')
+    const first = open(path)
+    const note = first.notes.create({ title: 'Old', project: 'aico' })
+    const { capture: kept } = first.insertCapture(capture('eeeeeeee', { project: 'aico' }))
+    first.close()
+    const raw = new DatabaseSync(path)
+    raw.exec(
+      `DROP INDEX notes_project; ALTER TABLE notes DROP COLUMN project;
+       ALTER TABLE captures DROP COLUMN project; UPDATE meta SET value = '6' WHERE key = 'schema_version'`,
+    )
+    raw.close()
+    const store = open(path)
+    expect(store.meta('schema_version')).toBe(String(SCHEMA_VERSION))
+    expect(store.notes.getNote(note.id)).toMatchObject({ title: 'Old', project: null })
+    expect(store.getCapture(kept.id)).toMatchObject({ client_id: 'eeeeeeee', project: null })
+    expect(store.notes.list({ project: 'aico' }).total).toBe(0)
+    expect(store.notes.list().total).toBe(1)
+    const index = new DatabaseSync(path)
+    expect(
+      index.prepare("SELECT name FROM sqlite_master WHERE name = 'notes_project'").get(),
+    ).toBeDefined()
+    index.close()
     store.close()
   })
 

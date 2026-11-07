@@ -13,6 +13,7 @@ import {
   uploadThumb,
 } from './api/captures'
 import { makeThumbnail } from './capture-thumb'
+import { shownProject } from './frame/shown-project'
 
 export type ItemState = 'queued' | 'sending' | 'sent' | 'failed'
 
@@ -24,6 +25,8 @@ export interface QueueItem {
   progress: number
   error: string | null
   capture: Capture | null
+  /** The project it was taken in (the session on screen when it was added), or null. */
+  project: string | null
 }
 
 export interface QueueSnapshot {
@@ -50,6 +53,15 @@ export function setCaptureLimits(next: Limits | null) {
 }
 
 const newId = () => crypto.randomUUID()
+
+/** A page that is not a session but has a project of its own (Notes opened for one) says so here. */
+let pageProject: string | null = null
+export function setCapturePage(project: string | null) {
+  pageProject = project
+}
+
+/** What a file added now belongs to: the page's project, else the session on screen's. */
+const captureProject = () => pageProject ?? shownProject()
 
 const megabytes = (bytes: number) =>
   Math.round((bytes / (1024 * 1024)) * 10) / 10
@@ -108,6 +120,7 @@ function createQueue(options: { askId?: string } = {}): CaptureQueue {
         // An ask's files are counted against the ask, not a batch.
         groupId: options.askId ? undefined : groupId,
         askId: options.askId,
+        project: item.project ?? undefined,
         caption: snapshot.caption.trim() || undefined,
         onProgress: (progress) => patchItem(key, { progress }),
         signal: abort.signal,
@@ -201,6 +214,8 @@ function createQueue(options: { askId?: string } = {}): CaptureQueue {
             ? `That file is over ${megabytes(limits?.max_bytes ?? 0)} MB`
             : null,
           capture: null,
+          // An ask's files belong to the ask, not to a project.
+          project: options.askId ? null : captureProject(),
         })
       }
       let notice: string | null = null

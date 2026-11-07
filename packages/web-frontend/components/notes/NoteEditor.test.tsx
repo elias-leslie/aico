@@ -11,6 +11,7 @@ const note = (over: Partial<NoteDetail> = {}): NoteDetail => ({
   pinned: false,
   archived: false,
   source: null,
+  project: null,
   createdAt: 0,
   editedAt: 0,
   updatedAt: 0,
@@ -62,6 +63,16 @@ vi.mock('@/lib/api/notes', async (importOriginal) => ({
   // The note just made is re-read from the server: it has what was saved.
   fetchNote: vi.fn(() => new Promise(() => {})),
 }))
+vi.mock('@/lib/hooks/use-note-projects', () => ({
+  useNoteProjects: () => ({
+    projects: [
+      { id: 'portfolio-ai', name: 'Portfolio' },
+      { id: 'aico', name: 'Aico' },
+    ],
+    loaded: true,
+    nameOf: (id: string) => (id === 'portfolio-ai' ? 'Portfolio' : id),
+  }),
+}))
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }))
@@ -70,13 +81,13 @@ vi.mock('@/lib/hooks/use-captures', () => ({
   useCaptureLimits: () => ({ limits: null }),
 }))
 
-function renderNew(onMade = vi.fn()) {
+function renderNew(onMade = vi.fn(), project: string | null = null) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, refetchInterval: false } },
   })
   const view = render(
     <QueryClientProvider client={client}>
-      <NoteEditor id={null} kind="note" onMade={onMade} />
+      <NoteEditor id={null} kind="note" project={project} onMade={onMade} />
     </QueryClientProvider>,
   )
   return { ...view, onMade }
@@ -169,5 +180,44 @@ describe('New note', () => {
       }),
     )
     expect(isBlankNote(note({ remindAt: 5 }), empty)).toBe(false)
+  })
+
+  it('starts in the project Notes was opened for, which can be changed before anything is typed', async () => {
+    api.createNote.mockImplementation(async (input) =>
+      note({ id: 'f00dfeed0004', ...input }),
+    )
+    renderNew(vi.fn(), 'portfolio-ai')
+    const picker = screen.getByLabelText('Project') as HTMLSelectElement
+    expect(picker.value).toBe('portfolio-ai')
+    // Choosing a project is not content: nothing is made yet.
+    fireEvent.change(picker, { target: { value: 'aico' } })
+    expect(api.createNote).not.toHaveBeenCalled()
+    fireEvent.change(screen.getByLabelText('Title'), {
+      target: { value: 'Plan' },
+    })
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(api.createNote).toHaveBeenCalledWith({
+      kind: 'note',
+      title: 'Plan',
+      project: 'aico',
+    })
+  })
+
+  it('a note with no session behind it starts with no project', async () => {
+    api.createNote.mockImplementation(async (input) =>
+      note({ id: 'f00dfeed0005', ...input }),
+    )
+    renderNew()
+    expect((screen.getByLabelText('Project') as HTMLSelectElement).value).toBe(
+      '',
+    )
+    fireEvent.change(screen.getByLabelText('Title'), {
+      target: { value: 'Loose' },
+    })
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(api.createNote).toHaveBeenCalledWith({
+      kind: 'note',
+      title: 'Loose',
+    })
   })
 })

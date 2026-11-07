@@ -34,10 +34,17 @@ const POLL_MS = 10_000
 const retryOther = (count: number, error: unknown) =>
   !isPermanentRefusal(error) && count < 2
 
-export function useNotes(q: string, archived: boolean, reminders = false) {
+/** `project`: only that project's notes; undefined: every note. */
+export function useNotes(
+  q: string,
+  archived: boolean,
+  reminders = false,
+  project?: string,
+) {
   const query = useQuery({
-    queryKey: [...NOTES_KEY, 'list', q, archived, reminders],
-    queryFn: ({ signal }) => fetchNotes({ q, archived, reminders, signal }),
+    queryKey: [...NOTES_KEY, 'list', q, archived, reminders, project ?? null],
+    queryFn: ({ signal }) =>
+      fetchNotes({ q, archived, reminders, project, signal }),
     placeholderData: keepPreviousData,
     refetchInterval: POLL_MS,
     refetchOnWindowFocus: true,
@@ -52,10 +59,13 @@ export function useNotes(q: string, archived: boolean, reminders = false) {
 }
 
 /** Every label in use, for the filter chips; null until the first answer (or if it fails). */
-export function useNoteLabels(archived: boolean | 'all'): string[] | null {
+export function useNoteLabels(
+  archived: boolean | 'all',
+  project?: string,
+): string[] | null {
   const query = useQuery({
-    queryKey: [...NOTES_KEY, 'list', 'labels', archived],
-    queryFn: ({ signal }) => fetchNoteLabels(archived, signal),
+    queryKey: [...NOTES_KEY, 'list', 'labels', archived, project ?? null],
+    queryFn: ({ signal }) => fetchNoteLabels(archived, project, signal),
     placeholderData: keepPreviousData,
     refetchInterval: POLL_MS,
     refetchOnWindowFocus: true,

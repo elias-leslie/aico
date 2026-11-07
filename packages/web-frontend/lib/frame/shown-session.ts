@@ -8,6 +8,11 @@ export function publishShownSession(id: string | null) {
   shown = id
 }
 
+/** The id of the session on screen, or null: none open. */
+export function shownSession(): string | null {
+  return shown
+}
+
 /** Home with the session on screen: leaving a page comes back to it, not to
  * whatever home would pick on its own. */
 export function homeHref(): string {
