@@ -89,6 +89,23 @@ export function acceptedCheck(root: string, sha: string): Accepted | null {
   return fallback
 }
 
+/**
+ * Records a carried acceptance on `sha` itself, so the push step (which reads only the exact
+ * commit's record) agrees with the carry-forward rule. Never replaces a whole-tree record.
+ */
+export function recordCarried(root: string, sha: string, accepted: Accepted): void {
+  if (!accepted.carriedFrom || !whole(accepted.check)) return
+  if (whole(localCheck(root, sha))) return
+  const value: LocalCheck & { carried_from: string } = {
+    ...accepted.check,
+    sha,
+    tree: git(root, ['rev-parse', `${sha}^{tree}`]).trim(),
+    at: new Date().toISOString(),
+    carried_from: accepted.carriedFrom,
+  }
+  receiptStore(root).put(`publish-${sha}`, value)
+}
+
 /** Publishing can lose its proof without changing the outcome of a local check or commit. */
 export function noteLocalCheck(
   root: string,

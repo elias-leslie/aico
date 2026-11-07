@@ -15,7 +15,7 @@ import {
 } from '@aico/tasks'
 import policy from '../data/publish.json' with { type: 'json' }
 import { git, gitOk, repoRoot } from './git'
-import { acceptedCheck, type LocalCheck } from './local-check'
+import { acceptedCheck, type LocalCheck, recordCarried } from './local-check'
 import { webUrl } from './status'
 
 export type PublishProject = Pick<Project, 'id' | 'root_path' | 'agent_configs'> &
@@ -233,6 +233,7 @@ export async function publishRepos(
             if (result.reason === 'checked_main') {
               if (options.dryRun) result.state = 'ok'
               else {
+                if (accepted) recordCarried(root, sha, accepted)
                 const delivery = await (options.deliver ?? deliver)(
                   root,
                   sha,

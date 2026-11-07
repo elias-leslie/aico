@@ -319,6 +319,23 @@ it('acceptance carries over commits that change docs only, and says where it cam
   )
 })
 
+it('a carried acceptance is recorded on the commit before the push step reads it', async () => {
+  const root = repo()
+  accept1(root)
+  commitFile(root, 'ROADMAP.md', 'next')
+  const sha = git(root, 'rev-parse', 'HEAD')
+  expect(localCheck(root, sha)).toBeNull()
+  const deliver = vi.fn(async () => {
+    // The push step (git-outgoing) accepts only a passed record of this exact commit.
+    expect(localCheck(root, sha)).toMatchObject({ sha, passed: true, failed: [] })
+    expect(localCheck(root, sha)?.lane).not.toBe('quick')
+    return { publication_complete: true, pushed: true, reason: 'source_published' }
+  })
+  const row = (await publishRepos([project(root)], { deliver, post: async () => {} }))[0]
+  expect(deliver).toHaveBeenCalledOnce()
+  expect(row).toMatchObject({ state: 'ok', pushed: true, sha })
+})
+
 it('a code file anywhere in the chain leaves the commit unaccepted', async () => {
   const root = repo()
   accept1(root)
