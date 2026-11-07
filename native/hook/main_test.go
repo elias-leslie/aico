@@ -428,13 +428,13 @@ func TestCodexTrustDropsStaleSlots(t *testing.T) {
 	}
 }
 
-// The owner-question tools are refused in every tool's hook, for every session, with the one form to use instead.
+// The owner-question tools are refused in the Claude and Codex hooks, for every session, with the one form to use
+// instead. Pi has no such tool and its extension forwards only bash, connector and edit calls, so it is not listed.
 func TestOwnerQuestionToolsAreRefusedWithTheTetherAskForm(t *testing.T) {
 	sandbox(t)
 	for mode, tools := range map[string][]string{
 		"claude": {"AskUserQuestion"},
 		"codex":  {"request_user_input", "request_user_input_async"},
-		"pi":     {"AskUserQuestion"},
 	} {
 		for _, tool := range tools {
 			call := `{"hook_event_name":"PreToolUse","tool_name":"` + tool + `","tool_input":{"questions":[{"question":"A or B?"}]},"cwd":"/tmp"}`
