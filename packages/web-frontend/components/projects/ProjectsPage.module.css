@@ -58,7 +58,7 @@
 .row {
   position: relative;
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
+  grid-template-columns: 18px minmax(0, 1fr) auto auto;
   gap: 2px 10px;
   align-items: center;
   min-height: 64px;
@@ -110,7 +110,7 @@
 }
 
 .top {
-  grid-column: 2 / 4;
+  grid-column: 2 / 5;
   min-width: 0;
   overflow: hidden;
   font-size: 13px;
@@ -122,6 +122,8 @@
 .badges {
   position: relative;
   z-index: 1;
+  grid-row: 1;
+  grid-column: 3;
   display: flex;
   gap: 8px;
   align-items: center;
@@ -129,6 +131,10 @@
 }
 
 .age {
+  position: relative;
+  z-index: 1;
+  grid-row: 1;
+  grid-column: 4;
   width: 44px;
   color: var(--mist);
   font-size: 12px;
@@ -777,6 +783,15 @@
   .badge {
     height: 44px;
     padding: 0 10px;
+    white-space: nowrap;
+  }
+
+  /* Badges drop under the name so it keeps its room. */
+  .badges {
+    grid-row: 3;
+    grid-column: 2 / 5;
+    flex-wrap: wrap;
+    justify-content: flex-start;
   }
 
   .search,

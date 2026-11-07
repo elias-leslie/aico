@@ -2666,6 +2666,19 @@ a.lantern-ask-attached {
     align-items: center;
   }
 
+  .status-project {
+    min-width: 44px;
+    justify-content: center;
+  }
+
+  /* Page fields and disclosure rows (search boxes, selects, "When this prompt loads"). */
+  main
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"]),
+  main select,
+  main summary {
+    min-height: 44px;
+  }
+
   /* The text size steps in the session menu. */
   .lantern-menu-item .lantern-btn[aria-label$="text"] {
     width: 44px !important;

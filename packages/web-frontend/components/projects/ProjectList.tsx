@@ -44,26 +44,26 @@ function Row({
           {top}
         </span>
       </button>
-      <span className={styles.badges} style={{ gridRow: 1, gridColumn: 3 }}>
-        {project.problems.map((problem) => (
-          <ProblemBadge
-            key={problem.kind}
-            kind={problem.kind}
-            count={problem.count}
-            worst={problem.worst}
-            onClick={() => onPick(project.id, problem.kind)}
-          />
-        ))}
-        {project.agents > 0 && (
-          <AgentsBadge
-            count={project.agents}
-            onClick={() => onPick(project.id, 'agents')}
-          />
-        )}
-        <span className={styles.age}>
-          {shortAge(project.lastActivity, now)}
+      {(project.problems.length > 0 || project.agents > 0) && (
+        <span className={styles.badges}>
+          {project.problems.map((problem) => (
+            <ProblemBadge
+              key={problem.kind}
+              kind={problem.kind}
+              count={problem.count}
+              worst={problem.worst}
+              onClick={() => onPick(project.id, problem.kind)}
+            />
+          ))}
+          {project.agents > 0 && (
+            <AgentsBadge
+              count={project.agents}
+              onClick={() => onPick(project.id, 'agents')}
+            />
+          )}
         </span>
-      </span>
+      )}
+      <span className={styles.age}>{shortAge(project.lastActivity, now)}</span>
     </div>
   )
 }

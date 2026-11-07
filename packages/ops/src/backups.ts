@@ -708,8 +708,8 @@ export function listText(
   }
   const okCopies = live.length - problems.length - away.length
   const parts = [
-    `${tally.ok} ${tally.ok === 1 ? 'source' : 'sources'} current (${okCopies} ${okCopies === 1 ? 'copy' : 'copies'})`,
-    `${tally.bad} need a look`,
+    `${tally.bad ? '' : 'All '}${tally.ok} ${tally.ok === 1 ? 'source' : 'sources'} current (${okCopies} ${okCopies === 1 ? 'copy' : 'copies'})`,
+    tally.bad ? `${tally.bad} need a look` : '',
     tally.away ? `${tally.away} on a machine that is off` : '',
     tally.archived ? `${tally.archived} archived` : '',
   ].filter(Boolean)

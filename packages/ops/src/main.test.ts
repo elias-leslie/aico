@@ -79,7 +79,7 @@ it('lists backups for a person: problems, one line per target, archived sources 
     now,
   )
   expect(text.split('\n')[0]).toBe(
-    'Backups on ws: 1 source current (2 copies), 0 need a look, 1 on a machine that is off, 1 archived.',
+    'Backups on ws: All 1 source current (2 copies), 1 on a machine that is off, 1 archived.',
   )
   expect(text).toContain('On a machine that is off:')
   expect(text).toContain('Owner backups Jobs DB: no good copy date known')
