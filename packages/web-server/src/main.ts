@@ -27,6 +27,7 @@ import { CLI_COMMANDS, runCli } from './cli'
 import { HISTORY_LINES, loadConfig } from './config'
 import { registerContextRoutes } from './context'
 import { WebStore } from './db'
+import { registerDigestRoutes } from './digest'
 import { ExtractWorker } from './extract-worker'
 import { registerGrantRoutes } from './grants'
 import { registerLoginRoutes } from './logins'
@@ -169,6 +170,14 @@ function serve(): void {
     machine,
     publicHost: config.publicHost,
     tether,
+    status,
+    notifier: notify.notifier,
+  })
+  registerDigestRoutes(api, {
+    dataDir: config.dataDir,
+    publicHost: config.publicHost,
+    tether,
+    asks,
     status,
     notifier: notify.notifier,
   })
