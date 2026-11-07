@@ -11,7 +11,7 @@ import { getState, openUsage, plansPath, usageDbPath } from './db'
 import { loadFacts } from './facts'
 import { loadPlans } from './plans'
 import { usageReport } from './report'
-import { brief, count, type SpendInput, spendRows } from './spend'
+import { brief, type SpendInput, spendRows } from './spend'
 import type { ProjectRef } from './split'
 import { type Facts, micros } from './windows'
 
@@ -118,6 +118,24 @@ async function collectCommand(argv: string[], io: UsageCliIo): Promise<number> {
   }
 }
 
+/** 141,089,000 -> "141M": counts in a few characters. */
+const compact = (value: number): string =>
+  value >= 1e9
+    ? `${(value / 1e9).toFixed(1)}B`
+    : value >= 1e6
+      ? `${(value / 1e6).toFixed(value >= 1e7 ? 0 : 1)}M`
+      : value >= 1e4
+        ? `${(value / 1e3).toFixed(0)}K`
+        : value >= 1e3
+          ? `${(value / 1e3).toFixed(1)}K`
+          : String(Math.round(value))
+
+/** "62%", or "<1%" for a share that rounds to nothing. */
+const percent = (share: number): string => {
+  const value = Math.round(share * 100)
+  return value === 0 && share > 0 ? '<1%' : `${value}%`
+}
+
 /** The by-project lines of `aico usage show`: one block per provider, or why there is none. */
 export function projectLines(report: ReturnType<typeof usageReport>): string {
   if ('error' in report) return `By project: not available (${report.error})\n`
@@ -134,10 +152,10 @@ export function projectLines(report: ReturnType<typeof usageReport>): string {
       continue
     }
     const what = split.unit === 'credits' ? 'credits spent' : 'tokens'
-    out += `${provider.name} by project, last ${days} days (${count(split.total)} ${what}):\n`
+    out += `${provider.name} by project, last ${days} days (${compact(split.total)} ${what}):\n`
     const width = Math.max(...split.items.map((item) => item.name.length))
     for (const item of split.items)
-      out += `  ${item.name.padEnd(width)}  ${String(Math.round(item.share * 100)).padStart(3)}%  ${count(item.amount)}\n`
+      out += `  ${item.name.padEnd(width)}  ${percent(item.share).padStart(4)}  ${compact(item.amount)}\n`
   }
   return out
 }

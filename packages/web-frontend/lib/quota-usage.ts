@@ -22,7 +22,7 @@ export interface SpendDay {
 export interface ProjectShare {
   id: string | null
   name: string
-  kind: 'project' | 'other' | 'private' | 'unknown' | 'rest'
+  kind: 'project' | 'folder' | 'private' | 'unknown' | 'rest'
   amount: number
   /** 0..1 of the total. */
   share: number

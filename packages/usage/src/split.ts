@@ -1,7 +1,8 @@
 // Where a provider's recent usage came from, by project. The collectors file each day's use
 // under the project folder of the session's working directory (daily.project); here those
 // folders are matched to the project registry. Only providers whose sessions leave a working
-// directory in their logs (data/usage.json by_project) are split; the others say so.
+// directory in their logs (data/usage.json by_project) are split; the others say so. A folder
+// no registered project owns keeps its own name.
 
 import config from '../data/usage.json' with { type: 'json' }
 import type { Database } from './db'
@@ -13,10 +14,10 @@ export interface ProjectRef {
 }
 
 export interface ProjectShare {
-  /** The registry id for a project; null for the grouped rows. */
+  /** The registry id for a project, the folder name for one that is not (anymore) registered; null for the grouped rows. */
   id: string | null
   name: string
-  kind: 'project' | 'other' | 'private' | 'unknown' | 'rest'
+  kind: 'project' | 'folder' | 'private' | 'unknown' | 'rest'
   amount: number
   /** 0..1 of the total. */
   share: number
@@ -77,10 +78,8 @@ export function projectSplit(
     else if (key === 'unknown')
       add('unknown', () => ({ id: null, name: 'Unknown folder', kind: 'unknown' }), row.amount)
     else if (ref) add(key, () => ({ id: ref.id, name: ref.name, kind: 'project' }), row.amount)
-    else if (projects)
-      add('other', () => ({ id: null, name: 'Other folders', kind: 'other' }), row.amount)
-    // No registry to match against: the folder name stands for the project.
-    else add(key, () => ({ id: row.project, name: row.project, kind: 'project' }), row.amount)
+    // A folder no registered project owns (a retired project, a scratch folder) keeps its name.
+    else add(key, () => ({ id: row.project, name: row.project, kind: 'folder' }), row.amount)
   }
   const total = [...picked.values()].reduce((sum, item) => sum + item.amount, 0)
   const sorted = [...picked.values()]

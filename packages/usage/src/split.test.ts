@@ -38,7 +38,7 @@ describe('usage by project', () => {
     expect(split.items.map((i) => [i.name, i.kind, i.amount])).toEqual([
       ['Aico', 'project', 900],
       ['Vault', 'project', 100],
-      ['Other folders', 'other', 60],
+      ['scratch-thing', 'folder', 60],
       ['Private work', 'private', 50],
     ])
     expect(split.items[0]?.share).toBeCloseTo(900 / 1110)
