@@ -151,6 +151,7 @@ export function createLifecycle(deps: LifecycleDeps) {
     workingDir: string | null
     name?: string | null
     host?: string | null
+    continueFrom?: string | null
   }): Promise<WebSession> {
     const descriptor = await tetherCall(() =>
       createSession(tether, {
@@ -160,6 +161,7 @@ export function createLifecycle(deps: LifecycleDeps) {
         name: input.name,
         size,
         host: input.host,
+        continueFrom: input.continueFrom,
       }),
     )
     const link = store.link(descriptor.id, input.paneId, descriptor.tool || input.mode)
@@ -209,6 +211,8 @@ export function createLifecycle(deps: LifecycleDeps) {
     host?: string | null
     /** The owner's name for the session that opens (the agent, else the shell). */
     sessionName?: string | null
+    /** The agent starts from a recap of this session (another tool's). */
+    continueFrom?: string | null
   }): Promise<PaneView> {
     const { paneType, paneName, projectId, workingDir } = input
     const modes = [SHELL_MODE]
@@ -234,6 +238,7 @@ export function createLifecycle(deps: LifecycleDeps) {
               (index === modes.length - 1 ? input.sessionName?.trim() : null) ||
               (projectId ? null : paneName),
             host: input.host,
+            continueFrom: index === modes.length - 1 ? input.continueFrom : null,
           }),
         )
     } catch (error) {

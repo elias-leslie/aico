@@ -111,6 +111,10 @@ export function buildApi(deps: ApiDeps): Router {
     const toolRef = optionalString(body, 'agent_tool_slug', { max: 100, pattern: SLUG })
     const host = optionalString(body, 'host', { max: 64, pattern: HOST_NAME }) || null
     const sessionName = optionalString(body, 'session_name', { max: MAX_SESSION_NAME }) || null
+    const continueFrom =
+      optionalString(body, 'continue_from', { max: 8, pattern: SESSION_ID }) || null
+    if (continueFrom && (paneType !== 'project' || !toolRef || toolRef === SHELL_MODE || host))
+      throw new HttpError(400, 'continue_from needs a project tab, an agent tool and this computer')
     if (paneType === 'project' && !projectId)
       throw new HttpError(400, 'project_id required for project panes')
     if (paneType === 'adhoc' && projectId)
@@ -126,6 +130,7 @@ export function buildApi(deps: ApiDeps): Router {
       agentMode,
       host,
       sessionName,
+      continueFrom,
     })
     const { pane: view, order } = await paneById(created.id, false)
     return paneResponse(view, order)

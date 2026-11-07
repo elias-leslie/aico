@@ -506,6 +506,46 @@ describe('panes', () => {
     expect(creates[1]).toMatchObject({ tool: 'claude', name: 'Fix login' })
   })
 
+  it('asks Tether to carry on from another session in the new agent only', async () => {
+    const { status } = await call('POST', '/api/panes', {
+      pane_type: 'project',
+      pane_name: 'Aico',
+      project_id: 'aico',
+      working_dir: '/srv/workspaces/projects/aico/',
+      agent_tool_slug: 'cc',
+      continue_from: 'a1b2c3d4',
+    })
+    expect(status).toBe(200)
+    const creates = tether
+      .callsOf('request')
+      .filter(([method, path]) => method === 'POST' && path === '/v1/sessions')
+      .map(([, , input]) => input as { tool: string; continueFrom?: string })
+    expect(creates[0]).toMatchObject({ tool: 'shell' })
+    expect(creates[0].continueFrom).toBeUndefined()
+    expect(creates[1]).toMatchObject({ tool: 'claude', continueFrom: 'a1b2c3d4' })
+  })
+
+  it('refuses continue_from that is not a session id or has no agent to start', async () => {
+    const base = { pane_type: 'project', pane_name: 'Aico', project_id: 'aico' }
+    expect(
+      (await call('POST', '/api/panes', { ...base, agent_tool_slug: 'cc', continue_from: 'nope' }))
+        .status,
+    ).toBe(422)
+    expect(
+      (
+        await call('POST', '/api/panes', {
+          ...base,
+          agent_tool_slug: 'shell',
+          continue_from: 'a1b2c3d4',
+        })
+      ).status,
+    ).toBe(400)
+    expect((await call('POST', '/api/panes', { ...base, continue_from: 'a1b2c3d4' })).status).toBe(
+      400,
+    )
+    expect(tether.sessions.size).toBe(0)
+  })
+
   it('ends what it created and drops the tab when Tether refuses a session', async () => {
     tether.failTool = 'claude'
     const { status } = await call('POST', '/api/panes', {

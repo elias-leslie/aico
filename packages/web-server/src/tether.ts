@@ -34,9 +34,12 @@ export function createSession(
     size: { cols: number; rows: number }
     /** A remote host from Tether's hosts; omitted for this computer. */
     host?: string | null
+    /** Carry on from this session in `tool`, starting from a recap of it (Tether builds it). */
+    continueFrom?: string | null
   },
 ): Promise<SessionDescriptor> {
   const body: Record<string, unknown> = { origin: WEB_ORIGIN, tool: input.tool, size: input.size }
+  if (input.continueFrom) body.continueFrom = input.continueFrom
   if (input.host) body.host = input.host
   if (input.projectId) body.projectId = input.projectId
   if (input.projectRoot) body.projectRoot = input.projectRoot

@@ -39,6 +39,8 @@ interface CreatePaneRequest {
   host?: string
   /** The owner's name for the session that opens; absent: the project's. */
   session_name?: string
+  /** Start the agent from a recap of this session (another tool's). */
+  continue_from?: string
 }
 
 interface UpdatePaneRequest {
@@ -50,6 +52,7 @@ interface PanePlacementOptions {
   detached?: boolean
   host?: string
   sessionName?: string
+  continueFrom?: string
 }
 
 const api = {
@@ -315,6 +318,7 @@ export function useTerminalPanes() {
         detached: options?.detached,
         host: options?.host,
         session_name: options?.sessionName,
+        continue_from: options?.continueFrom,
       }),
     [createMutation],
   )

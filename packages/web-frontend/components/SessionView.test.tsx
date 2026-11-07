@@ -146,6 +146,7 @@ vi.mock('@/components/files/FilesDialog', () => ({
 }))
 
 vi.mock('./KeptCheckIns', () => ({ KeptCheckIns: () => null }))
+vi.mock('./ContinueNotice', () => ({ ContinueNotice: () => null }))
 vi.mock('@/lib/hooks/use-agent-tools', () => ({
   useAgentTools: () => ({ agentTools: [] }),
 }))

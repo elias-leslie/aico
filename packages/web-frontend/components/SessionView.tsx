@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { ContinueNotice } from '@/components/ContinueNotice'
 import { ChatSession } from '@/components/chat/ChatSession'
 import { EmptySessionState } from '@/components/EmptySessionState'
 import { FilesDialog } from '@/components/files/FilesDialog'
@@ -308,6 +309,8 @@ export function SessionView({
             change={slot.modelSwitch}
           />
         )}
+
+        {slot && !signInTool && <ContinueNotice slot={slot} />}
 
         {signInTool && sessionId && (
           <SignInLink sessionId={sessionId} tool={signInTool} />
