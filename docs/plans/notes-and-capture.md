@@ -1,6 +1,6 @@
 # Notes and capture in Aico, with two equal front doors
 
-Status: design, nothing built. Written 2026-11-02 from the owner decisions in `summitflow/docs/plans/codebase-cleanup/plan.md` ("Decisions log", "Notes in Aico", "Notes store: works with either host down", "Hosts", "Phone Aico when either host is down", "Remote agent work"). Those are settled and not reopened here. Same rule as [ADR 0001](../adr/0001-tether-owns-sessions.md): Tether owns sessions, apps own data and views. So notes and captures live in `aico-web`, not Tether.
+Status: built and running on both hosts (milestones 1 to 9 shipped 2026-11-02; see "as shipped" below, and the 2026-11-07 check in [audit-notes-remote-hosts-2026-11-07.md](audit-notes-remote-hosts-2026-11-07.md)). The design text below is kept as written on 2026-11-02, so where the build differs, the "as shipped" and "Review fixes" sections win. Written from the owner decisions in `summitflow/docs/plans/codebase-cleanup/plan.md` ("Decisions log", "Notes in Aico", "Notes store: works with either host down", "Hosts", "Phone Aico when either host is down", "Remote agent work"). Those are settled and not reopened here. Same rule as [ADR 0001](../adr/0001-tether-owns-sessions.md): Tether owns sessions, apps own data and views. So notes and captures live in `aico-web`, not Tether.
 
 ## What you get
 
@@ -390,11 +390,11 @@ Row-level, two-way. No CRDT library, no database replication. A generic engine i
 
 ### Conflict rule (per row)
 
-For a remote row R and the local row L with the same key:
+For a remote row R and the local row L with the same key (as built; the first version of this rule compared `R.prev` with `L.updated_at` and gave false conflicts, replaced in the 5a review fixes below):
 1. Same `updated_at` and `origin`: identical, skip.
-2. `R.prev == L.updated_at`: R was made on top of L. Take R.
-3. `L.prev == R.updated_at`: we are already past R. Skip.
-4. Otherwise both sides edited from a common ancestor while apart. The newest (`updated_at`, then `origin`) wins the whole row. If text fields differ, the loser's text is saved as a `note_revisions` row with `reason='conflict'`. Nothing is silently lost.
+2. R descends from L: take R. Rows from one host are one history, so the later one descends from the earlier. Across hosts, R descends from L when R's `prev_origin` is L's `origin` and R's `prev` (the newest version by another host that R was built on) is at or after L's `updated_at`.
+3. L descends from R by the same test: we are already past R. Skip.
+4. Otherwise both sides edited while apart. The newest (`updated_at`, then `origin`) wins the whole row. The host whose own edit loses saves its text as a `note_revisions` row with `reason='conflict'`; the revision id comes from the losing version, so both hosts make the same row and a replay adds none. Nothing is silently lost.
 - Adds never collide (random ids). A delete is a row with `deleted=1` and wins by the same rule. If an edit is newer than the delete, the note comes back and the deleted text is kept as a revision.
 - `session_seen` merges by `max(seen_at)`, no tombstones.
 - Tombstones are kept 180 days (config), then removed once both cursors are past them.

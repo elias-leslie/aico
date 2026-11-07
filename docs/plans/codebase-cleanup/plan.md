@@ -6,6 +6,8 @@ Neri rule: line counts are fine. Never review case or hunter details.
 
 Status: **Decided** = the owner said do it. **Proposed** = recommended and checked, awaiting a go-ahead. **Owner call** = needs your judgment. **Exploring** = still being designed.
 
+Checked against the running system on 2026-11-07: see [audit-2026-11-07.md](audit-2026-11-07.md) (what is done, built differently, missing, or superseded). Lines below keep what was decided at the time; where a later decision or the build replaced one, it carries a "Superseded" or "Built differently" note with the audit row.
+
 ## Decisions log
 - 2026-11-02 **Cut `st claude` and the Agent Hub Claude worker.** Agents ran `st claude task` once in 120 days: on 2026-10-09, to test it after the restore. Every other mention was a `--help` read or text inside another command. Native subagents and Aico sessions do this work now.
 - 2026-11-02 **Notes stay, rebuilt properly in Aico.** "Just because I haven't used it doesn't mean I don't need it." Google Keep is your current notes app. See the notes section below. The SummitFlow and agent-hub notes code goes away once Aico notes exist and the 36 existing notes are moved over.
@@ -13,10 +15,10 @@ Status: **Decided** = the owner said do it. **Proposed** = recommended and check
 - 2026-11-02 **Wife's shared grocery list: deferred.** "We can add that later if I want." If it comes back: her Google account through Cloudflare Access on an existing hostname, with no new subdomain.
 - 2026-11-02 **Photo text may call Gemini directly.** If the bake-off shows Gemini is best, extraction runs the `agy` subscription CLI on whichever host is up, and Agent Hub becomes an optional route for this one module.
 - 2026-11-02 **VMs:** agents may start any VM they need (e.g. VM 180 to check the portfolio-ai and jobinator leftovers) and stop it again when done. Only VMs they started get stopped.
-- 2026-11-02 **Kept as is:** the Nightshift native tray and inbox panel (you moved off the website on 10-30, so T4 is withdrawn), the ledger and the drill, the aico lifecycle harness and real-session smoke scripts, and the Neri warp and oracle exits.
+- 2026-11-02 **Kept as is:** the Nightshift native tray and inbox panel (you moved off the website on 10-30, so T4 is withdrawn), the ledger and the drill, the aico lifecycle harness and real-session smoke scripts, and the Neri warp and oracle exits. *(Superseded 2026-11-06 for the ledger and the drill: the ledger is dropped and the drill runs on demand; see "Settled consolidation choices" and audit A7b.)*
 - 2026-11-02 **Wake-on-LAN changes need your OK first.** That covers the Wake button, the wake commands in hosts.json and any router or BIOS changes. Run each by you before building it. Testing the existing WoL (shut down, wake, time it) is fine without asking.
 - 2026-11-02 **Router cloudflared: no.** There isn't enough flash for it, firmware upgrades wipe it, and gem already runs its own connector (tunnel `9483e71c`, serving `pve.summitflow.dev`).
-- 2026-11-02 **gem's Aico container may SSH into the Proxmox host**, only for a phone rescue shell and alerts while the workstation is off. That means one restricted key and the container's address in the `management` ipset, done when CT 190 is built.
+- 2026-11-02 **gem's Aico container may SSH into the Proxmox host**, only for a phone rescue shell and alerts while the workstation is off. That means one restricted key and the container's address in the `management` ipset, done when CT 190 is built. *(Built differently, audit A10: two forced-command keys, `aico-push` and `aico-ct190-power`; CT 190's address is allowed on port 22 by two `host.fw` rules and the `management` ipset still holds only the workstation; there is no phone rescue shell over the key, audit H11.)*
 - 2026-11-02 **Nightly notes export uses its own Drive token**, limited to its `SummitFlow-Notes` folder (`drive.file`). You sign in once when the export is built; the backup's token never goes to gem.
 - 2026-11-02 **Wake workstation button: not now.** You said "hold off on this for now and revisit it at a later date if i want". Nothing gets built; `wake-ws` on gem stays the manual route.
 - 2026-11-02 **Phone Photos multi-select works** (you tested it on your phone).
@@ -117,7 +119,7 @@ Proposed ownership (to discuss):
       - **Winner: agy Flash.** `vision-extract` calls it directly. Local qwen3-vl stays as the fallback, and anything it reads is flagged for a look.
       - Skipped the `gemini-3.8-flash` API run. It's the same model family as the subscription, and the free-tier API may use personal photos.
       - For Milestone 2: keep the writer's text (`see weeds`, `pamagrants`) and add a cleaned-up item (`seaweed`, `pomegranates`) for search and checklists. Strike-through is a hint you can fix; the photo stays attached.
-- **Nightshift Web Push:** delivers reminders, since it is the only owner-alert channel.
+- **Nightshift Web Push:** delivers reminders, since it is the only owner-alert channel. *(Superseded 2026-11-03: alerts go only through the Aico phone app (FCM); Web Push is retired. Audit C14. Reminders on notes were never built, audit C13.)*
 - **Backups:** the Aico notes database and photos join the existing registered Google Drive backup. No separate Drive sync.
 
 Proposed shape:
@@ -143,7 +145,7 @@ You asked whether a standard exists, so Aico isn't held together with per-tool h
 - **That costs a lot of code.** T3 Code's Claude adapter is 11.7k lines, Codex is 8k plus 60k of generated app-server protocol, and its ACP packages are about 38k.
 - **T3 Code doesn't use ACP for Claude or Codex either.** It uses the Claude Agent SDK and `codex app-server`. ACP is its route for tools without a native interface (Antigravity, Grok, Cursor and others), behind one `ProviderAdapter` contract (start, steer, interrupt, resume, events).
 - **Our mess is where the per-tool code lives.** Per-tool knowledge is spread over about 8 Tether files (`agent-state.ts` alone has 27 per-tool branches, plus `tools.ts`, `model-switch.ts`, `lifecycle/tui/context.ts`, `root-control.ts`, `continuity.ts`), SummitFlow `scripts/lib/coord_inbox.py` (547 lines) and `tether/integrations/pi/aico-due.ts`. Each tool's own extension points (Claude and Codex hooks, the Pi extension) are the supported way to work with a live TUI; they're just not organized.
-- **Decision:** keep the real TUIs, and borrow T3 Code's shape instead of its protocol. Each tool gets one adapter module under `tether/src/lifecycle/tui/` (the registry already exists), all implementing one contract: launch, busy or idle, deliver now, deliver at the next turn, install context and hooks, resume, model switch. One conformance suite runs every adapter through the same checks: unit tests, plus a short live smoke per tool. Adding a tool means one file plus passing the suite. Headless runs (Agent Hub) keep using `stream-json` and `codex app-server`.
+- **Decision:** keep the real TUIs, and borrow T3 Code's shape instead of its protocol. Each tool gets one adapter module under `tether/src/lifecycle/tui/` (the registry already exists), all implementing one contract: launch, busy or idle, deliver now, deliver at the next turn, install context and hooks, resume, model switch. One conformance suite runs every adapter through the same checks: unit tests, plus a short live smoke per tool. Adding a tool means one file plus passing the suite. Headless runs (Agent Hub) keep using `stream-json` and `codex app-server`. *(Superseded: Agent Hub is retired, audit D2.)*
 - **Not doing:** an ACP or SDK chat UI in Aico. Revisit only if you want a phone-first chat for headless sessions.
 - **Status:** starts after the delivery fix for all tools (running now) lands, since it touches the same code. Medium-large.
 
@@ -217,7 +219,7 @@ Once this plan is done, look into:
      - Each repo has a home machine. Another machine takes it over only while the home is down.
      - Synced repos: a pinned list plus any repo with commits in the last 14 days. Code only, and never Neri case or hunter data.
    - **Sessions** stay on the machine where they started. Resume elsewhere only where that turns out to be cheap.
-   - **No auto-wake for now.**
+   - **No auto-wake for now.** *(Superseded in part, audit F20: a hunt-pool session now starts VM 201 by itself. Everything else is still manual.)*
    - **Stack:**
      - **TypeScript on Node** for Aico (server, link, sync, jobs, CLI, worker).
      - **SQLite per machine,** no Postgres. The Postgres, Redis and Hatchet stack retires with the consolidation.
@@ -279,7 +281,7 @@ Every pick matches the recommendation unless noted. Anything not listed below mo
 - **`st` stays** as the CLI. These surfaces fold into Aico: web, elevate, vm, sessions, lease, pulse, memory, prompt and mandates. These stay separate: browser, ui, neri, jobs, portfolio, bugout, ominull, uilint and wiki. Dropped: learn (done), design, graph and show. A tiny `st monitor` stays, reading `/proc`.
 - **Hooks:** guard, lease and coordination go into the Go `aico-hook`.
 - **Commit and done:** both run locally. GitHub work runs nightly and never blocks. The three Actions workflows and the acceptance ceremony are deleted; at most one code-scanning job stays.
-- **Tasks:** about 13 are carried by hand and the rest are closed. Tasks and sessions link many-to-many.
+- **Tasks:** about 13 are carried by hand and the rest are closed. Tasks and sessions link many-to-many. *(Superseded 2026-11-06, memory d6ee990c: tasks are gone. `st claim`, `st done`, `st create` and `st context` answer "dropped"; each project keeps a ROADMAP.md at its repo root. Audit G-SF4.)*
 - **Mockups:** HTML files, added with `st mockup add <file> --project --title`. One page per project, with a note and a "Use this one" button that answers the asking session.
 - **Snapshots:** btrfs snapshots and btrbk stay on the workstation only. They give instant undo for uncommitted work, and btrbk is config, not our code. Every other machine uses restic. Each machine's Aico SQLite goes hourly to CT 160 (append-only) and daily to Drive. Replicas don't count as backups.
 - **Code intelligence** (sf-37): waits on its check.
@@ -294,7 +296,7 @@ Owner decisions (2026-11-02):
 - Notes must keep working with either host down (updated 2026-11-02; see "Notes store"). The offline phone queue and the Drive Inbox stay dropped, and the Drive backup stays.
 - You switch servers and services on and off yourself. Build no automatic power management and no auto-start.
 - davion-sidarli costs more to run, so whatever must be available all the time belongs on davion-gem.
-- portfolio-ai and jobinator-4000 already moved to gem, in VM 180 `apps`. It is off by your choice.
+- portfolio-ai and jobinator-4000 already moved to gem: portfolio-ai in VM 180 `apps`, jobinator in its own container, CT 191 (corrected 2026-11-07, audit H2). Both are off by your choice.
 
 Measured 2026-11-02:
 | | davion-sidarli | davion-gem |
@@ -311,7 +313,7 @@ Other facts:
 
 Proposed split:
 - **Always-on, on gem:**
-  - VM 180 with portfolio-ai (receipts, and vehicles next) and jobinator.
+  - VM 180 with portfolio-ai (receipts, and vehicles next), and CT 191 with jobinator (it is its own container, not in VM 180).
   - Aico's front door: aico-web plus a gem Tether that holds notes (synced with the workstation's copy) and capture, and links to the workstation's Tether when it is up. When the workstation is off, its terminals show as offline.
   - Security and backups: ominull-hub, opencanary, restic-append, and Nightshift's off-host watchdog and push.
   - The cloudflared connector for those hostnames.
@@ -376,6 +378,7 @@ Adding the gem Aico front door gives the phone:
   - **Worth adding:** VM 200 pulls fresh checkouts from GitHub, read-only. The Nightshift "workstation silent" push links to the Aico rescue session.
 
 ### Leftovers from moving portfolio-ai and jobinator to VM 180 (done 2026-11-02)
+*(Jobinator is CT 191, not VM 180, as of the 2026-11-07 audit; the leftovers below are as found at the time.)*
 - **VM 180 has its own tunnel** (`cdd3c8b5`, remote-managed, token on the VM), so `port.` and `jobs.` never went through the workstation's tunnel `2757c3c8`. The workstation rules were stale, not live 502s.
 - **Removed on the workstation:**
   - the `port.` and `jobs.` ingress from `/etc/cloudflared/config.yml` and the matching Caddy vhosts. Backups are `*.bak.20261102T165118Z`, both services were reloaded, and the other hostnames still answer.
@@ -390,6 +393,8 @@ Adding the gem Aico front door gives the phone:
 - VM 180 was started for the check and shut down again.
 
 ## agent-hub
+*Superseded: the repo is archived and its work was folded into Aico or dropped (audit section I, rows I-A, I-S, I-T).*
+
 | # | Item | Status | Size |
 |---|---|---|---|
 | A1 | Delete `backend/scripts/run_claude_orchestrated_worker.py` (1,470 lines) and `backend/tests/scripts/test_run_claude_orchestrated_worker.py` (1,107) | Decided | -2.6k |
@@ -403,6 +408,8 @@ Adding the gem Aico front door gives the phone:
 | A9 | Checked 2026-11-02: not a bug. `memory_injection_metrics` is written only on Agent Hub's own `/api/complete` path, and that path's traffic stopped on 10-30 (254 requests on 10-29, 4 on 10-30). Harness deliveries go through `build_canonical_context_delivery` and are recorded in `context_deliveries` (since 11-01). A live `st complete` wrote a new row. Fold into A8: point the memory dashboard and analytics at `context_deliveries`, or drop them with the analytics layer. | Done (no change) | 0 |
 
 ## summitflow
+*Superseded: the repo is archived and its work was folded into Aico or dropped (audit section I, rows I-A, I-S, I-T).*
+
 | # | Item | Status | Size |
 |---|---|---|---|
 | S1 | Remove `st claude` (`backend/cli/commands/claude.py`, `_claude_dispatch.py`, `backend/tests/cli/test_claude.py`), its registration and its help and capability text | Decided | -0.9k |
@@ -424,6 +431,8 @@ Adding the gem Aico front door gives the phone:
 | C5 | Keep `tether-lifecycle-harness.sh` and `tether-real-session-smoke.sh` (the only live proof that Tether contains its processes) and run them in the nightly deep lane. Deleted `aico-install-context-hooks.sh` (aico b4a9c00). Both scripts now run in the nightly deep lane against a throwaway `tether@dev` (aico bdcc2a6). The first deep run passed: 13 harness checks and the Codex smoke, with nothing left behind. | Done | -23 lines |
 
 ## nightshift
+*Superseded: the repo is archived and its work was folded into Aico or dropped (audit section I, rows I-A, I-S, I-T).*
+
 | # | Item | Status | Size |
 |---|---|---|---|
 | T1 | Parallel tests (xdist) and a look at the 13 autouse fixtures. Tests take 48s on their own, but the check takes 110-154s. | Proposed | check time |
