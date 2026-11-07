@@ -193,6 +193,10 @@ It retries quietly with backoff and never powers a host on. ssh (the
   that is cleared when the host is up again. A refused or failed power-off is
   logged and tried again after another idle period. The earlier guest-side
   load and ssh checks were dropped: sessions and wakes are what the hub sees.
+  Only the workstation's hub does this: bookings and wakes are hub-local, so
+  the standby (CT 190) sets `idleOffMin: 0` for every host in its own
+  hosts.json (2026-11-07, after it powered neri-hunters off without seeing
+  the workstation's bookings).
 
 ### Placement (`--host auto`, built 2026-10-31)
 
@@ -211,7 +215,8 @@ host in `~/.config/tether/placement.json` order whose live room fits, or answers
 - **Room** = live free − owner reserve − open reservations, per host. This
   computer reads Nightshift's admission file (green and fresh, else unknown).
   A VM reads its own MemAvailable, PSI, CPUs and load over the link, and its
-  Proxmox node's available memory and storage over `ssh <node> pvesh`. The
+  Proxmox node's available memory and storage through the Proxmox API (token
+  from Aico Logins, `packages/fleet/src/proxmox.ts`). The
   smaller of VM and node room counts. A powered-off VM counts only when the
   node can start it; the create then wakes it as above.
 - **Capabilities**: the live-ready marker (contract 4) on the host, its
@@ -246,7 +251,8 @@ The `_coord.json` ledger stays per host.
 
 1. **Hub, link and client attach.**
    - 1a: the Tether daemon hub and the link unit.
-   - 1b: the web app attaches over ssh, the remote pid, reattach, the
+   - 1b: the web app attaches through the hub (originally over ssh; the
+     fleet link replaced it in 2026-11), the remote pid, reattach, the
      badge and the picker.
 2. **Create on a host:** wake, readiness gate, lineage, `st aico create --host`
    and VM bring-up.
