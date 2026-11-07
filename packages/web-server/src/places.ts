@@ -38,6 +38,8 @@ export interface PlaceView extends Place {
 export interface GuestSource {
   list(): Promise<Guest[]>
   act(guest: Guest, action: GuestAction): Promise<void>
+  /** Writes Proxmox's start-at-boot setting. */
+  setOnboot(guest: Guest, on: boolean): Promise<void>
 }
 
 type Marks = Pick<
@@ -184,6 +186,49 @@ export class Places {
     return place.machine
       ? this.options.status.expectedOff().has(place.machine)
       : place.intent !== 'always'
+  }
+
+  /** What the last Proxmox reading listed (templates left out), when it was read, and why it
+   * could not be read; `guests` is empty then, never a stale list. */
+  guestList(): { guests: Guest[]; asOf: string | null; failure: string | null } {
+    const asOf = this.readAt === null ? null : iso(this.readAt)
+    const failure = this.failure ?? (this.snapshot ? null : 'Not read yet.')
+    if (failure || !this.snapshot) return { guests: [], asOf, failure }
+    return { guests: [...this.snapshot.values()].filter((guest) => !guest.template), asOf, failure }
+  }
+
+  /**
+   * Turns Proxmox's start-at-boot on or off for one guest, then reads it back: the answer is what
+   * Proxmox now says, not what was asked. It does not touch the guest's declared intent (Status's
+   * "meant to be on" is the registry's; this is only whether Proxmox starts it at boot).
+   */
+  async setAutostart(vmid: number, on: boolean): Promise<Guest> {
+    const { guests } = this.options
+    if (!guests) throw new HttpError(503, 'No Proxmox access is set up on this machine.')
+    await this.refresh()
+    const guest = this.snapshot?.get(vmid)
+    if (this.failure || !guest)
+      throw new HttpError(503, this.failure ?? 'Proxmox does not list this guest.')
+    try {
+      await guests.setOnboot(guest, on)
+    } catch (error) {
+      throw new HttpError(
+        502,
+        `${guest.name}: Proxmox refused autostart ${on ? 'on' : 'off'} (${(error as Error).message.split('\n')[0]}).`,
+      )
+    }
+    // A reading that was already under way predates the write.
+    await this.reading
+    await this.refresh()
+    const now = this.snapshot?.get(vmid)
+    if (this.failure || !now)
+      throw new HttpError(503, `${guest.name}: set, but Proxmox did not answer when read back.`)
+    if (now.onboot !== on)
+      throw new HttpError(
+        502,
+        `${guest.name}: Proxmox still shows autostart ${now.onboot ? 'on' : 'off'}.`,
+      )
+    return now
   }
 
   view(place: Place): PlaceView {

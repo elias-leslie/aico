@@ -27,7 +27,7 @@ function hostName(value: string): string {
 }
 
 /** Tether's plain-words reason, kept as the detail; its status stays. */
-async function hostCall<T>(work: () => Promise<T>): Promise<T> {
+export async function hostCall<T>(work: () => Promise<T>): Promise<T> {
   try {
     return await work()
   } catch (error) {

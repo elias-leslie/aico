@@ -2,6 +2,7 @@
 // sessions can run on (Tether's links). Pure; the page fetches and renders.
 
 import type { HostChoice } from './hooks/use-hosts'
+import type { MachineGuest } from './hooks/use-machine-guests'
 import { MACHINE_LABEL, WORKSTATION_LABEL } from './machine-name'
 import {
   ago,
@@ -42,6 +43,8 @@ export type Up =
   | 'on'
   | 'off'
   | 'starting'
+  | 'stopping'
+  | 'restarting'
   | 'connecting'
   | 'unreachable'
   | 'changed'
@@ -53,6 +56,8 @@ export const UP_WORD: Record<Up, string> = {
   on: 'On',
   off: 'Off',
   starting: 'Starting',
+  stopping: 'Shutting down',
+  restarting: 'Restarting',
   connecting: 'Connecting',
   unreachable: 'Unreachable',
   changed: 'Changed',
@@ -66,6 +71,8 @@ export const UP_CHIP: Record<Up, string> = {
   on: 'ok',
   off: 'off',
   starting: 'warn',
+  stopping: 'warn',
+  restarting: 'warn',
   connecting: 'warn',
   unreachable: 'late',
   changed: 'warn',
@@ -90,9 +97,64 @@ export interface Machine {
   sessions: number | null
   /** The session host's Tether name, for power. */
   host: string | null
-  /** The one power action offered, if any. */
+  /** The one power action offered when Proxmox can't be asked, if any. */
   power: 'on' | 'off' | 'trust' | null
   isWorkstation: boolean
+  /** Its Proxmox guest (power, autostart); null for the two computers and while Proxmox can't be read. */
+  guest: MachineGuest | null
+  /** Up since, size and projects, from Proxmox and the project registry; empty when not known. */
+  facts: string
+}
+
+const GUEST_FREE = new Set(['davion-gem'])
+
+/** "Up 3 days", "Up 5 h", "Up 12 min". */
+function uptime(since: string | null, now: number): string {
+  const start = since ? Date.parse(since) : Number.NaN
+  if (Number.isNaN(start)) return ''
+  const minutes = Math.max(0, Math.round((now - start) / 60_000))
+  if (minutes < 1) return 'Up just now'
+  if (minutes < 60) return `Up ${minutes} min`
+  if (minutes < 48 * 60) return `Up ${Math.round(minutes / 60)} h`
+  return `Up ${Math.floor(minutes / 1440)} days`
+}
+
+const gb = (mb: number) =>
+  `${Number.isInteger(mb / 1024) ? mb / 1024 : (mb / 1024).toFixed(1)} GB`
+
+function guestFacts(guest: MachineGuest, now: number): string {
+  const size = [
+    guest.cpus ? plural(guest.cpus, 'CPU') : '',
+    guest.memoryMb ? `${gb(guest.memoryMb)} RAM` : '',
+  ]
+    .filter(Boolean)
+    .join(', ')
+  const projects = guest.projects.length
+    ? `${guest.projects.length === 1 ? 'Project' : 'Projects'}: ${guest.projects.map((p) => p.name).join(', ')}`
+    : ''
+  return [
+    guest.state === 'running' ? uptime(guest.since, now) : '',
+    size,
+    projects,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+}
+
+/** Autostart and the registry's intent are two facts; this says so when they pull apart. */
+export function autostartHint(guest: MachineGuest): string {
+  if (guest.autostart === null) return 'Proxmox didn’t say.'
+  if (guest.intent === 'always' && !guest.autostart)
+    return 'Meant to be always on, but won’t start by itself after the Proxmox host reboots.'
+  if (guest.intent === 'on-demand' && guest.autostart)
+    return 'On demand, yet starts with the Proxmox host.'
+  return guest.autostart ? 'Starts when the Proxmox host boots.' : ''
+}
+
+export const INTENT_TAG: Record<NonNullable<MachineGuest['intent']>, string> = {
+  always: 'Always on',
+  'on-demand': 'On demand',
+  off: 'Parked',
 }
 
 export interface Machines {
@@ -174,11 +236,23 @@ function noteFor(
   return ''
 }
 
+/** Proxmox knows better than a lagging report whether a guest is running or being stopped. */
+function upWithGuest(up: Up, guest: MachineGuest): Up {
+  if (guest.busy === 'shutdown') return 'stopping'
+  if (guest.busy === 'restart') return 'restarting'
+  if (guest.busy === 'start' || guest.state === 'starting') return 'starting'
+  if ((guest.state === 'stopped' || guest.state === 'down') && up !== 'off')
+    return 'off'
+  if (guest.state === 'running' && up === 'off') return 'starting'
+  return up
+}
+
 /** Every machine once. `view` is null while Status can't be read, `hosts` null while the hosts can't. */
 export function buildMachines(
   view: StatusView | null,
   hosts: HostChoice[] | null,
   now: number,
+  guests: readonly MachineGuest[] | null = null,
 ): Machines {
   const workstationKey = view?.machine ?? WORKSTATION_LABEL
   const rows = (view?.rows ?? []).filter((row) => row.kind === 'machine')
@@ -212,9 +286,17 @@ export function buildMachines(
     else if (host) up = upFromHost(host)
     else if (link) up = upFromRow(link)
     else up = 'on'
+    const guest =
+      isWorkstation || GUEST_FREE.has(key)
+        ? null
+        : (guests?.find((g) => g.machine === key) ?? null)
+    if (guest) up = upWithGuest(up, guest)
     const sessionHost = isWorkstation || !!host || (!!link && hosts === null)
     const sessionHostName = host?.name ?? null
-    const note = noteFor(up, row ?? link, host, now)
+    const note =
+      guest?.state === 'down' && up === 'off'
+        ? 'Stopped, but meant to be on.'
+        : noteFor(up, row ?? link, host, now)
     return {
       key,
       name: isWorkstation ? WORKSTATION_LABEL : (MACHINE_LABEL[key] ?? key),
@@ -228,6 +310,8 @@ export function buildMachines(
       host: sessionHostName,
       power: powerFor(host),
       isWorkstation,
+      guest,
+      facts: guest ? guestFacts(guest, now) : '',
     }
   })
   const rank = (m: Machine) =>

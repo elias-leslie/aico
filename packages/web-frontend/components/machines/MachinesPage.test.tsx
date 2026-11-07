@@ -9,6 +9,9 @@ const data = vi.hoisted(() => ({
   status: {} as Record<string, unknown>,
   hosts: {} as Record<string, unknown>,
   power: vi.fn(async () => ({})),
+  guests: {} as Record<string, unknown>,
+  machinePower: vi.fn(async () => ({})),
+  autostart: vi.fn(async () => ({})),
 }))
 vi.mock('@/lib/hooks/use-status', () => ({ useStatus: () => data.status }))
 vi.mock('@/lib/hooks/use-hosts', () => ({ useHosts: () => data.hosts }))
@@ -19,6 +22,14 @@ vi.mock('@/lib/hooks/use-host-admin', () => ({
   powerHost: (...args: unknown[]) =>
     (data.power as (...a: unknown[]) => unknown)(...args),
   trustHost: vi.fn(),
+}))
+
+vi.mock('@/lib/hooks/use-machine-guests', () => ({
+  useMachineGuests: () => data.guests,
+  powerMachine: (...args: unknown[]) =>
+    (data.machinePower as (...a: unknown[]) => unknown)(...args),
+  setAutostart: (...args: unknown[]) =>
+    (data.autostart as (...a: unknown[]) => unknown)(...args),
 }))
 
 const row = (over: Partial<StatusRow>): StatusRow => ({
@@ -78,6 +89,14 @@ const ok = (v: StatusView) => ({
 describe('MachinesPage', () => {
   beforeEach(() => {
     data.power.mockClear()
+    data.machinePower.mockClear()
+    data.autostart.mockClear()
+    data.guests = {
+      guests: null,
+      failure: null,
+      isLoading: false,
+      refetch: vi.fn(),
+    }
     data.status = ok(view(ROWS))
     data.hosts = {
       hosts: [host()],
@@ -105,11 +124,11 @@ describe('MachinesPage', () => {
     renderPage()
     fireEvent.click(
       within(screen.getByTestId('machine-agent-work')).getByRole('button', {
-        name: 'Power off',
+        name: 'Shut down',
       }),
     )
     expect(data.power).not.toHaveBeenCalled()
-    expect(screen.getByText('Power off agent-work?')).toBeInTheDocument()
+    expect(screen.getByText('Shut down agent-work?')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(data.power).not.toHaveBeenCalled()
   })
@@ -147,5 +166,128 @@ describe('MachinesPage', () => {
       'Couldn’t load machines.',
     )
     expect(screen.queryByTestId('machine-davion-sidarli')).toBeNull()
+  })
+
+  describe('with Proxmox read', () => {
+    const guest = (over: Record<string, unknown>) => ({
+      machine: 'ominull-hub',
+      vmid: 150,
+      kind: 'ct',
+      state: 'running',
+      since: null,
+      busy: null,
+      autostart: true,
+      intent: 'always',
+      powerable: true,
+      cpus: 2,
+      memoryMb: 1024,
+      projects: [],
+      ...over,
+    })
+    const withGuests = (...list: Record<string, unknown>[]) => {
+      data.guests = {
+        guests: list,
+        failure: null,
+        isLoading: false,
+        refetch: vi.fn(),
+      }
+    }
+
+    it('offers Restart and Shut down on a machine that is on, and asks first', async () => {
+      withGuests(guest({}))
+      renderPage()
+      const hub = within(screen.getByTestId('machine-ominull-hub'))
+      expect(hub.queryByRole('button', { name: 'Power on' })).toBeNull()
+      fireEvent.click(hub.getByRole('button', { name: 'Restart' }))
+      expect(screen.getByText('Restart ominull-hub?')).toBeInTheDocument()
+      expect(data.machinePower).not.toHaveBeenCalled()
+      fireEvent.click(screen.getByRole('button', { name: 'Restart' }))
+      await vi.waitFor(() =>
+        expect(data.machinePower).toHaveBeenCalledWith(
+          'ominull-hub',
+          'restart',
+          true,
+        ),
+      )
+    })
+
+    it('warns an always-on machine that Status will not flag it while off', () => {
+      withGuests(guest({}))
+      renderPage()
+      fireEvent.click(
+        within(screen.getByTestId('machine-ominull-hub')).getByRole('button', {
+          name: 'Shut down',
+        }),
+      )
+      expect(screen.getByText(/Status won’t flag it/)).toBeInTheDocument()
+    })
+
+    it('offers Power on for a stopped machine and shows a start in progress', () => {
+      withGuests(
+        guest({
+          machine: 'ominull-hub',
+          state: 'stopped',
+          intent: 'on-demand',
+        }),
+      )
+      renderPage()
+      expect(
+        screen.getByRole('button', { name: 'Power on' }),
+      ).toBeInTheDocument()
+      withGuests(
+        guest({ machine: 'ominull-hub', state: 'stopped', busy: 'start' }),
+      )
+      renderPage()
+      expect(
+        screen.getAllByRole('button', { name: 'Starting…' })[0],
+      ).toBeDisabled()
+    })
+
+    it('shows the real autostart value and writes the toggle', async () => {
+      withGuests(guest({ autostart: false, intent: 'on-demand' }))
+      renderPage()
+      const toggle = within(
+        screen.getByTestId('machine-ominull-hub'),
+      ).getByRole('switch', { name: 'Autostart' })
+      expect(toggle).not.toBeChecked()
+      fireEvent.click(toggle)
+      await vi.waitFor(() =>
+        expect(data.autostart).toHaveBeenCalledWith('ominull-hub', true),
+      )
+    })
+
+    it('says so when Proxmox did not give the autostart value', () => {
+      withGuests(guest({ autostart: null }))
+      renderPage()
+      expect(
+        screen.getByText(/Autostart: Proxmox didn’t say/),
+      ).toBeInTheDocument()
+      expect(screen.queryByRole('switch')).toBeNull()
+    })
+
+    it('says Proxmox could not be read and keeps session-host power', () => {
+      data.guests = {
+        guests: null,
+        failure: 'Proxmox did not answer.',
+        isLoading: false,
+        refetch: vi.fn(),
+      }
+      renderPage()
+      expect(screen.getByText(/Couldn’t read Proxmox/)).toBeInTheDocument()
+      expect(screen.queryByRole('switch')).toBeNull()
+      expect(
+        within(screen.getByTestId('machine-agent-work')).getByRole('button', {
+          name: 'Shut down',
+        }),
+      ).toBeInTheDocument()
+    })
+
+    it('does not offer power on a machine the registry says is not powered here', () => {
+      withGuests(guest({ powerable: false }))
+      renderPage()
+      const hub = within(screen.getByTestId('machine-ominull-hub'))
+      expect(hub.queryByRole('button', { name: 'Shut down' })).toBeNull()
+      expect(hub.getByRole('switch')).toBeInTheDocument()
+    })
   })
 })

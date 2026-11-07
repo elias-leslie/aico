@@ -210,9 +210,22 @@ function guests(initial: Partial<Guest> = {}) {
       name: 'jobinator',
       status: 'running',
       uptime: 5000,
+      maxmem: 0,
+      maxcpu: 0,
+      template: false,
       ...initial,
     },
-    { vmid: 180, type: 'qemu', node: 'gem', name: 'apps', status: 'stopped', uptime: 0 },
+    {
+      vmid: 180,
+      type: 'qemu',
+      node: 'gem',
+      name: 'apps',
+      status: 'stopped',
+      uptime: 0,
+      maxmem: 0,
+      maxcpu: 0,
+      template: false,
+    },
   ]
   const calls: string[] = []
   const source: GuestSource & { fail?: boolean; down?: boolean } = {
@@ -224,6 +237,7 @@ function guests(initial: Partial<Guest> = {}) {
       if (source.fail) throw new Error('boom')
       calls.push(`${guest.vmid}:${action}`)
     },
+    async setOnboot() {},
   }
   return { list, calls, source }
 }

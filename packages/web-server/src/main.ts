@@ -4,7 +4,7 @@
 
 import { join } from 'node:path'
 import { agentDbPath, ChatSessions, openAgentDb, tetherPush } from '@aico/agent'
-import { guestAction, listGuests, proxmoxSshFrom } from '@aico/fleet/power'
+import { guestAction, listGuests, proxmoxSshFrom, setGuestOnboot } from '@aico/fleet/power'
 import { loadCaptureTypes } from '@aico/notes/capture-types'
 import { execRunner, PreviewJobs } from '@aico/notes/heic'
 import { extract } from '@aico/notes/vision-extract'
@@ -31,6 +31,7 @@ import { registerDigestRoutes } from './digest'
 import { ExtractWorker } from './extract-worker'
 import { registerGrantRoutes } from './grants'
 import { registerLoginRoutes } from './logins'
+import { MachinesService, registerMachineRoutes } from './machines'
 import { registerMemoryRoutes } from './memory-routes'
 import { registerMockupRoutes } from './mockups'
 import { NotesStore } from './notes-db'
@@ -196,6 +197,8 @@ function serve(): void {
       ? {
           list: () => listGuests(proxmox, config.projects.pveTimeoutMs),
           act: (guest, action) => guestAction(proxmox, guest, action, config.projects.pveTimeoutMs),
+          setOnboot: (guest, on) =>
+            setGuestOnboot(proxmox, guest, on, config.projects.pveTimeoutMs),
         }
       : null,
     status,
@@ -214,6 +217,7 @@ function serve(): void {
       activityMs: config.projects.activityMs,
     }),
   )
+  registerMachineRoutes(api, new MachinesService(places, registry, tether))
   places.start()
   registerGrantRoutes(api)
   const canaryFolder = join(config.dataDir, 'canary')

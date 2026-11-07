@@ -1,6 +1,6 @@
 import { parseRow, view } from '@aico/status'
 import { describe, expect, it } from 'vitest'
-import { parseGuestPower, peerStatusRow } from './power'
+import { guestOnbootArgs, parseGuestPower, parseOnboot, peerStatusRow } from './power'
 
 const settings = { machine: 'workstation', deadMs: 5000 }
 const peer = { name: 'worker', connected: false, lastSeen: null }
@@ -40,5 +40,37 @@ describe('fleet peer power status', () => {
     ])
     expect(parseGuestPower([...rows, rows[0]]).has('worker')).toBe(false)
     expect(() => parseGuestPower({})).toThrow()
+  })
+})
+
+describe('Proxmox start-at-boot', () => {
+  it('reads onboot from the configs and leaves out guests that do not say', () => {
+    const boot = parseOnboot(
+      [
+        '/etc/pve/nodes/gem/qemu-server/180.conf: onboot: 0',
+        '/etc/pve/nodes/gem/lxc/150.conf: onboot: 1',
+        'noise',
+        '/etc/pve/nodes/gem/lxc/x.conf: onboot: 1',
+      ].join('\n'),
+    )
+    expect([...boot]).toEqual([
+      [180, false],
+      [150, true],
+    ])
+  })
+  it('writes it with pvesh on the guest’s own node and type, and refuses a bad node', () => {
+    expect(guestOnbootArgs({ vmid: 180, type: 'qemu', node: 'gem' }, true)).toEqual([
+      'pvesh',
+      'set',
+      '/nodes/gem/qemu/180/config',
+      '--onboot',
+      '1',
+    ])
+    expect(guestOnbootArgs({ vmid: 150, type: 'lxc', node: 'gem' }, false).slice(2)).toEqual([
+      '/nodes/gem/lxc/150/config',
+      '--onboot',
+      '0',
+    ])
+    expect(() => guestOnbootArgs({ vmid: 1, type: 'lxc', node: 'a;b' }, true)).toThrow()
   })
 })

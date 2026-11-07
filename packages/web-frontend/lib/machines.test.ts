@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { HostChoice } from './hooks/use-hosts'
-import { buildMachines, machinesLine, sessionHostLabel } from './machines'
+import type { MachineGuest } from './hooks/use-machine-guests'
+import {
+  autostartHint,
+  buildMachines,
+  machinesLine,
+  sessionHostLabel,
+} from './machines'
 import type { StatusRow, StatusView } from './status'
 
 const NOW = Date.parse('2026-11-06T12:00:00Z')
@@ -131,5 +137,91 @@ describe('sessionHostLabel', () => {
     expect(sessionHostLabel(null)).toBe('Workstation')
     expect(sessionHostLabel('aico')).toBe('Proxmox host')
     expect(sessionHostLabel('agent-work')).toBe('agent-work')
+  })
+})
+
+const guest = (over: Partial<MachineGuest>): MachineGuest => ({
+  machine: 'apps',
+  vmid: 180,
+  kind: 'vm',
+  state: 'stopped',
+  since: null,
+  busy: null,
+  autostart: false,
+  intent: 'on-demand',
+  powerable: true,
+  cpus: 4,
+  memoryMb: 6144,
+  projects: [{ id: 'portfolio-ai', name: 'Portfolio AI' }],
+  ...over,
+})
+
+describe('buildMachines with Proxmox guests', () => {
+  const by = (guests: MachineGuest[] | null) =>
+    Object.fromEntries(
+      buildMachines(view(ROWS), HOSTS, NOW, guests).machines.map((m) => [
+        m.key,
+        m,
+      ]),
+    )
+
+  it('puts each guest on its machine and never on the two computers', () => {
+    const list = by([
+      guest({}),
+      guest({ machine: 'davion-gem', vmid: 1 }),
+      guest({ machine: 'davion-sidarli', vmid: 2 }),
+    ])
+    expect(list.apps?.guest?.vmid).toBe(180)
+    expect(list['davion-gem']?.guest).toBeNull()
+    expect(list['davion-sidarli']?.guest).toBeNull()
+  })
+
+  it('says size, uptime and projects, and only counts uptime while running', () => {
+    const stopped = by([guest({})]).apps
+    expect(stopped?.facts).toBe('4 CPUs, 6 GB RAM · Project: Portfolio AI')
+    const running = by([
+      guest({ state: 'running', since: '2026-11-04T12:00:00Z' }),
+    ]).apps
+    expect(running?.facts).toBe(
+      'Up 2 days · 4 CPUs, 6 GB RAM · Project: Portfolio AI',
+    )
+  })
+
+  it('lets Proxmox override a lagging report and shows power in progress', () => {
+    // Status still says on; Proxmox says stopped.
+    const stopped = by([guest({ machine: 'ominull-hub', state: 'stopped' })])
+    expect(stopped['ominull-hub']?.up).toBe('off')
+    expect(
+      by([guest({ machine: 'ominull-hub', state: 'down' })])['ominull-hub']
+        ?.note,
+    ).toBe('Stopped, but meant to be on.')
+    expect(by([guest({ state: 'stopped', busy: 'start' })]).apps?.up).toBe(
+      'starting',
+    )
+    expect(
+      by([
+        guest({ machine: 'ominull-hub', state: 'running', busy: 'shutdown' }),
+      ])['ominull-hub']?.up,
+    ).toBe('stopping')
+    expect(
+      by([
+        guest({ machine: 'ominull-hub', state: 'running', busy: 'restart' }),
+      ])['ominull-hub']?.up,
+    ).toBe('restarting')
+  })
+
+  it('has no guest while Proxmox could not be read', () => {
+    expect(by(null).apps?.guest).toBeNull()
+  })
+})
+
+describe('autostartHint', () => {
+  it('names the two facts when they disagree, and is quiet when autostart is off as expected', () => {
+    expect(autostartHint(guest({ autostart: false }))).toBe('')
+    expect(autostartHint(guest({ autostart: true }))).toContain('On demand')
+    expect(
+      autostartHint(guest({ autostart: false, intent: 'always' })),
+    ).toContain('Meant to be always on')
+    expect(autostartHint(guest({ autostart: null }))).toContain('didn’t say')
   })
 })
