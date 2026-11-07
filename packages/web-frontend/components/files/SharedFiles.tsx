@@ -1,8 +1,9 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import { File, Folder, Link } from 'lucide-react'
+import { Code, File, Folder, Globe, Link } from 'lucide-react'
 import { baseName } from '@/components/AgentShowToast'
+import { isHtmlPath, sharedPageUrl } from '@/lib/api/pane-files'
 import { type AgentShow, fetchShows } from '@/lib/hooks/use-agent-shows'
 
 /** When it was shared: the time today, else the day. */
@@ -21,7 +22,7 @@ function folderOf(path: string): string {
 
 /**
  * What agents shared, newest first: each file or folder links to where it is,
- * and opens in the viewer; a web link opens in a new tab.
+ * and opens in the viewer; a web link, or a shared web page, opens in a new tab.
  */
 export function SharedFiles({
   highlight,
@@ -103,6 +104,32 @@ export function SharedFiles({
               share.paths.map((path) => {
                 const isFolder = path.endsWith('/')
                 const Icon = isFolder ? Folder : File
+                if (!isFolder && !share.host && isHtmlPath(path))
+                  return (
+                    // A web page opens rendered in its own tab; Source shows its text here.
+                    <div key={path} className="flex items-center gap-1 pr-1">
+                      <a
+                        href={sharedPageUrl(path)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="lantern-file-row min-w-0 flex-1"
+                        title={`${path} (opens in a new tab)`}
+                      >
+                        <Globe strokeWidth={1.7} />
+                        <span className="n">{baseName(path)}</span>
+                        <span className="s">{folderOf(path)}</span>
+                      </a>
+                      <button
+                        type="button"
+                        className="lantern-btn ghost h-8! flex-none px-2! text-xs! max-md:h-10!"
+                        aria-label={`View source of ${baseName(path)}`}
+                        onClick={() => onOpenPath(path)}
+                      >
+                        <Code className="h-3.5 w-3.5" strokeWidth={1.7} />
+                        Source
+                      </button>
+                    </div>
+                  )
                 return (
                   <button
                     key={path}

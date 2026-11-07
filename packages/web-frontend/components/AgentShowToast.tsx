@@ -2,7 +2,7 @@
 
 import { Copy, FolderOpen, X } from 'lucide-react'
 import { useState } from 'react'
-import { rawFileUrl } from '@/lib/api/pane-files'
+import { isHtmlPath, rawFileUrl, sharedPageUrl } from '@/lib/api/pane-files'
 import { openFiles } from '@/lib/files-opener'
 import { type AgentShow, useAgentShows } from '@/lib/hooks/use-agent-shows'
 
@@ -55,7 +55,13 @@ export function AgentShowToast({
       // No session open to show Files in: open the first file by itself.
       const first = show.paths[0]
       const folder = first.slice(0, first.lastIndexOf('/')) || '/'
-      window.open(rawFileUrl(folder, baseName(first)), '_blank', 'noopener')
+      window.open(
+        isHtmlPath(first)
+          ? sharedPageUrl(first)
+          : rawFileUrl(folder, baseName(first)),
+        '_blank',
+        'noopener',
+      )
     }
     onDismiss()
   }

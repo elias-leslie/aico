@@ -211,6 +211,7 @@ export function FilesDialog({
                 source={{ kind: 'location', root: view.root }}
                 initialSelected={view.select}
                 onInsertPath={insert}
+                shared={view.fromShared}
               />
             </>
           ) : null}

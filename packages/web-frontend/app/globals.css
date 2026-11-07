@@ -1257,6 +1257,11 @@ div.xterm .xterm-viewport {
   transition: background 0.15s var(--ease-arrival);
 }
 
+a.lantern-ask-attached {
+  min-width: 0;
+  text-decoration: none;
+}
+
 .lantern-ask-attached:hover:not(:disabled) {
   background: var(--paper-veil);
 }

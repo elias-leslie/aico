@@ -43,6 +43,7 @@ import { Places } from './places'
 import { ProjectsService, registerProjectRoutes } from './projects'
 import { createWebServer } from './server'
 import { createServiceAppsServer } from './service-apps'
+import { registerSharedPageRoutes } from './shared-pages'
 import { Shows } from './shows'
 import { createStaticSite } from './static'
 import { registerStatusRoutes, startSelfRows } from './status'
@@ -210,6 +211,7 @@ function serve(): void {
   registerBackupRoutes(api)
   registerLoginRoutes(api, process.env, tether)
   registerMockupRoutes(api, { dataDir: config.dataDir, tether })
+  registerSharedPageRoutes(api, { shares: () => shows.list('here') })
   // The phone alert rule: checked on every write of rows. aico-web's own heartbeat writes every
   // few minutes, so a backup or machine row that goes late is seen then too. A notice notify
   // refuses throws, and the batch is offered again on the next pass.

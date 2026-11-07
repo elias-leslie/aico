@@ -105,3 +105,16 @@ export function fetchPathInfo(path: string): Promise<PathInfo> {
     'This file was moved or deleted',
   )
 }
+
+/** Whether a file is a web page (opened rendered in its own tab, not as text). */
+export function isHtmlPath(path: string): boolean {
+  return /\.html?$/i.test(path)
+}
+
+/**
+ * A shared HTML file, rendered in its own tab: the web server serves it (and
+ * the files beside it) sandboxed, at a path-shaped URL so relative links resolve.
+ */
+export function sharedPageUrl(path: string): string {
+  return `/api/files/page${path.split('/').map(encodeURIComponent).join('/')}`
+}

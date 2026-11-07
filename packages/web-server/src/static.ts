@@ -29,7 +29,7 @@ const CSP_HASHES_FILE = 'csp-hashes.json'
 
 const IMMUTABLE_PREFIX = '/_next/static/'
 
-const CONTENT_TYPES: Readonly<Record<string, string>> = {
+export const CONTENT_TYPES: Readonly<Record<string, string>> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.mjs': 'text/javascript; charset=utf-8',

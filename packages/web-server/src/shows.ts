@@ -166,11 +166,11 @@ export class Shows {
     await sendNotice(this.options.notices, showNotice(share, this.options.publicHost))
   }
 
-  /** Tether's shares, oldest first; any that fail the checks are left out. */
-  async list(): Promise<Share[]> {
+  /** Tether's shares (with the linked hosts', or this host's only), oldest first; any that fail the checks are left out. */
+  async list(hosts: 'all' | 'here' = 'all'): Promise<Share[]> {
     const { body } = await this.options.tether.request<{ items?: unknown }>(
       'GET',
-      '/v1/shares?hosts=all',
+      hosts === 'all' ? '/v1/shares?hosts=all' : '/v1/shares',
     )
     if (!Array.isArray(body?.items)) return []
     return body.items.map(validateShare).filter((share): share is Share => share !== null)

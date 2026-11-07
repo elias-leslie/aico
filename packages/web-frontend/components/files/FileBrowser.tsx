@@ -17,8 +17,10 @@ import {
 import { useCallback, useMemo, useState } from 'react'
 import {
   type FilesSource,
+  isHtmlPath,
   type PaneFileTreeEntry,
   rawFileUrl,
+  sharedPageUrl,
 } from '@/lib/api/pane-files'
 import { isPermanentRefusal } from '@/lib/api-fetch'
 import { useFileContent, useFileTree } from '@/lib/hooks/use-pane-files'
@@ -195,11 +197,14 @@ export function FileBrowser({
   source,
   initialSelected = null,
   onInsertPath,
+  shared = false,
 }: {
   source: FilesSource
   initialSelected?: FileChoice | null
   /** Types the path into the session; without it there is no Insert path. */
   onInsertPath?: (path: string) => void
+  /** A shared or attached folder: a web page's Open shows it rendered. */
+  shared?: boolean
 }) {
   const tree = useFileTree(source, '')
   const [selected, setSelected] = useState<FileChoice | null>(initialSelected)
@@ -251,6 +256,7 @@ export function FileBrowser({
         selected={selected}
         onInsertPath={onInsertPath}
         className={selected ? 'flex' : 'hidden md:flex'}
+        shared={shared}
       />
     </div>
   )
@@ -266,12 +272,15 @@ export function FilePreview({
   selected,
   onInsertPath,
   className,
+  shared = false,
 }: {
   source: FilesSource
   selected: FileChoice | null
   /** Types the path into the session; without it there is no Insert path. */
   onInsertPath?: (path: string) => void
   className?: string
+  /** A shared or attached file: a web page's Open shows it rendered. */
+  shared?: boolean
 }) {
   const [copiedThing, setCopiedThing] = useState<'path' | 'content' | null>(
     null,
@@ -286,6 +295,11 @@ export function FilePreview({
   const rawUrl =
     root !== null && relativePath !== null
       ? rawFileUrl(root, relativePath)
+      : null
+  // A shared web page's Open shows it rendered, in its own tab (only shared files are served so).
+  const pageUrl =
+    shared && selectedPath && root !== null && isHtmlPath(selectedPath)
+      ? sharedPageUrl(selectedPath)
       : null
   const image =
     rawUrl && IMAGE_EXTENSIONS.has(content.data?.extension?.toLowerCase() ?? '')
@@ -380,13 +394,13 @@ export function FilePreview({
             <div className="flex flex-wrap gap-1.5">
               {rawUrl && (
                 <a
-                  href={rawUrl}
+                  href={pageUrl ?? rawUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="lantern-btn h-8! px-2.5! text-xs!"
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
-                  Open
+                  {pageUrl ? 'Open page' : 'Open'}
                 </a>
               )}
               {onInsertPath && (

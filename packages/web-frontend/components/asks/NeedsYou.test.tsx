@@ -1019,6 +1019,40 @@ describe('attached files', () => {
     ).toHaveValue('half typed')
   })
 
+  it('opens an attached web page rendered in its own tab, with its source one tap away', () => {
+    state.asks = [
+      ask({
+        share: '0123456789ab',
+        attached: [
+          {
+            path: '/srv/a/my mockup/index.html',
+            name: 'index.html',
+            kind: 'file',
+            size: 4096,
+          },
+        ],
+      }),
+    ]
+    render(<NeedsYouDrawer open onOpenChange={() => {}} />)
+    const card = screen.getByTestId('ask-card')
+    const chip = within(card).getByTestId('ask-attached')
+    expect(chip.tagName).toBe('A')
+    expect(chip).toHaveAttribute(
+      'href',
+      '/api/files/page/srv/a/my%20mockup/index.html',
+    )
+    expect(chip).toHaveAttribute('target', '_blank')
+    expect(chip).toHaveTextContent('HTML · 4 KB · new tab')
+    fireEvent.click(
+      within(card).getByRole('button', { name: 'View source of index.html' }),
+    )
+    expect(screen.getByTestId('ask-attached-view')).toBeInTheDocument()
+    expect(fileReads.at(-1)).toEqual({
+      root: '/srv/a/my mockup',
+      path: 'index.html',
+    })
+  })
+
   it('keeps the share button for a share with no files to list', () => {
     state.asks = [ask({ share: '0123456789ab' })]
     render(<NeedsYouDrawer open onOpenChange={() => {}} />)

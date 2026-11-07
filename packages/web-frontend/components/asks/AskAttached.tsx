@@ -1,6 +1,7 @@
 'use client'
 
-import { ArrowLeft, File, FileX, Folder } from 'lucide-react'
+import { ArrowLeft, Code, File, FileX, Folder, Globe } from 'lucide-react'
+import { isHtmlPath, sharedPageUrl } from '@/lib/api/pane-files'
 import { formatBytes } from '@/lib/capture-format'
 import type { AttachedFile, OwnerAsk } from '@/lib/hooks/use-asks'
 import { FileBrowser, FilePreview } from '../files/FileBrowser'
@@ -48,7 +49,7 @@ function detail(file: AttachedFile, host: string | undefined): string {
 
 /**
  * The files an agent attached to its question: one chip each, which opens the
- * file in place. A moved or deleted file says so and does not open; a file on
+ * file in place (a web page opens rendered in its own tab, with Source beside it). A moved or deleted file says so and does not open; a file on
  * another computer opens there, not here.
  */
 export function AttachedFiles({
@@ -70,6 +71,41 @@ export function AttachedFiles({
           const missing = file.kind === 'missing'
           const Icon = missing ? FileX : file.kind === 'folder' ? Folder : File
           const away = ask.host !== undefined
+          if (file.kind === 'file' && !away && isHtmlPath(file.name))
+            return (
+              <li key={file.path} className="flex min-w-0 max-w-full gap-1">
+                {/* A web page opens rendered in its own tab; its source stays one tap away. */}
+                <a
+                  href={sharedPageUrl(file.path)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="lantern-ask-attached"
+                  data-testid="ask-attached"
+                  title={file.path}
+                >
+                  <Globe aria-hidden="true" strokeWidth={1.7} />
+                  <span className="min-w-0">
+                    <span className="n" dir="auto">
+                      {file.name}
+                    </span>
+                    <span className="s">
+                      {detail(file, ask.host)} · new tab
+                    </span>
+                  </span>
+                </a>
+                <button
+                  type="button"
+                  className="lantern-ask-attached flex-none"
+                  data-testid="ask-attached-source"
+                  aria-label={`View source of ${file.name}`}
+                  title="View source"
+                  onClick={() => onOpen(file)}
+                >
+                  <Code aria-hidden="true" strokeWidth={1.7} />
+                  <span className="n">Source</span>
+                </button>
+              </li>
+            )
           return (
             <li key={file.path} className="min-w-0 max-w-full">
               <button
@@ -159,11 +195,12 @@ export function AttachedFileView({
         </p>
       </div>
       {file.kind === 'folder' ? (
-        <FileBrowser source={{ kind: 'location', root: file.path }} />
+        <FileBrowser source={{ kind: 'location', root: file.path }} shared />
       ) : (
         <FilePreview
           source={{ kind: 'location', root }}
           selected={{ path: name, name }}
+          shared
         />
       )}
     </section>

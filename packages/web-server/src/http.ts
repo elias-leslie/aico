@@ -73,6 +73,11 @@ export class Router {
     const source = path
       .split('/')
       .map((segment) => {
+        // `*name`, last: the rest of the path (slashes included).
+        if (segment.startsWith('*')) {
+          names.push(segment.slice(1))
+          return '(.+)'
+        }
         if (!segment.startsWith(':')) return segment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
         names.push(segment.slice(1))
         return '([^/]+)'
