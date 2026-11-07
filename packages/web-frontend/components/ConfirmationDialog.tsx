@@ -110,7 +110,7 @@ export function ConfirmationDialog({
                 data-testid="confirm-dialog-cancel"
                 onClick={onCancel}
                 disabled={isPending}
-                className="lantern-btn ghost"
+                className="lantern-btn ghost max-md:min-h-11"
               >
                 {cancelText}
               </button>
@@ -120,7 +120,7 @@ export function ConfirmationDialog({
                   data-testid="confirm-dialog-secondary"
                   onClick={onSecondary}
                   disabled={isPending}
-                  className="lantern-btn"
+                  className="lantern-btn max-md:min-h-11"
                 >
                   {secondaryText}
                 </button>
@@ -132,7 +132,7 @@ export function ConfirmationDialog({
                 onClick={onConfirm}
                 disabled={isPending}
                 aria-busy={isPending}
-                className="lantern-btn"
+                className="lantern-btn max-md:min-h-11"
                 style={{
                   borderColor: accentColor,
                   backgroundColor: `color-mix(in srgb, ${accentColor} 16%, transparent)`,

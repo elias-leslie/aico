@@ -205,3 +205,13 @@
     grid-column: 1;
   }
 }
+
+.more {
+  margin-top: 8px;
+}
+
+@media (max-width: 760px) {
+  .more {
+    min-height: 44px;
+  }
+}

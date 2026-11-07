@@ -213,8 +213,7 @@ export function GrantsPage() {
               {uses.length > USES_SHOWN && (
                 <button
                   type="button"
-                  className="lantern-btn ghost small"
-                  style={{ marginTop: 8 }}
+                  className={`lantern-btn ghost small ${styles.more}`}
                   onClick={() => setAllUses((v) => !v)}
                 >
                   {allUses ? 'Show fewer' : `Show all ${uses.length}`}
