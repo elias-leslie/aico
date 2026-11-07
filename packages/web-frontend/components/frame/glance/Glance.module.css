@@ -75,7 +75,7 @@
 .foldLine {
   padding-left: 2px;
 }
-[data-stale] {
+.body [data-stale] {
   opacity: 0.62;
 }
 
