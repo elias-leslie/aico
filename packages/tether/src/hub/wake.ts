@@ -6,7 +6,7 @@
 
 import { spawn } from 'node:child_process'
 import { execArgv } from '@aico/fleet/exec'
-import { HttpError } from '../http'
+import { HttpError } from '@aico/shared/http'
 import type { Peer } from './peer'
 import type { WakeProgress, WakeStep } from './types'
 

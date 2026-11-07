@@ -11,11 +11,10 @@ import { linkPaths } from '@aico/fleet/link'
 import { type PeerAnswer, PeerUnavailable, peerRequest } from '@aico/fleet/peer-http'
 import { pushToolLogins, setToolGrant } from '@aico/fleet/secrets'
 import { readSettings } from '@aico/fleet/settings'
-import { HttpError, type Router, readJsonObject, sendJson } from '../http'
-import type { ToolLogin } from '../lifecycle/tui/adapters/contract'
-import { ADAPTERS } from '../lifecycle/tui/registry'
-import { SIGN_IN_TITLE } from '../lifecycle/tui/sign-in-link'
+import { HttpError, type Router, readJsonObject, sendJson } from '@aico/shared/http'
 import { downReason } from './peer'
+import { DEFAULT_LOGINS, tetherHubPorts } from './ports'
+import type { HubTools, ToolLogin } from './types'
 
 /** A command's exit code (null when it could not run or timed out), its
  * stdout, and the last line it printed on stderr (else stdout) for a reason. */
@@ -71,10 +70,9 @@ export const runCommand: Runner = (argv, timeoutMs) =>
  * `session` sign-out are shell lines typed into a new session there; `command` runs over ssh. */
 export type { ToolLogin }
 
-/** The tools' own logins, from their adapters. A `host-logins.json` next to hosts.json overrides them per tool. */
-export const DEFAULT_LOGINS: Record<string, ToolLogin> = Object.fromEntries(
-  ADAPTERS.map((adapter) => [adapter.id, adapter.login]),
-)
+/** The tools' own logins (hub/ports.ts, from their adapters). A `host-logins.json` next to
+ * hosts.json overrides them per tool. */
+export { DEFAULT_LOGINS }
 
 const STATUS_LINE = '"$HOME/.local/lib/tether/bin/tether" fleet login-status'
 const STATUS_TIMEOUT_MS = 20_000
@@ -103,6 +101,8 @@ export interface HostAdminDeps {
   peer?: (socket: string, method: string, path: string, body: unknown) => Promise<PeerAnswer>
   grant?: (name: string, tool: string, granted: boolean) => Promise<void>
   readFile?: (path: string) => string
+  /** The tools' logins and sign-in title (default: this Tether's own, hub/ports.ts). */
+  tools?: HubTools
   log?: (message: string) => void
   /** One-shot timer, injectable for tests. */
   setTimer?: (fn: () => void, ms: number) => unknown
@@ -129,21 +129,22 @@ export function loadLogins(
   env: NodeJS.ProcessEnv,
   read: (path: string) => string,
   log: (message: string) => void,
+  defaults: Record<string, ToolLogin> = DEFAULT_LOGINS,
 ): Record<string, ToolLogin> {
   const path = join(dirname(hostsFilePath(env)), 'host-logins.json')
   let text: string
   try {
     text = read(path)
   } catch {
-    return DEFAULT_LOGINS
+    return defaults
   }
   try {
     const raw = record(JSON.parse(text))
     if (!raw) throw new Error('not an object')
-    return { ...DEFAULT_LOGINS, ...(raw as Record<string, ToolLogin>) }
+    return { ...defaults, ...(raw as Record<string, ToolLogin>) }
   } catch (error) {
     log(`host-logins.json ignored: ${(error as Error).message}`)
-    return DEFAULT_LOGINS
+    return defaults
   }
 }
 
@@ -151,6 +152,7 @@ export class HostAdmin {
   private readonly run: Runner
   private readonly peer: NonNullable<HostAdminDeps['peer']>
   private readonly read: (path: string) => string
+  private readonly tools: HubTools
   private readonly log: (message: string) => void
 
   constructor(private readonly deps: HostAdminDeps) {
@@ -158,6 +160,7 @@ export class HostAdmin {
     this.peer =
       deps.peer ??
       ((socket, method, path, body) => peerRequest(socket, method, path, body, CREATE_TIMEOUT_MS))
+    this.tools = deps.tools ?? tetherHubPorts.tools
     this.read = deps.readFile ?? ((path) => readFileSync(path, 'utf8'))
     this.log = deps.log ?? ((message) => console.log(`[tether:hosts] ${message}`))
   }
@@ -183,7 +186,7 @@ export class HostAdmin {
   }
 
   logins(): Record<string, ToolLogin> {
-    return loadLogins(this.deps.env, this.read, this.log)
+    return loadLogins(this.deps.env, this.read, this.log, this.tools.logins)
   }
 
   /** `GET /v1/hosts/:name/logins`: the host's `tether fleet login-status` as it
@@ -359,7 +362,7 @@ export class HostAdmin {
         await this.grant(name, tool, true)
         return [200, { host: name, tool, signedIn: true }]
       }
-      return this.openSession(name, `${SIGN_IN_TITLE}${tool}`, login.signIn, body)
+      return this.openSession(name, `${this.tools.signInTitle}${tool}`, login.signIn, body)
     }
     if (action !== 'sign_out') throw new HttpError(400, 'invalid_body', { field: 'action' })
     const signOut = login.signOut

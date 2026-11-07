@@ -1,7 +1,7 @@
 {
   "name": "@aico/shared",
   "version": "0.1.0",
-  "description": "Ids, time, clocks and secret masking every package may use.",
+  "description": "Ids, time, clocks, secret masking, HTTP helpers and the host admission reader every package may use.",
   "private": true,
   "license": "Apache-2.0",
   "aico": {
@@ -11,6 +11,8 @@
   "type": "module",
   "exports": {
     "./hlc": "./src/hlc.ts",
+    "./host-admission": "./src/host-admission.ts",
+    "./http": "./src/http.ts",
     "./secrets": "./src/secrets.ts",
     "./status-order": "./src/status-order.ts",
     "./suggest": "./src/suggest.ts",

@@ -11,14 +11,12 @@ import {
   admissionOverrideFromEnv,
   DEFAULT_AGENT_ADMISSION_LIMITS,
   type HostAdmissionVerdict,
-  hostAdmissionPath,
   hostAdmissionRed,
   LAUNCH_SETTLE_MS,
   observeAgentScopes,
   parseHostAdmission,
   parseMemAvailable,
   parseMemoryPressure,
-  readHostAdmission,
   type ScopeFs,
 } from './agent-admission'
 
@@ -415,16 +413,6 @@ describe('observeAgentScopes', () => {
 
 describe('Host admission state', () => {
   const now = 1_791_819_000_000
-  const state = (fields: Record<string, unknown>) =>
-    JSON.stringify({
-      v: 1,
-      state: 'red',
-      admit: false,
-      reason: 'swap 80%',
-      updated_at: now / 1000,
-      expires_at: now / 1000 + 30,
-      ...fields,
-    })
 
   it('defers every launch while the host denies admission, with its reason', async () => {
     const {
@@ -489,57 +477,5 @@ describe('Host admission state', () => {
     const { admission } = harness({ verdict })
     const denied = await denial(admission.reserve({ widgetId: 'abcd1234', kind: 'launch' }))
     expect(denied.reason).toContain('The host has closed agent admission (Disk is critical')
-  })
-
-  it('parses contract v1 and ignores stale, unknown or malformed state', () => {
-    expect(parseHostAdmission(state({}), now)).toEqual({
-      admit: false,
-      state: 'red',
-      memoryState: null,
-      reason: 'swap 80%',
-    })
-    expect(parseHostAdmission(state({ state: 'green', admit: true, reason: '' }), now)).toEqual({
-      admit: true,
-      state: 'green',
-      memoryState: null,
-      reason: 'no reason given',
-    })
-    expect(parseHostAdmission(state({ state: 'purple' }), now)).toMatchObject({
-      state: null,
-    })
-    expect(parseHostAdmission(state({ expires_at: now / 1000 - 1 }), now)).toBeNull()
-    expect(parseHostAdmission(state({ v: 2 }), now)).toBeNull()
-    expect(parseHostAdmission(state({ admit: 'no' }), now)).toBeNull()
-    expect(parseHostAdmission('{not json', now)).toBeNull()
-  })
-
-  it('reads admission.json under XDG_RUNTIME_DIR and treats a missing file as no verdict', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'tether-admission-'))
-    expect(hostAdmissionPath({ XDG_RUNTIME_DIR: dir })).toBe(
-      join(dir, 'host-steward', 'admission.json'),
-    )
-    expect(hostAdmissionPath({})).toBeNull()
-    // another user's Tether reads the file memctl publishes elsewhere; a relative override is ignored
-    expect(
-      hostAdmissionPath({
-        XDG_RUNTIME_DIR: dir,
-        TETHER_HOST_ADMISSION: '/run/host-steward-memctl/admission.json',
-      }),
-    ).toBe('/run/host-steward-memctl/admission.json')
-    expect(
-      hostAdmissionPath({ TETHER_HOST_ADMISSION: '/run/host-steward-memctl/admission.json' }),
-    ).toBe('/run/host-steward-memctl/admission.json')
-    expect(hostAdmissionPath({ XDG_RUNTIME_DIR: dir, TETHER_HOST_ADMISSION: 'x/y.json' })).toBe(
-      join(dir, 'host-steward', 'admission.json'),
-    )
-    const file = join(dir, 'admission.json')
-    expect(await readHostAdmission(file, now)).toBeNull()
-    writeFileSync(file, state({}))
-    expect(await readHostAdmission(file, now)).toEqual({
-      admit: false,
-      state: 'red',
-      memoryState: null,
-      reason: 'swap 80%',
-    })
   })
 })

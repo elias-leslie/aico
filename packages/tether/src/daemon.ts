@@ -24,6 +24,7 @@ import { HostAdmin } from './hub/host-admin'
 import { Hub } from './hub/hub'
 import { IdleOff, releaseStatusWriter, statusWriter } from './hub/idle-off'
 import { LOCAL_HOST, localRootFate, Placement } from './hub/placement'
+import { tetherHubPorts } from './hub/ports'
 import { installedRelease } from './hub/update'
 import { LaneReporter, LaneReportStore, laneView } from './lane-reports'
 import { hostAdmissionPath, hostAdmissionRed } from './lifecycle/agent-admission'
@@ -346,7 +347,8 @@ function createHub(
         status: releaseStatusWriter(env),
         fault: (error) => fleet.fault(error),
         uid: process.getuid?.(),
-        publish: (type, data) => events.publish(type, data),
+        ports: tetherHubPorts,
+        publish: (type, data) => events.publish(type as Parameters<EventBus['publish']>[0], data),
         settings: {
           get: (key) => store.getSetting(key),
           put: (key, value) => store.putSetting(key, value, Date.now()),
@@ -373,7 +375,7 @@ function createHub(
 
 /** Powers off a host that has sat with no sessions for its `idleOffMin` (src/hub/idle-off.ts). */
 function startIdleOff(context: DaemonContext, env: NodeJS.ProcessEnv, hosts: Hub): IdleOff {
-  const admin = new HostAdmin({ hub: hosts, env })
+  const admin = new HostAdmin({ hub: hosts, env, tools: tetherHubPorts.tools })
   const idle = new IdleOff({
     hostNames: () => hosts.hostNames(),
     idleFacts: (name) => hosts.idleFacts(name),

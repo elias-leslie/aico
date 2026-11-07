@@ -10,10 +10,7 @@ import { type HostEntry, hostsFilePath, loadHosts, peerDir } from '@aico/fleet/h
 import { linkPaths } from '@aico/fleet/link'
 import { forwardRequest, PeerUnavailable, peerRequest } from '@aico/fleet/peer-http'
 import { fleetFile, readSettings } from '@aico/fleet/settings'
-import { API_VERSION } from '../config'
-import type { EventType } from '../events'
-import { HttpError, sendJson } from '../http'
-import { ADAPTERS, adapterOf } from '../lifecycle/tui/registry'
+import { HttpError, sendJson } from '@aico/shared/http'
 import {
   type Descriptor,
   downReason,
@@ -24,7 +21,8 @@ import {
   type PeerUpdate,
 } from './peer'
 import type { PeerView } from './placement'
-import type { ReleaseIdentity } from './types'
+import { tetherHubPorts } from './ports'
+import type { HubPorts, ReleaseIdentity } from './types'
 import {
   installedRelease,
   installStarted,
@@ -63,7 +61,8 @@ export interface HubDeps {
   fleetPeers?: () => string[]
   fault?(error: unknown): void
   uid?: number
-  publish(type: EventType, data: Record<string, unknown>): void
+  /** `type` is an event type name (Tether's `EventType`); the hub relays what peers send. */
+  publish(type: string, data: Record<string, unknown>): void
   settings: { get(key: string): string | null; put(key: string, value: string): void }
   isLocalSession(id: string): boolean
   /** With an identity, match only that exact root, not a same-named remote root. */
@@ -93,6 +92,8 @@ export interface HubDeps {
   /** The files this hub runs from, as a worker is compared to it (tests set it; null sends none). */
   build?: ReleaseIdentity | null
   releaseSweepMs?: number
+  /** Tether's API version, instance-name check and tool facts (default: this Tether's own). */
+  ports?: HubPorts
   /** Write a Status row for a release update (aico-web's Status). */
   status?(row: ReleaseUpdateRow): Promise<void>
 }
@@ -180,6 +181,7 @@ export class Hub {
   private readonly updates = new Map<string, Promise<void>>()
   /** Creates in flight per host (they may be waking it or sending to it). */
   private readonly creating = new Map<string, number>()
+  private readonly ports: HubPorts
   private readonly updater: Updater
   private readonly release: string
   private readonly build: ReleaseIdentity | null
@@ -195,8 +197,9 @@ export class Hub {
     this.now = deps.now ?? Date.now
     this.snapshots = readJson(deps.settings.get(SNAPSHOTS_KEY), {})
     this.gate = { ...defaultGateRuntime, ...deps.gate }
+    this.ports = deps.ports ?? tetherHubPorts
     const release = runningRelease()
-    this.updater = deps.update ?? ((target) => pushRelease(release, target))
+    this.updater = deps.update ?? ((target) => pushRelease(release, target, this.ports))
     this.release = deps.release ?? releaseId(release)
     this.build = deps.build !== undefined ? deps.build : installedRelease(release)
   }
@@ -411,7 +414,7 @@ export class Hub {
     const from = peer.apiVersion
     if (
       from !== null &&
-      from >= API_VERSION &&
+      from >= this.ports.apiVersion &&
       peer.update?.state === 'failed' &&
       !peer.update.build
     ) {
@@ -419,9 +422,9 @@ export class Hub {
       peer.setUpdate(null)
       this.forgetUpdateFailure(peer.name)
     }
-    if (from === null || from >= API_VERSION || this.updates.has(peer.name)) return
+    if (from === null || from >= this.ports.apiVersion || this.updates.has(peer.name)) return
     const failed = this.updateFailures()[peer.name]
-    if (failed && failed.from === from && failed.to === API_VERSION) {
+    if (failed && failed.from === from && failed.to === this.ports.apiVersion) {
       if (failed.release === this.release) return
       this.log(`${peer.name}: the last Tether update failed on another hub release; trying again`)
     }
@@ -437,11 +440,11 @@ export class Hub {
     if (!peer.live || this.updates.has(name)) return
     const api = peer.apiVersion
     // An older API is `checkRelease`'s; a newer or unnamed one is left alone.
-    if (api !== API_VERSION || !this.build) return void this.awaiting.delete(name)
+    if (api !== this.ports.apiVersion || !this.build) return void this.awaiting.delete(name)
     const facts = this.idleFacts(name)
     const busy = !facts || facts.sessions > 0 || facts.wakes > 0 || facts.busy
     const action = releaseAction(
-      { api: API_VERSION, release: this.build },
+      { api: this.ports.apiVersion, release: this.build },
       { api, release: peer.release, busy },
     )
     if (action === 'current') {
@@ -525,7 +528,7 @@ export class Hub {
   }
 
   private async updatePeer(peer: Peer, from: number, build: boolean): Promise<void> {
-    const to = API_VERSION
+    const to = this.ports.apiVersion
     const short = (hash: string | undefined) => hash?.slice(0, 8)
     const change = build
       ? { build: { from: short(peer.release?.hash) ?? null, to: short(this.build?.hash) ?? '' } }
@@ -617,8 +620,8 @@ export class Hub {
    * older API than this one. Null when it is not. */
   private behind(peer: Peer): string | null {
     const api = peer.apiVersion
-    if (api === null || api >= API_VERSION) return null
-    const base = `remote Tether on ${peer.name} is API ${api}, needs ${API_VERSION}`
+    if (api === null || api >= this.ports.apiVersion) return null
+    const base = `remote Tether on ${peer.name} is API ${api}, needs ${this.ports.apiVersion}`
     const update = peer.update
     if (update?.state === 'failed') return `${base}; update failed: ${update.error}`
     return `${base}; updating`
@@ -931,7 +934,7 @@ export class Hub {
         host: peer.name,
         reason: `${peer.name} runs a Tether without session entries (API ${peer.apiVersion ?? 'unknown'})`,
       })
-    const needs = adapterOf(forwarded.tool)?.entryApiVersion
+    const needs = this.ports.tools.entryApiVersion(forwarded.tool)
     if (
       path === '/v1/roots' &&
       forwarded.entry !== undefined &&
@@ -940,9 +943,10 @@ export class Hub {
       (peer.apiVersion ?? 0) < needs
     ) {
       // The tools that peer's Tether runs through an entry, in words.
-      const runs = ADAPTERS.filter(
-        (adapter) => adapter.entryApiVersion && (peer.apiVersion ?? 0) >= adapter.entryApiVersion,
-      ).map((adapter) => adapter.id)
+      const runs = this.ports.tools
+        .entryTools()
+        .filter((tool) => (peer.apiVersion ?? 0) >= tool.entryApiVersion)
+        .map((tool) => tool.id)
       const list = runs.length > 1 ? `${runs.slice(0, -1).join(', ')} and ${runs.at(-1)}` : runs[0]
       throw new HttpError(400, 'entry_unsupported', {
         host: peer.name,

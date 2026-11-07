@@ -11,6 +11,7 @@ import { registerFileRoutes } from './files/api'
 import { HttpError, Router, readJsonObject, sendError, sendJson } from './http'
 import { HostAdmin, registerHostAdminRoutes } from './hub/host-admin'
 import type { Hub } from './hub/hub'
+import { tetherHubPorts } from './hub/ports'
 import { installedRelease } from './hub/update'
 import { getWidget } from './lifecycle/catalog'
 import { lifecycleStatus } from './lifecycle/engine'
@@ -427,6 +428,7 @@ function buildRouter(context: ServerContext): Router {
     hostAdmin ??= new HostAdmin({
       hub,
       env: process.env,
+      tools: tetherHubPorts.tools,
     })
     return hostAdmin
   })

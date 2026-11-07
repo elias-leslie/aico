@@ -22,9 +22,9 @@ import {
 } from '@aico/fleet/releases'
 import { readSettings } from '@aico/fleet/settings'
 import { readPins } from '@aico/fleet/trust'
-import { API_VERSION, isInstanceName } from '../config'
 import { type RunResult, shellQuote } from './host-admin'
-import type { ReleaseIdentity } from './types'
+import { tetherHubPorts } from './ports'
+import type { HubPorts, ReleaseIdentity } from './types'
 
 /** How long the copy, install, restart and rollback may take in all: two
  * answer waits, two stops and the copies. */
@@ -269,8 +269,9 @@ export function receiveUpdate(
   input: string,
   target: { instance: string; socket: string; stateDir: string | null; id: string },
   env = process.env,
+  ports: Pick<HubPorts, 'apiVersion' | 'isInstanceName'> = tetherHubPorts,
 ): RunResult {
-  if (!isInstanceName(target.instance) || !target.socket.startsWith('/'))
+  if (!ports.isInstanceName(target.instance) || !target.socket.startsWith('/'))
     throw new Error('Invalid update target')
   const settings = readSettings(env, '')
   if (!settings) throw new Error('Fleet is not configured')
@@ -281,7 +282,7 @@ export function receiveUpdate(
   const installed = existsSync(installedFile)
     ? verifyRelease(readFileSync(installedFile, 'utf8'), keys)
     : undefined
-  if (!newerRelease(candidate, API_VERSION, releaseHash(lib), installed))
+  if (!newerRelease(candidate, ports.apiVersion, releaseHash(lib), installed))
     return { code: 0, stdout: 'Already installed', output: '' }
   const resultFile = jobFile(settings.stateDir, target.id)
   if (existsSync(resultFile)) return updateResult(target.id, candidate.releaseHash, env)
@@ -338,10 +339,11 @@ export function receiveUpdate(
 export async function pushRelease(
   release: string | null,
   target: UpdateTarget,
+  ports: Pick<HubPorts, 'isInstanceName'> = tetherHubPorts,
 ): Promise<RunResult> {
   const fail = (output: string): RunResult => ({ code: null, stdout: '', output })
   if (!release) return fail('this Tether does not run from an installed release')
-  if (!target.instance || !isInstanceName(target.instance))
+  if (!target.instance || !ports.isInstanceName(target.instance))
     return fail('The host named no usable instance')
   let installing = false
   try {

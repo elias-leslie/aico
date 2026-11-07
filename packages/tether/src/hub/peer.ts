@@ -7,7 +7,6 @@
 import { statSync } from 'node:fs'
 import type { HostEntry } from '@aico/fleet/hosts'
 import { PeerUnavailable, peerRequest, peerStream } from '@aico/fleet/peer-http'
-import type { EventType } from '../events'
 import type { ReleaseIdentity, WakeProgress } from './types'
 
 export type HostState = 'connected' | 'connecting' | 'offline' | 'powered_off' | 'identity_changed'
@@ -41,7 +40,8 @@ export interface PeerSnapshot {
 }
 
 export interface PeerDeps {
-  publish(type: EventType, data: Record<string, unknown>): void
+  /** `type` is an event type name (Tether's `EventType`). */
+  publish(type: string, data: Record<string, unknown>): void
   /** A session id this hub runs itself: the local copy wins over a peer's. */
   isLocal(id: string): boolean
   /** An ask id this Tether holds itself. */
@@ -643,7 +643,7 @@ export class Peer {
   }
 
   private relay(event: Record<string, unknown>): void {
-    const type = event.type as EventType
+    const type = event.type as string
     const data = { ...(record(event.data) ?? {}) }
     // No transitive federation: what a peer relays from its own peers (its events
     // carry `host`; a host's own never do) is not ours. Two hosts linked both
