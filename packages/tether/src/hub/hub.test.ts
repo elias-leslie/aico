@@ -57,6 +57,8 @@ class FakePeer {
   identity: Record<string, unknown> = { name: 'vm-1', machineId: 'aaaa' }
   /** Absent: an older Tether that names no API version in its health. */
   apiVersion: number | undefined = undefined
+  /** Absent: a Tether from before health named its release. */
+  release: { hash: string; issuedAt: number | null } | undefined = undefined
   requests: { method: string; url: string; body: unknown }[] = []
   refuseEnd = false
   /** Refuse creates and deliveries as an older Tether refuses a field it
@@ -113,6 +115,7 @@ class FakePeer {
         status: 'ok',
         instance: 'default',
         apiVersion: this.apiVersion,
+        release: this.release,
         host: this.identity,
       })
     }
@@ -1059,6 +1062,167 @@ describe('hub', () => {
     await vi.waitFor(() => expect(state()).toBe('connected'), { timeout: 8_000 })
     expect(JSON.parse(settings.get('peer_identities') ?? '{}')).toEqual({
       vm: { hostname: 'clone', machineId: 'bbbb' },
+    })
+  })
+
+  describe('a host on this API but another build of the release', () => {
+    const ours = { hash: 'b'.repeat(64), issuedAt: 2000 }
+    const older = { hash: 'a'.repeat(64), issuedAt: 1000 }
+    const update = () => hub.hosts()[0]?.update as Record<string, unknown> | null | undefined
+    let rows: { id: string; state: string; meaning: string }[]
+
+    async function startHub(overrides: Partial<HubDeps> = {}): Promise<void> {
+      hub.close()
+      rows = []
+      hub = makeHub({
+        build: ours,
+        releaseSweepMs: 100,
+        status: async (row) => {
+          rows.push(row)
+        },
+        ...overrides,
+      })
+      hub.start()
+      await vi.waitFor(() => expect(state()).toBe('connected'))
+    }
+
+    /** The host restarts on the pushed build, as the update's restart does. */
+    async function restartOnOurs(): Promise<void> {
+      peer.release = ours
+      await peer.stop()
+      await peer.start()
+    }
+
+    beforeEach(() => {
+      peer.apiVersion = API_VERSION
+      peer.sessions = []
+    })
+
+    it('pushes this build to an idle host and says so in Status', async () => {
+      peer.release = older
+      const targets: UpdateTarget[] = []
+      await startHub({
+        update: async (target) => {
+          targets.push(target)
+          await restartOnOurs()
+          return { code: 0, stdout: `${UPDATE_INSTALLING}\n`, output: '' }
+        },
+      })
+      await vi.waitFor(() => expect(update()?.state).toBe('updated'), { timeout: 8_000 })
+      expect(targets).toHaveLength(1)
+      expect(update()).toMatchObject({
+        from: API_VERSION,
+        to: API_VERSION,
+        build: { from: 'aaaaaaaa', to: 'bbbbbbbb' },
+      })
+      expect(rows).toEqual([
+        expect.objectContaining({
+          id: 'tether/release-update/vm',
+          state: 'ok',
+          meaning: expect.stringContaining('release bbbbbbbb (was aaaaaaaa)'),
+        }),
+      ])
+    })
+
+    it('pushes to a host that names no release (it predates the field)', async () => {
+      peer.release = undefined
+      let calls = 0
+      await startHub({
+        update: async () => {
+          calls += 1
+          await restartOnOurs()
+          return { code: 0, stdout: '', output: '' }
+        },
+      })
+      await vi.waitFor(() => expect(update()?.state).toBe('updated'), { timeout: 8_000 })
+      expect(calls).toBe(1)
+    })
+
+    it('does not push when the host already runs this build', async () => {
+      peer.release = ours
+      let calls = 0
+      await startHub({
+        update: async () => {
+          calls += 1
+          return { code: 0, stdout: '', output: '' }
+        },
+      })
+      await new Promise((resolve) => setTimeout(resolve, 400))
+      expect(calls).toBe(0)
+      expect(update()).toBeNull()
+      expect(rows).toEqual([])
+    })
+
+    it('never pushes an older or same-age build over a host that runs a newer deploy', async () => {
+      let calls = 0
+      const counting = async () => {
+        calls += 1
+        return { code: 0, stdout: '', output: '' }
+      }
+      peer.release = { hash: 'c'.repeat(64), issuedAt: 3000 }
+      await startHub({ update: counting })
+      await new Promise((resolve) => setTimeout(resolve, 400))
+      peer.release = { hash: 'c'.repeat(64), issuedAt: 2000 }
+      await startHub({ update: counting })
+      await new Promise((resolve) => setTimeout(resolve, 400))
+      expect(calls).toBe(0)
+      // And an API below the host's is never taken down either.
+      peer.apiVersion = API_VERSION + 1
+      peer.release = older
+      await startHub({ update: counting })
+      await new Promise((resolve) => setTimeout(resolve, 400))
+      expect(calls).toBe(0)
+    })
+
+    it('holds off while sessions run there, and pushes once they end', async () => {
+      peer.release = older
+      peer.sessions = [session('aaaa0001')]
+      let calls = 0
+      await startHub({
+        update: async () => {
+          calls += 1
+          await restartOnOurs()
+          return { code: 0, stdout: '', output: '' }
+        },
+      })
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      expect(calls).toBe(0)
+      expect(update()).toBeNull()
+      peer.emit('session.updated', { session: { ...peer.sessions[0], status: 'ended' } })
+      await vi.waitFor(() => expect(update()?.state).toBe('updated'), { timeout: 8_000 })
+      expect(calls).toBe(1)
+    })
+
+    it('says why a failed push failed and does not repeat it on this hub release', async () => {
+      peer.release = older
+      let calls = 0
+      const failing = async () => {
+        calls += 1
+        return { code: 1, stdout: `${UPDATE_INSTALLING}\n`, output: 'its install failed' }
+      }
+      await startHub({ release: 'release-a', update: failing })
+      await vi.waitFor(() => expect(update()?.state).toBe('failed'))
+      expect(rows[0]).toMatchObject({ state: 'failed' })
+      expect(rows[0]?.meaning).toContain('its install failed')
+      await startHub({ release: 'release-a', update: failing })
+      await new Promise((resolve) => setTimeout(resolve, 400))
+      expect(calls).toBe(1)
+      await startHub({ release: 'release-b', update: failing })
+      await vi.waitFor(() => expect(calls).toBe(2))
+    })
+
+    it('sends nothing when this hub has no installed release of its own', async () => {
+      peer.release = older
+      let calls = 0
+      await startHub({
+        build: null,
+        update: async () => {
+          calls += 1
+          return { code: 0, stdout: '', output: '' }
+        },
+      })
+      await new Promise((resolve) => setTimeout(resolve, 400))
+      expect(calls).toBe(0)
     })
   })
 

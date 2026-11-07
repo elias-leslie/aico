@@ -24,7 +24,16 @@ import {
   type PeerUpdate,
 } from './peer'
 import type { PeerView } from './placement'
-import { installStarted, pushRelease, releaseId, runningRelease, type Updater } from './update'
+import type { ReleaseIdentity } from './types'
+import {
+  installedRelease,
+  installStarted,
+  pushRelease,
+  releaseAction,
+  releaseId,
+  runningRelease,
+  type Updater,
+} from './update'
 import { defaultGateRuntime, type GateRuntime, readyHost } from './wake'
 
 const LIST_TIMEOUT_MS = 1_500
@@ -37,6 +46,8 @@ const IDENTITIES_KEY = 'peer_identities'
 /** How long an updated host's Tether has to come back on the link. */
 const UPDATE_RECONNECT_MS = 60_000
 const UPDATE_POLL_MS = 500
+/** How often hosts that wait for their sessions to end are looked at again. */
+const RELEASE_SWEEP_MS = 30_000
 /** Failed updates by host, with the hub release that tried them. */
 const UPDATE_FAILURES_KEY = 'peer_update_failures'
 const SNAPSHOTS_KEY = 'peer_sessions'
@@ -79,6 +90,21 @@ export interface HubDeps {
   updateReconnectMs?: number
   /** This hub's release (src/hub/update.ts releaseId; tests set it). */
   release?: string
+  /** The files this hub runs from, as a worker is compared to it (tests set it; null sends none). */
+  build?: ReleaseIdentity | null
+  releaseSweepMs?: number
+  /** Write a Status row for a release update (aico-web's Status). */
+  status?(row: ReleaseUpdateRow): Promise<void>
+}
+
+export interface ReleaseUpdateRow {
+  id: string
+  what: string
+  kind: 'service'
+  machine: string
+  state: 'ok' | 'failed'
+  meaning: string
+  last_run: string
 }
 
 /** A failed update as settings keep it: the same from/to is tried again only
@@ -156,6 +182,12 @@ export class Hub {
   private readonly creating = new Map<string, number>()
   private readonly updater: Updater
   private readonly release: string
+  private readonly build: ReleaseIdentity | null
+  /** Hosts linked up since their last build check that have not had it done: a host
+   * with sessions waits here for the sweep. One attempt per link-up. */
+  private readonly awaiting = new Set<string>()
+  private readonly deferred = new Set<string>()
+  private sweepTimer: NodeJS.Timeout | null = null
 
   constructor(private readonly deps: HubDeps) {
     this.file = hostsFilePath(deps.env)
@@ -166,17 +198,25 @@ export class Hub {
     const release = runningRelease()
     this.updater = deps.update ?? ((target) => pushRelease(release, target))
     this.release = deps.release ?? releaseId(release)
+    this.build = deps.build !== undefined ? deps.build : installedRelease(release)
   }
 
   start(): void {
     this.reload()
     this.reloadTimer = setInterval(() => this.reload(), RELOAD_MS)
     this.reloadTimer.unref()
+    this.sweepTimer = setInterval(
+      () => this.sweepBuilds(),
+      this.deps.releaseSweepMs ?? RELEASE_SWEEP_MS,
+    )
+    this.sweepTimer.unref()
   }
 
   close(): void {
     if (this.reloadTimer) clearInterval(this.reloadTimer)
     this.reloadTimer = null
+    if (this.sweepTimer) clearInterval(this.sweepTimer)
+    this.sweepTimer = null
     for (const peer of this.peers.values()) peer.stop()
     this.peers.clear()
     this.flush()
@@ -275,6 +315,10 @@ export class Hub {
           poweredOff: (host) => this.poweredOff(host),
           kick: (host) => this.gate.kick(host),
           checked: (peer) => this.checkRelease(peer),
+          synced: (peer) => {
+            this.awaiting.add(peer.name)
+            this.checkBuild(peer)
+          },
         },
         this.snapshots[entry.name] ?? null,
       )
@@ -360,11 +404,17 @@ export class Hub {
    * another hub release, so a host that cannot take it is not restarted on
    * every link-up or hub restart. One that failed before (no ssh, a dropped
    * link, a held lock) installed nothing and is tried on the next link-up. A
-   * peer that names no API, or a newer one, is left alone. */
+   * peer that names no API, or a newer one, is left alone. A peer on the same
+   * API but another build is `checkBuild`'s. */
   private checkRelease(peer: Peer): void {
     // The production updater sends only verified, signed releases.
     const from = peer.apiVersion
-    if (from !== null && from >= API_VERSION && peer.update?.state === 'failed') {
+    if (
+      from !== null &&
+      from >= API_VERSION &&
+      peer.update?.state === 'failed' &&
+      !peer.update.build
+    ) {
       // Brought up to this API some other way: the failure no longer holds.
       peer.setUpdate(null)
       this.forgetUpdateFailure(peer.name)
@@ -375,7 +425,63 @@ export class Hub {
       if (failed.release === this.release) return
       this.log(`${peer.name}: the last Tether update failed on another hub release; trying again`)
     }
-    const run = this.updatePeer(peer, from)
+    this.startUpdate(peer, from, false)
+  }
+
+  /** A linked-up peer on this API but another build of the release gets this
+   * hub's build once no session runs there (restarting its Tether is the
+   * cost); `releaseAction` decides. Called when the host's list is in and,
+   * for a host that waited on its sessions, by the sweep. */
+  private checkBuild(peer: Peer): void {
+    const name = peer.name
+    if (!peer.live || this.updates.has(name)) return
+    const api = peer.apiVersion
+    // An older API is `checkRelease`'s; a newer or unnamed one is left alone.
+    if (api !== API_VERSION || !this.build) return void this.awaiting.delete(name)
+    const facts = this.idleFacts(name)
+    const busy = !facts || facts.sessions > 0 || facts.wakes > 0 || facts.busy
+    const action = releaseAction(
+      { api: API_VERSION, release: this.build },
+      { api, release: peer.release, busy },
+    )
+    if (action === 'current') {
+      this.awaiting.delete(name)
+      if (peer.update?.state === 'failed' && peer.update.build) {
+        peer.setUpdate(null)
+        this.forgetUpdateFailure(name)
+      }
+      return
+    }
+    if (action === 'defer') {
+      if (!this.deferred.has(name))
+        this.log(
+          `${name}: its Tether is on another build than this one; waiting for its sessions to end`,
+        )
+      this.deferred.add(name)
+      return
+    }
+    this.awaiting.delete(name)
+    this.deferred.delete(name)
+    const failed = this.updateFailures()[name]
+    if (failed?.build && failed.release === this.release) return
+    this.startUpdate(peer, api, true)
+  }
+
+  private sweepBuilds(): void {
+    for (const name of [...this.awaiting]) {
+      const peer = this.peers.get(name)
+      if (!peer?.live) {
+        this.awaiting.delete(name)
+        this.deferred.delete(name)
+        continue
+      }
+      this.checkBuild(peer)
+    }
+  }
+
+  private startUpdate(peer: Peer, from: number, build: boolean): void {
+    if (this.updates.has(peer.name)) return
+    const run = this.updatePeer(peer, from, build)
       .catch((error: Error) => this.log(`${peer.name}: Tether update failed: ${error.message}`))
       .finally(() => this.updates.delete(peer.name))
     this.updates.set(peer.name, run)
@@ -392,10 +498,44 @@ export class Hub {
     this.deps.settings.put(UPDATE_FAILURES_KEY, JSON.stringify(failures))
   }
 
-  private async updatePeer(peer: Peer, from: number): Promise<void> {
+  /** Aico web's Status says each release update: when a host got this hub's
+   * build, and why one did not. */
+  private reportUpdate(peer: Peer, update: PeerUpdate): void {
+    const status = this.deps.status
+    if (!status || update.state === 'updating') return
+    const at = new Date(this.now())
+    const clock = at.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+    const what = update.build
+      ? `release ${update.build.to}${update.build.from ? ` (was ${update.build.from})` : ''}`
+      : `API ${update.to}`
+    const done = update.state === 'updated'
+    status({
+      id: `tether/release-update/${peer.name}`,
+      what: `Tether release on ${peer.name}`,
+      kind: 'service',
+      machine: peer.name,
+      state: done ? 'ok' : 'failed',
+      meaning: done
+        ? `This Tether sent ${peer.name} its release at ${clock}; ${peer.name} now runs ${what}.`
+        : `This Tether tried to bring ${peer.name} to ${what} at ${clock} and could not: ${update.error ?? 'unknown error'}.`,
+      last_run: at.toISOString(),
+    }).catch((error: Error) =>
+      this.log(`${peer.name}: could not write its Status row: ${error.message}`),
+    )
+  }
+
+  private async updatePeer(peer: Peer, from: number, build: boolean): Promise<void> {
     const to = API_VERSION
-    peer.setUpdate({ state: 'updating', from, to, since: this.now(), error: null })
-    this.log(`${peer.name}: its Tether is API ${from}, this one is ${to}; updating it`)
+    const short = (hash: string | undefined) => hash?.slice(0, 8)
+    const change = build
+      ? { build: { from: short(peer.release?.hash) ?? null, to: short(this.build?.hash) ?? '' } }
+      : {}
+    peer.setUpdate({ state: 'updating', from, to, ...change, since: this.now(), error: null })
+    this.log(
+      build
+        ? `${peer.name}: its Tether is release ${change.build?.from ?? 'unknown'}, this one is ${change.build?.to}; updating it (API ${to})`
+        : `${peer.name}: its Tether is API ${from}, this one is ${to}; updating it`,
+    )
     /** `remember` false: nothing was installed (no ssh, a dropped link, a
      * held lock), so the next link-up tries again. */
     const fail = (why: string, remember = true) => {
@@ -403,8 +543,16 @@ export class Hub {
         ? why
         : `${why}; nothing was installed, tried again on the next link-up`
       this.log(`${peer.name}: Tether update failed: ${error}`)
-      const update: PeerUpdate = { state: 'failed', from, to, since: this.now(), error }
+      const update: PeerUpdate = {
+        state: 'failed',
+        from,
+        to,
+        ...change,
+        since: this.now(),
+        error,
+      }
       peer.setUpdate(update)
+      this.reportUpdate(peer, update)
       if (!remember) return this.forgetUpdateFailure(peer.name)
       this.deps.settings.put(
         UPDATE_FAILURES_KEY,
@@ -429,18 +577,39 @@ export class Hub {
     // The restart dropped the peer's stream; wait for the link-up on the new release.
     const waitMs = this.deps.updateReconnectMs ?? UPDATE_RECONNECT_MS
     const deadline = this.now() + waitMs
-    while (!(peer.live && (peer.apiVersion ?? 0) >= to)) {
+    const installed = () =>
+      peer.live &&
+      (peer.apiVersion ?? 0) >= to &&
+      (!build ||
+        result.stdout.includes('Already installed') ||
+        peer.release?.hash === this.build?.hash)
+    while (!installed()) {
       if (this.now() >= deadline)
         return fail(
           peer.live
-            ? `its Tether still answers API ${peer.apiVersion ?? 'unknown'} after the update`
+            ? build
+              ? `its Tether still runs release ${short(peer.release?.hash) ?? 'unknown'} after the update`
+              : `its Tether still answers API ${peer.apiVersion ?? 'unknown'} after the update`
             : `its Tether did not come back within ${Math.round(waitMs / 1000)} s after the update`,
         )
       peer.retryNow()
       await new Promise<void>((resolve) => setTimeout(resolve, UPDATE_POLL_MS).unref())
     }
-    this.log(`${peer.name}: Tether updated from API ${from} to ${peer.apiVersion}`)
-    peer.setUpdate({ state: 'updated', from, to, since: this.now(), error: null })
+    this.log(
+      build
+        ? `${peer.name}: Tether updated to release ${change.build?.to} (was ${change.build?.from ?? 'unknown'}, API ${peer.apiVersion})`
+        : `${peer.name}: Tether updated from API ${from} to ${peer.apiVersion}`,
+    )
+    const update: PeerUpdate = {
+      state: 'updated',
+      from,
+      to,
+      ...change,
+      since: this.now(),
+      error: null,
+    }
+    peer.setUpdate(update)
+    this.reportUpdate(peer, update)
     this.forgetUpdateFailure(peer.name)
   }
 

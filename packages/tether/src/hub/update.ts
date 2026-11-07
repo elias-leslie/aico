@@ -13,6 +13,7 @@ import {
   DEFAULT_UPDATE_PINS,
   newerRelease,
   RELEASE_FILES,
+  type Release,
   readUpdateKeys,
   releaseHash,
   SIGNED_RELEASE,
@@ -23,6 +24,7 @@ import { readSettings } from '@aico/fleet/settings'
 import { readPins } from '@aico/fleet/trust'
 import { API_VERSION, isInstanceName } from '../config'
 import { type RunResult, shellQuote } from './host-admin'
+import type { ReleaseIdentity } from './types'
 
 /** How long the copy, install, restart and rollback may take in all: two
  * answer waits, two stops and the copies. */
@@ -73,6 +75,65 @@ export function releaseId(release: string | null): string {
   } catch {
     return 'none'
   }
+}
+
+const identities = new Map<string, ReleaseIdentity | null>()
+
+/** The installed release this process runs from, read once per process (the bundle
+ * is what runs, so a later install in the same folder is not it). Null when it runs
+ * from anywhere else, or the folder is not a whole release. */
+export function installedRelease(dir: string | null = runningRelease()): ReleaseIdentity | null {
+  if (!dir) return null
+  if (identities.has(dir)) return identities.get(dir) ?? null
+  let identity: ReleaseIdentity | null = null
+  try {
+    const hash = releaseHash(dir)
+    let issuedAt: number | null = null
+    try {
+      const signed = JSON.parse(readFileSync(join(dir, SIGNED_RELEASE), 'utf8')) as {
+        payload?: string
+      }
+      const payload = JSON.parse(signed.payload ?? '{}') as Partial<Release>
+      // Only a signature file that describes these files says when they were issued.
+      if (payload.releaseHash === hash && Number.isSafeInteger(payload.issuedAt))
+        issuedAt = payload.issuedAt as number
+    } catch {
+      // Unsigned: no deploy order.
+    }
+    identity = { hash, issuedAt }
+  } catch {
+    identity = null
+  }
+  identities.set(dir, identity)
+  return identity
+}
+
+export type ReleaseAction = 'current' | 'update' | 'defer'
+
+/** Whether a host's Tether should get this hub's release (same API or not).
+ * - An API older than the hub's: always `update` (the hub cannot talk to it as it is).
+ * - A newer API, or one that names none: `current`, never a downgrade.
+ * - The same API: `current` when the host reports the same files, or files issued at
+ *   or after this hub's (a standby hub that is behind never pushes over a newer
+ *   deploy); otherwise `update`, but `defer` while sessions run there, since the
+ *   update restarts its Tether. A host that reports no release (it predates this)
+ *   is updated; its own receiver still refuses an older signed release. */
+export function releaseAction(
+  hub: { api: number; release: ReleaseIdentity | null },
+  host: { api: number | null; release: ReleaseIdentity | null; busy: boolean },
+): ReleaseAction {
+  if (host.api === null || host.api > hub.api) return 'current'
+  if (host.api < hub.api) return 'update'
+  if (!hub.release) return 'current'
+  if (host.release) {
+    if (host.release.hash === hub.release.hash) return 'current'
+    if (
+      host.release.issuedAt !== null &&
+      (hub.release.issuedAt === null || host.release.issuedAt >= hub.release.issuedAt)
+    )
+      return 'current'
+  }
+  return host.busy ? 'defer' : 'update'
 }
 
 /** The shell line the host runs with the release's tar on stdin. */

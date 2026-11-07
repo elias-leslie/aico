@@ -22,8 +22,9 @@ import { EventBus } from './events'
 import { listenPrivateSocket } from './http'
 import { HostAdmin } from './hub/host-admin'
 import { Hub } from './hub/hub'
-import { IdleOff, statusWriter } from './hub/idle-off'
+import { IdleOff, releaseStatusWriter, statusWriter } from './hub/idle-off'
 import { LOCAL_HOST, localRootFate, Placement } from './hub/placement'
+import { installedRelease } from './hub/update'
 import { LaneReporter, LaneReportStore, laneView } from './lane-reports'
 import { hostAdmissionPath, hostAdmissionRed } from './lifecycle/agent-admission'
 import {
@@ -277,6 +278,8 @@ function startContinuity(context: DaemonContext, env: NodeJS.ProcessEnv): void {
     void recovery.onAbandoned(event)
     deadShells.onAbandoned(event)
   })
+  // The release this process runs, read now: health reports it and a hub sends it.
+  installedRelease()
   void deadShells.settleStartup(context.startedAt)
   setLaunchGuard((id) => recovery.holdsLaunch(id))
   context.continuity = continuity
@@ -340,6 +343,7 @@ function createHub(
   return hubEnabled(env)
     ? new Hub({
         env,
+        status: releaseStatusWriter(env),
         fault: (error) => fleet.fault(error),
         uid: process.getuid?.(),
         publish: (type, data) => events.publish(type, data),

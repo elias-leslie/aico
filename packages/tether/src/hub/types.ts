@@ -11,3 +11,10 @@ export interface WakeProgress {
   since: number
   error: string | null
 }
+
+/** What a Tether release is, whatever its API version: the hash of its installed files and,
+ * when a signed update sits beside them, when it was issued (the deploy order). */
+export interface ReleaseIdentity {
+  hash: string
+  issuedAt: number | null
+}

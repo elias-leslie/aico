@@ -6,7 +6,7 @@
 // power-off is logged and written to Status; the row goes when the host is up again.
 
 import { AICO_WEB_DEFAULT_URL } from '../config'
-import type { IdleFacts } from './hub'
+import type { HubDeps, IdleFacts } from './hub'
 
 export interface IdleOffDeps {
   hostNames(): string[]
@@ -144,5 +144,19 @@ export function statusWriter(env: NodeJS.ProcessEnv): IdleOffDeps['status'] {
         })
     if (!response.ok && response.status !== 404)
       throw new Error(`Status answered ${response.status}`)
+  }
+}
+
+/** A release-update row (src/hub/hub.ts) over the same loopback API. */
+export function releaseStatusWriter(env: NodeJS.ProcessEnv): NonNullable<HubDeps['status']> {
+  const base = (env.AICO_WEB_URL?.trim() || AICO_WEB_DEFAULT_URL).replace(/\/+$/, '')
+  return async (row) => {
+    const response = await fetch(`${base}/api/status/rows`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify([row]),
+      signal: AbortSignal.timeout(10_000),
+    })
+    if (!response.ok) throw new Error(`Status answered ${response.status}`)
   }
 }

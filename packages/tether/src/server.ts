@@ -11,6 +11,7 @@ import { registerFileRoutes } from './files/api'
 import { HttpError, Router, readJsonObject, sendError, sendJson } from './http'
 import { HostAdmin, registerHostAdminRoutes } from './hub/host-admin'
 import type { Hub } from './hub/hub'
+import { installedRelease } from './hub/update'
 import { getWidget } from './lifecycle/catalog'
 import { lifecycleStatus } from './lifecycle/engine'
 import { createRootHandlerState, type RootHandlerState } from './lifecycle/root-control'
@@ -256,6 +257,9 @@ function buildRouter(context: ServerContext): Router {
         instance: paths.instance,
         version: VERSION,
         apiVersion: API_VERSION,
+        /** The installed files this Tether runs from (null from a checkout); a hub
+         * compares it to its own to bring a worker up to the same build. */
+        release: installedRelease(),
         schemaVersion: store.schemaVersion(),
         uptimeMs: Math.max(0, now() - context.startedAt),
         bootId: events.bootId,

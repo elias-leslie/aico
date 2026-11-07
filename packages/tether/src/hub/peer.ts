@@ -8,7 +8,7 @@ import { statSync } from 'node:fs'
 import type { HostEntry } from '@aico/fleet/hosts'
 import { PeerUnavailable, peerRequest, peerStream } from '@aico/fleet/peer-http'
 import type { EventType } from '../events'
-import type { WakeProgress } from './types'
+import type { ReleaseIdentity, WakeProgress } from './types'
 
 export type HostState = 'connected' | 'connecting' | 'offline' | 'powered_off' | 'identity_changed'
 
@@ -26,6 +26,8 @@ export interface PeerUpdate {
   /** The host's API version before, and this hub's. */
   from: number
   to: number
+  /** Short release hashes when the update was for a different build of the same API. */
+  build?: { from: string | null; to: string }
   since: number
   error: string | null
 }
@@ -59,6 +61,8 @@ export interface PeerDeps {
   /** The peer answered its health on a link-up as the trusted machine
    * (`apiVersion` and `instance` are fresh). */
   checked?(peer: Peer): void
+  /** The peer's session list is in and it is connected. */
+  synced?(peer: Peer): void
 }
 
 const HEALTH_TIMEOUT_MS = 3_000
@@ -133,6 +137,8 @@ export class Peer {
   wake: WakeProgress | null = null
   /** The peer Tether's `apiVersion` from its last health answer. */
   apiVersion: number | null = null
+  /** The peer Tether's installed release from its last health answer (null when it names none). */
+  release: ReleaseIdentity | null = null
   /** The peer Tether's instance from its last health answer. */
   instance: string | null = null
   /** The last update of its Tether to this hub's API, if one was needed. */
@@ -496,6 +502,14 @@ export class Peer {
     if (health.status !== 200) throw new PeerUnavailable(`health answered ${health.status}`)
     const api = record(health.body)?.apiVersion
     this.apiVersion = typeof api === 'number' ? api : null
+    const release = record(record(health.body)?.release)
+    this.release =
+      typeof release?.hash === 'string'
+        ? {
+            hash: release.hash,
+            issuedAt: typeof release.issuedAt === 'number' ? release.issuedAt : null,
+          }
+        : null
     const instance = record(health.body)?.instance
     this.instance = typeof instance === 'string' ? instance : null
     const host = record(record(health.body)?.host)
@@ -553,6 +567,7 @@ export class Peer {
               .then(() => {
                 synced = true
                 onUp()
+                this.deps.synced?.(this)
                 for (const queued of early.splice(0)) this.relay(queued)
               })
               .catch((error) => {
