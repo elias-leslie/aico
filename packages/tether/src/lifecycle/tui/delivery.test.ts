@@ -15,8 +15,12 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { Store } from '../../store'
 import {
   bindCatalog,
+  getSessionEntry,
+  getWidget,
   insertWidget,
+  listSessions,
   reserveRootRequest,
+  rootRequestForWidget,
   setWidgetName,
   setWidgetProject,
 } from '../catalog'
@@ -172,6 +176,12 @@ describe('withContextDelivery', () => {
     env,
     now: () => new Date(DELIVERY_FIXTURE.now),
     toolUsage: async () => DELIVERY_FIXTURE.toolUsage,
+    catalog: {
+      widget: getWidget,
+      hasEntry: (id: string) => getSessionEntry(id) !== null,
+      workRole: (id: string) => rootRequestForWidget(id)?.workRole ?? null,
+      sessions: listSessions,
+    },
   }
   beforeAll(() => {
     bindCatalog(store.db)

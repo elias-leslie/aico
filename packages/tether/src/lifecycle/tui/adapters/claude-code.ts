@@ -6,7 +6,7 @@
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import type { AgentSignal } from '../../../agent-state'
+import type { AgentSignal } from '../../../agent-signal'
 import {
   keyOf,
   type ModelEvent,

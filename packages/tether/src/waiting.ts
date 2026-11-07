@@ -10,7 +10,7 @@
 // Only the Tether that knows where Aico is (TETHER_AICO_URL) sends these: it
 // sees its own sessions and every remote host's, so a remote Tether stays quiet.
 
-import { DEFAULT_URL as AICO_WEB_DEFAULT_URL } from './capture-cli'
+import { AICO_WEB_DEFAULT_URL } from './config'
 import { HttpError, type Router, readJsonObject, sendJson } from './http'
 
 /** Blocked and unseen this long: one notice. */

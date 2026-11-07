@@ -7,6 +7,7 @@ import { existsSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
+import { AICO_WEB_DEFAULT_URL } from './config'
 
 export const CAPTURE_USAGE = `Usage:
   tether capture list [--status S] [--ask ID] [--limit N] [--json]
@@ -26,7 +27,7 @@ export const CAPTURE_USAGE = `Usage:
 
 Talks to http://127.0.0.1:3002 (AICO_WEB_URL overrides).`
 
-export const DEFAULT_URL = 'http://127.0.0.1:3002'
+export const DEFAULT_URL = AICO_WEB_DEFAULT_URL
 const STATUSES = ['new', 'extracting', 'ready', 'failed', 'filed']
 
 export interface CaptureIo {

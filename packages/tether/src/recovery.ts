@@ -74,7 +74,7 @@ import {
 } from './lifecycle/tui/launch'
 import { adapterOf, getTui } from './lifecycle/tui/registry'
 import type { TuiSpec } from './lifecycle/tui/spec'
-import type { LifecycleApiContext } from './lifecycle-api'
+import type { LifecycleContext } from './lifecycle-context'
 import { nodeProcFs, processTree, UUID_RE } from './proc-fs'
 import {
   CRASH_RESULTS,
@@ -406,7 +406,7 @@ export class Recovery {
   private busy = false
 
   constructor(
-    private readonly context: LifecycleApiContext,
+    private readonly context: Pick<LifecycleContext, 'paths' | 'placement'>,
     options: RecoveryOptions = {},
   ) {
     this.path = join(context.paths.stateDir, 'recoveries.json')

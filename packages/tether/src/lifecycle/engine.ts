@@ -58,6 +58,7 @@ import {
   compareAndSetWidgetOwnership,
   coordinatorRoleLanes,
   getCurrentManagedTmuxServer,
+  getSessionEntry,
   getTmuxServer,
   getWidget,
   insertLegacyUnclassifiedWidget,
@@ -69,6 +70,7 @@ import {
   markTmuxServerDead,
   promoteCoordinatorLanes,
   removeWidgetIfOwnership,
+  rootRequestForWidget,
   setWidgetPendingScope,
   setWidgetProject,
   setWidgetTool,
@@ -170,7 +172,13 @@ import {
 } from './tmux-server-state'
 import { ensureBlankSlateWorkspace, isBlankSlateRoot } from './tui/blank-slate'
 import { ensureContext } from './tui/context'
-import { forgetDelivery, withContextDelivery, withLastDelivery } from './tui/delivery'
+import {
+  type DeliveryDeps,
+  withContextDelivery as deliverContext,
+  deliveryDeps,
+  forgetDelivery,
+  withLastDelivery,
+} from './tui/delivery'
 import { detectTuiFromProcessNames, parseProcessTable, processTreeNames } from './tui/detect'
 import { type AgentExitMarker, paneCommand, paneGatePath, parseAgentExitMarker } from './tui/launch'
 import { agentProcessNames, getTui, listTuis } from './tui/registry'
@@ -201,6 +209,9 @@ interface EngineConfig {
   projectRoot: (projectId: string) => string | null
   /** The desktop session's current graphical variables; they win over `env`. */
   graphicalEnv?: () => Record<string, string>
+  /** Whether Aico's project registry lists a project, for context delivery
+   * (the daemon passes it; without it a delivery skips the check). */
+  registeredProject?: (projectId: string) => boolean
 }
 
 let config: EngineConfig | null = null
@@ -217,6 +228,23 @@ function stateDir(): string {
 
 function tmuxConfPath(): string {
   return join(stateDir(), 'tmux.conf')
+}
+
+/** What a launch's context delivery reads: the catalog and the project registry. */
+function contextDeliveryDeps(): DeliveryDeps {
+  return deliveryDeps(
+    {
+      widget: getWidget,
+      hasEntry: (id) => getSessionEntry(id) !== null,
+      workRole: (id) => rootRequestForWidget(id)?.workRole ?? null,
+      sessions: listSessions,
+    },
+    config?.registeredProject,
+  )
+}
+
+function withContextDelivery<T extends TuiSpec | undefined>(spec: T, widgetId: string): Promise<T> {
+  return deliverContext(spec, widgetId, contextDeliveryDeps())
 }
 
 /** Bind the instance. The daemon calls this once before `startLifecycle`. */

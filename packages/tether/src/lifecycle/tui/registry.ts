@@ -4,7 +4,7 @@
 // engine's pure-data TuiSpec. The adapters are code and can never be edited
 // through the API; the table holds the operator's command, colour and order.
 
-import type { AgentTool, ContextHook as ToolContextHook } from '../../tools'
+import type { AgentTool, ContextHook as ToolContextHook } from '../../tool-types'
 import { agy } from './adapters/agy'
 import { aicoAgent } from './adapters/aico-agent'
 import { claudeCode } from './adapters/claude-code'

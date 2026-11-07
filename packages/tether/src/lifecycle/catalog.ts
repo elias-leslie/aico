@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto'
 import type { DatabaseSync, StatementSync } from 'node:sqlite'
 import { MAX_UNIX_SOCKET_PATH_BYTES } from '../config'
 import { durableTmuxServerUnit, MANAGED_LIFECYCLE_VERSION } from './ownership'
-import type { RootLaunchOptions } from './root-control'
+import type { RootLaunchOptions } from './types'
 
 // Session catalog, extracted from Aico's electron/main/store.ts. Aico's
 // `widgets` identity columns live in Tether's `sessions` table with identical

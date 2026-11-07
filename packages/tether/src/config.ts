@@ -45,6 +45,9 @@ import { join } from 'node:path'
  * older than that. */
 export const API_VERSION = 32
 
+/** Where Aico's web server listens on this host (`AICO_WEB_URL` overrides it). */
+export const AICO_WEB_DEFAULT_URL = 'http://127.0.0.1:3002'
+
 /** The one instance that keeps Aico's names and adopts historical servers. */
 export const DEFAULT_INSTANCE = 'default'
 

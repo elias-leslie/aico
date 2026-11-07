@@ -1,13 +1,13 @@
 import { randomUUID } from 'node:crypto'
 import { AGENT_SESSION_ENV, FRESH_SESSION_ENV } from '../proc-fs'
 import { getLaunchOptions, getWidget, rootRequestForWidget } from './catalog'
-import type { RootLaunchOptions } from './root-control'
 import { forWorkspace } from './tui/blank-slate'
 import { withInstructions } from './tui/instructions'
 import { forRole } from './tui/lane-tools'
 import { isResumeSessionId, launchLine, resumeLaunchLine } from './tui/launch'
 import { getTui } from './tui/registry'
 import type { TuiSpec } from './tui/spec'
+import type { RootLaunchOptions } from './types'
 
 /** What a session launches: its tool in its workspace (Blank Slate or not),
  * trimmed to its work role, with its chosen instructions. Every launch path

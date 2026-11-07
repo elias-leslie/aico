@@ -15,7 +15,7 @@ import type { ShowConfig } from './config'
 import type { EventBus } from './events'
 import { HttpError, type Router, readJsonObject, sendJson } from './http'
 import type { Hub } from './hub/hub'
-import { realPaths, ShareStore } from './show'
+import { realPaths, ShareStore } from './shares'
 
 const MAX_ASK_OPTIONS = 5
 /** The most files one ask can want or be answered with. */

@@ -31,6 +31,7 @@ import {
   ROOT_CREATE_TOOLS,
   supportsInstructions,
 } from './tui/registry'
+import type { RootLaunchOptions } from './types'
 
 const KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
 /** A provider/model id: the tool's provider flag takes the part before the slash. */
@@ -51,12 +52,6 @@ function promptOverLimit(value: unknown): number | null {
   if (!object(value) || typeof value.initialPrompt !== 'string') return null
   const limit = value.resumeSessionId ? MAX_RESUME_PROMPT_BYTES : MAX_FRESH_PROMPT_BYTES
   return Buffer.byteLength(value.initialPrompt) > limit ? limit : null
-}
-
-export interface RootLaunchOptions {
-  model: string | null
-  reasoningEffort: string | null
-  daybreak?: boolean | null
 }
 
 /** The explicit launch options a create asked for, or null for none. */

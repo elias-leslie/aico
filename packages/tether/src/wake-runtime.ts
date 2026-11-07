@@ -45,8 +45,9 @@ import { MAIN_TURN_OVER } from './lifecycle/tui/adapters/contract'
 import { ensureBlankSlateWorkspace, isBlankSlateRoot } from './lifecycle/tui/blank-slate'
 import { isResumeSessionId } from './lifecycle/tui/launch'
 import { getTui, isDeliveryTool } from './lifecycle/tui/registry'
-import type { LifecycleApiContext } from './lifecycle-api'
+import type { LifecycleContext } from './lifecycle-context'
 import { nodeProcFs } from './proc-fs'
+import type { Continuity } from './reboot'
 import { pasteIntoRunningSession, runTmux } from './running-session'
 import {
   applyWakePolicyPatch,
@@ -124,6 +125,9 @@ export function agentBusyReason(agent: Record<string, unknown>): string | null {
   return `the agent is ${agent.state} (${agent.stateSource})`
 }
 
+/** The shared context, with the one service the wake runtime reads from it. */
+export type WakeContext = LifecycleContext & { continuity?: Pick<Continuity, 'observe'> }
+
 export class WakeService {
   readonly store: WakeStore
   readonly scheduler: WakeScheduler
@@ -133,7 +137,7 @@ export class WakeService {
   private readonly now: () => number
 
   constructor(
-    private readonly context: LifecycleApiContext,
+    private readonly context: WakeContext,
     options: { home?: string; now?: () => number; operations?: Partial<WakeOperations> } = {},
   ) {
     this.store = new WakeStore(context.store.db)

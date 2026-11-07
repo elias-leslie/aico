@@ -8,17 +8,9 @@ import { spawn } from 'node:child_process'
 import { execArgv } from '@aico/fleet/exec'
 import { HttpError } from '../http'
 import type { Peer } from './peer'
+import type { WakeProgress, WakeStep } from './types'
 
-export type WakeStep = 'powering_on' | 'connecting' | 'checking_services'
-
-/** What a create is waiting for on a host, shown while it waits and after it failed. */
-export interface WakeProgress {
-  state: 'starting' | 'failed'
-  reason: 'host_starting'
-  step: WakeStep
-  since: number
-  error: string | null
-}
+export type { WakeProgress } from './types'
 
 export interface GateRuntime {
   /** Run an argv to completion: its exit code (null when it could not run or

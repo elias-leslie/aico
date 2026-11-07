@@ -7,7 +7,7 @@
 // capabilities set to false below. Tether delivers to it by the gated paste.
 
 import { DatabaseSync } from 'node:sqlite'
-import type { AgentSignal } from '../../../agent-state'
+import type { AgentSignal } from '../../../agent-signal'
 import { type ProcFs, UUID_RE } from '../../../proc-fs'
 import type { ContextStatus } from '../spec'
 import type { AgentProbe, TuiAdapter } from './contract'

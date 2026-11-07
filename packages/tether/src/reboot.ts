@@ -35,7 +35,7 @@ import { ENTRY_RETRY_EXIT } from './lifecycle/entries'
 import { withRootPrompt } from './lifecycle/root-launch'
 import { isResumeSessionId } from './lifecycle/tui/launch'
 import { getTui } from './lifecycle/tui/registry'
-import type { LifecycleApiContext } from './lifecycle-api'
+import type { LifecycleContext } from './lifecycle-context'
 import { nodeProcFs } from './proc-fs'
 import type { Recovery } from './recovery'
 import { restoreSessionReservation } from './recovery-placement'
@@ -136,7 +136,7 @@ export class Continuity {
   })
 
   constructor(
-    private readonly context: LifecycleApiContext,
+    private readonly context: Pick<LifecycleContext, 'paths' | 'placement'>,
     options: ContinuityOptions = {},
   ) {
     this.snapshotPath = join(context.paths.stateDir, 'continuity.json')

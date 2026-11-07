@@ -30,8 +30,6 @@ import {
   recordDelivery,
   type Source,
 } from '@aico/context'
-import { registryProjects } from '@aico/tasks/registry'
-import { getSessionEntry, getWidget, listSessions, rootRequestForWidget } from '../catalog'
 import { shellQuote } from './launch'
 import type { TuiSpec } from './spec'
 
@@ -98,25 +96,60 @@ function writeAtomic(path: string, body: string): void {
   renameSync(temporary, path)
 }
 
+/** A session as a delivery reads it (the catalog's widget row has all of it). */
+export interface DeliverySession {
+  id: string
+  createdAt: number
+  tool: string
+  name: string | null
+  projectId: string | null
+  projectRoot: string | null
+  sessionId: string
+  coordinator: boolean
+}
+
+/** What a delivery reads of the session catalog, passed in by the engine (the
+ * adapters sit below the catalog and never import it). */
+export interface DeliveryCatalog {
+  widget(id: string): DeliverySession | undefined
+  /** Whether the session runs through an entry (a container home). */
+  hasEntry(id: string): boolean
+  workRole(id: string): string | null
+  sessions(): DeliverySession[]
+}
+
 export interface DeliveryDeps {
   env: NodeJS.ProcessEnv
   now(): Date
   toolUsage(cwd: string | undefined, project: string | null): Promise<Source<string>>
-  /** Whether Aico's project registry lists the project. */
+  /** Whether Aico's project registry lists the project (the daemon passes it). */
   registered?(project: string): boolean
+  catalog: DeliveryCatalog
 }
 
-const DEFAULT_DEPS: DeliveryDeps = {
-  env: process.env,
-  now: () => new Date(),
-  toolUsage: (cwd, project) => readToolUsage(undefined, process.env, cwd, project),
-  registered: (project) => registryProjects(process.env).some((row) => row.id === project),
+/** The delivery's own defaults around the engine's catalog and registry. */
+export function deliveryDeps(
+  catalog: DeliveryCatalog,
+  registered?: (project: string) => boolean,
+): DeliveryDeps {
+  return {
+    env: process.env,
+    now: () => new Date(),
+    toolUsage: (cwd, project) => readToolUsage(undefined, process.env, cwd, project),
+    ...(registered ? { registered } : {}),
+    catalog,
+  }
 }
 
 /** The project's other named sessions, for the Recent Activity lines. */
-function projectActivity(widgetId: string, project: string | null): Activity[] {
+function projectActivity(
+  catalog: DeliveryCatalog,
+  widgetId: string,
+  project: string | null,
+): Activity[] {
   if (!project) return []
-  return listSessions()
+  return catalog
+    .sessions()
     .filter((row) => row.id !== widgetId && row.projectId === project && row.name)
     .map((row) => ({ at: row.createdAt, tool: row.tool, name: row.name as string }))
 }
@@ -127,7 +160,7 @@ function projectActivity(widgetId: string, project: string | null): Activity[] {
 export async function withContextDelivery<T extends TuiSpec | undefined>(
   spec: T,
   widgetId: string,
-  deps: DeliveryDeps = DEFAULT_DEPS,
+  deps: DeliveryDeps,
 ): Promise<T> {
   const how = spec?.contextDelivery
   // A Blank Slate workspace launches with nothing added; a session entry runs in
@@ -137,8 +170,8 @@ export async function withContextDelivery<T extends TuiSpec | undefined>(
   const dir = deliveryDir(widgetId, deps.env)
   let db: Database | null = null
   try {
-    const row = getWidget(widgetId)
-    if (!row || getSessionEntry(widgetId) || !existsSync(path)) return spec
+    const row = deps.catalog.widget(widgetId)
+    if (!row || deps.catalog.hasEntry(widgetId) || !existsSync(path)) return spec
     db = openContext(path)
     if (!deliveryTools(db).includes(spec.slug)) {
       rmSync(dir, { recursive: true, force: true })
@@ -153,10 +186,10 @@ export async function withContextDelivery<T extends TuiSpec | undefined>(
       tool: spec.slug,
       project: row.projectId,
       session: row.sessionId,
-      role: rootRequestForWidget(widgetId)?.workRole ?? null,
+      role: deps.catalog.workRole(widgetId),
       coordinator: row.coordinator,
       toolUsage: await deps.toolUsage(row.projectRoot ?? undefined, row.projectId),
-      activity: projectActivity(widgetId, row.projectId),
+      activity: projectActivity(deps.catalog, widgetId, row.projectId),
       ...(deps.registered ? { registered: deps.registered } : {}),
       now,
       ...(chosen && spec.chosenInstructions

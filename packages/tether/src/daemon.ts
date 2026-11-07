@@ -172,6 +172,7 @@ function bindLifecycleModules(
     env,
     projectRoot: (projectId) => projectRoots.get(projectId) ?? null,
     graphicalEnv: reconcileEnabled(env) ? userManagerGraphicalEnvironment : undefined,
+    registeredProject: (project) => registryProjects(process.env).some((row) => row.id === project),
   })
 }
 

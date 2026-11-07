@@ -8,7 +8,7 @@ import { statSync } from 'node:fs'
 import type { HostEntry } from '@aico/fleet/hosts'
 import { PeerUnavailable, peerRequest, peerStream } from '@aico/fleet/peer-http'
 import type { EventType } from '../events'
-import type { WakeProgress } from './wake'
+import type { WakeProgress } from './types'
 
 export type HostState = 'connected' | 'connecting' | 'offline' | 'powered_off' | 'identity_changed'
 

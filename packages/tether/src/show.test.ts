@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { callSocket } from './client'
 import { resolvePaths, resolveShowConfig, type TetherPaths } from './config'
 import { type RunningDaemon, startDaemon } from './daemon'
-import { ShareStore } from './show'
+import { ShareStore } from './shares'
 import { Store } from './store'
 
 let dir: string
