@@ -52,3 +52,6 @@ Performance and refactor run (Backups load, session open 2.5 s, any page or comm
 
 ## Added by the owner (2026-11-06)
 28. Needs you questions carry the files the agent shares for them: file chips on the card that open in place, so nothing has to be looked up in Files > Shared. (S-M, being built now: owner request)
+
+## Approved (owner 2026-11-06)
+Build with the mockup 2 layout (docs/plans/post-consolidation/mockup-2/, NOTES.md). Changes from the list: #7/#8 become mockup 2's top bar + drag-out left pane (rail/panel/wide/full, phone slide-over); #13 the Agents page is renamed Context (tabs Prompts, Roles, Memory, Cost); Notes one click in the top bar; #16 mode switch as in mockup 1; owner previews (st browser preview) stay open until closed. Then the performance and refactor run.
