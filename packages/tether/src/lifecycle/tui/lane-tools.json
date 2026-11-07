@@ -11,7 +11,7 @@
     "roles": {
       "coordinator": false,
       "implementation": { "args": ["--disallowedTools=AskUserQuestion,ReportFindings"] },
-      "other": { "args": ["--disallowedTools=ReportFindings,ScheduleWakeup"] },
+      "other": { "args": ["--disallowedTools=AskUserQuestion,ReportFindings,ScheduleWakeup"] },
       "*": { "args": ["--disallowedTools=AskUserQuestion,ReportFindings,ScheduleWakeup"] }
     }
   }

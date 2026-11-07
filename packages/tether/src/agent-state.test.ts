@@ -246,6 +246,51 @@ describe('Codex rollout', () => {
     expect(turn.signal().state).toBe('idle')
   })
 
+  it('an asynchronous question stays blocked past its accepted output and the turn end, until the owner answers', () => {
+    const turn = new CodexTurn(CODEX)
+    turn.apply(line('event_msg', { type: 'task_started' }))
+    turn.apply(
+      line('response_item', {
+        type: 'function_call',
+        name: 'request_user_input_async',
+        call_id: 'a1',
+      }),
+    )
+    expect(turn.signal()).toMatchObject({ state: 'blocked', detail: 'input needed' })
+    turn.apply(
+      line('response_item', {
+        type: 'function_call_output',
+        call_id: 'a1',
+        output: '{"accepted":true}',
+      }),
+    )
+    expect(turn.signal().state).toBe('blocked')
+    // The agent's own and tool-injected lines are not the owner's answer.
+    turn.apply(line('response_item', { type: 'message', role: 'assistant' }))
+    turn.apply(line('response_item', { type: 'message', role: 'developer' }))
+    expect(turn.signal().state).toBe('blocked')
+    turn.apply(line('event_msg', { type: 'task_complete' }))
+    expect(turn.signal()).toMatchObject({ state: 'blocked', detail: 'input needed' })
+    // The owner's reply starts the next turn.
+    turn.apply(line('event_msg', { type: 'task_started' }))
+    expect(turn.signal().state).toBe('working')
+  })
+
+  it('an asynchronous question asked mid-turn is answered by a user message', () => {
+    const turn = new CodexTurn(CODEX)
+    turn.apply(line('event_msg', { type: 'task_started' }))
+    turn.apply(
+      line('response_item', {
+        type: 'custom_tool_call',
+        name: 'request_user_input_async',
+        call_id: 'a1',
+      }),
+    )
+    expect(turn.signal().state).toBe('blocked')
+    turn.apply(line('response_item', { type: 'message', role: 'user' }))
+    expect(turn.signal().state).toBe('working')
+  })
+
   it.each([
     ['on-request', 'user', 'blocked'],
     ['never', 'user', 'working'],

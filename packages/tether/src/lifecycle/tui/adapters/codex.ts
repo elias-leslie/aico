@@ -115,6 +115,11 @@ export function entryCodexRollout(
 
 /** Tools whose call waits for the user's answer. */
 const CODEX_QUESTION_TOOLS = new Set(['request_user_input'])
+/** Questions that do not wait: the call returns `{"accepted":true}` at once and
+ * the turn goes on (or ends); the question stays open in Codex until the owner
+ * answers, which arrives as a user message or the next turn. Measured in a
+ * 2026-11-05 rollout: the call never reached Needs you. */
+const CODEX_ASYNC_QUESTION_TOOLS = new Set(['request_user_input_async'])
 /** Approval prompts, if a Codex build ever records them in the rollout. */
 const CODEX_APPROVAL_EVENTS = new Set([
   'exec_approval_request',
@@ -163,6 +168,9 @@ export class CodexTurn {
   private active = false
   private approval = false
   private readonly questions = new Set<string>()
+  /** Asynchronous questions asked and not yet answered: they outlive their
+   * call's output and the turn's end, until an owner message or a new turn. */
+  private readonly asyncQuestions = new Set<string>()
   /** Escalated tool calls the user must approve, until their output. */
   private readonly escalations = new Set<string>()
   /** The turn's policy routes escalation requests to the user. */
@@ -200,6 +208,8 @@ export class CodexTurn {
         this.active = kind === 'task_started'
         this.approval = false
         this.questions.clear()
+        // A new turn is the owner's answer (or a new ask); an ended turn leaves the question open.
+        if (kind === 'task_started') this.asyncQuestions.clear()
         this.escalations.clear()
         stamp()
       } else if (typeof kind === 'string' && CODEX_APPROVAL_EVENTS.has(kind)) {
@@ -214,7 +224,19 @@ export class CodexTurn {
     }
     if (item.type !== 'response_item') return
     const callId = typeof payload.call_id === 'string' ? payload.call_id : null
+    if (kind === 'message' && payload.role === 'user' && this.asyncQuestions.size > 0) {
+      this.asyncQuestions.clear()
+      stamp()
+    }
     if (
+      (kind === 'function_call' || kind === 'custom_tool_call') &&
+      callId &&
+      typeof payload.name === 'string' &&
+      CODEX_ASYNC_QUESTION_TOOLS.has(payload.name)
+    ) {
+      this.asyncQuestions.add(callId)
+      stamp()
+    } else if (
       (kind === 'function_call' || kind === 'custom_tool_call') &&
       callId &&
       typeof payload.name === 'string' &&
@@ -244,7 +266,7 @@ export class CodexTurn {
 
   signal(): AgentSignal {
     const base = { source: 'codex-rollout', at: this.at, agentSessionId: this.threadId }
-    if (this.active && this.questions.size > 0)
+    if (this.asyncQuestions.size > 0 || (this.active && this.questions.size > 0))
       return { ...base, state: 'blocked', detail: 'input needed' }
     if (this.active && (this.approval || this.escalations.size > 0))
       return { ...base, state: 'blocked', detail: 'permission prompt' }

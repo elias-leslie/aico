@@ -91,8 +91,9 @@ describe('shipped lane tools', () => {
   })
 
   it('keeps the tools a role used in the last week', () => {
-    // implementation lanes scheduled wakeups; an "other" lane asked a question.
+    // implementation lanes scheduled wakeups. Questions go through tether ask for every role: the
+    // trimmed roles start without AskUserQuestion, and aico-hook refuses it for the rest.
     expect(forRole(claude, 'implementation').command.at(-1)).not.toContain('ScheduleWakeup')
-    expect(forRole(claude, 'other').command.at(-1)).not.toContain('AskUserQuestion')
+    expect(forRole(claude, 'other').command.at(-1)).toContain('AskUserQuestion')
   })
 })

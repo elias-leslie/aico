@@ -393,7 +393,11 @@ arguments, all documented harness switches. Claude Code roles other than
 `coordinator` start without the Artifact and Workflow tools, Claude-drafted
 feedback, Chrome and claude.ai connectors, and with `--disallowedTools` for tools
 the role did not use in a week (AskUserQuestion, ReportFindings, ScheduleWakeup;
-`implementation` keeps ScheduleWakeup, `other` keeps AskUserQuestion). That takes
+`implementation` keeps ScheduleWakeup). Questions to the owner go through
+`tether ask create` for every role: aico-hook refuses AskUserQuestion (and Codex's
+request_user_input and request_user_input_async) in any session, coordinators and
+owner-started ones included, with the exact form to use (`native/hook/data/hook.json`
+`ask`). That takes
 a fresh lane from about 45K to 23K tokens. Coordinators and sessions nobody
 launched keep the full harness. Codex and Pi are not listed: Neri's Codex lanes
 use computer use, and Blank Slate Codex and Pi already start bare.
