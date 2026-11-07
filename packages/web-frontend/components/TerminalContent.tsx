@@ -79,8 +79,17 @@ function TerminalContentBody({
   const shownSlot = getShownSlot(terminalSlots, activeSessionId)
   // A deep link or a session picked from the sheet shows that session.
   const setSheetOpen = frame?.setSheetOpen
+  // Not on first render: a page opened by its link (/needs-you on a phone)
+  // keeps its sheet open.
+  const firstSession = useRef(true)
   // biome-ignore lint/correctness/useExhaustiveDependencies: on a new session only
-  useEffect(() => setSheetOpen?.(false), [activeSessionId])
+  useEffect(() => {
+    if (firstSession.current) {
+      firstSession.current = false
+      return
+    }
+    setSheetOpen?.(false)
+  }, [activeSessionId])
   useShownSessionPublisher(terminalSlots, shownSlot, terminalStatuses)
   const atFull = frame?.docked === true && frame.tier === 'full'
   const select = (slot: TerminalSlot | PaneSlot) => {

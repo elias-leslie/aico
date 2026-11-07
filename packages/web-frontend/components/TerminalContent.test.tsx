@@ -208,7 +208,8 @@ describe('TerminalContent compose box', () => {
     frame.current = { docked: false, tier: 'panel', setTier, setSheetOpen }
     render(<TerminalContent {...props} onSlotSwitch={vi.fn()} />)
     expect(screen.getByTestId('session-side')).not.toHaveAttribute('inert')
-    setSheetOpen.mockClear()
+    // The first render leaves a page's sheet (a /needs-you link) open.
+    expect(setSheetOpen).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Pick session b' }))
     expect(setSheetOpen).toHaveBeenCalledWith(false)
     expect(setTier).not.toHaveBeenCalled()
