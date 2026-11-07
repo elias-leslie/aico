@@ -74,9 +74,6 @@ export interface SessionViewProps {
   /** Desktop: whether the compose box is shown */
   composeOpen?: boolean
   onToggleCompose?: () => void
-  /** The session list sits beside the session (desktop browsers), so the
-   * bar shows the title without a switcher and keeps search open. */
-  sideList?: boolean
   onChatBack?: () => void
 }
 
@@ -118,7 +115,6 @@ export function SessionView({
   isModeSwitching,
   composeOpen,
   onToggleCompose,
-  sideList = false,
   onChatBack,
 }: SessionViewProps) {
   const [refreshVersion, setRefreshVersion] = useState(0)
@@ -204,7 +200,6 @@ export function SessionView({
         slots={slots}
         onOpen={onSwitch}
         onNewSession={onNewSession}
-        showLaunchers={!sideList}
       />
     )
   }
@@ -265,7 +260,6 @@ export function SessionView({
               ? () => onUpload(sessionId ?? undefined)
               : undefined
           }
-          onOpenModal={sideList ? undefined : onNewSession}
           onModeSwitch={
             onModeSwitch ? (mode) => onModeSwitch(slot, mode) : undefined
           }
@@ -273,9 +267,7 @@ export function SessionView({
           composeOpen={composeOpen}
           onToggleCompose={chat ? undefined : onToggleCompose}
           isMobile={isMobile}
-          allSlots={sideList ? undefined : slots}
-          onSwitchTo={sideList ? undefined : onSwitch}
-          searchAlwaysOpen={sideList && !isMobile}
+          searchAlwaysOpen={!isMobile}
           connectionStatus={
             chat
               ? undefined

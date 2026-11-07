@@ -7,23 +7,15 @@ import { useServerReach } from '@/lib/frame/server-reach'
 import { useSessionAttention } from '@/lib/hooks/use-session-attention'
 import { usePaneListError } from '@/lib/hooks/use-terminal-panes'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
-import { NeedsYouLauncher } from './asks/NeedsYou'
-import { CaptureLauncher } from './capture/CaptureLauncher'
 import { useFrame } from './frame/FrameContext'
-import { HostsLauncher } from './HostsButton'
-import { HistoryLauncher } from './history/HistoryLauncher'
-import { NotesLauncher } from './notes/NotesLauncher'
+import { SideEdgeButton, sideIsAway } from './frame/SideEdgeButton'
 import { SessionList } from './SessionList'
-import { StatusLauncher } from './status/StatusLauncher'
 
 interface EmptySessionStateProps {
   /** Running sessions the user can open. */
   slots: Array<TerminalSlot | PaneSlot>
   onOpen?: (slot: TerminalSlot | PaneSlot) => void
   onNewSession?: () => void
-  /** No session list beside this (a phone or a narrow window): show Needs
-   * you, Status and Hosts here, as the session sheet does. */
-  showLaunchers?: boolean
 }
 
 /**
@@ -33,7 +25,6 @@ export function EmptySessionState({
   slots,
   onOpen,
   onNewSession,
-  showLaunchers = false,
 }: EmptySessionStateProps) {
   const attention = useSessionAttention()
   // Can't reach the server: the list is its last answer, so its states are muted.
@@ -55,15 +46,10 @@ export function EmptySessionState({
       style={{ backgroundColor: 'var(--rim)' }}
       data-stale={down ? 'true' : undefined}
     >
-      {showLaunchers && (
-        <header className="lantern-sheet-tools mx-auto flex max-w-md flex-wrap items-center justify-end gap-2">
-          <NeedsYouLauncher variant="row" />
-          <CaptureLauncher variant="row" />
-          <NotesLauncher variant="row" />
-          <StatusLauncher variant="row" />
-          <HistoryLauncher variant="row" />
-          <HostsLauncher />
-        </header>
+      {sideIsAway(frame) && (
+        <div className="-mx-2 -mt-2 flex h-12 items-center">
+          <SideEdgeButton />
+        </div>
       )}
       <div className="mx-auto flex max-w-md flex-col items-center gap-3 pt-[12vh] text-center">
         {failed ? (

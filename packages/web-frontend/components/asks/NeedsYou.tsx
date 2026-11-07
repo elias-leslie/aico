@@ -43,70 +43,27 @@ export function takeAskFromUrl(): string | null {
   return /^[0-9a-f]{12}$/.test(id) ? id : null
 }
 
-/** Where the launcher sits: the session bar on a desktop (`pill`), its
- * folded rail (`icon`), the phone's session bar (`compact`: the count alone,
- * nothing when nothing waits), the session sheet (`row`: labelled) or no
- * button at all (`none`). */
-type Variant = 'pill' | 'icon' | 'compact' | 'row' | 'none'
-
-/** The "N need you" button: it shows Needs you in the side. */
-export function NeedsYouLauncher({ variant = 'pill' }: { variant?: Variant }) {
+/** The "N need you" icon button (the Rail's): it shows Needs you in the side. */
+/** (`variant` is kept for the Rail's call; there is only the icon now.) */
+export function NeedsYouLauncher(_props: { variant?: 'icon' }) {
   const { count, summary } = useNeedsYouCounts()
   const show = () => openNeedsYou()
-
-  if (variant === 'none') return null
-  if (variant === 'row')
-    return (
-      <button
-        type="button"
-        className="lantern-btn ghost small"
-        onClick={show}
-        aria-label={summary}
-        title={summary}
-        data-testid="needs-you-pill"
-        data-count={count}
-      >
-        <Inbox className="h-4 w-4" strokeWidth={1.7} aria-hidden="true" />
-        Needs you
-        {count > 0 && (
-          <span aria-hidden="true" style={{ color: 'var(--lantern)' }}>
-            {count}
-          </span>
-        )}
-      </button>
-    )
-  if (variant === 'icon' || (variant !== 'compact' && count === 0))
-    return (
-      <button
-        type="button"
-        className="lantern-icon-btn compact relative"
-        onClick={show}
-        aria-label={summary}
-        title={summary}
-        data-testid="needs-you-pill"
-        data-count={count}
-      >
-        <Inbox className="h-[18px] w-[18px]" strokeWidth={1.7} />
-        {count > 0 && (
-          <span aria-hidden="true" className="lantern-rail-count">
-            {count}
-          </span>
-        )}
-      </button>
-    )
-  if (count === 0) return null
   return (
     <button
       type="button"
-      className="lantern-need-pill"
+      className="lantern-icon-btn compact relative"
       onClick={show}
       aria-label={summary}
       title={summary}
       data-testid="needs-you-pill"
       data-count={count}
     >
-      <span aria-hidden="true" className="dot" />
-      {variant === 'pill' ? `${count} need you` : count}
+      <Inbox className="h-[18px] w-[18px]" strokeWidth={1.7} />
+      {count > 0 && (
+        <span aria-hidden="true" className="lantern-rail-count">
+          {count}
+        </span>
+      )}
     </button>
   )
 }

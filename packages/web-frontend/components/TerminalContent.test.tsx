@@ -66,11 +66,9 @@ vi.mock('./terminal-content/TerminalFileSection', () => ({
   TerminalFileSection: ({
     composeOpen,
     onToggleCompose,
-    sideList,
   }: {
     composeOpen?: boolean
     onToggleCompose?: () => void
-    sideList?: boolean
   }) => (
     <>
       {onToggleCompose && (
@@ -82,7 +80,6 @@ vi.mock('./terminal-content/TerminalFileSection', () => ({
           Compose
         </button>
       )}
-      {sideList && <p>Bar without its own switcher</p>}
     </>
   ),
 }))
@@ -169,7 +166,7 @@ describe('TerminalContent compose box', () => {
     expect(screen.getByTestId('phone-key-row')).toBeInTheDocument()
   })
 
-  it('puts the panel or rail beside the session and says the bar needs no switcher', () => {
+  it('puts the panel or rail beside the session', () => {
     frame.current = {
       docked: true,
       tier: 'panel',
@@ -178,7 +175,6 @@ describe('TerminalContent compose box', () => {
     }
     const { rerender } = render(<TerminalContent {...props} />)
     expect(screen.getByText('List')).toBeVisible()
-    expect(screen.getByText('Bar without its own switcher')).toBeVisible()
     frame.current = { ...frame.current, tier: 'rail' }
     rerender(<TerminalContent {...props} />)
     expect(screen.getByText('Rail')).toBeVisible()
@@ -213,10 +209,5 @@ describe('TerminalContent compose box', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Pick session b' }))
     expect(setSheetOpen).toHaveBeenCalledWith(false)
     expect(setTier).not.toHaveBeenCalled()
-  })
-
-  it('shows no session list without the frame (a page standing alone)', () => {
-    render(<TerminalContent {...props} />)
-    expect(screen.queryByText('Bar without its own switcher')).toBeNull()
   })
 })

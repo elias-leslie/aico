@@ -7,15 +7,13 @@ import { useAgentTools } from '@/lib/hooks/use-agent-tools'
 import { useTerminalPanes } from '@/lib/hooks/use-terminal-panes'
 import { useTerminalSessions } from '@/lib/hooks/use-terminal-sessions'
 import { getSlotPanelId, getSlotSessionId, isPaneSlot } from '@/lib/utils/slot'
-import { NeedsYouLauncher } from '../asks/NeedsYou'
-import { CaptureLauncher } from '../capture/CaptureLauncher'
+import { useFrame } from '../frame/FrameContext'
+import { SideEdgeButton } from '../frame/SideEdgeButton'
 import { ModeToggle } from '../ModeToggle'
-import { NotesLauncher } from '../notes/NotesLauncher'
 import { PaneOverflowMenu } from '../PaneOverflowMenu'
 import { ContextFillBadge } from './ContextFillBadge'
 import { HeaderIconButton } from './HeaderIconButton'
 import { HeaderNameDisplay } from './HeaderNameDisplay'
-import { NewSessionButton } from './NewSessionButton'
 import { PaneSearchControl } from './PaneSearchControl'
 import { PaneStatusBadge } from './PaneStatusBadge'
 import type { UnifiedTerminalHeaderProps } from './types'
@@ -34,12 +32,9 @@ export const UnifiedTerminalHeaderContent = memo(
     onRefresh,
     onFiles,
     onUpload,
-    onOpenModal,
     onModeSwitch,
     isModeSwitching = false,
     isMobile = false,
-    allSlots,
-    onSwitchTo,
     connectionStatus,
     searchAlwaysOpen = false,
     onSearch,
@@ -51,6 +46,11 @@ export const UnifiedTerminalHeaderContent = memo(
     const { renamePane } = useTerminalPanes()
     const { update: updateSession } = useTerminalSessions()
     const [isRenaming, setIsRenaming] = useState(false)
+    // The title only where no list shows this session's row beside it: Rail,
+    // a hidden side, a phone. Rename still opens the name field.
+    const frame = useFrame()
+    const listShowsRow =
+      !!frame?.docked && (frame.tier === 'panel' || frame.tier === 'wide')
     const paneId = isPaneSlot(slot) ? slot.paneId : null
     // A session the backend lets us rename keeps its name in Tether (Aico
     // shows it too); a pane name is only for sessions Tether does not own.
@@ -80,6 +80,8 @@ export const UnifiedTerminalHeaderContent = memo(
           isMobile ? 'pr-1 pl-1.5' : 'pr-1.5 pl-2.5',
         )}
       >
+        <SideEdgeButton />
+
         {/* The session's tool mark; switches shell <-> agent on a project */}
         {slot.type === 'project' && onModeSwitch && (
           <ModeToggle
@@ -92,31 +94,23 @@ export const UnifiedTerminalHeaderContent = memo(
           />
         )}
 
-        {/* Beside the session list the top bar already names the session and
-            says its state, so the toolbar repeats neither (Rename still opens
-            the name field here); without the list, the switcher in this name
-            carries it. */}
         <div
           className={clsx(
             'flex min-w-0 flex-[0_1_auto] items-center',
-            !allSlots && !isRenaming && 'hidden',
+            listShowsRow && !isRenaming && 'hidden',
           )}
         >
           <HeaderNameDisplay
             slot={slot}
             isActive={isActive}
             isMobile={isMobile}
-            allSlots={allSlots}
-            onSwitchTo={onSwitchTo}
             onRename={canRename ? handleRename : undefined}
             isEditing={isRenaming}
             onEditingChange={setIsRenaming}
           />
         </div>
 
-        {allSlots && (
-          <PaneStatusBadge status={connectionStatus} compact={isMobile} />
-        )}
+        <PaneStatusBadge status={connectionStatus} compact={isMobile} />
         <ContextFillBadge
           sessionId={getSlotSessionId(slot)}
           mode={slot.type === 'project' ? slot.activeMode : slot.sessionMode}
@@ -125,19 +119,6 @@ export const UnifiedTerminalHeaderContent = memo(
         <div className="min-w-1 flex-1" />
 
         <div className="flex min-w-0 flex-[0_1_auto] items-center gap-0.5">
-          {/* Without the session list beside it, the bar carries Needs you. */}
-          {allSlots && onSwitchTo && (
-            <>
-              <NeedsYouLauncher variant={isMobile ? 'compact' : 'pill'} />
-              <CaptureLauncher variant="icon" />
-              <NotesLauncher variant="icon" />
-            </>
-          )}
-
-          {onOpenModal && (
-            <NewSessionButton onClick={onOpenModal} isMobile={isMobile} />
-          )}
-
           {onSearch && onClearSearch && (
             <PaneSearchControl
               onSearch={onSearch}

@@ -38,8 +38,6 @@ type TerminalFileSectionProps = Pick<
 > & {
   composeOpen?: boolean
   onToggleCompose?: () => void
-  /** The session list sits beside the session (desktop) */
-  sideList?: boolean
   onChatBack?: () => void
 }
 
@@ -59,7 +57,6 @@ export function TerminalFileSection({
   isModeSwitching,
   composeOpen,
   onToggleCompose,
-  sideList,
   onChatBack,
   fileInputRef,
   progress,
@@ -126,7 +123,6 @@ export function TerminalFileSection({
           isModeSwitching={isModeSwitching}
           composeOpen={composeOpen}
           onToggleCompose={onToggleCompose}
-          sideList={sideList}
           onChatBack={onChatBack}
         />
       </FileUploadDropzone>

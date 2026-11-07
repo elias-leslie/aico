@@ -151,17 +151,6 @@ vi.mock('@/lib/hooks/use-agent-tools', () => ({
   useAgentTools: () => ({ agentTools: [] }),
 }))
 
-vi.mock('./capture/CaptureLauncher', () => ({
-  CaptureLauncher: () => <button type="button">Capture</button>,
-}))
-vi.mock('./asks/NeedsYou', () => ({
-  NeedsYouLauncher: () => <button type="button">Needs you</button>,
-}))
-vi.mock('./status/StatusLauncher', () => ({
-  StatusLauncher: () => <a href="/status">Status</a>,
-}))
-vi.mock('./HostsButton', () => ({ HostsLauncher: () => null }))
-
 vi.mock('@/lib/hooks/use-terminal-panes', () => ({
   usePaneListError: () => ({ isError: false, retry: vi.fn() }),
 }))
@@ -269,21 +258,6 @@ describe('SessionView', () => {
     expect(notice.nextElementSibling).toBe(frame)
   })
 
-  it('with no session open and no list beside it, offers Needs you and Status', () => {
-    const { rerender } = render(
-      <SessionView fontSize={14} slots={[]} activeSessionId={null} />,
-    )
-    expect(screen.getByText('No session open.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Needs you' })).toBeVisible()
-    expect(screen.getByRole('link', { name: 'Status' })).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Capture' })).toBeVisible()
-    rerender(
-      <SessionView fontSize={14} slots={[]} activeSessionId={null} sideList />,
-    )
-    expect(screen.queryByRole('button', { name: 'Needs you' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Capture' })).toBeNull()
-  })
-
   it("while the session's host is away, the bar says so instead of Live", () => {
     const statuses = new Map([['session-1', 'connected' as const]])
     renderView({ slots: [ownSlot('1')], terminalStatuses: statuses })
@@ -305,12 +279,11 @@ describe('SessionView', () => {
     expect(status()).toBe('connected')
   })
 
-  it('shows only the active session, with every session in its switcher', () => {
+  it('shows only the active session', () => {
     const slots = [ownSlot('1'), ownSlot('2'), ownTmuxView()]
     renderView({ slots, activeSessionId: 'session-2' })
 
     expect(terminalProps.map((p) => p.sessionId)).toEqual(['session-2'])
-    expect(headerProps[0]?.allSlots).toBe(slots)
   })
 
   it("with nothing chosen, shows one of the user's own sessions", () => {

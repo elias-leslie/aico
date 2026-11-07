@@ -182,7 +182,6 @@ function TerminalContentBody({
             handleFileSelect={handleFileSelect}
             activeSessionId={activeSessionId}
             isMobile={isMobile}
-            sideList={frame !== null}
             onChatBack={
               frame && !frame.docked
                 ? () => frame.setSheetOpen(true)

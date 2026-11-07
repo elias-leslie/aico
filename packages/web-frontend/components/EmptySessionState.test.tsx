@@ -21,16 +21,10 @@ vi.mock('@/lib/hooks/use-terminal-panes', () => ({
   usePaneListError: () => ({ isError: false, retry: () => undefined }),
 }))
 vi.mock('@/lib/chat', () => ({ newChat: () => undefined }))
-vi.mock('./asks/NeedsYou', () => ({ NeedsYouLauncher: () => null }))
-vi.mock('./capture/CaptureLauncher', () => ({ CaptureLauncher: () => null }))
-vi.mock('./HostsButton', () => ({ HostsLauncher: () => null }))
-vi.mock('./history/HistoryLauncher', () => ({ HistoryLauncher: () => null }))
-vi.mock('./notes/NotesLauncher', () => ({ NotesLauncher: () => null }))
 vi.mock('./SessionList', () => ({
   SessionList: () => <ul data-testid="session-list" />,
 }))
 vi.mock('./frame/FrameContext', () => ({ useFrame: () => frame.value }))
-vi.mock('./status/StatusLauncher', () => ({ StatusLauncher: () => null }))
 
 describe('EmptySessionState', () => {
   beforeEach(() => {

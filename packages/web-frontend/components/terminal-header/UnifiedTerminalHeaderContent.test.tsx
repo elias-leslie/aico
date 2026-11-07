@@ -19,13 +19,8 @@ vi.mock('@/lib/frame/live', async (importOriginal) => ({
     stale: false,
   }),
 }))
-vi.mock('../HostsButton', () => ({ HostsButton: () => null }))
-vi.mock('../status/StatusLauncher', () => ({ StatusLauncher: () => null }))
-vi.mock('../asks/NeedsYou', () => ({
-  NeedsYouLauncher: () => <i data-testid="needs-you-mock" />,
-}))
-vi.mock('../capture/CaptureLauncher', () => ({
-  CaptureLauncher: () => <i data-testid="capture-mock" />,
+vi.mock('../frame/SideEdgeButton', () => ({
+  SideEdgeButton: () => <i data-testid="side-edge-mock" />,
 }))
 vi.mock('../KeptCheckIns', () => ({ KeptCheckIns: () => null }))
 vi.mock('@/lib/hooks/use-agent-tools', () => ({
@@ -121,20 +116,6 @@ describe('UnifiedTerminalHeaderContent', () => {
       }
     },
   )
-
-  it('carries Capture beside Needs you when the list is not beside it', () => {
-    const slot = makeProjectSlot('a', 'Alpha')
-    render(
-      <UnifiedTerminalHeaderContent
-        slot={slot}
-        allSlots={[slot]}
-        onSwitchTo={vi.fn()}
-      />,
-    )
-    expect(screen.getByTestId('needs-you-mock').nextElementSibling).toBe(
-      screen.getByTestId('capture-mock'),
-    )
-  })
 
   it('shows a lane title and chip', () => {
     render(
@@ -249,40 +230,6 @@ describe('UnifiedTerminalHeaderContent', () => {
     const button = screen.getByRole('button', { name: 'Files' })
     expect(button).toHaveTextContent('Files')
     expect(button).toHaveAttribute('title')
-  })
-
-  it.each([false, true])(
-    'opens the session list from the title (phone: %s)',
-    (isMobile) => {
-      const slotA = makeProjectSlot('a', 'Alpha')
-      const slotB = makeProjectSlot('b', 'Beta')
-      const onSwitchTo = vi.fn()
-
-      render(
-        <UnifiedTerminalHeaderContent
-          slot={slotA}
-          allSlots={[slotA, slotB]}
-          onSwitchTo={onSwitchTo}
-          isMobile={isMobile}
-        />,
-      )
-
-      fireEvent.click(screen.getByTestId('session-switcher'))
-      fireEvent.click(screen.getByRole('button', { name: /beta/i }))
-      expect(onSwitchTo).toHaveBeenCalledWith(slotB)
-    },
-  )
-
-  it('offers New session from the bar', () => {
-    const onOpenModal = vi.fn()
-    render(
-      <UnifiedTerminalHeaderContent
-        slot={makeProjectSlot('a', 'Alpha')}
-        onOpenModal={onOpenModal}
-      />,
-    )
-    fireEvent.click(screen.getByRole('button', { name: 'New session' }))
-    expect(onOpenModal).toHaveBeenCalledTimes(1)
   })
 
   it('offers Compose only where the compose box can be hidden, showing its state', () => {

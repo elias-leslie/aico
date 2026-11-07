@@ -2,6 +2,7 @@
 import { ArrowLeft, Info } from 'lucide-react'
 import type { RefObject } from 'react'
 import { CHAT_STATE, type ChatView } from '@/lib/chat'
+import { SideEdgeButton } from '../frame/SideEdgeButton'
 import { clock } from './chat-format'
 
 /** The chat's title bar: state, title, facts, the one action that fits the state, and the details toggle. */
@@ -30,6 +31,7 @@ export function ChatHeader({
 }) {
   return (
     <header className="chat-head">
+      <SideEdgeButton dockedOnly />
       <button
         type="button"
         className="lantern-icon-btn chat-back"

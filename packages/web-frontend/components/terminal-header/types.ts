@@ -18,17 +18,11 @@ export interface UnifiedTerminalHeaderProps {
   onRefresh?: () => void
   onFiles?: () => void
   onUpload?: () => void
-  /** Opens the new-session picker */
-  onOpenModal?: () => void
   /** Callback for mode switch (shell <-> agent) - only for project slots */
   onModeSwitch?: (mode: TerminalMode) => void | Promise<void>
   /** Whether mode switch is in progress */
   isModeSwitching?: boolean
   isMobile?: boolean
-  /** Every session, for the switcher */
-  allSlots?: Array<TerminalSlot | PaneSlot>
-  /** Open another session */
-  onSwitchTo?: (slot: TerminalSlot | PaneSlot) => void
   connectionStatus?: ConnectionStatus
   /** Desktop with the session list beside it: search stays open */
   searchAlwaysOpen?: boolean

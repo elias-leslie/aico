@@ -194,9 +194,9 @@ describe('NeedsYouLauncher', () => {
         },
       ],
     }
-    render(<NeedsYouLauncher variant="pill" />)
+    render(<NeedsYouLauncher />)
     const pill = screen.getByTestId('needs-you-pill')
-    expect(pill).toHaveTextContent('2 need you')
+    expect(pill).toHaveTextContent('2')
     expect(pill).toHaveAccessibleName(
       'Needs you: 1 agent question, 1 grant waiting',
     )
@@ -213,28 +213,17 @@ describe('NeedsYouLauncher', () => {
         blocking: false,
       }),
     ]
-    render(<NeedsYouLauncher variant="pill" />)
+    render(<NeedsYouLauncher />)
     expect(screen.getByTestId('needs-you-pill')).toHaveAccessibleName(
       'Needs you: 1 notice waiting',
     )
   })
 
-  it('is a labelled row with its count in the session sheet', () => {
-    state.asks = [ask()]
-    render(<NeedsYouLauncher variant="row" />)
+  it('stays a quiet icon when nothing waits', () => {
+    render(<NeedsYouLauncher />)
     const pill = screen.getByTestId('needs-you-pill')
-    expect(pill).toHaveTextContent(/^Needs you1$/)
-    expect(pill).toHaveAccessibleName('Needs you: 1 agent question waiting')
-  })
-
-  it('stays a quiet icon when nothing waits, and off the phone bar', () => {
-    const { unmount } = render(<NeedsYouLauncher />)
-    expect(screen.getByTestId('needs-you-pill')).toHaveAccessibleName(
-      'Needs you: nothing waiting',
-    )
-    unmount()
-    render(<NeedsYouLauncher variant="compact" />)
-    expect(screen.queryByTestId('needs-you-pill')).toBeNull()
+    expect(pill).toHaveAccessibleName('Needs you: nothing waiting')
+    expect(pill).toHaveTextContent('')
   })
 
   it('does not read as none waiting before the lists have loaded', () => {
@@ -256,7 +245,7 @@ describe('NeedsYouLauncher', () => {
     render(
       <>
         <Probe />
-        <NeedsYouLauncher variant="pill" />
+        <NeedsYouLauncher />
       </>,
     )
     fireEvent.click(screen.getByTestId('needs-you-pill'))

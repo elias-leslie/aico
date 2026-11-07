@@ -1,20 +1,15 @@
 'use client'
 
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
-import { useSessionAttention } from '@/lib/hooks/use-session-attention'
 import { getSlotName, type PaneSlot, type TerminalSlot } from '@/lib/utils/slot'
-import { AttentionBadge } from '../AttentionBadge'
 import { CoordinatorBadge } from '../CoordinatorBadge'
 import { HostBadge } from '../HostBadge'
-import { SessionSwitcher } from '../SessionSwitcher'
 import { SessionTitle } from '../SessionTitle'
 
 interface HeaderNameDisplayProps {
   slot: TerminalSlot | PaneSlot
   isActive: boolean
   isMobile: boolean
-  allSlots?: Array<TerminalSlot | PaneSlot>
-  onSwitchTo?: (slot: TerminalSlot | PaneSlot) => void
   onRename?: (newName: string) => void
   isEditing?: boolean
   onEditingChange?: (editing: boolean) => void
@@ -24,8 +19,6 @@ export const HeaderNameDisplay = memo(function HeaderNameDisplay({
   slot,
   isActive,
   isMobile,
-  allSlots,
-  onSwitchTo,
   onRename,
   isEditing = false,
   onEditingChange,
@@ -34,7 +27,6 @@ export const HeaderNameDisplay = memo(function HeaderNameDisplay({
   // A session renamed in Tether renames its task; the project stays the
   // workspace's.
   const renameValue = slot.can.rename ? (slot.task ?? '') : name
-  const attention = useSessionAttention()
   const textColor = isActive ? 'var(--bone)' : 'var(--mist)'
 
   const [editValue, setEditValue] = useState(renameValue)
@@ -100,21 +92,7 @@ export const HeaderNameDisplay = memo(function HeaderNameDisplay({
     )
   }
 
-  // The title opens the session list.
-  if (allSlots && onSwitchTo) {
-    return (
-      <SessionSwitcher
-        currentSlot={slot}
-        allSlots={allSlots}
-        onSwitchTo={onSwitchTo}
-        isMobile={isMobile}
-        attention={attention}
-      />
-    )
-  }
-
-  // Static display — still supports double-click rename. The pane's agent
-  // state (waiting 3m, done 1m, ...) sits beside its name.
+  // The name; the connection chip beside it is the header's.
   return (
     <span className="flex min-w-0 items-center gap-1.5 overflow-hidden">
       <CoordinatorBadge badge={slot.badge} dot={isMobile} />
@@ -130,7 +108,6 @@ export const HeaderNameDisplay = memo(function HeaderNameDisplay({
       >
         <SessionTitle name={name} task={slot.task} />
       </span>
-      <AttentionBadge attention={attention.forSlot(slot)} />
     </span>
   )
 })
