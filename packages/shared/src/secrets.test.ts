@@ -111,7 +111,7 @@ describe('maskKnownSecrets', () => {
       [`export DB_PASSWORD="${v}" && run`, `export DB_PASSWORD="${HIDDEN_TOKEN}" && run`],
       [`password: ${v} next`, `password: ${HIDDEN_TOKEN} next`],
       [`{"client_secret": "${v}", "id": 7}`, `{"client_secret": "${HIDDEN_TOKEN}", "id": 7}`],
-      [`{"apiKey":"abcdefgh"}`, `{"apiKey":"${HIDDEN_TOKEN}"}`],
+      [`{"apiKey":"abcdefgh12"}`, `{"apiKey":"${HIDDEN_TOKEN}"}`],
       [`{\\"password\\": \\"hunter2x\\"}`, `{\\"password\\": \\"${HIDDEN_TOKEN}\\"}`],
       [
         `curl 'https://x.test/?access_token=${v}&a=1'`,
@@ -141,6 +141,8 @@ describe('maskKnownSecrets', () => {
       'Bearer authentication is used here, and the token: is missing',
       'sk-short token: expired password: required',
       'KEYBOARD=us max_tokens=4000 monkey=banana primary_key: id',
+      'token = tokenOf(request) password: z.string() pwd: /srv/workspaces/p1 config_key: 123456789',
+      '{"token": "some-name-here"} const secret = process.env.SECRET1; token: string; source_key=abc12345',
       'password: <redacted> API_TOKEN=${API_TOKEN} secret=$SECRET token=****** password: (none)',
       'commit=53a307d9e4b1c2d3a4f5061728394a5b6c7d8e9f session=6f1c2a3b-4d5e-4f60-8a9b-0c1d2e3f4a5b',
       'we asked at 1730000000:00 for AKIA only',

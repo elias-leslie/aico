@@ -16,8 +16,10 @@ const BEARER = new RegExp(shapes.bearer, 'g')
 /** The broad shape for previews of text the owner wrote (Notes, project files): any 12+ characters. */
 const BEARER_BROAD = new RegExp(shapes.bearerBroad, 'g')
 /** `NAME=value`, `NAME: value`, `"name": "value"` for a secret-like name: the value only. */
-const ASSIGNMENTS = shapes.assignment.values.map(
-  (value) => new RegExp(value.replaceAll('{name}', shapes.assignment.name), 'gi'),
+const ASSIGNMENTS = shapes.assignment.names.flatMap((name) =>
+  shapes.assignment.values.map(
+    (value) => new RegExp(value.replaceAll('{name}', name.pattern), name.flags),
+  ),
 )
 
 /** `password: X`, `api_key=X`, `BOT_TOKEN = "X"`: the label stays, the value goes. */
