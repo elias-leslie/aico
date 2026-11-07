@@ -22,16 +22,17 @@ vi.mock('@/lib/hooks/use-terminal-panes', () => ({
   useTerminalPanes: () => ({ createProjectPane: h.create }),
 }))
 
-const glance = (id: string, state: QuotaGlance['state']): QuotaGlance => ({
-  id,
-  name: id === 'claude' ? 'Claude' : 'Codex',
-  state,
-  left: state === 'left' ? 50 : 0,
-  gone: null,
-  line: '',
-  meaning: `${id} ${state}`,
-  warn: state === 'used_up',
-})
+const glance = (id: string, state: QuotaGlance['state']) =>
+  ({
+    id,
+    name: id === 'claude' ? 'Claude' : 'Codex',
+    state,
+    left: state === 'left' ? 50 : 0,
+    gone: null,
+    line: '',
+    meaning: `${id} ${state}`,
+    warn: state === 'used_up',
+  }) as QuotaGlance
 const tool = (slug: string, name: string, aliases: string[] = []) =>
   ({ slug, name, aliases, enabled: true }) as AgentTool
 

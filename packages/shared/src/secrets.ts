@@ -11,7 +11,14 @@ export const HIDDEN_KEY = '•••• (hidden: looks like a private key)'
 // Exact token shapes live in data/secret-shapes.json.
 const KNOWN_TOKENS: RegExp[] = shapes.shapes.map((shape) => new RegExp(shape.pattern, 'g'))
 const PRIVATE_KEY = new RegExp(shapes.privateKey, 'g')
+/** The exact shape: a digit somewhere in the value, so prose after "Bearer" stays visible. */
 const BEARER = new RegExp(shapes.bearer, 'g')
+/** The broad shape for previews of text the owner wrote (Notes, project files): any 12+ characters. */
+const BEARER_BROAD = new RegExp(shapes.bearerBroad, 'g')
+/** `NAME=value`, `NAME: value`, `"name": "value"` for a secret-like name: the value only. */
+const ASSIGNMENTS = shapes.assignment.values.map(
+  (value) => new RegExp(value.replaceAll('{name}', shapes.assignment.name), 'gi'),
+)
 
 /** `password: X`, `api_key=X`, `BOT_TOKEN = "X"`: the label stays, the value goes. */
 const LABELLED =
@@ -39,13 +46,14 @@ function looksRandom(run: string): boolean {
 }
 
 /** `text` with only well-defined secret shapes hidden: known service tokens, private key blocks,
- * `Bearer` values. No guessing from length or randomness, so git hashes, UUIDs and base64 data
+ * `Bearer` values with a digit, values assigned to a secret-like name. No guessing from length or randomness, so git hashes, UUIDs and base64 data
  * stay visible. For transcripts, where the broad mask in `maskSecrets` hid ordinary text. */
 export function maskKnownSecrets(text: string): string {
   if (!text) return text
   let out = text.replace(PRIVATE_KEY, HIDDEN_KEY)
   out = out.replace(BEARER, (_all, prefix: string) => `${prefix}${HIDDEN_TOKEN}`)
   for (const pattern of KNOWN_TOKENS) out = out.replace(pattern, HIDDEN_TOKEN)
+  for (const pattern of ASSIGNMENTS) out = out.replace(pattern, HIDDEN_TOKEN)
   return out
 }
 
@@ -57,7 +65,7 @@ export function maskSecrets(text: string): string {
     const word = /pass|pwd/i.test(kind) ? HIDDEN_PASSWORD : HIDDEN_TOKEN
     return `${label}${sep}${word}`
   })
-  out = out.replace(BEARER, (_all, prefix: string) => `${prefix}${HIDDEN_TOKEN}`)
+  out = out.replace(BEARER_BROAD, (_all, prefix: string) => `${prefix}${HIDDEN_TOKEN}`)
   for (const pattern of KNOWN_TOKENS) out = out.replace(pattern, HIDDEN_TOKEN)
   return out.replace(LONG_RUN, (run) => (looksRandom(run) ? HIDDEN_TOKEN : run))
 }

@@ -59,6 +59,14 @@ describe('maskSecrets', () => {
   })
 })
 
+describe('maskSecrets bearer', () => {
+  it('hides any long value after Bearer, as Notes always did', () => {
+    expect(maskSecrets('Authorization: Bearer abcdefghijklmnop')).toBe(
+      `Authorization: Bearer ${HIDDEN_TOKEN}`,
+    )
+  })
+})
+
 describe('maskKnownSecrets', () => {
   const extra = {
     gitlab: `glpat-${'Fake0123456789abcdefg'}`,
@@ -96,6 +104,25 @@ describe('maskKnownSecrets', () => {
     )
   })
 
+  it('hides the value of a secret-named assignment and keeps the name', () => {
+    const v = `${'Fake'}Value0123`
+    const cases: [string, string][] = [
+      [`CLOUDFLARE_API_TOKEN=${v}`, `CLOUDFLARE_API_TOKEN=${HIDDEN_TOKEN}`],
+      [`export DB_PASSWORD="${v}" && run`, `export DB_PASSWORD="${HIDDEN_TOKEN}" && run`],
+      [`password: ${v} next`, `password: ${HIDDEN_TOKEN} next`],
+      [`{"client_secret": "${v}", "id": 7}`, `{"client_secret": "${HIDDEN_TOKEN}", "id": 7}`],
+      [`{"apiKey":"abcdefgh"}`, `{"apiKey":"${HIDDEN_TOKEN}"}`],
+      [`{\\"password\\": \\"hunter2x\\"}`, `{\\"password\\": \\"${HIDDEN_TOKEN}\\"}`],
+      [
+        `curl 'https://x.test/?access_token=${v}&a=1'`,
+        `curl 'https://x.test/?access_token=${HIDDEN_TOKEN}&a=1'`,
+      ],
+      [`SECRET_KEY = ${v}`, `SECRET_KEY = ${HIDDEN_TOKEN}`],
+      [`stripe-api_key: ${v}`, `stripe-api_key: ${HIDDEN_TOKEN}`],
+    ]
+    for (const [text, want] of cases) expect(maskKnownSecrets(text)).toBe(want)
+  })
+
   it('hides a private key block inside escaped JSON', () => {
     const fence = (edge: string) => `-----${edge} RSA ${'PRIVATE'} KEY-----`
     const text = JSON.stringify({ text: `${fence('BEGIN')}\nZmFrZQ==\n${fence('END')}\ndone` })
@@ -111,8 +138,11 @@ describe('maskKnownSecrets', () => {
       'sha256 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
       'session 6f1c2a3b-4d5e-4f60-8a9b-0c1d2e3f4a5b',
       `data:image/png;base64,iVBORw0KGgo${'AAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAHnOcQAAAAABJRU5ErkJggg'.repeat(3)}`,
-      'Bearer authentication is used here, and password: Hunter2 stays in a log',
-      'api_key=somevalue token: abc123 sk-short',
+      'Bearer authentication is used here, and the token: is missing',
+      'sk-short token: expired password: required',
+      'KEYBOARD=us max_tokens=4000 monkey=banana primary_key: id',
+      'password: <redacted> API_TOKEN=${API_TOKEN} secret=$SECRET token=****** password: (none)',
+      'commit=53a307d9e4b1c2d3a4f5061728394a5b6c7d8e9f session=6f1c2a3b-4d5e-4f60-8a9b-0c1d2e3f4a5b',
       'we asked at 1730000000:00 for AKIA only',
       'https://example.com:8080/path user@host',
       'Zm9vQmFyQmF6Q3J1eDEyMzQ1Njc4OTBxV2VSdFl1SW9QYXNkZmdoamts',
