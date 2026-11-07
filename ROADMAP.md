@@ -5,7 +5,6 @@ Aico is a Linux companion for people working with terminal AI tools. Agent sessi
 - Enroll VMs 200 and 201 (Aico fleet and OmniNull agent), CT 190 automatic updates, end the stuck dev test session
 - Codebase cleanup: prune summitflow, agent-hub and nightshift and fold what is needed into Aico (plan: docs/plans/codebase-cleanup/plan.md)
 - Projects page: runtime places, power actions and the page itself, then verify on phone and desktop (plan: docs/plans/projects-page/plan.md)
-- Approved agent UX items (being built): one question channel, doing-now line, session names, history search, continue in another tool, transcript secret masking, per-project quota (plan: docs/plans/agent-ux/plan.md)
 ## Next
 - Split the session engine and move fleet code out of Tether
 - Failover: copy active repos to the peer host and let jobs move when their home is down
