@@ -1,0 +1,136 @@
+# continue-from live test: Claude session c959db67 -> Codex session 5c64fcdc (tether sessions create --tool codex --continue-from c959db67)
+
+## Codex pane (recap as the launch prompt, then Codex acting on it)
+bash-5.3$ exec /bin/bash --noprofile --norc -c 'printf '\''\033[3J\033[H\033[2J'\''; { read -r tether_adj </proc/self/oo
+m_score_adj && echo 100 >/proc/self/oom_score_adj; } 2>/dev/null; tether_cg=; tether_mark=; { while read -r tether_l; do
+ case $tether_l in 0::*) tether_cg=${tether_l#0::} ;; esac; done </proc/self/cgroup; } 2>/dev/null; [ -n "${tether_cg##*
+/}" ] && tether_mark=/run/user/1000/tether/default/agent-exits/${tether_cg##*/} && { printf '\''started\n'\'' >"$tether_
+mark"; } 2>/dev/null; tether_stop() { trap '\'''\'' "$1"; kill -"$1" -$$ 2>/dev/null || kill -"$1" "$tether_pid" 2>/dev/
+null; wait; [ -n "$tether_mark" ] && { printf '\''signal %s\n'\'' "$1" >"$tether_mark"; } 2>/dev/null; exit "$2"; }; tra
+p '\''tether_stop HUP 129'\'' HUP; trap '\''tether_stop TERM 143'\'' TERM; ( trap - INT QUIT; if [ "$AICO_ROOT_INITIAL_L
+AUNCH" = 1 ]; then set --; if [ -n "$AICO_ROOT_MODEL" ]; then set -- "$@" --model "$AICO_ROOT_MODEL"; fi; if [ -n "$AICO
+_ROOT_REASONING_EFFORT" ]; then set -- "$@" -c '\''model_reasoning_effort="'\''"$AICO_ROOT_REASONING_EFFORT"'\''"'\''; f
+i; if [ -n "$AICO_ROOT_DAYBREAK" ]; then set -- "$@" -c "daybreak=$AICO_ROOT_DAYBREAK"; fi; if [ -n "$AICO_ROOT_RESUME_S
+ESSION_ID" ]; then /usr/bin/env -u AICO_ROOT_INITIAL_PROMPT -u AICO_ROOT_RESUME_SESSION_ID -u AICO_ROOT_FRESH_SESSION_ID
+ -u AICO_ROOT_REASONING_EFFORT -u AICO_ROOT_MODEL -u AICO_ROOT_DAYBREAK /usr/bin/env -u NO_COLOR COLORTERM=truecolor CLI
+COLOR=1 AICO_CONTEXT_DELIVERED=e0cf11fe4d9f9ec1366a17957fc9ca19ce832f300d0f0c41213434a596ecf7cd sh -c '\''export AICO_CO
+NTEXT_PID=$$; exec "$@"'\'' sh codex --yolo -c "$(cat /home/kasadis/.local/state/aico/deliveries/5c64fcdc/config.toml)"
+"$@" resume --no-daemon "$AICO_ROOT_RESUME_SESSION_ID" -- "$AICO_ROOT_INITIAL_PROMPT"; else /usr/bin/env -u AICO_ROOT_IN
+ITIAL_PROMPT -u AICO_ROOT_RESUME_SESSION_ID -u AICO_ROOT_FRESH_SESSION_ID -u AICO_ROOT_REASONING_EFFORT -u AICO_ROOT_MOD
+EL -u AICO_ROOT_DAYBREAK /usr/bin/env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 AICO_CONTEXT_DELIVERED=e0cf11fe4d9f9ec1
+366a17957fc9ca19ce832f300d0f0c41213434a596ecf7cd sh -c '\''export AICO_CONTEXT_PID=$$; exec "$@"'\'' sh codex --yolo -c
+"$(cat /home/kasadis/.local/state/aico/deliveries/5c64fcdc/config.toml)" "$@" -- "$AICO_ROOT_INITIAL_PROMPT"; fi; else /
+usr/bin/env -u NO_COLOR COLORTERM=truecolor CLICOLOR=1 AICO_CONTEXT_DELIVERED=e0cf11fe4d9f9ec1366a17957fc9ca19ce832f300d
+0f0c41213434a596ecf7cd sh -c '\''export AICO_CONTEXT_PID=$$; exec "$@"'\'' sh codex --yolo -c "$(cat /home/kasadis/.loca
+l/state/aico/deliveries/5c64fcdc/config.toml)"; fi ) <&0 & tether_pid=$!; trap '\'''\'' INT QUIT; wait "$tether_pid"; ex
+port TETHER_AGENT_EXIT=$?; { [ -n "$tether_mark" ] && printf '\''exit %s\n'\'' "$TETHER_AGENT_EXIT" >"$tether_mark"; } 2
+>/dev/null; trap - HUP TERM INT QUIT; { [ -n "$tether_adj" ] && echo "$tether_adj" >/proc/self/oom_score_adj; } 2>/dev/n
+ull; exec "${SHELL:-/bin/bash}"'
+  >_ OpenAI Codex (v0.166.0)
+     /srv/workspaces/projects/aico
+› Ask Codex to do anything
+╭─────────────────────────────────────────────────╮
+│ ✨ Update available! 0.166.0 -> 0.167.0         │
+│ Run npm install -g @openai/codex to update.     │
+│                                                 │
+│ See full release notes:                         │
+│ https://github.com/openai/codex/releases/latest │
+╰─────────────────────────────────────────────────╯
+  >_ OpenAI Codex (v0.166.0)
+     /srv/workspaces/projects/aico
+  permissions: YOLO mode
+  Tip: Use the desktop app. Install it from https://learn.chatgpt.com/docs/linux/linux-app and run chatgpt.
+• Daybreak is on for new turns.
+› You are picking up work from an earlier Claude Code session ("agent-ux-test claude src") in /srv/workspaces/projects/
+  aico. It stopped (usage used up or ended); you are Codex. The files and git are as it left them. Check the git state
+  below before editing; other agents may share this checkout.
+  First request:
+  Please look at packages/tether/src/continue-recap.json and tell me in one sentence what maxMessages is for. Then say
+  DONE-SRC.
+  Last messages, oldest first:
+  Owner: Please look at packages/tether/src/continue-recap.json and tell me in one sentence what maxMessages is for.
+  Then say DONE-SRC.
+  Agent ran Bash: cat /srv/workspaces/projects/aico/packages/tether/src/continue-recap.json; grep -rn "maxMessages" /
+  srv/workspaces/projects/aico/packages/tether/src --include=*…
+  Agent ran Bash: sed -n 80,120p /srv/workspaces/projects/aico/packages/tether/src/continue-from.ts
+  Agent: `maxMessages` (24) caps how many of the old session's latest transcript lines go into a `--continue-from`
+  recap. Those lines are what the owner said, what the agent said, and which tools it ran. The cap is applied in
+  `packages/tether/src/continue-from.ts:115`.
+  DONE-SRC
+  git status (/srv/workspaces/projects/aico):
+  ## main...origin/main [ahead 59]
+  ?? docs/plans/codebase-cleanup/evidence/M9-1/review-codex.md
+  ?? docs/plans/projects-page/adversarial-critique.md
+  ?? docs/plans/projects-page/design-critique.md
+  ?? docs/plans/projects-page/mockup-desktop.png
+  ?? docs/plans/projects-page/mockup-phone.png
+  ?? docs/plans/projects-page/mockup.html
+  ?? docs/rex-comparison-2026-11-06.md
+  ?? evidence/agent-ux-1-5/
+  ?? evidence/ask-files/
+  ?? evidence/fix2-a/
+  ?? evidence/fix2-b/
+  ?? evidence/html-open/
+  ?? evidence/machines-controls/
+  ?? evidence/part1-frame/
+  ?? evidence/part2a/
+  ?? evidence/part2b/
+  ?? evidence/part3/
+  ?? evidence/part4-notes/
+  ?? evidence/perf/
+  ?? evidence/refactor-web/
+  ?? evidence/status-off/
+  ?? evidence/user-test-2/
+  ?? evidence/user-test-2026-11-06/
+  Recent commits:
+  3ded56a3 Continue in <tool>: a session whose subscription is used up shows a notice with a button per tool that has
+  room; the web server passes continue_from on to Tether
+  e34b814f tether sessions create --continue-from ID: a new session in another tool starts from a bounded recap (old
+  transcript tail, git status, recent commits); recap limits in continue-recap.json
+  10c1b2ef Recent: search what was said or run in past sessions (Claude Code, Codex, Pi), hits open the transcript on
+  the message; rows named by the conversation's own title; a working session shows what it is doing on its row, in the
+  top bar and in Today's tooltip
+  95de9f8e Codex request_user_input_async counts as a blocked question until the answer arrives; Claude lanes (not
+  coordinators) refuse AskUserQuestion at the tool level; docs name the one owner-question channel
+  b419da78 Test the history search route
+  168e8133 Aico server: GET /api/history/search, and sessions carry the conversation name and the doing-now line
+  affea54e Session descriptors carry autoName, taskName and a doing-now line (tool, file or last sentence for a working
+  session; agy from its database)
+  d1dd6070 Unnamed sessions are named by what their tool calls the conversation (Claude title, Codex thread name, Pi
+  session name), else the first prompt; agy's doing-now line comes from its conversation database
+  Carry on from the last message. If the next step is unclear, ask the owner with tether ask create (one line that
+  stands alone, options, a recommendation).
+• I’ll check the current Git state, then read the recap limit and where it is applied.
+• Ran git status --short --branch && cat packages/tether/src/continue-recap.json && rg -n -C 4 'maxMessages' packages/
+  │ tether/src/continue-from.ts
+  └ ## main...origin/main [ahead 59]
+    ?? docs/plans/codebase-cleanup/evidence/M9-1/review-codex.md
+    ?? docs/plans/projects-page/adversarial-critique.md
+    +52 lines (^t to view transcript)
+• maxMessages caps the number of recent transcript lines included in a --continue-from recap.
+  DONE-SRC
+  Worked for 8s • 11:31 AM
+› Ask Codex to do anything
+  GPT-6-Sol xhigh · Standard · aico · main · +14381 -4351 · Context 5% used · 5h 100% left ·…  ⚠ 1 warning · f2 to view
+
+## Claude source pane
+OLORTERM=truecolor CLICOLOR=1 AICO_CONTEXT_DELIVERED=5930779f7dbacf318ddb6b13d935d197dcb5c92db2e13b1695d25cbd8ab49c31 CL
+AUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1 sh -c '\''export AICO_CONTEXT_PID=$$; exec "$@"'\'' sh claude --dangerously
+elf/oom_score_adj; } 2>/dev/null; exec "${SHELL:-/bin/bash}"'
+ ▐▛███▛█   Claude Code v2.1.319
+▝▜██████▀  Opus 5.5 with medium effort · Claude Ultra
+ ▝▝   ▝▝   /srv/workspaces/projects/aico
+❯ Please look at packages/tether/src/continue-recap.json and tell me in one sentence what maxMessages is for. Then say
+  DONE-SRC.
+  Searched for 1 pattern, ran 1 shell command
+● maxMessages (24) caps how many of the old session's latest transcript lines go into a --continue-from recap. Those
+  lines are what the owner said, what the agent said, and which tools it ran. The cap is applied in
+  packages/tether/src/continue-from.ts:115.
+  DONE-SRC
+✻ Sautéed for 6s · done 11:30 AM
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   Opus 5.5 medium | aico | main ●23 ↑59
+   50K/1M 5% | 7d 24% | v2.1.319
+  ⏵⏵ bypass permissions on (shift+tab to cycle)
