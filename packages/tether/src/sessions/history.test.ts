@@ -629,7 +629,9 @@ describe('routes and command', () => {
   it('lists, shows and dumps events', async () => {
     const list = await run('list')
     expect(list.code).toBe(0)
-    expect(list.out.split('\n')[0]).toMatch(/^ID +LAST ACTIVITY +OUTCOME +CALLS +MODEL +PROJECT$/)
+    expect(list.out.split('\n')[0]).toMatch(
+      /^ID +LAST ACTIVITY +OUTCOME +CALLS +MODEL +PROJECT +NAME$/,
+    )
     expect(list.out).toContain('claude-code:s1')
     expect(list.out).toContain('OUTCOME: completed (it gave a final answer)')
     expect(list.out).toContain('claude-test-1')
@@ -651,7 +653,7 @@ describe('routes and command', () => {
     const bogus = await run('bogus')
     expect(bogus.code).toBe(2)
     expect(bogus.err).toBe(
-      "aico recent: unknown command 'bogus' (list, show or events); aico recent --help shows how",
+      "aico recent: unknown command 'bogus' (list, search, show or events); aico recent --help shows how",
     )
     expect(bogus.out).toBe('')
   })

@@ -7,6 +7,14 @@
 import { readdirSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import {
+  INJECTED_PROMPT,
+  lastSentence,
+  patchDoing,
+  promptName,
+  THINKING,
+  toolDoing,
+} from '../doing'
+import {
   clip,
   type Fold,
   num,
@@ -77,6 +85,13 @@ function read(record: Record<string, unknown>, _state: State, wantEvents: boolea
       const text = textOf(payload.content)
       if (role === 'assistant' && payload.channel === 'final' && text) fold.outcome = 'completed'
       const injected = role === 'user' && INJECTED_USER_TEXT.test(text)
+      if (role === 'user' && text && !injected && !INJECTED_PROMPT.test(text)) {
+        fold.prompt = promptName(text)
+        fold.doing = null
+      } else if (role === 'assistant' && text) {
+        const said = lastSentence(text)
+        if (said) fold.doing = said
+      }
       if (wantEvents && text && !injected && (role === 'user' || role === 'assistant')) {
         events.push({ at: at ?? null, role, kind: 'text', text: clip(text) })
       }
@@ -86,6 +101,7 @@ function read(record: Record<string, unknown>, _state: State, wantEvents: boolea
       fold.toolCalls = 1
       const files = [...input.matchAll(PATCH_FILE)].map((m) => (m[1] ?? '').trim()).filter(Boolean)
       if (files.length) fold.files = files
+      fold.doing = files.length ? patchDoing(input) : (callDoing(name, input) ?? fold.doing)
       if (wantEvents) {
         events.push({
           at: at ?? null,
@@ -95,6 +111,8 @@ function read(record: Record<string, unknown>, _state: State, wantEvents: boolea
           tool: name,
         })
       }
+    } else if (kind === 'reasoning') {
+      fold.doing = THINKING
     } else if (
       wantEvents &&
       (kind === 'function_call_output' || kind === 'custom_tool_call_output')
@@ -104,6 +122,18 @@ function read(record: Record<string, unknown>, _state: State, wantEvents: boolea
     }
   }
   return { fold, events }
+}
+
+/** A Codex tool call in the present tense; its arguments arrive as a JSON string. */
+function callDoing(name: string, input: string): string | undefined {
+  let args: Record<string, unknown> | undefined
+  try {
+    args = obj(JSON.parse(input))
+  } catch {
+    // custom tools take plain text: the whole input is the command
+    args = input ? { command: input } : undefined
+  }
+  return toolDoing(name, args)
 }
 
 /** Setup Codex puts in the user's seat itself (working folder, instructions, hook text): not something the owner said. */

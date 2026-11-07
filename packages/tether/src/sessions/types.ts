@@ -33,6 +33,15 @@ export interface Fold {
   files?: string[]
   /** Where the conversation stands after this record; null: a turn is running. */
   outcome?: Outcome | null
+  /** The tool's own name for the conversation (its terminal title, a thread or session
+   * name); null: it was cleared. The latest one replaces the row's. */
+  title?: string | null
+  /** What the owner asked in a message that is theirs (not setup text the tool injected);
+   * the row keeps the first one. */
+  prompt?: string
+  /** What the agent is doing as of this record, one short line; null: nothing to say
+   * (a new prompt came in). The latest one replaces the row's. */
+  doing?: string | null
 }
 
 export type EventRole = 'user' | 'assistant' | 'tool' | 'system'

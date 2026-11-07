@@ -5,12 +5,18 @@
 import { localTime } from '@aico/shared/time'
 import { callSocket } from '../client'
 import type { TetherPaths } from '../config'
-import type { EventPage, SessionDetail, SessionSummary, Tokens } from './history'
+import type { EventPage, SearchPage, SessionDetail, SessionSummary, Tokens } from './history'
 import type { SessionEvent } from './types'
 
 export const HISTORY_USAGE = `Usage:
   aico recent list [--tool T] [--project P] [--limit N] [--json]
-      Recent sessions of Claude Code, Codex, Pi and the Aico agent, newest first.
+      Recent sessions of Claude Code, Codex, Pi and the Aico agent, newest first,
+      each named by the tool's own name for it, else its first prompt.
+  aico recent search TEXT [--tool T] [--project P] [--limit N] [--json]
+      Text search through what was said and the commands run in past Claude Code,
+      Codex and Pi sessions (not tool output). A phrase, any capitals. Newest
+      sessions first, with the matching lines; open one with the events command
+      shown under it. Aico agent chats and agy sessions are not searched yet.
   aico recent show <id> [--json]
       One session: model, project, start and end, outcome, tokens, tool
       calls, files written and its subagents (an Aico agent run: the model of
@@ -74,6 +80,7 @@ function table(items: SessionSummary[]): string[] {
     calls: string,
     model: string,
     where: string,
+    name: string,
   ) =>
     [
       id.padEnd(width),
@@ -81,12 +88,13 @@ function table(items: SessionSummary[]): string[] {
       outcome.padEnd(10),
       calls.padEnd(6),
       model.padEnd(22),
-      where,
+      where.padEnd(18),
+      name,
     ]
       .join(' ')
       .trimEnd()
   return [
-    cells('ID', 'LAST ACTIVITY', 'OUTCOME', 'CALLS', 'MODEL', 'PROJECT'),
+    cells('ID', 'LAST ACTIVITY', 'OUTCOME', 'CALLS', 'MODEL', 'PROJECT', 'NAME'),
     ...items.map((item, index) =>
       cells(
         ids[index] as string,
@@ -94,7 +102,8 @@ function table(items: SessionSummary[]): string[] {
         item.outcome ?? 'open',
         String(item.toolCalls),
         item.model ?? '-',
-        item.project ?? item.cwd ?? '-',
+        clip(item.project ?? item.cwd ?? '-', 18),
+        clip(flat(item.title ?? '-'), 60),
       ),
     ),
     OUTCOMES,
@@ -146,6 +155,21 @@ export async function runHistory(
       const value = flag(rest, `--${name}`)
       if (value) query.set(name, value)
     }
+  } else if (sub === 'search') {
+    const text = rest
+      .filter((arg, index) => !arg.startsWith('--') && !isFlagValue(rest, index))
+      .join(' ')
+      .trim()
+    if (text.length < 2) {
+      io.err('aico recent search needs the text to look for (at least 2 characters)')
+      return 2
+    }
+    path = '/v1/history/search'
+    query.set('q', text)
+    for (const name of ['tool', 'project', 'limit']) {
+      const value = flag(rest, `--${name}`)
+      if (value) query.set(name, value)
+    }
   } else if (sub === 'show' || sub === 'events') {
     if (!id) {
       io.err(`aico recent ${sub} needs a session id (aico recent list shows them)`)
@@ -162,7 +186,7 @@ export async function runHistory(
     }
   } else {
     io.err(
-      `aico recent: unknown command '${sub}' (list, show or events); aico recent --help shows how`,
+      `aico recent: unknown command '${sub}' (list, search, show or events); aico recent --help shows how`,
     )
     return 2
   }
@@ -194,6 +218,10 @@ export async function runHistory(
     io.out(JSON.stringify(response.body, null, 2))
     return 0
   }
+  if (sub === 'search') {
+    for (const line of searchLines(response.body as SearchPage)) io.out(line)
+    return 0
+  }
   if (sub === 'list') {
     const items = (response.body as { items: SessionSummary[] }).items
     if (!items.length)
@@ -203,7 +231,7 @@ export async function runHistory(
   }
   if (sub === 'show') {
     const item = response.body as SessionDetail
-    io.out(`${item.id}  (${item.tool})`)
+    io.out(`${item.id}  (${item.tool})${item.title ? `  ${flat(item.title)}` : ''}`)
     io.out(`project: ${item.project ?? '-'}   folder: ${item.cwd ?? '-'}`)
     io.out(`model: ${item.model ?? '-'}   outcome: ${item.outcome ?? 'no final answer yet'}`)
     io.out(`started: ${when(item.startedAt)}   last activity: ${when(item.endedAt)}`)
@@ -232,6 +260,45 @@ export async function runHistory(
   if (page.older !== null) io.out(`older: --before ${page.older}`)
   if (page.newer !== null) io.out(`newer: --from ${page.newer}`)
   return 0
+}
+
+const TOOL_NAMES: Record<string, string> = {
+  'claude-code': 'Claude Code',
+  codex: 'Codex',
+  pi: 'Pi',
+}
+const HIT_WHO: Record<string, string> = { user: 'you', assistant: 'assistant' }
+
+/** A search answer for a person: what was read, then each session with its matching lines. */
+export function searchLines(page: SearchPage): string[] {
+  const names = page.covers.map((tool) => TOOL_NAMES[tool] ?? tool).join(', ')
+  const since = page.searched.since === null ? '' : ` since ${localTime(page.searched.since)}`
+  const lines = [
+    `Searched ${names}: ${page.searched.sessions} sessions${since}. Aico agent chats and agy sessions are not searched yet.`,
+  ]
+  if (!page.items.length) lines.push(`Nothing found for "${page.query}".`)
+  const ids = shortIds(page.items.map((item) => item.session.id))
+  page.items.forEach((item, index) => {
+    const id = ids[index] as string
+    const name = item.session.title ? `  ${clip(flat(item.session.title), 50)}` : ''
+    lines.push(
+      '',
+      `${id}  ${when(item.session.endedAt)}  ${item.session.project ?? '-'}${name}  (${item.matches} ${item.matches === 1 ? 'match' : 'matches'})`,
+    )
+    for (const hit of item.hits) {
+      const who =
+        hit.kind === 'tool_call' ? `${hit.tool ?? 'tool'} call` : (HIT_WHO[hit.role] ?? hit.role)
+      lines.push(`  ${who.padEnd(12)} ${hit.snippet}`)
+    }
+    const first = item.hits[0]
+    if (first) lines.push(`  open: aico recent events ${id} --from ${first.offset}`)
+  })
+  if (page.more)
+    lines.push(
+      '',
+      'Stopped at the limit; older sessions were not searched. Narrow it with --project or --tool, or raise --limit.',
+    )
+  return lines
 }
 
 const VALUE_FLAGS = new Set(['--tool', '--project', '--limit', '--before', '--from'])

@@ -3,7 +3,7 @@
 // copies rows byte for byte. The only widening is the tmux_servers unit CHECK,
 // which additionally admits non-default instance unit names.
 
-export const SCHEMA_VERSION = 36
+export const SCHEMA_VERSION = 37
 
 /** Conversations observed in an owned workload survive its retirement and delayed transcript ingestion. */
 export const TRANSCRIPT_OWNERS_SQL = `
@@ -17,6 +17,16 @@ export const TRANSCRIPT_OWNERS_SQL = `
 
 /** v34: the latest model call's prompt tokens per conversation (its context fill). */
 export const TRANSCRIPT_CONTEXT_SQL = 'ALTER TABLE transcripts ADD COLUMN context_tokens INTEGER'
+
+/** v37: what a conversation is called (`title`: the tool's own name for it; `first_prompt`: the
+ * first thing the owner asked, trimmed) and what it is doing now (`doing`, one short line).
+ * `names_read` is 1 once a pass has read those from the whole transcript. */
+export const TRANSCRIPT_NAMES_COLUMNS = [
+  ['title', 'ALTER TABLE transcripts ADD COLUMN title TEXT'],
+  ['first_prompt', 'ALTER TABLE transcripts ADD COLUMN first_prompt TEXT'],
+  ['doing', 'ALTER TABLE transcripts ADD COLUMN doing TEXT'],
+  ['names_read', 'ALTER TABLE transcripts ADD COLUMN names_read INTEGER NOT NULL DEFAULT 0'],
+] as const
 
 /** Aico's tmux_servers table (first defined by the retired desktop app),
  * plus `tether-<instance>-tmux-server-<id>.service` for non-default instances. */
@@ -831,6 +841,10 @@ export const TRANSCRIPTS_SQL = `
     cache_write_tokens INTEGER NOT NULL DEFAULT 0,
     output_tokens      INTEGER NOT NULL DEFAULT 0,
     context_tokens     INTEGER,
+    title         TEXT,
+    first_prompt  TEXT,
+    doing         TEXT,
+    names_read    INTEGER NOT NULL DEFAULT 0,
     tool_calls    INTEGER NOT NULL DEFAULT 0,
     ignored       INTEGER NOT NULL DEFAULT 0,
     read_offset   INTEGER NOT NULL DEFAULT 0,

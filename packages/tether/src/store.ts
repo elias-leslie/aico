@@ -37,6 +37,7 @@ import {
   SHARES_SQL,
   TMUX_SERVERS_TABLE_SQL,
   TRANSCRIPT_CONTEXT_SQL,
+  TRANSCRIPT_NAMES_COLUMNS,
   TRANSCRIPT_OWNERS_SQL,
   TRANSCRIPTS_SQL,
   WAITS_ARMED_BY_COLUMNS,
@@ -531,6 +532,18 @@ export class Store {
         this.db
           .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
           .run(36, now)
+      }
+      if (current < 37) {
+        // v37: conversation names and the "doing now" line (transcripts.title and friends).
+        for (const [column, sql] of TRANSCRIPT_NAMES_COLUMNS) {
+          const has = this.db
+            .prepare("SELECT 1 FROM pragma_table_info('transcripts') WHERE name = ?")
+            .get(column)
+          if (!has) this.db.exec(sql)
+        }
+        this.db
+          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+          .run(37, now)
       }
     })
   }

@@ -10,10 +10,13 @@
 // from the start. A tick reads at most `budget` bytes, newest files first, so a
 // first run over old files spreads over many ticks.
 
+import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { basename, delimiter } from 'node:path'
+import { basename, delimiter, join } from 'node:path'
+import { maskKnownSecrets } from '@aico/shared/secrets'
 import { completeEnd, edgeHash, fileFacts, readBackward, readForward } from './lines'
 import { READERS, readerFor } from './readers'
+import { type SearchHit, searchFile } from './search'
 import type {
   Fold,
   HistoryTool,
@@ -55,6 +58,20 @@ export interface SessionSummary {
   contextTokens: number | null
   toolCalls: number
   filesWritten: number
+  /** What the conversation is called: the tool's own name for it, else the first prompt
+   * (trimmed). null: neither is known yet. */
+  title: string | null
+  /** What it is doing as of its last record, one line. null: nothing to say. Meaningful
+   * while a turn runs; the row says nothing about whether one does. */
+  doing: string | null
+}
+
+/** What a running session's conversation is called, and by which source. */
+interface ConversationName {
+  title: string | null
+  prompt: string | null
+  /** The row's doing-now line. */
+  doing: string | null
 }
 
 export interface Tokens {
@@ -98,6 +115,28 @@ export interface PushedRun {
   turns: RunTurn[]
 }
 
+/** The tools whose transcripts a search reads. */
+const SEARCHED_TOOLS: HistoryTool[] = ['claude-code', 'codex', 'pi']
+
+export interface SearchResult {
+  session: SessionSummary
+  /** Events (said or run) that contain the text. */
+  matches: number
+  /** The first few, oldest first. */
+  hits: SearchHit[]
+}
+
+export interface SearchPage {
+  query: string
+  items: SearchResult[]
+  /** The tools read; agy and the Aico agent keep nothing a search can read yet. */
+  covers: HistoryTool[]
+  /** Conversations looked through, and the start of the oldest one. */
+  searched: { sessions: number; since: number | null; bytes: number; ms: number }
+  /** More conversations matched than `limit` returned. */
+  more: boolean
+}
+
 export interface EventPage {
   items: SessionEvent[]
   /** Pass as `before` for the older events; null: this is the start. */
@@ -109,6 +148,8 @@ export interface EventPage {
 
 const DAY = 24 * 3600_000
 const SLICE = 4 << 20
+/** Bytes of old transcripts one pass starts reading for names. */
+const HARVEST_BUDGET = 32 << 20
 
 interface Row {
   id: string
@@ -126,6 +167,10 @@ interface Row {
   cache_write_tokens: number
   output_tokens: number
   context_tokens: number | null
+  title: string | null
+  first_prompt: string | null
+  doing: string | null
+  names_read: number
   tool_calls: number
   ignored: number
   read_offset: number
@@ -173,6 +218,11 @@ export interface HistoryDb {
 
 export class History {
   private readonly now: () => number
+  /** Codex keeps thread names in one index file; its facts at the last read. */
+  private codexIndex: { path: string; mtime: number; size: number; names: Map<string, string> }[] =
+    []
+  /** Newest conversation name per running session; null: rebuild on next ask. */
+  private owned: Map<string, ConversationName> | null = null
   private readonly options: Required<Omit<HistoryOptions, 'now' | 'projectOf'>> &
     Pick<HistoryOptions, 'projectOf'>
 
@@ -196,6 +246,7 @@ export class History {
   /** Bind an observed native conversation to the workload Tether owns. */
   bind(session: string, tool: string, nativeId: string): void {
     if (tool === 'claude') tool = 'claude-code'
+    this.owned = null
     this.db
       .prepare(`INSERT INTO transcript_owners (transcript_id, session_id, ended_at)
       VALUES (?, ?, (SELECT retired_at FROM retired_session_ids WHERE id = ?))
@@ -265,10 +316,144 @@ export class History {
       bytes += await this.follow(item.reader, item.file, this.options.budget - bytes)
       await yieldLoop()
     }
+    bytes += await this.harvestNames(HARVEST_BUDGET)
+    this.refreshCodexNames()
     this.prune()
     this.settleEnded()
+    this.owned = null
     return { files, bytes }
   }
+
+  // --- names ----------------------------------------------------------------
+
+  /** Codex names a thread in ~/.codex/session_index.jsonl (the latest line of an id wins);
+   * its rows take the name from there. */
+  private refreshCodexNames(): void {
+    let changed = false
+    const seen = this.options.homes.map((home) => {
+      const path = join(home, '.codex', 'session_index.jsonl')
+      const facts = fileFacts(path)
+      const before = this.codexIndex.find((item) => item.path === path)
+      if (!facts)
+        return before ? null : { path, mtime: 0, size: 0, names: new Map<string, string>() }
+      if (before && before.mtime === facts.mtime && before.size === facts.size) return before
+      changed = true
+      const names = new Map<string, string>()
+      try {
+        for (const line of readFileSync(path, 'utf8').split('\n')) {
+          if (!line) continue
+          try {
+            const entry = JSON.parse(line) as { id?: unknown; thread_name?: unknown }
+            if (typeof entry.id === 'string' && typeof entry.thread_name === 'string') {
+              const name = entry.thread_name.replace(/\s+/g, ' ').trim()
+              if (name) names.set(entry.id, name)
+              else names.delete(entry.id)
+            }
+          } catch {
+            // a half-written last line
+          }
+        }
+      } catch {
+        // gone between the stat and the read: the next pass tries again
+      }
+      return { path, mtime: facts.mtime, size: facts.size, names }
+    })
+    this.codexIndex = seen.filter((item): item is NonNullable<typeof item> => item !== null)
+    if (!changed) return
+    const update = this.db.prepare(
+      "UPDATE transcripts SET title = ? WHERE id = ? AND tool = 'codex' AND title IS NOT ?",
+    )
+    for (const { names } of this.codexIndex)
+      for (const [id, raw] of names) {
+        const name = maskKnownSecrets(raw)
+        update.run(name, `codex:${id}`, name)
+      }
+  }
+
+  private codexName(nativeId: string): string | null {
+    for (const { names } of this.codexIndex) {
+      const name = names.get(nativeId)
+      if (name) return maskKnownSecrets(name)
+    }
+    return null
+  }
+
+  /** Rows read before names existed: one more read of each transcript for its name and
+   * its last line, newest first. A file is read whole, so at most `budget` bytes of
+   * further files are started. */
+  private async harvestNames(budget: number): Promise<number> {
+    const rows = this.db
+      .prepare(
+        `SELECT id, tool, path FROM transcripts WHERE ignored = 0 AND names_read = 0 AND tool != ?
+         ORDER BY COALESCE(ended_at, file_mtime) DESC LIMIT 40`,
+      )
+      .all(PUSHED_TOOL) as unknown as { id: string; tool: string; path: string }[]
+    let spent = 0
+    for (const row of rows) {
+      if (spent >= budget) break
+      const reader = readerFor(row.tool)
+      const facts = fileFacts(row.path)
+      if (!reader || !facts) {
+        this.db.prepare('UPDATE transcripts SET names_read = 1 WHERE id = ?').run(row.id)
+        continue
+      }
+      const found: { title?: string | null; prompt?: string; doing?: string | null } = {}
+      const state = reader.initialState()
+      let offset = 0
+      while (offset < facts.size) {
+        const before = offset
+        const { end } = readForward(row.path, offset, SLICE, (line) => {
+          if (!line.text || reader.skip?.(line.text)) return true
+          let record: unknown
+          try {
+            record = JSON.parse(line.text)
+          } catch {
+            return true
+          }
+          if (!record || typeof record !== 'object' || Array.isArray(record)) return true
+          const { fold } = reader.read(record as Record<string, unknown>, state, false)
+          if (fold.title !== undefined) found.title = fold.title && maskKnownSecrets(fold.title)
+          if (fold.prompt) found.prompt ??= maskKnownSecrets(fold.prompt)
+          if (fold.doing !== undefined) found.doing = fold.doing && maskKnownSecrets(fold.doing)
+          return true
+        })
+        if (end === before) break
+        spent += end - before
+        offset = end
+        await yieldLoop()
+      }
+      this.db
+        .prepare(
+          `UPDATE transcripts SET title = coalesce(?, title), first_prompt = coalesce(first_prompt, ?),
+             doing = ?, names_read = 1 WHERE id = ?`,
+        )
+        .run(found.title ?? null, found.prompt ?? null, found.doing ?? null, row.id)
+    }
+    return spent
+  }
+
+  /** What the newest named conversation of each running session is called. */
+  private ownedNames(): Map<string, ConversationName> {
+    if (this.owned) return this.owned
+    const names = new Map<string, ConversationName>()
+    const rows = this.db
+      .prepare(
+        `SELECT o.session_id AS session, t.title AS title, t.first_prompt AS prompt, t.doing AS doing
+         FROM transcript_owners o JOIN transcripts t ON t.id = o.transcript_id
+         WHERE t.ignored = 0 AND t.parent_id IS NULL AND (t.title IS NOT NULL OR t.first_prompt IS NOT NULL OR t.doing IS NOT NULL)
+         ORDER BY COALESCE(t.ended_at, t.file_mtime)`,
+      )
+      .all() as unknown as ({ session: string } & ConversationName)[]
+    for (const row of rows)
+      names.set(row.session, { title: row.title, prompt: row.prompt, doing: row.doing })
+    this.owned = names
+    return names
+  }
+
+  /** What a Tether session's conversation is called (its newest named one), or undefined.
+   * The session's own typed name comes before this; the caller decides. */
+  conversationName = (session: string): ConversationName | undefined =>
+    this.ownedNames().get(session)
 
   private blocked(text: string): boolean {
     return this.options.skip.some((pattern) => pattern.test(text))
@@ -342,6 +527,8 @@ export class History {
     if (!totals.project && totals.cwd) {
       totals.project = this.options.projectOf?.(totals.cwd) ?? basename(totals.cwd)
     }
+    if (reader.tool === 'codex')
+      totals.title = this.codexName(reader.nativeIdOf(file.path)) ?? totals.title
     totals.parent_id = file.parentNativeId ? `${reader.tool}:${file.parentNativeId}` : null
     totals.read_offset = offset
     // A read the budget cut short saves the size it reached, so the next scan sees the
@@ -378,6 +565,11 @@ export class History {
       cache_write_tokens: 0,
       output_tokens: 0,
       context_tokens: null,
+      title: null,
+      first_prompt: null,
+      doing: null,
+      // Read from the first byte on, so every name in the file is seen as it comes.
+      names_read: 1,
       tool_calls: 0,
       ignored: 0,
       read_offset: 0,
@@ -431,7 +623,7 @@ export class History {
              started_at = ?, ended_at = ?, outcome = ?, input_tokens = ?, cache_read_tokens = ?,
              cache_write_tokens = ?, output_tokens = ?, context_tokens = ?, tool_calls = ?, read_offset = ?,
              file_size = ?, file_mtime = ?, file_inode = ?, head_hash = ?, tail_hash = ?,
-             reader_state = ?
+             reader_state = ?, title = ?, first_prompt = ?, doing = ?, names_read = ?
            WHERE id = ?`,
         )
         .run(
@@ -456,6 +648,10 @@ export class History {
           row.head_hash,
           row.tail_hash,
           row.reader_state,
+          row.title,
+          row.first_prompt,
+          row.doing,
+          row.names_read,
           row.id,
         )
       if (reset) this.db.prepare('DELETE FROM transcript_files WHERE transcript_id = ?').run(row.id)
@@ -491,14 +687,15 @@ export class History {
       .prepare(
         `INSERT INTO transcripts (id, tool, native_id, path, project, cwd, model, started_at, ended_at,
            outcome, input_tokens, cache_read_tokens, cache_write_tokens, output_tokens, tool_calls,
-           file_mtime, reader_state)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           file_mtime, reader_state, title, names_read)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
          ON CONFLICT(id) DO UPDATE SET project = excluded.project, cwd = excluded.cwd,
            model = excluded.model, started_at = excluded.started_at, ended_at = excluded.ended_at,
            outcome = excluded.outcome, input_tokens = excluded.input_tokens,
            cache_read_tokens = excluded.cache_read_tokens, cache_write_tokens = excluded.cache_write_tokens,
            output_tokens = excluded.output_tokens, tool_calls = excluded.tool_calls,
-           file_mtime = excluded.file_mtime, reader_state = excluded.reader_state`,
+           file_mtime = excluded.file_mtime, reader_state = excluded.reader_state,
+           title = excluded.title`,
       )
       .run(
         id,
@@ -518,6 +715,7 @@ export class History {
         run.toolCalls,
         this.now(),
         JSON.stringify({ role: run.role, turns: run.turns, ...(run.chat && { chat: run.chat }) }),
+        run.chat?.title ?? null,
       )
     return true
   }
@@ -563,6 +761,67 @@ export class History {
       )
       .all(...args) as unknown as (Row & { files_written: number })[]
     return rows.map(summaryOf)
+  }
+
+  /** Text search over the kept conversations of Claude Code, Codex and Pi, newest first. A
+   * phrase, case-blind, in what was said and the commands run. Stops once `limit`
+   * conversations matched (`more` says there were others). */
+  async search(
+    query: string,
+    options: { limit?: number; tool?: string; project?: string; hits?: number } = {},
+  ): Promise<SearchPage> {
+    const started = this.now()
+    const text = query.trim()
+    const limit = Math.min(Math.max(options.limit ?? 30, 1), 200)
+    const keep = Math.min(Math.max(options.hits ?? 3, 1), 20)
+    const where = [
+      'ignored = 0',
+      'parent_id IS NULL',
+      'cwd IS NOT NULL',
+      `tool IN (${SEARCHED_TOOLS.map(() => '?').join(', ')})`,
+    ]
+    const args: string[] = [...SEARCHED_TOOLS]
+    if (options.tool) {
+      where.push('tool = ?')
+      args.push(options.tool)
+    }
+    if (options.project) {
+      where.push('project = ?')
+      args.push(options.project)
+    }
+    const rows = this.db
+      .prepare(
+        `SELECT t.*, (SELECT count(*) FROM transcript_files f WHERE f.transcript_id = t.id) AS files_written
+         FROM transcripts t WHERE ${where.join(' AND ')}
+         ORDER BY COALESCE(ended_at, file_mtime) DESC`,
+      )
+      .all(...args) as unknown as (Row & { files_written: number })[]
+    const items: SearchResult[] = []
+    let bytes = 0
+    let more = false
+    let since: number | null = null
+    for (const row of rows) {
+      if (row.started_at !== null && (since === null || row.started_at < since))
+        since = row.started_at
+      if (!text) continue
+      if (items.length >= limit) {
+        more = true
+        continue
+      }
+      const found = await searchFile(row, text, keep)
+      bytes += found.bytes
+      if (found.matches)
+        items.push({ session: summaryOf(row), matches: found.matches, hits: found.hits })
+    }
+    return {
+      query: text,
+      items,
+      covers: options.tool
+        ? SEARCHED_TOOLS.filter((tool) => tool === options.tool)
+        : SEARCHED_TOOLS,
+      searched: { sessions: rows.length, since, bytes, ms: this.now() - started },
+      more,
+    }
   }
 
   /** A session by its full id or the start of its tool's own id. */
@@ -696,6 +955,8 @@ function summaryOf(row: Row & { files_written: number }): SessionSummary {
     contextTokens: row.context_tokens ?? null,
     toolCalls: row.tool_calls,
     filesWritten: row.files_written,
+    title: row.title ?? row.first_prompt ?? null,
+    doing: row.doing ?? null,
   }
 }
 
@@ -750,6 +1011,10 @@ function applyFold(row: Row, fold: Fold, written: Map<string, number>): void {
   if (fold.toolCalls) row.tool_calls += fold.toolCalls
   for (const path of fold.files ?? []) written.set(path, (written.get(path) ?? 0) + 1)
   if (fold.outcome !== undefined) row.outcome = fold.outcome
+  // Names and the doing-now line are shown beside the session, so they pass the same mask as events.
+  if (fold.title !== undefined) row.title = fold.title && maskKnownSecrets(fold.title)
+  if (fold.prompt && !row.first_prompt) row.first_prompt = maskKnownSecrets(fold.prompt)
+  if (fold.doing !== undefined) row.doing = fold.doing && maskKnownSecrets(fold.doing)
 }
 
 function addUsage(row: Row, usage: Usage | undefined): void {

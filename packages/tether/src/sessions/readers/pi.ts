@@ -3,6 +3,7 @@
 
 import { readdirSync } from 'node:fs'
 import { basename, join } from 'node:path'
+import { INJECTED_PROMPT, lastSentence, promptName, THINKING, toolDoing } from '../doing'
 import {
   clip,
   type Fold,
@@ -37,6 +38,8 @@ function read(record: Record<string, unknown>, _state: State, wantEvents: boolea
   const type = str(record.type)
   if (type === 'session') {
     fold.cwd = str(record.cwd)
+  } else if (type === 'session_info') {
+    fold.title = str(record.name)?.trim() || null
   } else if (type === 'model_change') {
     fold.model = str(record.modelId)
   } else if (type === 'message') {
@@ -46,6 +49,10 @@ function read(record: Record<string, unknown>, _state: State, wantEvents: boolea
     if (role === 'user') {
       fold.outcome = null
       const text = textOf(message.content)
+      if (text && !INJECTED_PROMPT.test(text)) {
+        fold.prompt = promptName(text)
+        fold.doing = null
+      }
       if (wantEvents && text)
         events.push({ at: at ?? null, role: 'user', kind: 'text', text: clip(text) })
     } else if (role === 'toolResult') {
@@ -85,6 +92,8 @@ function read(record: Record<string, unknown>, _state: State, wantEvents: boolea
           const name = str(block.name) ?? 'tool'
           const args = obj(block.arguments)
           fold.toolCalls = (fold.toolCalls ?? 0) + 1
+          const doing = toolDoing(name, args)
+          if (doing) fold.doing = doing
           if (WRITERS.has(name)) {
             const path = str(args?.path) ?? str(args?.file_path)
             if (path) fold.files = [...(fold.files ?? []), path]
@@ -99,9 +108,13 @@ function read(record: Record<string, unknown>, _state: State, wantEvents: boolea
               model: fold.model,
             })
           }
-        } else if (wantEvents && (block.type === 'text' || block.type === 'thinking')) {
+        } else if (block.type === 'text' || block.type === 'thinking') {
           const text = str(block.text) ?? str(block.thinking)
-          if (text) {
+          if (block.type === 'text') {
+            const said = text ? lastSentence(text) : undefined
+            if (said) fold.doing = said
+          } else fold.doing ??= THINKING
+          if (wantEvents && text) {
             events.push({
               at: at ?? null,
               role: 'assistant',

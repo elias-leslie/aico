@@ -7,6 +7,7 @@
 
 import { readdirSync } from 'node:fs'
 import { basename, join } from 'node:path'
+import { INJECTED_PROMPT, lastSentence, promptName, THINKING, toolDoing } from '../doing'
 import {
   clip,
   type EventRole,
@@ -26,6 +27,8 @@ import {
 interface State extends Record<string, unknown> {
   messageId: string | null
   usage: Usage
+  /** A title the owner gave (`/rename`) is on the row: the generated one no longer replaces it. */
+  renamed?: boolean
 }
 
 const WRITERS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit'])
@@ -82,6 +85,14 @@ function read(record: Record<string, unknown>, state: State, wantEvents: boolean
   const cwd = str(record.cwd)
   if (cwd) fold.cwd = cwd
   const message = obj(record.message)
+  if (type === 'custom-title' || type === 'ai-title') {
+    const title = str(record.customTitle) ?? str(record.aiTitle)
+    if (type === 'custom-title') {
+      state.renamed = Boolean(title)
+      fold.title = title?.trim() || null
+    } else if (!state.renamed && title) fold.title = title.trim()
+    return { fold, events }
+  }
   if (!message || (type !== 'user' && type !== 'assistant')) {
     if (type === 'system' && str(record.subtype) === 'compact_boundary' && wantEvents) {
       events.push({ at: at ?? null, role: 'system', kind: 'note', text: 'Conversation compacted' })
@@ -98,6 +109,17 @@ function read(record: Record<string, unknown>, state: State, wantEvents: boolean
       const text =
         block.type === 'tool_result' ? resultText(block.content) : (str(block.text) ?? '')
       if (block.type === 'text' && text.startsWith('[Request interrupted')) fold.outcome = 'aborted'
+      if (
+        block.type === 'text' &&
+        text &&
+        record.isMeta !== true &&
+        record.isCompactSummary !== true &&
+        !text.startsWith('[Request interrupted') &&
+        !INJECTED_PROMPT.test(text)
+      ) {
+        fold.prompt ??= promptName(text)
+        fold.doing = null
+      }
       if (!wantEvents || !text) continue
       const result = block.type === 'tool_result'
       events.push({
@@ -132,6 +154,8 @@ function read(record: Record<string, unknown>, state: State, wantEvents: boolean
       const name = str(block.name) ?? 'tool'
       const input = obj(block.input)
       fold.toolCalls = (fold.toolCalls ?? 0) + 1
+      const doing = toolDoing(name, input)
+      if (doing) fold.doing = doing
       if (WRITERS.has(name)) {
         const path = str(input?.file_path) ?? str(input?.notebook_path)
         if (path) fold.files = [...(fold.files ?? []), path]
@@ -146,9 +170,13 @@ function read(record: Record<string, unknown>, state: State, wantEvents: boolean
           model,
         })
       }
-    } else if (wantEvents && (block.type === 'text' || block.type === 'thinking')) {
+    } else if (block.type === 'text' || block.type === 'thinking') {
       const text = str(block.text) ?? str(block.thinking)
-      if (text) {
+      if (block.type === 'text') {
+        const said = text ? lastSentence(text) : undefined
+        if (said) fold.doing = said
+      } else fold.doing ??= THINKING
+      if (wantEvents && text) {
         events.push({
           at: at ?? null,
           role: 'assistant' as EventRole,

@@ -122,6 +122,21 @@ export function registerHistoryRoutes(router: Router, history: History): void {
       const run = parsePushedRun(params.run ?? '', await readJsonObject(req))
       sendJson(res, 200, { kept: history.record(run) })
     })
+    .add('GET', '/v1/history/search', async (_req, res, _params, query) => {
+      const text = (query.get('q') ?? '').trim()
+      if (text.length < 2 || text.length > 200)
+        throw new HttpError(400, 'invalid_query', { field: 'q' })
+      sendJson(
+        res,
+        200,
+        await history.search(text, {
+          limit: count(query.get('limit'), 'limit'),
+          tool: query.get('tool') ?? undefined,
+          project: query.get('project') ?? undefined,
+          hits: count(query.get('hits'), 'hits'),
+        }),
+      )
+    })
     .add('GET', '/v1/history/:id', (_req, res, params) => {
       sendJson(res, 200, history.get(find(params.id)))
     })
