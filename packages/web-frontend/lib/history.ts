@@ -27,6 +27,41 @@ export interface HistorySession {
   filesWritten: number
   /** A smoke or scratch run (the server's rule); Recent leaves it out until asked. */
   test?: boolean
+  /** What the conversation is called: its own title (Claude, Codex, Pi), else the first prompt. */
+  title?: string | null
+  /** What a working agent is doing now; null when it is not working. */
+  doing?: string | null
+}
+
+/** A match in a past conversation: `offset` opens the transcript at it. */
+export interface HistorySearchHit {
+  offset: number
+  at: number | null
+  role: HistoryEvent['role']
+  kind: HistoryEvent['kind']
+  tool?: string
+  snippet: string
+}
+
+export interface HistorySearchResult {
+  session: HistorySession
+  matches: number
+  hits: HistorySearchHit[]
+}
+
+export interface HistorySearchPage {
+  query: string
+  items: HistorySearchResult[]
+  /** The tools read; the rest keep nothing a search can read yet. */
+  covers: HistorySession['tool'][]
+  searched: {
+    sessions: number
+    since: number | null
+    bytes: number
+    ms: number
+  }
+  /** Stopped at the limit: older conversations were not read. */
+  more: boolean
 }
 
 export interface HistoryDetail extends HistorySession {
@@ -71,10 +106,11 @@ export function toolName(tool: string): string {
  * every row of one project read the same.
  */
 export function sessionLabel(
-  session: Pick<HistorySession, 'tool' | 'startedAt'>,
+  session: Pick<HistorySession, 'tool' | 'startedAt' | 'title'>,
   name?: string | null,
 ): string {
   if (name) return name
+  if (session.title) return session.title
   return session.startedAt === null
     ? toolName(session.tool)
     : `${toolName(session.tool)} · ${clock(session.startedAt)}`
@@ -182,8 +218,16 @@ export function shortFolder(cwd: string | null): string {
   return cwd.split('/').filter(Boolean).slice(-2).join('/')
 }
 
-export function sessionHref(id: string): string {
-  return `/history?session=${encodeURIComponent(id)}`
+export function sessionHref(id: string, at?: number): string {
+  return `/history?session=${encodeURIComponent(id)}${at === undefined ? '' : `&at=${at}`}`
+}
+
+/** "Claude Code, Codex and Pi": the tools a search reads, in a sentence. */
+export function toolList(tools: readonly string[]): string {
+  const names = tools.map(toolName)
+  return names.length < 2
+    ? names.join('')
+    : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
 }
 
 /** What the session said last, one line: markdown links and marks reduced to their words. */

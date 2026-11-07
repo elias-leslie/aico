@@ -104,7 +104,7 @@ export function TodayTimeline() {
               <Link
                 href={sessionHref(session.id)}
                 className={styles.row}
-                title={`${label} · ${session.project ?? (shortFolder(session.cwd) || 'Unknown project')} · ${toolName(session.tool)} · ${clock(session.startedAt)} to ${here ? 'now' : clock(session.endedAt)}`}
+                title={`${label} · ${session.project ?? (shortFolder(session.cwd) || 'Unknown project')} · ${toolName(session.tool)} · ${clock(session.startedAt)} to ${here ? 'now' : clock(session.endedAt)}${state === 'working' && session.doing ? ` · ${session.doing}` : ''}`}
               >
                 <span className={styles.label}>{label}</span>
                 <span className={styles.track}>

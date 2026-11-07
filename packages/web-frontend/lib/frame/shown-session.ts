@@ -18,6 +18,8 @@ export interface ShownSession {
   /** The live connection; null for a chat (no connection to show). */
   status: ConnectionStatus | null
   attention: Attention | null
+  /** What a working agent is doing now, one short line; null when it is not working. */
+  doing?: string | null
   /** Another device holding the session's size, as it names itself. */
   holder: string | null
 }
@@ -45,7 +47,8 @@ export function publishShownSession(next: Omit<ShownSession, 'holder'> | null) {
     shown.agentName === next.agentName &&
     shown.status === next.status &&
     shown.attention?.group === next.attention?.group &&
-    shown.attention?.detail === next.attention?.detail
+    shown.attention?.detail === next.attention?.detail &&
+    shown.doing === next.doing
   if (same) return
   shown = { ...next, holder }
   emit()
@@ -91,8 +94,10 @@ export function shownSessionLine(
   const group = session.attention?.group
   if (status !== 'session_dead') {
     if (group === 'needs-you') parts.push('needs you')
-    else if (group === 'working') parts.push('working')
-    else if (group === 'finished') parts.push('finished')
+    else if (group === 'working') {
+      parts.push('working')
+      if (session.doing) parts.push(session.doing)
+    } else if (group === 'finished') parts.push('finished')
     else if (group === 'idle')
       parts.push(
         session.attention?.age ? `idle ${session.attention.age}` : 'idle',

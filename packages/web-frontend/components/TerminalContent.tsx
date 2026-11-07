@@ -259,6 +259,7 @@ function useShownSessionPublisher(
       agentName: toolName(agentTools, mode),
       status: chat ? null : status,
       attention: state,
+      doing: slot.doing ?? null,
     })
   })
   useEffect(() => () => publishShownSession(null), [])

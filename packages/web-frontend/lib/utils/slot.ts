@@ -37,6 +37,8 @@ interface SlotSessionFields {
   task?: string | null
   /** The project it belongs to, when its name does not already say it. */
   projectLabel?: string | null
+  /** What a working agent is doing now, one short line; absent when it is not working. */
+  doing?: string | null
   /** Coordinator or lane chip, as Aico shows it. */
   badge?: CoordinatorBadgeInfo | null
   /** The session's pending check-ins, oldest first. */
@@ -220,6 +222,7 @@ function slotFields(
   return {
     task: session.task,
     projectLabel: session.project_name ?? null,
+    ...(session.doing ? { doing: session.doing } : {}),
     badge,
     checkIns: session.check_ins ?? [],
     coordinator: session.is_coordinator === true,

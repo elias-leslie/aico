@@ -6,11 +6,17 @@ import { HistoryPage } from '@/components/history/HistoryPage'
 
 /** /history lists recent sessions; /history?session=<id> shows one session's transcript;
  * /history?standing=failed lists only the sessions that failed. */
+function offsetOf(value: string | null): number | null {
+  const at = value === null || value === '' ? Number.NaN : Number(value)
+  return Number.isSafeInteger(at) && at >= 0 ? at : null
+}
+
 function History() {
   const params = useSearchParams()
   return (
     <HistoryPage
       session={params.get('session') ?? ''}
+      at={offsetOf(params.get('at'))}
       failedOnly={params.get('standing') === 'failed'}
     />
   )

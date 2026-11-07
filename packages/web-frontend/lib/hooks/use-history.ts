@@ -5,6 +5,7 @@ import { apiFetch, isPermanentRefusal } from '../api-fetch'
 import type {
   HistoryDetail,
   HistoryEventPage,
+  HistorySearchPage,
   HistorySession,
 } from '../history'
 
@@ -76,4 +77,36 @@ export function eventsBefore(
     undefined,
     'Couldn’t load the transcript',
   )
+}
+
+/** GET /api/history/search: the conversations whose messages contain `text` (two or more characters). */
+export function useHistorySearch(text: string, tool: string) {
+  const query = text.trim()
+  return useQuery({
+    queryKey: ['history', 'search', query, tool],
+    enabled: query.length >= 2,
+    queryFn: () =>
+      apiFetch<HistorySearchPage>(
+        `/api/history/search?q=${encodeURIComponent(query)}&limit=30${tool ? `&tool=${encodeURIComponent(tool)}` : ''}`,
+        undefined,
+        'Couldn’t search the sessions',
+      ),
+    staleTime: 60_000,
+    retry: retryOnce,
+  })
+}
+
+/** The one event at a byte offset (a search hit), for the transcript to open on. */
+export function useHistoryEventAt(id: string, at: number | null) {
+  return useQuery({
+    queryKey: ['history', 'event-at', id, at],
+    enabled: at !== null,
+    queryFn: () =>
+      apiFetch<HistoryEventPage>(
+        `/api/history/${encodeURIComponent(id)}/events?limit=1&from=${at}`,
+        undefined,
+        'Couldn’t load the matching message',
+      ),
+    retry: retryOnce,
+  })
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, Search } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useLiveSessions } from '@/lib/frame/live'
@@ -23,6 +23,7 @@ import { useHistory } from '@/lib/hooks/use-history'
 import { useSessionLabels } from '@/lib/hooks/use-session-labels'
 import { SkeletonRows } from '../status/SkeletonRows'
 import styles from './HistoryList.module.css'
+import { HistorySearchResults } from './HistorySearchResults'
 
 /** The list of recent sessions, newest first, one link each to its transcript. */
 export function HistoryList({ failedOnly = false }: { failedOnly?: boolean }) {
@@ -47,6 +48,15 @@ export function HistoryList({ failedOnly = false }: { failedOnly?: boolean }) {
   const liveOf = (id: string) =>
     [...live.bySession.values()].find((item) => item.conversation === id)
   const [showTests, setShowTests] = useState(false)
+  // The search box: results replace the list once two characters are typed.
+  const [text, setText] = useState('')
+  const [query, setQuery] = useState('')
+  const [searchTests, setSearchTests] = useState(0)
+  useEffect(() => {
+    const timer = setTimeout(() => setQuery(text.trim()), 300)
+    return () => clearTimeout(timer)
+  }, [text])
+  const searching = query.length >= 2
   const tests = items?.filter((session) => session.test).length ?? 0
   const visible = showTests ? items : items?.filter((session) => !session.test)
   // Failed means the session's last turn ended in an error (a running session is never failed).
@@ -56,15 +66,17 @@ export function HistoryList({ failedOnly = false }: { failedOnly?: boolean }) {
       )
     : visible
 
-  const sub = loading
-    ? 'Loading…'
-    : failed
-      ? 'Not loaded'
-      : stale
-        ? `As of ${clock(readAt)} · couldn’t refresh`
-        : shown?.length
-          ? `${countOf(shown.length, 'session')} · updated ${agoAt(readAt, now)}`
-          : 'None yet'
+  const sub = searching
+    ? 'Search'
+    : loading
+      ? 'Loading…'
+      : failed
+        ? 'Not loaded'
+        : stale
+          ? `As of ${clock(readAt)} · couldn’t refresh`
+          : shown?.length
+            ? `${countOf(shown.length, 'session')} · updated ${agoAt(readAt, now)}`
+            : 'None yet'
 
   return (
     <>
@@ -72,6 +84,23 @@ export function HistoryList({ failedOnly = false }: { failedOnly?: boolean }) {
         <h1>Recent sessions</h1>
         <span className="sub">{sub}</span>
       </header>
+      <div className="history-search">
+        <label className="lantern-field">
+          <Search className="h-4 w-4" strokeWidth={1.7} aria-hidden="true" />
+          <input
+            type="search"
+            aria-label="Search past sessions"
+            placeholder="Search what was said or run"
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+          />
+        </label>
+        {text.trim().length === 1 && (
+          <span className="status-muted">
+            Type one more character to search.
+          </span>
+        )}
+      </div>
       <div className="status-filters">
         <select
           className={`status-select${tool ? ' set' : ''}`}
@@ -96,7 +125,7 @@ export function HistoryList({ failedOnly = false }: { failedOnly?: boolean }) {
             Failed only · Show all
           </button>
         )}
-        {tests > 0 && (
+        {(searching ? searchTests : tests) > 0 && (
           <button
             type="button"
             className="lantern-btn ghost small"
@@ -104,13 +133,21 @@ export function HistoryList({ failedOnly = false }: { failedOnly?: boolean }) {
             onClick={() => setShowTests(!showTests)}
           >
             {showTests
-              ? `Hide ${countOf(tests, 'test run')}`
-              : `${countOf(tests, 'test run')} hidden · Show`}
+              ? 'Hide test runs'
+              : `${countOf(searching ? searchTests : tests, 'test run')} hidden · Show`}
           </button>
         )}
       </div>
 
-      {failed && (
+      {searching && (
+        <HistorySearchResults
+          query={query}
+          tool={tool}
+          showTests={showTests}
+          onTests={setSearchTests}
+        />
+      )}
+      {!searching && failed && (
         <div className="status-notice bad" role="alert">
           <p>
             <b>Couldn’t load recent sessions.</b>{' '}
@@ -133,7 +170,7 @@ export function HistoryList({ failedOnly = false }: { failedOnly?: boolean }) {
           </button>
         </div>
       )}
-      {stale && (
+      {!searching && stale && (
         <div className="status-notice wait" role="status">
           <p>
             <b>Showing the list from {clock(readAt)}.</b> Couldn’t refresh it,
@@ -155,13 +192,13 @@ export function HistoryList({ failedOnly = false }: { failedOnly?: boolean }) {
         </div>
       )}
 
-      {loading && (
+      {!searching && loading && (
         <>
           <p className="status-muted">Loading recent sessions…</p>
           <SkeletonRows />
         </>
       )}
-      {failed && (
+      {!searching && failed && (
         <div className="status-rows">
           <div className="status-empty">
             <h3>No sessions to show</h3>
@@ -169,7 +206,7 @@ export function HistoryList({ failedOnly = false }: { failedOnly?: boolean }) {
           </div>
         </div>
       )}
-      {shown && shown.length === 0 && (
+      {!searching && shown && shown.length === 0 && (
         <div className="status-rows">
           <div className="status-empty">
             <h3>
@@ -187,7 +224,7 @@ export function HistoryList({ failedOnly = false }: { failedOnly?: boolean }) {
           </div>
         </div>
       )}
-      {shown && shown.length > 0 && (
+      {!searching && shown && shown.length > 0 && (
         <div
           className={`status-rows ${styles.rows}`}
           data-testid="history-rows"
@@ -243,7 +280,7 @@ export function HistoryList({ failedOnly = false }: { failedOnly?: boolean }) {
           })}
         </div>
       )}
-      {items && items.length >= 100 && (
+      {!searching && items && items.length >= 100 && (
         <p className="status-muted history-cap">
           Showing the newest {count(items.length)}.
         </p>

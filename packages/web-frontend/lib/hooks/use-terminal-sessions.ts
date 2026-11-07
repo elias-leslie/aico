@@ -94,6 +94,8 @@ export interface TerminalSession extends CoordinatorFields {
   activity_at?: number | null
   /** Why blocked: `permission prompt`, `input needed`, ... */
   activity_detail?: string | null
+  /** What a working agent is doing now, one short line; null when it is not working. */
+  doing?: string | null
   /** When the owner last had it open on any device (ms, the server's clock). */
   seen_at?: number | null
   /** The session can be renamed (in Tether). */

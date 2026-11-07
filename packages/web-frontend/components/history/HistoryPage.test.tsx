@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ApiError } from '@/lib/api-fetch'
 import { HistoryPage } from './HistoryPage'
 
 const api = vi.hoisted(() => ({
@@ -10,6 +11,7 @@ const api = vi.hoisted(() => ({
   calls: [] as string[],
   live: { items: [] } as unknown,
   sessions: { items: [] } as unknown,
+  search: null as unknown,
 }))
 vi.mock('@/lib/api-fetch', async () => {
   const actual =
@@ -21,12 +23,23 @@ vi.mock('@/lib/api-fetch', async () => {
       api.calls.push(url)
       if (url === '/api/history/live') return api.live
       if (url.startsWith('/api/sessions')) return api.sessions
+      if (url.startsWith('/api/history/search')) {
+        if (api.search instanceof Error) throw api.search
+        return api.search
+      }
       if (url.startsWith('/api/history?')) {
         if (!api.list) throw new ApiError('Tether is not reachable', 503)
         return api.list
       }
       if (url.includes('/events?')) {
-        const answer = api.events[url.includes('before=') ? 'older' : 'newest']
+        const answer =
+          api.events[
+            url.includes('from=')
+              ? 'at'
+              : url.includes('before=')
+                ? 'older'
+                : 'newest'
+          ]
         if (answer instanceof Error) throw answer
         return answer
       }
@@ -69,13 +82,13 @@ const session = (over: object = {}) => ({
   ...over,
 })
 
-const renderPage = (id = '') => {
+const renderPage = (id = '', at: number | null = null) => {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
   return render(
     <QueryClientProvider client={client}>
-      <HistoryPage session={id} />
+      <HistoryPage session={id} at={at} />
     </QueryClientProvider>,
   )
 }
@@ -87,6 +100,7 @@ beforeEach(() => {
   api.calls = []
   api.live = { items: [] }
   api.sessions = { items: [] }
+  api.search = null
 })
 
 describe('recent sessions list', () => {
@@ -400,5 +414,168 @@ describe('transcript', () => {
         screen.getAllByText(/no longer in the list/).length,
       ).toBeGreaterThan(0),
     )
+  })
+})
+
+describe('session titles', () => {
+  it('names a row by the conversation title when no running session owns it, never by the project alone', async () => {
+    api.list = {
+      items: [
+        session({
+          id: 'codex:a',
+          project: 'aico',
+          title: 'Fix the quota page',
+        }),
+        session({ id: 'codex:b', project: 'aico', title: null }),
+      ],
+    }
+    renderPage()
+    expect(await screen.findByText('Fix the quota page')).toBeTruthy()
+    expect(screen.getByText(/^Codex · /)).toBeTruthy()
+  })
+})
+
+const hit = (over: object = {}) => ({
+  session: session({ title: 'Fix the quota page' }),
+  matches: 2,
+  hits: [
+    {
+      offset: 120,
+      at: null,
+      role: 'user',
+      kind: 'text',
+      snippet: '…why does the Quota page say stale…',
+    },
+    {
+      offset: 340,
+      at: null,
+      role: 'assistant',
+      kind: 'tool_call',
+      tool: 'exec',
+      snippet: 'rg quota src',
+    },
+  ],
+  ...over,
+})
+
+describe('search', () => {
+  const type = async (text: string) => {
+    api.list = { items: [session()] }
+    renderPage()
+    await screen.findByTestId('history-rows')
+    fireEvent.change(screen.getByLabelText('Search past sessions'), {
+      target: { value: text },
+    })
+  }
+
+  it('lists the sessions that match, says which tools it read, and links each hit to its message', async () => {
+    api.search = {
+      query: 'quota',
+      items: [hit()],
+      covers: ['claude-code', 'codex', 'pi'],
+      searched: { sessions: 40, since: null, bytes: 1000, ms: 80 },
+      more: false,
+    }
+    await type('quota')
+    expect(await screen.findByText('Fix the quota page')).toBeTruthy()
+    expect(screen.getByText(/searched Claude Code, Codex and Pi/)).toBeTruthy()
+    expect(
+      screen.getByText(/agy and Aico agent chats are not searchable/),
+    ).toBeTruthy()
+    expect(screen.getByText('Quota').tagName).toBe('MARK')
+    const link = screen
+      .getAllByRole('link')
+      .find((a) => a.getAttribute('href')?.endsWith('&at=340'))
+    expect(link?.getAttribute('href')).toBe(
+      '/history?session=codex%3Aabc&at=340',
+    )
+    expect(
+      api.calls.some((url) => url.includes('/api/history/search?q=quota')),
+    ).toBe(true)
+  })
+
+  it('waits for two characters, and says plainly when nothing matches or the search failed', {
+    timeout: 10_000,
+  }, async () => {
+    await type('q')
+    expect(screen.getByText('Type one more character to search.')).toBeTruthy()
+    expect(api.calls.some((url) => url.startsWith('/api/history/search'))).toBe(
+      false,
+    )
+    api.search = {
+      query: 'zzzz',
+      items: [],
+      covers: ['claude-code', 'codex', 'pi'],
+      searched: { sessions: 40, since: null, bytes: 1000, ms: 80 },
+      more: false,
+    }
+    fireEvent.change(screen.getByLabelText('Search past sessions'), {
+      target: { value: 'zzzz' },
+    })
+    expect(await screen.findByText('Nothing found for “zzzz”')).toBeTruthy()
+    api.search = new ApiError('Tether is not reachable', 503)
+    fireEvent.change(screen.getByLabelText('Search past sessions'), {
+      target: { value: 'yyyy' },
+    })
+    expect(
+      await screen.findByText(
+        'Couldn’t search the sessions.',
+        {},
+        { timeout: 4000 },
+      ),
+    ).toBeTruthy()
+  })
+
+  it('hides test runs in the results like the list does', async () => {
+    api.search = {
+      query: 'quota',
+      items: [
+        hit({
+          session: session({ id: 'codex:t', title: 'smoke', test: true }),
+        }),
+      ],
+      covers: ['claude-code', 'codex', 'pi'],
+      searched: { sessions: 1, since: null, bytes: 1, ms: 1 },
+      more: true,
+    }
+    await type('quota')
+    expect(await screen.findByText('Nothing found for “quota”')).toBeTruthy()
+    expect(screen.getAllByText(/1 test run hidden/).length).toBeGreaterThan(0)
+  })
+})
+
+describe('opening a search hit', () => {
+  it('shows the matching message first, marked as found here', async () => {
+    api.detail = {
+      ...session(),
+      path: '/x',
+      files: [],
+      subagents: {
+        count: 0,
+        toolCalls: 0,
+        tokens: { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 },
+      },
+    }
+    api.events = {
+      newest: { items: [], older: null, newer: null, size: 0 },
+      at: {
+        items: [
+          {
+            offset: 340,
+            at: null,
+            role: 'assistant',
+            kind: 'text',
+            text: 'the quota page says stale',
+          },
+        ],
+        older: 120,
+        newer: null,
+        size: 500,
+      },
+    }
+    renderPage('codex:abc', 340)
+    const found = await screen.findByTestId('history-match')
+    expect(found.textContent).toContain('Found here')
+    expect(await screen.findByText('the quota page says stale')).toBeTruthy()
   })
 })

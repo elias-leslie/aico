@@ -278,6 +278,11 @@ export function SessionList({
           )
         : slot?.checkIns
     const chat = slot?.chatSummary
+    // The line shows only while the agent is working, so it never goes stale.
+    const doing =
+      shown.state.tone === 'work' || shown.state.tone === 'quiet'
+        ? slot?.doing
+        : null
     const meta = chat
       ? `${chat.role} · ${chat.model ?? '—'} · ${CHAT_STATE[chat.state] ?? chat.state} · ${chat.cwd.split('/').pop()}`
       : [
@@ -328,6 +333,11 @@ export function SessionList({
             </span>
             <CheckInBadge checkIns={checkIns} />
           </span>
+          {doing && (
+            <span className="doing" title={doing}>
+              {doing}
+            </span>
+          )}
         </button>
         {isTeam && (
           <button

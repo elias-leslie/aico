@@ -14,12 +14,14 @@ import {
   type HistoryEvent,
   STANDING_CHIP,
   STANDING_TEXT,
+  sessionHref,
   standing,
   tokenLine,
   toolName,
 } from '@/lib/history'
 import {
   eventsBefore,
+  useHistoryEventAt,
   useHistoryEvents,
   useHistorySession,
 } from '@/lib/hooks/use-history'
@@ -93,9 +95,18 @@ function EventItem({ event }: { event: HistoryEvent }) {
 }
 
 /** One session: its totals, then what was said and done, newest at the bottom. */
-export function HistoryTranscript({ id }: { id: string }) {
+export function HistoryTranscript({
+  id,
+  at = null,
+}: {
+  id: string
+  /** A search hit's byte offset: that message is shown first, marked. */
+  at?: number | null
+}) {
   const detail = useHistorySession(id)
   const newest = useHistoryEvents(id)
+  const match = useHistoryEventAt(id, at)
+  const matched = match.data?.items.find((event) => event.offset === at)
   const [older, setOlder] = useState<HistoryEvent[]>([])
   const [cursor, setCursor] = useState<number | null | undefined>(undefined)
   const [loadingOlder, setLoadingOlder] = useState(false)
@@ -266,6 +277,36 @@ export function HistoryTranscript({ id }: { id: string }) {
             className="lantern-ask-body"
             onOpenPath={openPath}
           />
+        </section>
+      )}
+
+      {at !== null && (
+        <section
+          aria-label="Matching message"
+          className="history-match"
+          data-testid="history-match"
+        >
+          <h2 className="lantern-sec">
+            Found here
+            <Link href={sessionHref(id)} className="n">
+              Show without the marker
+            </Link>
+          </h2>
+          {match.isPending && (
+            <p className="status-muted">Loading the matching message…</p>
+          )}
+          {match.isError && (
+            <p className="status-muted" role="alert">
+              {refusal(match.error, 'Couldn’t load the matching message')} The
+              transcript below still reads fine.
+            </p>
+          )}
+          {match.data && !matched && (
+            <p className="status-muted">
+              That message is no longer in the transcript.
+            </p>
+          )}
+          {matched && <EventItem event={matched} />}
         </section>
       )}
 

@@ -472,6 +472,16 @@ select {
   color: var(--mist);
 }
 
+.lantern-row .doing {
+  grid-column: 2 / 4;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--bone) 78%, var(--mist));
+}
+
 .lantern-row .when {
   font-size: 12px;
   color: var(--mist);
@@ -2462,6 +2472,120 @@ a.lantern-ask-attached {
 
 .history-row .sec {
   display: block;
+}
+
+.history-search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  max-width: 640px;
+  margin: 12px 0 0;
+}
+
+.history-search .lantern-field {
+  flex: 1 1 280px;
+}
+
+.history-search .lantern-field input {
+  font-size: 16px;
+}
+
+.history-scope {
+  margin: 12px 2px 8px;
+  font-size: 12.5px;
+}
+
+.history-hits {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 900px;
+}
+
+.history-hit {
+  padding: 10px 12px;
+  border: 1px solid var(--paper-veil);
+  border-radius: 8px;
+  background: rgb(var(--ink-rgb) / 0.35);
+}
+
+.history-hit .head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--bone);
+  text-decoration: none;
+}
+
+.history-hit .head .what {
+  min-width: 0;
+  font: 450 14.5px / 1.3 var(--font-display);
+  overflow-wrap: anywhere;
+}
+
+.history-hit .head:hover .what {
+  color: var(--lantern);
+}
+
+.history-hit .when {
+  flex: none;
+  color: var(--mist);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.history-hit .meaning {
+  margin: 2px 0 6px;
+  color: var(--mist);
+  font-size: 12px;
+}
+
+.history-hit .snippet {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  color: var(--bone);
+  font-size: 12.5px;
+  line-height: 1.4;
+  text-decoration: none;
+  transition: background 0.15s var(--ease-arrival);
+}
+
+.history-hit .snippet:hover {
+  background: var(--paper);
+}
+
+.history-hit .snippet .who {
+  color: var(--mist);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-hit .snippet .text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.history-hit mark {
+  padding: 0 2px;
+  border-radius: 3px;
+  background: rgb(var(--lantern-rgb) / 0.22);
+  color: var(--bone);
+}
+
+.history-match {
+  max-width: 900px;
+  margin: 0 0 16px;
+  padding-left: 10px;
+  border-left: 2px solid var(--lantern);
 }
 
 .history-cap {

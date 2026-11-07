@@ -12,9 +12,11 @@ export function useSessionLabels(): (session: HistorySession) => string {
     const owner = [...live.bySession.values()].find(
       (item) => item.conversation === session.id,
     )
-    const name = owner
-      ? sessions.find((candidate) => candidate.id === owner.session)?.name
+    // The task (the name without its project), never the project-prefixed name.
+    const running = owner
+      ? sessions.find((candidate) => candidate.id === owner.session)
       : undefined
+    const name = running?.task || running?.name || undefined
     return sessionLabel(session, name)
   }
 }
