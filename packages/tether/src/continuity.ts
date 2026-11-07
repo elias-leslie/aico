@@ -14,11 +14,11 @@
 import { randomUUID } from 'node:crypto'
 import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
+import { entryReaders } from './entry-files'
 import { ADAPTERS, adapterOf } from './lifecycle/tui/registry'
 import {
   type AgentObservation,
   type EntryProcess,
-  entryReaders,
   FRESH_SESSION_ENV,
   nodeProcFs,
   type ProcFs,

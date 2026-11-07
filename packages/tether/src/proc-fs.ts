@@ -4,6 +4,7 @@
 
 import {
   closeSync,
+  fstatSync,
   openSync,
   readdirSync,
   readFileSync,
@@ -11,14 +12,11 @@ import {
   readSync,
   statSync,
 } from 'node:fs'
-import { ENTRY_SCAN_DEFAULTS } from './config'
-import { entryHomeFiles, fileTail } from './entry-files'
-import type { EntryReaders, FileTail, ProcFs } from './proc-facts'
+import type { EntryHomeFiles, FileTail, ProcFs } from './proc-facts'
 
 export type {
   AgentObservation,
   EntryProcess,
-  EntryReaders,
   FileTail,
   ProcFs,
 } from './proc-facts'
@@ -27,6 +25,14 @@ export {
   observeChosenSession,
   UUID_RE,
 } from './proc-facts'
+
+let entryHomeReaders: (home: string) => EntryHomeFiles | null = () => null
+
+/** The readers for an entry home (src/entry-files.ts binds them when it loads), so
+ * this leaf does not import the file that builds them. */
+export function bindEntryHomeFiles(readers: (home: string) => EntryHomeFiles | null): void {
+  entryHomeReaders = readers
+}
 
 export const nodeProcFs: ProcFs = {
   readFile: (path) => readFileSync(path, 'utf8'),
@@ -48,7 +54,7 @@ export const nodeProcFs: ProcFs = {
       return null
     }
   },
-  entryHome: (home) => entryHomeFiles(home),
+  entryHome: (home) => entryHomeReaders(home),
 }
 
 /** The pane process and all its descendants (bounded). */
@@ -78,12 +84,42 @@ export function processTree(fs: ProcFs, root: number, limit = 512): number[] {
   return [...seen]
 }
 
-export const nodeFileTail: FileTail = fileTail((path) => openSync(path, 'r'))
-
-export function entryReaders(fs: ProcFs, home: string): EntryReaders | null {
-  if (!fs.entryHome) return { home, fs, tail: null, scan: ENTRY_SCAN_DEFAULTS }
-  return fs.entryHome(home)
+/** A FileTail over files `open` returns descriptors for. */
+export function fileTail(open: (path: string) => number): FileTail {
+  return {
+    read(path, offset, max) {
+      const fd = open(path)
+      try {
+        const size = fstatSync(fd).size
+        let start = offset > size ? 0 : offset
+        if (size - start > max) start = size - max
+        const buffer = Buffer.alloc(size - start)
+        const read = readSync(fd, buffer, 0, buffer.length, start)
+        const text = buffer.subarray(0, read).toString('utf8')
+        // Hold back a partial last line until it is complete.
+        const end = text.lastIndexOf('\n') + 1
+        return {
+          text: text.slice(0, end),
+          offset: start + Buffer.byteLength(text.slice(0, end)),
+          size,
+        }
+      } finally {
+        closeSync(fd)
+      }
+    },
+    range(path, start, end) {
+      const fd = open(path)
+      try {
+        const buffer = Buffer.alloc(Math.max(0, end - start))
+        return buffer.subarray(0, readSync(fd, buffer, 0, buffer.length, start))
+      } finally {
+        closeSync(fd)
+      }
+    },
+  }
 }
+
+export const nodeFileTail: FileTail = fileTail((path) => openSync(path, 'r'))
 
 /** The fresh conversation id Tether picks host-side for such an agent's launch
  * (root-launch.ts), so a host reader knows it even when the agent runs where

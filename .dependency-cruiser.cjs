@@ -43,7 +43,15 @@ module.exports = {
       name: 'no-cycles',
       severity: 'error',
       comment: 'No circular imports.',
-      from: {},
+      from: { pathNot: '^packages/tether/' },
+      to: { circular: true },
+    },
+    {
+      name: 'tether-no-cycles',
+      severity: 'error',
+      comment:
+        'Tether has no import cycles, value or type-only (tsPreCompilationDeps counts `import type`), and none is baselined (engine-split plan M0). Break one with a small type file both sides import.',
+      from: { path: '^packages/tether/' },
       to: { circular: true },
     },
     {

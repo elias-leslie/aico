@@ -17,6 +17,7 @@
 
 import type { AgentSignal, AgentState } from './agent-signal'
 import { findEntryProcess } from './continuity'
+import { entryReaders } from './entry-files'
 import type {
   AgentProbe,
   AgentRunLookup,
@@ -25,7 +26,7 @@ import type {
 } from './lifecycle/tui/adapters/contract'
 import { ADAPTERS, adapterOf } from './lifecycle/tui/registry'
 import type { ModelSource } from './model-record'
-import { entryReaders, type FileTail, type ProcFs, processTree } from './proc-fs'
+import { type FileTail, type ProcFs, processTree } from './proc-fs'
 
 export type { AgentSignal, AgentState } from './agent-signal'
 export { AGENT_STATES } from './agent-signal'

@@ -8,8 +8,8 @@
 // Only the Tether that knows where Aico is (TETHER_AICO_URL) sends these: it
 // sees its own sessions and every remote host's.
 
+import { type WaitingNotice, waitingNotice } from './aico-notice'
 import { type ModelSwitch, modelSwitchOf, modelSwitchText } from './model-switch'
-import { type WaitingNotice, waitingNotice } from './waiting'
 
 export interface ModelNoticeState {
   /** `<host>|<id>` to the notice key and the switch it was sent for. */

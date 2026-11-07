@@ -10,8 +10,11 @@
 // Only the Tether that knows where Aico is (TETHER_AICO_URL) sends these: it
 // sees its own sessions and every remote host's, so a remote Tether stays quiet.
 
+import { type WaitingNotice, waitingNotice } from './aico-notice'
 import { AICO_WEB_DEFAULT_URL } from './config'
 import { HttpError, type Router, readJsonObject, sendJson } from './http'
+
+export type { WaitingNotice }
 
 /** Blocked and unseen this long: one notice. */
 export const WAIT_NOTICE_MS = 2 * 60_000
@@ -19,44 +22,6 @@ export const WAIT_NOTICE_MS = 2 * 60_000
 const SEEN_KEPT = 500
 const SESSION_ID = /^[0-9a-f]{8}$/
 const SEEN_MAX_IDS = 50
-
-export interface WaitingNotice {
-  v: 1
-  source: 'aico'
-  kind: 'todo'
-  severity: 'warning'
-  title: string
-  body: string
-  key: string
-  open?: string
-  actions: ['open']
-  primary: 'open'
-  push: 'phone' | 'tray'
-}
-
-/** A session waiting on the owner, as an Aico notice (contract v1). */
-export function waitingNotice(parts: {
-  key: string
-  title: string
-  body: string
-  open?: string
-  /** Where it reaches the owner: the phone (default) or the desktop tray. */
-  push?: 'phone' | 'tray'
-}): WaitingNotice {
-  return {
-    v: 1,
-    source: 'aico',
-    kind: 'todo',
-    severity: 'warning',
-    title: parts.title.slice(0, 200),
-    body: parts.body.slice(0, 1000),
-    key: parts.key.replace(/[^A-Za-z0-9_.:/@+=,-]/g, '-').slice(0, 200),
-    ...(parts.open?.startsWith('https://') ? { open: parts.open } : {}),
-    actions: ['open'],
-    primary: 'open',
-    push: parts.push ?? 'phone',
-  }
-}
 
 /** The part of a session descriptor the notice reads. */
 export interface WaitingSession {
