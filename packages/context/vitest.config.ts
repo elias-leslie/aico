@@ -6,5 +6,7 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts'],
     passWithNoTests: false,
+    // Fixtures hold local times with their zone.
+    env: { TZ: 'America/New_York', AICO_CLI_NAME: 'st' },
   },
 })

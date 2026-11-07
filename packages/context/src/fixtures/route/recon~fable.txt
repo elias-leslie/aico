@@ -1,4 +1,4 @@
-OPTIONS[recon] policy=v5 facts as of 11-03 20:28; you choose, then st aico create --work-role recon --tool T [--model M]
+OPTIONS[recon] policy=v5 facts as of Nov 3, 8:28 PM EST; you choose, then st aico create --work-role recon --tool T [--model M]
 claude-code  DENIED: Owner 2026-11-01: Claude never for active hunting or recon
 codex  DENIED: Owner 2026-11-01: Claude never for active hunting or recon
 pi  DENIED: Owner 2026-11-01: Claude never for active hunting or recon

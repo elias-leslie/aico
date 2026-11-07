@@ -4,7 +4,7 @@
 
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { formatLaunch, formatOptions } from './format'
 import type { LaunchPolicy } from './launch'
 import { Catalog } from './models'
@@ -169,5 +169,37 @@ describe('route', () => {
     // A failed collection of one provider leaves the others alone.
     const failed = { ...roomy, unreadable: { claude: 'its last collection failed' } }
     expect(codex(failed).usage?.status).toBe('ok')
+  })
+
+  it('names the window that is used up, shows local times with a zone, and no reset for an untouched window', () => {
+    const now = '2026-11-06T12:00:00.000Z'
+    const reading = (window_minutes: number, used_percent: number, resets_at: string) => ({
+      provider: 'opencode-go',
+      window_minutes,
+      observed_at: now,
+      used_percent,
+      resets_at,
+      source: 'opencode_go_usage',
+    })
+    const facts: Facts = {
+      readings: [
+        reading(300, 0, '2026-11-06T17:00:00.000Z'),
+        reading(10080, 100, '2026-11-08T19:00:00.000Z'),
+      ],
+      credits: {},
+      refusals: [],
+      collected_at: now,
+    }
+    const payload = route(policy, catalog, { role: 'testing', tool: 'pi' }, facts, now)
+    const text = formatOptions(payload, 'testing')
+    expect(text).toContain('pi  opencode-go/deepseek-v4.1-flash xhigh  weekly used up  |')
+    expect(text).toContain('5h 100% left, read <1m ago;')
+    expect(text).not.toContain('5h 100% left, resets')
+    expect(text).toContain('weekly used up until Nov 8, 2:00 PM EST (')
+    expect(text).toContain('facts as of Nov 6, 7:00 AM EST;')
+    expect(text).toContain('then st aico create')
+    vi.stubEnv('AICO_CLI_NAME', 'aico')
+    expect(formatOptions(payload, 'testing')).toContain('then aico aico create')
+    vi.unstubAllEnvs()
   })
 })

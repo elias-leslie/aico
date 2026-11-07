@@ -1,6 +1,8 @@
 import { spawnSync } from 'node:child_process'
 import { isAbsolute, resolve } from 'node:path'
 import { runLogins } from '@aico/fleet/logins-cli'
+import { nearest } from '@aico/shared/suggest'
+import { localTime } from '@aico/shared/time'
 import { ASK_USAGE, runAsk } from './ask-cli'
 import { CAPTURE_USAGE, runCapture } from './capture-cli'
 import { callSocket } from './client'
@@ -21,30 +23,32 @@ Commands:
   serve                         run the daemon (used by tether@<instance>.service)
   doctor                        check host prerequisites and the running daemon
   version                       print the CLI and daemon versions
-  sessions [list | get <id>]    live sessions; get: one session (--json: the record)
+  sessions [list | get <id>]    live sessions, one per line (ID, STATUS, STATE, TOOL, PROJECT, NAME);
+                                get: one session (--json: the whole record)
   sessions create [--tool T] [--project P] [--name N]   start a session (alias: new);
                                 one line about it; --json prints the whole record
   reboot prepare [--timeout SEC] [--no-notify]   ask agents to checkpoint; exit 0 ready, 3 not
   reboot status                 restore results since the last boot
   recovery status               crash recoveries: waiting, recovered or held
-  recovery resume <id> [--mem-bytes N --cpus N]  resume; optionally seed a lost booking
-  sessions end <id>             retire one session (reads its generation first)
+  recovery resume <id> [--mem-bytes N --cpus N]  resume a session that was cut short; give both
+                                numbers to set the memory and CPUs it needs
+  sessions end <id>             end one session
   sessions attach <id> [--print]
                                 attach this terminal (exec tmux); --print shows
                                 the argv. Inside another tmux server the client
                                 nests with TMUX unset; inside the same server
                                 it switches the current client.
   sessions diagnostics <id>
-  roots [list | show <requestId>]
-  share <path>... [--title T]  show the owner files or folders where they are
+  roots [list | show <requestId>]   coordinator sessions started from a request
+  share <path>... [--title T] [--session ID]
+                                show the owner files or folders where they are
                                 (Aico: Files > Shared; nothing is copied);
-                                relative paths are from here
-  share --url <url> [--title T]
+                                relative paths are from here; the session is
+                                this pane's own unless --session ID names one
+  share --url <url> [--title T] [--session ID]
   share remove <id>...          take entries out of Files > Shared (a file named
                                 "remove" is ./remove); an unknown id exits 1,
                                 the rest are still removed
-                                the session is this pane's own; --session ID
-                                overrides it
   ask create|get|list|done|withdraw
                                 put a question to the owner in Aico and read
                                 the answer (tether ask --help)
@@ -59,17 +63,17 @@ Commands:
                                 copy a pre-Tether Aico catalog (an archived
                                 aico.db; dry-run unless --apply; opened
                                 read-only; stop the daemon first)
-  tools [list]                  merged agent-tool registry
+  tools [list]                  the tools a new session can start (claude-code, codex, ...)
   tools get <slug>
   tools add <slug> <name> -- <argv...>
   tools default|enable|disable <slug>
   tools rm <slug>
   projects [--refresh]          project list (registry, else local)
-  hosts                         remote hosts this Tether federates, with link state
-  fleet identity ROLE           show the public enrollment key and code (full|worker)
-  fleet enroll PUBLIC_FILE      ask the owner to approve a machine
-  fleet approve FILE ASK PINS    root: pin the exact identity approved in Needs you
-  fleet exec SOCKET -- COMMAND  carry a command over an approved fleet connection
+  hosts                         other machines this one is linked to, with link state
+  fleet identity ROLE           show this machine's public key and join code (full|worker)
+  fleet enroll PUBLIC_FILE      ask the owner to let another machine join
+  fleet approve FILE ASK PINS   admin only: record the machine the owner approved in Needs you
+  fleet exec SOCKET -- COMMAND  run a command on a machine that has joined
 
 The instance defaults to $TETHER_INSTANCE or "default". tether COMMAND --help shows one command.`
 
@@ -100,12 +104,31 @@ const OWN_USAGE: Record<string, string> = {
   note: NOTE_USAGE,
 }
 
+/** What the agent in a session is doing, in Aico's words; null when it does not say. */
+function stateWord(state: unknown): string | null {
+  if (state === 'blocked') return 'needs you'
+  return state === 'working' || state === 'idle' ? state : null
+}
+
 /** The one-line account of a session for a person; --json gives the record. */
 export function sessionLine(session: Record<string, unknown>): string {
   const where = session.projectId ? `in ${session.projectId}` : 'in no project'
   const host = session.host ? ` on ${session.host}` : ''
-  const state = session.state && session.state !== session.status ? ` (${session.state})` : ''
+  const known = stateWord(session.state)
+  const state = known && known !== session.status ? ` (${known})` : ''
   return `${session.id}  ${session.label ?? session.name ?? ''}  ${session.tool} ${where}${host}, ${session.status}${state}`
+}
+
+/** `tether sessions` for a person: a header, one row per session, and what STATUS and STATE mean. */
+export function sessionTable(items: Record<string, unknown>[]): string[] {
+  const cell = (value: unknown, width: number) => String(value ?? '-').padEnd(width)
+  return [
+    `${cell('ID', 10)}${cell('STATUS', 10)}${cell('STATE', 11)}${cell('TOOL', 13)}${cell('PROJECT', 14)}NAME`,
+    ...items.map((item) =>
+      `${cell(item.id, 10)}${cell(item.status, 10)}${cell(stateWord(item.state), 11)}${cell(item.tool, 13)}${cell(item.projectId, 14)}${item.label ?? item.name ?? ''}`.trimEnd(),
+    ),
+    'STATUS is the session (running or ended). STATE is the agent in it: working, idle, needs you, or - when it does not say.',
+  ]
 }
 
 export interface Io {
@@ -144,34 +167,40 @@ export function parseArgs(argv: string[]): Parsed {
   return parsed
 }
 
-export function render(io: Io, json: boolean, status: number, body: unknown): number {
+export function render(
+  io: Io,
+  json: boolean,
+  status: number,
+  body: unknown,
+  empty = 'Nothing here.',
+): number {
   if (json || typeof body !== 'object' || body === null) {
     io.out(typeof body === 'string' ? body : JSON.stringify(body, null, 2))
   } else {
     const record = body as Record<string, unknown>
     if (status >= 400) {
       io.err(`error ${status}: ${record.error}${record.detail ? ` — ${record.detail}` : ''}`)
+    } else if (Array.isArray(record.items) && record.items.length === 0) {
+      io.out(empty)
     } else if (
       Array.isArray(record.items) &&
       (record.items as Record<string, unknown>[]).some((item) => 'generation' in item)
     ) {
-      for (const item of record.items as Record<string, unknown>[])
-        io.out(
-          `  ${item.id}  ${String(item.status).padEnd(9)} ${String(item.tool).padEnd(12)} ${item.projectId ?? '-'}  ${item.label}`,
-        )
+      for (const row of sessionTable(record.items as Record<string, unknown>[])) io.out(row)
     } else if (
       Array.isArray(record.items) &&
       (record.items as Record<string, unknown>[]).some((item) => 'ssh' in item)
     ) {
-      // GET /v1/hosts: name, link state, the host's Tether API and its last update.
-      for (const item of record.items as Record<string, unknown>[]) {
-        const api = item.apiVersion == null ? 'api ?' : `api ${item.apiVersion}`
+      // GET /v1/hosts: name, link state, sessions and the last update (versions are in --json).
+      const items = record.items as Record<string, unknown>[]
+      io.out(`${'HOST'.padEnd(16)} ${'LINK'.padEnd(12)} ${'SESSIONS'.padEnd(9)} UPDATE`)
+      for (const item of items) {
         const update = item.update as Record<string, unknown> | null
         const updated = update
-          ? `  update ${update.state ?? ''}${update.error ? `: ${update.error}` : ''}`
-          : ''
+          ? `${update.state ?? ''}${update.error ? `: ${update.error}` : ''}`
+          : '-'
         io.out(
-          `  ${String(item.name).padEnd(16)} ${String(item.state).padEnd(12)} ${api}  sessions ${item.sessions}${updated}`,
+          `${String(item.name).padEnd(16)} ${String(item.state).padEnd(12)} ${String(item.sessions).padEnd(9)} ${updated}`,
         )
       }
     } else if (Array.isArray(record.items)) {
@@ -199,10 +228,11 @@ async function api(
   method: string,
   path: string,
   body?: unknown,
+  empty?: string,
 ): Promise<number> {
   try {
     const response = await callSocket(paths.socket, method, path, body)
-    return render(io, json, response.status, response.body)
+    return render(io, json, response.status, response.body, empty)
   } catch (error) {
     io.err(
       `tether (${paths.instance}) is not reachable at ${paths.socket}: ${(error as Error).message}`,
@@ -357,6 +387,20 @@ export function attachPlan(
   }
 }
 
+/** A refused session call for a person: an unknown id says so, naming the id. */
+function sessionRefusal(
+  io: Io,
+  json: boolean,
+  id: string,
+  response: { status: number; body: unknown },
+): number {
+  if (!json && response.status === 404) {
+    io.err(`No session ${id} (ended or never existed); tether sessions list shows the live ones`)
+    return 1
+  }
+  return render(io, json, response.status, response.body)
+}
+
 function slugPath(slug: string | undefined): string {
   if (!slug) throw new Error('a tool slug is required')
   return `/v1/tools/${encodeURIComponent(slug)}`
@@ -414,16 +458,37 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
         io.out(`tether ${VERSION}`)
         return api(io, paths, json, 'GET', '/v1/version')
       case 'sessions':
-        if (!sub || sub === 'list') return api(io, paths, json, 'GET', '/v1/sessions')
-        if (sub === 'get' && rest[0] && json)
-          return api(io, paths, json, 'GET', `/v1/sessions/${encodeURIComponent(rest[0])}`)
-        if (sub === 'diagnostics' && rest[0])
-          return api(io, paths, json, 'GET', `/v1/sessions/${encodeURIComponent(rest[0])}/${sub}`)
+        if (!sub || sub === 'list')
+          return api(
+            io,
+            paths,
+            json,
+            'GET',
+            '/v1/sessions',
+            undefined,
+            'No live sessions. Start one: tether sessions create',
+          )
+        if (sub === 'get' && rest[0] && json) {
+          const found = await callSocket(
+            paths.socket,
+            'GET',
+            `/v1/sessions/${encodeURIComponent(rest[0])}`,
+          )
+          return render(io, json, found.status, found.body)
+        }
+        if (sub === 'diagnostics' && rest[0]) {
+          const found = await callSocket(
+            paths.socket,
+            'GET',
+            `/v1/sessions/${encodeURIComponent(rest[0])}/diagnostics`,
+          )
+          return sessionRefusal(io, json, rest[0], found)
+        }
         if (sub === 'attach' && rest[0]) {
           const path = `/v1/sessions/${encodeURIComponent(rest[0])}/attach`
           if (json || rest.includes('--print')) return api(io, paths, json, 'GET', path)
           const response = await callSocket(paths.socket, 'GET', path, undefined, 15_000)
-          if (response.status !== 200) return render(io, json, response.status, response.body)
+          if (response.status !== 200) return sessionRefusal(io, json, rest[0], response)
           const plan = attachPlan(response.body as Parameters<typeof attachPlan>[0], process.env)
           if (plan.notice) io.err(plan.notice)
           const [file, ...args] = plan.argv as [string, ...string[]]
@@ -461,10 +526,10 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
           )
           const session = found.body as Record<string, unknown> | null
           if (found.status !== 200 || typeof session?.id !== 'string')
-            return render(io, json, found.status, found.body)
+            return sessionRefusal(io, json, rest[0], found)
           io.out(sessionLine(session))
           io.out(
-            `  root ${session.projectRoot ?? '-'}; started ${new Date(Number(session.createdAt)).toLocaleString()}`,
+            `  root ${session.projectRoot ?? '-'}; started ${session.createdAt ? localTime(Number(session.createdAt)) : '-'}`,
           )
           io.out('  Every field: add --json')
           return 0
@@ -480,7 +545,7 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
           const current = await callSocket(paths.socket, 'GET', path, undefined, 15_000)
           const generation = (current.body as Record<string, unknown> | null)?.generation
           if (current.status !== 200 || typeof generation !== 'string')
-            return render(io, json, current.status, current.body)
+            return sessionRefusal(io, json, rest[0], current)
           const ended = await callSocket(paths.socket, 'POST', `${path}/end`, { generation })
           if (json || ended.status !== 200) return render(io, json, ended.status, ended.body)
           io.out(`Ended ${rest[0]}.`)
@@ -592,7 +657,7 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
         return 0
       }
       case 'hosts':
-        return api(io, paths, json, 'GET', '/v1/hosts')
+        return api(io, paths, json, 'GET', '/v1/hosts', undefined, 'No other machines are linked.')
       case 'logins':
         return runLogins(parsed.args.slice(1))
       case 'fleet':
@@ -621,11 +686,19 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
           process.cwd(),
         )
       case 'history':
-        if (sub === undefined || sub === '--help' || sub === 'help') {
+        if (sub === '--help' || sub === 'help') {
           io.out(HISTORY_USAGE)
-          return sub === undefined ? 2 : 0
+          return 0
         }
-        return runHistory(io, paths, json, parsed.args.slice(1))
+        // Bare `history` (or only flags, like --limit 5) lists.
+        return runHistory(
+          io,
+          paths,
+          json,
+          sub === undefined || sub.startsWith('-')
+            ? ['list', ...parsed.args.slice(1)]
+            : parsed.args.slice(1),
+        )
       case 'capture':
         if (sub === undefined || sub === '--help' || sub === 'help') {
           io.out(CAPTURE_USAGE)
@@ -679,11 +752,53 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
         return api(io, paths, json, 'GET', `/v1/projects${sub === '--refresh' ? '?refresh=1' : ''}`)
     }
   } catch (error) {
-    io.err((error as Error).message)
+    const { code, message } = error as NodeJS.ErrnoException
+    io.err(
+      code === 'ENOENT' || code === 'ECONNREFUSED'
+        ? `tether (${paths.instance}) is not reachable at ${paths.socket}: ${message}`
+        : message,
+    )
     return 2
   }
-  io.err(USAGE)
+  io.err(mistake(command, sub))
   return 2
+}
+
+/** Subcommands of the commands that have them. */
+const SUBCOMMANDS: Record<string, string[]> = {
+  sessions: ['list', 'get', 'create', 'new', 'attach', 'end', 'diagnostics'],
+  reboot: ['prepare', 'status'],
+  recovery: ['status', 'resume'],
+  roots: ['list', 'show'],
+  tools: ['list', 'get', 'add', 'rm', 'default', 'enable', 'disable'],
+}
+
+/** What a subcommand needs when it is named without it. */
+const NEEDS: Record<string, string> = {
+  'sessions get': 'a session id (tether sessions list shows them)',
+  'sessions attach': 'a session id (tether sessions list shows them)',
+  'sessions end': 'a session id (tether sessions list shows them)',
+  'sessions diagnostics': 'a session id (tether sessions list shows them)',
+  'recovery resume': 'a session id (tether recovery status lists them)',
+  'roots show': 'a request id (tether roots lists them)',
+}
+
+/** The problem with a command line that matched nothing, in one or two lines. */
+function mistake(command: string, sub: string | undefined): string {
+  const commands = [...USAGE.matchAll(/^ {2}(\S+)/gm)].map((m) => m[1] as string)
+  const known = new Set([...commands, ...Object.keys(SUBCOMMANDS), 'link', 'logins'])
+  if (!known.has(command)) {
+    const near = nearest(command, [...known])
+    return `tether: unknown command ${command}${near ? ` (did you mean ${near}?)` : ''}; tether --help lists them`
+  }
+  const subs = SUBCOMMANDS[command]
+  if (subs && sub !== undefined && subs.includes(sub))
+    return `tether ${command} ${sub}: needs ${NEEDS[`${command} ${sub}`] ?? 'more arguments'}; tether ${command} ${sub} --help shows how`
+  if (subs) {
+    const near = sub === undefined ? null : nearest(sub, subs)
+    return `tether ${command}: ${sub === undefined ? 'needs a subcommand' : `unknown subcommand ${sub}${near ? ` (did you mean ${near}?)` : ''}`} (${subs.join(', ')}); tether ${command} --help shows how`
+  }
+  return `tether ${command}: that is not how it is used; tether ${command} --help shows how`
 }
 
 const isEntry = process.argv[1] !== undefined && /tether(\.mjs)?$|cli\.ts$/.test(process.argv[1])

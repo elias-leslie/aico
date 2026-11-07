@@ -17,6 +17,7 @@ import {
   route,
   routeFacts,
 } from '@aico/context'
+import { localTime } from '@aico/shared/time'
 import harnessData from '../data/harness.json' with { type: 'json' }
 import type { Contain } from './tools'
 import type { Egress } from './transport'
@@ -166,15 +167,10 @@ export interface RulesRequest {
   usage?: { facts: Facts; now: string }
 }
 
-/** "Nov 8, 7:00 PM" in the local zone, as `aico usage show` prints reset times. */
+/** "Nov 8, 7:00 PM EST" in the local zone, as `aico usage show` prints reset times. */
 export function resetText(iso: string | null): string {
   if (!iso) return 'a reset time Aico does not know'
-  return new Date(iso).toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  })
+  return localTime(iso)
 }
 
 /** Why `model` may not run for this role in this harness, or null. */

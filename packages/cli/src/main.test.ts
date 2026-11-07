@@ -823,6 +823,22 @@ describe('aico as the owner CLI', () => {
     expect(st.errors).toEqual(['st: Unknown command nonsense; use st --help'])
   })
 
+  it('names the command and the problem for db and monitor mistakes, as aico or as st', async () => {
+    for (const [h, who] of [
+      [aico(), 'aico'],
+      [harness(), 'st'],
+    ] as const) {
+      expect(await h.go(['db', 'drop', 'x'])).toBe(2)
+      expect(await h.go(['monitor', 'bogus'])).toBe(2)
+      expect(h.errors[0]).toBe(
+        `${who}: db: unknown command drop (read-only: tables, schema, count, sample, query)`,
+      )
+      expect(h.errors[1]).toBe(
+        `${who}: monitor bogus: dropped; use status, connections, processes, mounts or ${who} logs UNIT`,
+      )
+    }
+  })
+
   it('takes backup and backups alike', async () => {
     const h = aico()
     await h.go(['backup', 'list'])
@@ -830,6 +846,18 @@ describe('aico as the owner CLI', () => {
     expect(h.calls.map((c) => c.argv.slice(1))).toEqual([
       ['backups', 'list'],
       ['backups', 'list'],
+    ])
+  })
+
+  it('a bare recent lists, with or without flags', async () => {
+    const h = aico()
+    await h.go(['recent'])
+    await h.go(['recent', '--limit', '3'])
+    await h.go(['recent', '--help'])
+    expect(h.calls.map((c) => c.argv)).toEqual([
+      ['tether', 'history', 'list'],
+      ['tether', 'history', 'list', '--limit', '3'],
+      ['tether', 'history', '--help'],
     ])
   })
 

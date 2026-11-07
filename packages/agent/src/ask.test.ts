@@ -567,6 +567,8 @@ describe('askMain', () => {
   it('exits 2 on usage mistakes, 0 on an answer and the typed code on a failure', async () => {
     expect((await quiet([])).code).toBe(2)
     expect((await quiet(['haiku'])).code).toBe(2)
+    expect((await quiet(['haiku'])).seen).toMatch(/^aico prompt-model: the question is missing/)
+    expect((await quiet([])).seen).toMatch(/^aico prompt-model: the model and the question/)
     expect((await quiet(['haiku', 'q', '--schema', 'missing.json'])).code).toBe(2)
     expect((await quiet(['no-such-model', 'q'])).code).toBe(3)
     const claude = fakeBin('claude-main', echoing(claudeResult({ result: '42' })))

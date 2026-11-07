@@ -741,7 +741,13 @@ export async function askMain(
   let question = words.join(' ').trim()
   if (question === '-') question = (await (deps.stdin ?? readStdin)()).trim()
   if (!model || !question) {
-    process.stderr.write(`aico prompt-model: a model and a question are required\n${ASK_USAGE}\n`)
+    // Say which one is missing: a model alone is a common first try.
+    const missing = !model
+      ? 'the model and the question are both missing'
+      : 'the question is missing (aico prompt-model MODEL "question")'
+    process.stderr.write(
+      `aico prompt-model: ${missing}\n${ASK_USAGE.split('\n')[0]}   (aico prompt-model --help for the rest)\n`,
+    )
     return 2
   }
   let schema: unknown

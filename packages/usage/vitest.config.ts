@@ -6,5 +6,6 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts'],
     passWithNoTests: false,
+    env: { TZ: 'America/New_York' },
   },
 })

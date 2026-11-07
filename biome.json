@@ -63,8 +63,6 @@
                       "@aico/notify/**",
                       "@aico/ops",
                       "@aico/ops/**",
-                      "@aico/shared",
-                      "@aico/shared/**",
                       "@aico/status",
                       "@aico/status/**",
                       "@aico/tasks",
@@ -82,7 +80,7 @@
                       "@aico/webtools",
                       "@aico/webtools/**"
                     ],
-                    "message": "@aico/agent (layer 4): import only @aico/store, @aico/context, @aico/tether-client (package.json aico.imports; depcruise is the gate)"
+                    "message": "@aico/agent (layer 4): import only @aico/shared, @aico/store, @aico/context, @aico/tether-client (package.json aico.imports; depcruise is the gate)"
                   }
                 ]
               }
@@ -235,8 +233,6 @@
                       "@aico/notify/**",
                       "@aico/ops",
                       "@aico/ops/**",
-                      "@aico/shared",
-                      "@aico/shared/**",
                       "@aico/status",
                       "@aico/status/**",
                       "@aico/tasks",
@@ -254,7 +250,7 @@
                       "@aico/webtools",
                       "@aico/webtools/**"
                     ],
-                    "message": "@aico/context (layer 3): import only @aico/store, @aico/usage (package.json aico.imports; depcruise is the gate)"
+                    "message": "@aico/context (layer 3): import only @aico/shared, @aico/store, @aico/usage (package.json aico.imports; depcruise is the gate)"
                   }
                 ]
               }
@@ -521,8 +517,6 @@
                       "@aico/notes/**",
                       "@aico/notify",
                       "@aico/notify/**",
-                      "@aico/shared",
-                      "@aico/shared/**",
                       "@aico/tasks",
                       "@aico/tasks/**",
                       "@aico/tether",
@@ -540,7 +534,7 @@
                       "@aico/webtools",
                       "@aico/webtools/**"
                     ],
-                    "message": "@aico/ops (layer 4): import only @aico/status, @aico/store, @aico/fleet (package.json aico.imports; depcruise is the gate)"
+                    "message": "@aico/ops (layer 4): import only @aico/shared, @aico/status, @aico/store, @aico/fleet (package.json aico.imports; depcruise is the gate)"
                   }
                 ]
               }
@@ -949,8 +943,6 @@
                       "@aico/notify/**",
                       "@aico/ops",
                       "@aico/ops/**",
-                      "@aico/shared",
-                      "@aico/shared/**",
                       "@aico/tasks",
                       "@aico/tasks/**",
                       "@aico/tether",
@@ -966,7 +958,7 @@
                       "@aico/webtools",
                       "@aico/webtools/**"
                     ],
-                    "message": "@aico/usage (layer 2): import only @aico/store, @aico/status (package.json aico.imports; depcruise is the gate)"
+                    "message": "@aico/usage (layer 2): import only @aico/shared, @aico/store, @aico/status (package.json aico.imports; depcruise is the gate)"
                   }
                 ]
               }

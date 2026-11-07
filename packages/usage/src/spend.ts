@@ -2,20 +2,14 @@
 // window, when it resets, and the credits behind it. State is ok while the subscription
 // has room (or credits carry it) and warn when it is used up, unknown, or could not be read.
 
+import { localTime } from '@aico/shared/time'
 import type { StatusRow } from '@aico/status'
 import config from '../data/usage.json' with { type: 'json' }
 import { currentPlan, type Plans } from './plans'
 import { type Facts, micros, optionUsage, type Usage, type Window, windowFacts } from './windows'
 
-const SHORT = new Intl.DateTimeFormat('en-US', {
-  month: 'short',
-  day: 'numeric',
-  hour: 'numeric',
-  minute: '2-digit',
-})
-
-/** A moment in this machine's local time: "Nov 6, 5:00 AM". */
-export const when = (iso: string) => SHORT.format(new Date(micros(iso) / 1000))
+/** A moment in this machine's local time with its zone: "Nov 6, 5:00 AM EST". */
+export const when = (iso: string) => localTime(micros(iso) / 1000)
 
 export function ago(seconds: number): string {
   if (seconds < 90) return 'just now'
@@ -36,7 +30,9 @@ export function windowText(window: Window): string {
     return `${window.label} used up${window.resets_at ? ` until ${when(window.resets_at)}` : ''}`
   if (window.state === 'unknown')
     return `${window.label} unknown (last read ${ago(window.age_seconds)})`
-  return `${window.label} ${window.left_percent}% left${window.resets_at ? `, resets ${when(window.resets_at)}` : ''}`
+  // A window nothing has drawn from yet has no reset to speak of (OpenCode names "now + 5h").
+  const resets = window.resets_at && window.left_percent !== 100
+  return `${window.label} ${window.left_percent}% left${resets ? `, resets ${when(window.resets_at as string)}` : ''}`
 }
 
 export function creditText(credit: NonNullable<Usage['credits']>): string {

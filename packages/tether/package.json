@@ -29,6 +29,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@aico/shared": "0.1.0",
     "@aico/context": "0.1.0",
     "@aico/fleet": "0.1.0",
     "@aico/tasks": "0.1.0",

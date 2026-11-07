@@ -295,7 +295,7 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
       })
       if (values.help) {
         out(
-          'st tools manifest --surface ID | --discover WORD | --density core|full [--project ID] [--format json|inject]',
+          `${name} tools manifest --surface ID | --discover WORD | --density core|full [--project ID] [--format json|inject]`,
         )
         return 0
       }
@@ -392,7 +392,9 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
           sql = values.target || positionals.slice(1).join(' ')
           break
         default:
-          throw new Error('st db is read-only: tables, schema, count, sample, query')
+          throw new Error(
+            `db: unknown command ${positionals[0]} (read-only: tables, schema, count, sample, query)`,
+          )
       }
       out(json(readQuery(join(dir, filename), sql)))
       return 0
@@ -476,7 +478,7 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
         return execute(['ps', '-eo', 'pid,ppid,comm,rss', '--sort=-rss'], env)
       else
         throw new Error(
-          `st monitor ${rest[0]}: dropped; use status, connections, processes, mounts or st logs UNIT`,
+          `monitor ${rest[0]}: dropped; use status, connections, processes, mounts or ${name} logs UNIT`,
         )
       return 0
     }
@@ -493,7 +495,19 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
       // list|show|events: the old name of `recent`, kept for scripts that still call it.
       return execute(['tether', 'history', ...rest], env)
     }
-    if (verb === 'recent') return execute(['tether', 'history', ...rest], env)
+    // Bare `recent` (or only flags, like --limit 5) lists.
+    if (verb === 'recent')
+      return execute(
+        [
+          'tether',
+          'history',
+          ...(!rest[0] || (rest[0].startsWith('-') && !['--help', '-h'].includes(rest[0]))
+            ? ['list']
+            : []),
+          ...rest,
+        ],
+        env,
+      )
     if (verb === 'tether')
       return execute([join(root, 'packages/tether/scripts/st-tether'), ...rest], env)
     if (verb === 'status')

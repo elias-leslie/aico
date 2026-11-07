@@ -12,7 +12,9 @@
   "exports": {
     "./hlc": "./src/hlc.ts",
     "./secrets": "./src/secrets.ts",
-    "./status-order": "./src/status-order.ts"
+    "./status-order": "./src/status-order.ts",
+    "./suggest": "./src/suggest.ts",
+    "./time": "./src/time.ts"
   },
   "scripts": {
     "test": "vitest run"

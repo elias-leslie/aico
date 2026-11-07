@@ -15,7 +15,7 @@ import { callSocket } from '../client'
 import { HttpError, Router, sendError } from '../http'
 import { Store } from '../store'
 import { registerHistoryRoutes } from './api'
-import { formatEvent, runHistory } from './cli'
+import { formatEvent, runHistory, shortIds } from './cli'
 import { History } from './history'
 import { completeEnd, readBackward, readForward } from './lines'
 
@@ -543,21 +543,31 @@ describe('routes and command', () => {
   it('lists, shows and dumps events', async () => {
     const list = await run('list')
     expect(list.code).toBe(0)
+    expect(list.out.split('\n')[0]).toMatch(/^ID +LAST ACTIVITY +OUTCOME +CALLS +MODEL +PROJECT$/)
     expect(list.out).toContain('claude-code:s1')
+    expect(list.out).toContain('OUTCOME: completed (it gave a final answer)')
     expect(list.out).toContain('claude-test-1')
     const show = await run('show', 's1')
     expect(show.out).toContain('tokens: in 12, cache read 220, cache write 20, out 34')
     expect(show.out).toContain('tool calls: 1   files written: 1')
     const events = await run('events', 's1', '--limit', '2')
-    expect(events.out).toContain('assistant: all done')
+    expect(events.out).toMatch(/assistant +all done/)
+    expect(events.out).not.toMatch(/\[\d+\]/)
     const dump = await run('events', 's1', '--limit', '1', '--json')
     expect(JSON.parse(dump.out).items).toHaveLength(1)
   })
 
   it('answers plainly for a missing or ambiguous id', async () => {
-    expect((await run('show', 'nope')).err).toMatch(/No session with that id/)
+    expect((await run('show', 'nope')).err).toBe(
+      'No session nope (aico recent list shows the recent ones).',
+    )
     expect((await run('show', 's')).err).toMatch(/More than one session/)
-    expect((await run('bogus')).code).toBe(2)
+    const bogus = await run('bogus')
+    expect(bogus.code).toBe(2)
+    expect(bogus.err).toBe(
+      "aico recent: unknown command 'bogus' (list, show or events); aico recent --help shows how",
+    )
+    expect(bogus.out).toBe('')
   })
 
   it('keeps the Aico agent runs it is pushed, with the model of each turn', async () => {
@@ -581,8 +591,8 @@ describe('routes and command', () => {
     ]
     expect((await put(pushed(now, turns))).status).toBe(200)
     const list = await run('list', '--tool', 'aico-agent')
-    expect(list.out).toContain(`aico-agent:${id}`)
-    expect(list.out).toContain('2 calls')
+    expect(list.out).toContain('aico-agent:6f20c425 ')
+    expect(list.out).toMatch(/completed +2 /)
     const show = await run('show', '6f20c425')
     expect(show.out).toContain('model: opencode-go/deepseek-v4.1-flash   outcome: completed')
     expect(show.out).toContain('tokens: in 100, cache read 50, cache write 0, out 20')
@@ -600,23 +610,54 @@ describe('routes and command', () => {
     expect((await put(pushed(now, []), 'x')).status).toBe(400)
   })
 
-  it('formats an event on one line', () => {
-    expect(formatEvent({ offset: 5, at: null, role: 'user', kind: 'text', text: 'a\nb' })).toBe(
-      '[5] - user: a b',
-    )
-  })
-
-  it('prints times in local time, not UTC', () => {
+  it('formats an event as a readable line, long text cut', () => {
     const zone = process.env.TZ
     process.env.TZ = 'America/New_York'
     try {
       const at = Date.parse('2026-11-04T18:53:00Z')
-      expect(formatEvent({ offset: 1, at, role: 'user', kind: 'text', text: 'hi' })).toBe(
-        '[1] 2026-11-04 13:53 user: hi',
+      expect(formatEvent({ offset: 1, at, role: 'user', kind: 'text', text: 'a\nb' })).toBe(
+        'Nov 4, 1:53 PM EST   you          a b',
+      )
+      const call = formatEvent({
+        offset: 2,
+        at,
+        role: 'assistant',
+        kind: 'tool_call',
+        tool: 'Bash',
+        text: 'ls -la',
+      })
+      expect(call).toBe('Nov 4, 1:53 PM EST   Bash call    ls -la')
+      const result = formatEvent({
+        offset: 3,
+        at,
+        role: 'tool',
+        kind: 'tool_result',
+        text: `{"x":"${'y'.repeat(300)}"}`,
+      })
+      expect(result.endsWith('…')).toBe(true)
+      expect(result.length).toBeLessThan(160)
+      expect(formatEvent({ offset: 4, at: null, role: 'user', kind: 'text', text: 'hi' })).toBe(
+        '-                    you          hi',
       )
     } finally {
       if (zone === undefined) delete process.env.TZ
       else process.env.TZ = zone
     }
+  })
+
+  it('shortens ids to the shortest start that stays unique, at least 8 characters', () => {
+    expect(
+      shortIds([
+        'claude-code:beb34408-c92f-4eb7-95a9-97c4ad269f7a',
+        'codex:01a1b190-b3c9-7541-a2fc-9dbafba9b6af',
+        'codex:01a1b190-b3c9-7541-a2fc-0000aaaa0000',
+        'pi:abc',
+      ]),
+    ).toEqual([
+      'claude-code:beb34408',
+      'codex:01a1b190-b3c9-7541-a2fc-9',
+      'codex:01a1b190-b3c9-7541-a2fc-0',
+      'pi:abc',
+    ])
   })
 })

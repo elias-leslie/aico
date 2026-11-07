@@ -99,9 +99,7 @@
     },
     {
       "group": "Backups",
-      "commands": [
-        ["backups", "backup health (list), runs, restores and drills (backup works too)"]
-      ]
+      "commands": [["backups", "backup health (list), run, restores and drills (backup works too)"]]
     },
     {
       "group": "Usage and models",

@@ -80,7 +80,44 @@ it('lists backups for a person: problems, one line per target, retired sources f
   )
   expect(text.split('\n')[0]).toBe('Backups on ws: 2 ok, 1 need a look, 1 retired sources.')
   expect(text).toContain('  off    Owner backups Jobs DB: Machine is off.')
-  expect(text).toMatch(/ {2}T7 +1\/1 ok; newest data 30 min ago; last run 30 min ago, ok; next /)
+  expect(text).toMatch(
+    / {2}T7 +1\/1 ok; newest data 30 min ago; last run 30 min ago, ok; next Nov 7, 12:30 AM EST/,
+  )
   expect(text).toContain('Retired (path gone; older copies still hold them): Old.')
   expect(text).not.toContain('{')
+})
+
+async function backupsCall(argv: string[]) {
+  const out: string[] = []
+  const err: string[] = []
+  vi.spyOn(console, 'log').mockImplementation((line) => void out.push(String(line)))
+  vi.spyOn(console, 'error').mockImplementation((line) => void err.push(String(line)))
+  const code = await main(['backups', ...argv], { PATH: process.env.PATH })
+  return { code, out: out.join('\n'), err: err.join('\n') }
+}
+
+it('aico backups says what is wrong: unknown command, missing arguments, always exit 2', async () => {
+  const unknown = await backupsCall(['runs', '--help'])
+  expect(unknown.code).toBe(2)
+  expect(unknown.err).toBe(
+    'aico backups: unknown command runs (did you mean run?); aico backups --help lists them',
+  )
+  const restore = await backupsCall(['restore'])
+  expect(restore.code).toBe(2)
+  expect(restore.err).toMatch(
+    /^aico backups: restore needs SOURCE SNAPSHOT PATH --to FOLDER\nUsage:\n {2}aico backups restore SOURCE/,
+  )
+  expect((await backupsCall(['restore', 'a', 'b', '/x'])).err).toContain('needs --to FOLDER')
+  expect((await backupsCall(['run', 'bogus'])).code).toBe(2)
+  expect((await backupsCall(['snapshots'])).err).toContain('needs a SOURCE')
+})
+
+it('aico backups --help and aico backups COMMAND --help exit 0, the second with that command only', async () => {
+  const all = await backupsCall(['--help'])
+  expect(all.code).toBe(0)
+  expect(all.out).toContain('aico backups restore')
+  const one = await backupsCall(['run', '--help'])
+  expect(one.code).toBe(0)
+  expect(one.out).toContain('aico backups run native|drive')
+  expect(one.out).not.toContain('aico backups restore')
 })

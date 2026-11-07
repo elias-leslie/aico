@@ -2,6 +2,7 @@
 // history from the running Tether (src/sessions/history.ts). `events --json`
 // is the session-events dump used for debugging a reader.
 
+import { localTime } from '@aico/shared/time'
 import { callSocket } from '../client'
 import type { TetherPaths } from '../config'
 import type { EventPage, SessionDetail, SessionSummary, Tokens } from './history'
@@ -15,9 +16,9 @@ export const HISTORY_USAGE = `Usage:
       calls, files written and its subagents (an Aico agent run: the model of
       each turn). <id> is the id in the list or the start of the tool's own id.
   aico recent events <id> [--limit N] [--before OFFSET | --from OFFSET] [--json]
-      What was said and done, read from the tool's transcript. The last N by
-      default (50); --before OFFSET pages back, --from OFFSET reads forward.
-      --json prints the page as Tether serves it (the session-events dump).
+      What was said and done, one readable line each (long text is cut), read
+      from the tool's transcript. The last N by default (50); --before OFFSET
+      pages back, --from OFFSET reads forward. --json prints the whole records.
 
 Tokens: input is the part not served from the cache; cache read and cache
 write are the cached parts; output includes reasoning.`
@@ -28,9 +29,7 @@ export interface HistoryIo {
 }
 
 function when(at: number | null): string {
-  if (at === null) return '-'
-  // Local time, as the person reading it keeps it (sv-SE prints YYYY-MM-DD HH:MM:SS).
-  return new Date(at).toLocaleString('sv-SE').slice(0, 16)
+  return at === null ? '-' : localTime(at)
 }
 
 function count(n: number): string {
@@ -46,22 +45,84 @@ function flag(args: string[], name: string): string | undefined {
   return at >= 0 ? args[at + 1] : undefined
 }
 
-function line(item: SessionSummary): string {
-  const where = item.project ?? item.cwd ?? '-'
-  return [
-    item.id.padEnd(48),
-    when(item.endedAt).padEnd(16),
-    (item.outcome ?? 'open').padEnd(9),
-    `${item.toolCalls} calls`.padEnd(11),
-    (item.model ?? '-').padEnd(22),
-    where,
-  ].join(' ')
+/** The id with the shortest start that is still unique in the list (at least 8 characters of the tool's own id). */
+export function shortIds(ids: string[]): string[] {
+  return ids.map((id) => {
+    const colon = id.indexOf(':')
+    const tool = id.slice(0, colon + 1)
+    const native = id.slice(colon + 1)
+    let length = Math.min(8, native.length)
+    while (
+      length < native.length &&
+      ids.some((other) => other !== id && other.startsWith(`${tool}${native.slice(0, length)}`))
+    )
+      length += 1
+    return `${tool}${native.slice(0, length)}`
+  })
 }
 
+const OUTCOMES =
+  'OUTCOME: completed (it gave a final answer), aborted, error, open (no final answer yet). Times are local.'
+
+function table(items: SessionSummary[]): string[] {
+  const ids = shortIds(items.map((item) => item.id))
+  const width = Math.max(2, ...ids.map((id) => id.length))
+  const cells = (
+    id: string,
+    last: string,
+    outcome: string,
+    calls: string,
+    model: string,
+    where: string,
+  ) =>
+    [
+      id.padEnd(width),
+      last.padEnd(20),
+      outcome.padEnd(10),
+      calls.padEnd(6),
+      model.padEnd(22),
+      where,
+    ]
+      .join(' ')
+      .trimEnd()
+  return [
+    cells('ID', 'LAST ACTIVITY', 'OUTCOME', 'CALLS', 'MODEL', 'PROJECT'),
+    ...items.map((item, index) =>
+      cells(
+        ids[index] as string,
+        when(item.endedAt),
+        item.outcome ?? 'open',
+        String(item.toolCalls),
+        item.model ?? '-',
+        item.project ?? item.cwd ?? '-',
+      ),
+    ),
+    OUTCOMES,
+  ]
+}
+
+const flat = (text: string) => text.replace(/\s+/g, ' ').trim()
+const clip = (text: string, max: number) =>
+  text.length > max ? `${text.slice(0, max - 1)}…` : text
+
+/** One event for a person: when, who or what, and the gist. Raw records are --json. */
 export function formatEvent(event: SessionEvent): string {
-  const head = `${when(event.at)} ${event.role}${event.tool ? ` ${event.tool}` : ''}`
-  const text = event.text.replace(/\s+/g, ' ').trim()
-  return `[${event.offset}] ${head}: ${text.length > 300 ? `${text.slice(0, 300)}…` : text}`
+  const text = flat(event.text)
+  const tool = event.tool ?? 'tool'
+  const label =
+    event.kind === 'tool_call'
+      ? `${tool} call`
+      : event.kind === 'tool_result'
+        ? 'result'
+        : event.kind === 'thinking'
+          ? 'thinking'
+          : event.role === 'user'
+            ? 'you'
+            : event.role === 'assistant'
+              ? 'assistant'
+              : event.role
+  const body = clip(text, event.kind === 'tool_result' || event.kind === 'thinking' ? 120 : 220)
+  return `${when(event.at).padEnd(20)} ${label.padEnd(12)} ${body}`.trimEnd()
 }
 
 export async function runHistory(
@@ -100,8 +161,9 @@ export async function runHistory(
       }
     }
   } else {
-    io.err(`aico recent: unknown command '${sub}'`)
-    io.out(HISTORY_USAGE)
+    io.err(
+      `aico recent: unknown command '${sub}' (list, show or events); aico recent --help shows how`,
+    )
     return 2
   }
   let response: Awaited<ReturnType<typeof callSocket>>
@@ -121,7 +183,11 @@ export async function runHistory(
   }
   if (response.status !== 200) {
     const code = (response.body as { error?: string } | null)?.error ?? `http_${response.status}`
-    io.err(REFUSALS[code] ?? `Tether refused: ${code}`)
+    io.err(
+      code === 'unknown_session' && id
+        ? `No session ${id} (aico recent list shows the recent ones).`
+        : (REFUSALS[code] ?? `Tether refused: ${code}`),
+    )
     return 1
   }
   if (wantJson) {
@@ -132,7 +198,7 @@ export async function runHistory(
     const items = (response.body as { items: SessionSummary[] }).items
     if (!items.length)
       io.out('No sessions read yet. Tether reads new transcripts every 15 seconds.')
-    for (const item of items) io.out(line(item))
+    for (const row of table(items)) io.out(row)
     return 0
   }
   if (sub === 'show') {
@@ -162,6 +228,7 @@ export async function runHistory(
   const page = response.body as EventPage
   if (!page.items.length) io.out('No events in this range.')
   for (const event of page.items) io.out(formatEvent(event))
+  if (page.items.length) io.out('Longer text is cut; --json gives the whole records.')
   if (page.older !== null) io.out(`older: --before ${page.older}`)
   if (page.newer !== null) io.out(`newer: --from ${page.newer}`)
   return 0

@@ -1,6 +1,7 @@
 // Plain-text output of `aico memory | prompt | models`: the same lines `st memory`,
 // `st prompt` and `st models route` print today, so agents read them unchanged.
 
+import { localTime } from '@aico/shared/time'
 import type { Found, Memory } from './memory'
 import type { Prompt } from './prompts'
 import type { LaunchRow, Refusal, RoutePayload, Usage, Window } from './route'
@@ -86,14 +87,18 @@ export function formatPrompt(prompt: Prompt): string {
 
 // -- models route ----------------------------------------------------------------------------
 
-const pad2 = (value: number) => String(value).padStart(2, '0')
-
-/** Local MM-DD HH:MM of an ISO time, or - when it is missing. */
+/** Local time with its zone ("Nov 6, 10:30 PM EST") of an ISO time, or - when it is missing. */
 export function when(iso: unknown): string {
   const at = typeof iso === 'string' ? new Date(iso) : null
   if (!at || Number.isNaN(at.getTime())) return '-'
-  return `${pad2(at.getMonth() + 1)}-${pad2(at.getDate())} ${pad2(at.getHours())}:${pad2(at.getMinutes())}`
+  return localTime(at)
 }
+
+/** The day alone ("Nov 11") of an ISO time. */
+const day = (iso: string) => when(iso).split(',')[0] as string
+
+/** The command name the reader typed: aico when run as aico, else st. */
+const cliName = () => (process.env.AICO_CLI_NAME === 'aico' ? 'aico' : 'st')
 
 /** A length of time in the largest sensible unit: 5m, 4h, 2.6d. */
 export function span(seconds: unknown): string {
@@ -123,7 +128,9 @@ function windowText(window: Window): string {
     return `${window.label} unknown (its reset passed; last read ${age} ago)`
   if (window.state === 'used_up')
     return `${window.label} used up${window.resets_at ? ` until ${reset(window)}` : ''}, read ${age} ago`
-  return `${window.label} ${window.left_percent}% left${window.resets_at ? `, resets ${reset(window)}` : ''}, read ${age} ago`
+  // A window nothing has drawn from has no reset to speak of (OpenCode names "now + 5h").
+  const resets = window.resets_at && window.left_percent !== 100
+  return `${window.label} ${window.left_percent}% left${resets ? `, resets ${reset(window)}` : ''}, read ${age} ago`
 }
 
 const STATUS: Record<string, string> = {
@@ -135,6 +142,10 @@ const STATUS: Record<string, string> = {
 }
 
 function statusText(usage: Partial<Usage>): string {
+  // A used-up subscription names the window that is out ("weekly used up"), not a bare "used up"
+  // beside a 5h window with room.
+  const out = usage.windows?.find((window) => window.state === 'used_up')
+  if (usage.status === 'used_up' && out) return `${out.label} used up`
   if (usage.status === 'partly_unknown')
     return `has room in one window, ${usage.unknown_windows?.join(', ') || 'another window'} unknown`
   return STATUS[usage.status ?? ''] ?? 'usage unknown'
@@ -151,15 +162,14 @@ function creditLine(usage: Partial<Usage>): string {
   const credit = usage.credits
   if (!credit) return ''
   let text = `${count(credit.balance)} credits`
-  const resetDay = credit.reset_at ? when(credit.reset_at).slice(0, 5) : null
+  const resetDay = credit.reset_at ? day(credit.reset_at) : null
   if (credit.lasts_days === null) text += '; none drawn in the last 7 days'
   else if (credit.lasts_past_reset === true)
     text += `; at the last-7-day pace they last past the ${resetDay} reset`
   else if (credit.lasts_past_reset === false)
     text += `; at the last-7-day pace they run out in ${credit.lasts_days}d, before the ${resetDay} reset`
   else text += `; about ${credit.lasts_days}d at the last-7-day pace`
-  if (credit.earliest_expiry)
-    text += `; the earliest credits expire ${when(credit.earliest_expiry).slice(0, 5)}`
+  if (credit.earliest_expiry) text += `; the earliest credits expire ${day(credit.earliest_expiry)}`
   return text
 }
 
@@ -199,7 +209,7 @@ function optionLines(row: LaunchRow): string[] {
 export function formatOptions(payload: RoutePayload, role: string, project?: string): string {
   const where = project ? ` project=${project}` : ''
   const lines = [
-    `OPTIONS[${role}${where}] policy=v${payload.version} facts as of ${when(payload.facts_as_of)}; you choose, then st aico create --work-role ${role}${project ? ` --project ${project}` : ''} --tool T [--model M]`,
+    `OPTIONS[${role}${where}] policy=v${payload.version} facts as of ${when(payload.facts_as_of)}; you choose, then ${cliName()} aico create --work-role ${role}${project ? ` --project ${project}` : ''} --tool T [--model M]`,
   ]
   if (payload.facts_error || !payload.facts_as_of)
     lines.push(

@@ -1,7 +1,7 @@
 import { request, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { type StatusRow, StatusStore } from '@aico/status'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Router } from './http'
 import { createWebServer } from './server'
 import { registerStatusRoutes, startSelfRows } from './status'
@@ -309,5 +309,34 @@ describe('st status', () => {
     )
     expect(await runStatusCli(['--sort', 'size'], refused)).toBe(2)
     expect(await runStatusCli(['--bogus'], refused)).toBe(2)
+  })
+
+  it('names the command as typed and the problem on a mistake', async () => {
+    vi.stubEnv('AICO_CLI_NAME', 'aico')
+    const never = io(async () => Response.json({}))
+    expect(await runStatusCli(['--bogus'], never)).toBe(2)
+    expect(never.errors).toBe(
+      "aico status: unknown option '--bogus'; aico status --help lists the options\n",
+    )
+    never.errors = ''
+    expect(await runStatusCli(['--state'], never)).toBe(2)
+    expect(never.errors).toBe(
+      'aico status: --state needs a value (aico status --help lists them)\n',
+    )
+    expect(never.urls).toEqual([])
+    const refused = io(async () =>
+      Response.json({ detail: 'sort must be one of x' }, { status: 422 }),
+    )
+    await runStatusCli(['--sort', 'size'], refused)
+    expect(refused.errors).toBe('aico status: sort must be one of x\n')
+    vi.stubEnv('AICO_CLI_NAME', 'st')
+    never.errors = ''
+    await runStatusCli(['--bogus'], never)
+    expect(never.errors).toContain("st status: unknown option '--bogus'; st status --help")
+    vi.unstubAllEnvs()
+  })
+
+  it('writes times in the local zone', () => {
+    expect(when('2026-11-03T11:00:00Z', NOW)).toMatch(/\d [AP]M \S+$/)
   })
 })

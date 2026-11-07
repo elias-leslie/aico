@@ -720,7 +720,7 @@ describe('a used-up subscription', () => {
     }
     const [, , row] = spendRows(input)
     expect(row?.meaning).toMatch(
-      /^Weekly used up until Nov \d+, .+\. 5h 100% left, resets .+; monthly 5% left, resets .+\.$/,
+      /^Weekly used up until Nov \d+, [^.]+ E[SD]T\. 5h 100% left; monthly 5% left, resets Nov \d+, [^.]+ E[SD]T\.$/,
     )
     expect(row?.meaning).not.toContain('Used up.')
     expect(brief({ id: 'opencode-go', name: 'OpenCode Go' }, input)).toMatch(

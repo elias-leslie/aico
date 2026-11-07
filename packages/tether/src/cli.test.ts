@@ -309,6 +309,51 @@ describe('main', () => {
     expect(down.err.join('\n')).toContain('not reachable')
   })
 
+  it('names the problem for a typo, a missing id and an unknown session', async () => {
+    const said = async (...argv: string[]) => {
+      const { io, err, out } = capture()
+      const code = await main(['-i', 'clitest', ...argv], io)
+      return { code, err: err.join('\n'), out: out.join('\n') }
+    }
+    const typo = await said('sesions', 'list')
+    expect(typo).toMatchObject({ code: 2, out: '' })
+    expect(typo.err).toBe(
+      'tether: unknown command sesions (did you mean sessions?); tether --help lists them',
+    )
+    const sub = await said('sessions', 'lst')
+    expect(sub.err).toContain('tether sessions: unknown subcommand lst (did you mean list?)')
+    expect(sub.err.split('\n')).toHaveLength(1)
+    const noId = await said('sessions', 'end')
+    expect(noId.code).toBe(2)
+    expect(noId.err).toContain(
+      'tether sessions end: needs a session id (tether sessions list shows them)',
+    )
+    expect(noId.err).not.toContain('serve')
+    for (const argv of [
+      ['sessions', 'end', '99191edc'],
+      ['sessions', 'get', '99191edc'],
+      ['sessions', 'attach', '99191edc'],
+    ]) {
+      const unknown = await said(...argv)
+      expect(unknown).toMatchObject({ code: 1, out: '' })
+      expect(unknown.err).toBe(
+        'No session 99191edc (ended or never existed); tether sessions list shows the live ones',
+      )
+    }
+    const json = await said('--json', 'sessions', 'end', '99191edc')
+    expect(json.code).toBe(1)
+    expect(json.out).toContain('not_found')
+  })
+
+  it('says so when there are no sessions or hosts', async () => {
+    const list = capture()
+    expect(await main(['-i', 'clitest', 'sessions', 'list'], list.io)).toBe(0)
+    expect(list.out).toEqual(['No live sessions. Start one: tether sessions create'])
+    const hosts = capture()
+    expect(await main(['-i', 'clitest', 'hosts'], hosts.io)).toBe(0)
+    expect(hosts.out).toEqual(['No other machines are linked.'])
+  })
+
   it('exits 2 when the daemon is unreachable', async () => {
     const { io, err } = capture()
     const runtime = process.env.TETHER_RUNTIME_DIR
@@ -320,8 +365,41 @@ describe('main', () => {
   })
 })
 
+describe('tether sessions', () => {
+  it('lists with a header, words for the states and what the columns mean', () => {
+    const out: string[] = []
+    const io = { out: (line: string) => out.push(line), err: () => {} }
+    render(io as never, false, 200, {
+      items: [
+        {
+          id: 'fa41c0c8',
+          generation: 'g',
+          status: 'running',
+          state: 'blocked',
+          tool: 'claude-code',
+          projectId: 'aico',
+          label: 'Session 36',
+        },
+        {
+          id: '0123abcd',
+          generation: 'g',
+          status: 'running',
+          state: 'unknown',
+          tool: 'codex',
+          name: 'x',
+        },
+      ],
+    })
+    expect(out[0]).toMatch(/^ID +STATUS +STATE +TOOL +PROJECT +NAME$/)
+    expect(out[1]).toMatch(/^fa41c0c8 +running +needs you +claude-code +aico +Session 36$/)
+    expect(out[2]).toMatch(/^0123abcd +running +- +codex +- +x$/)
+    expect(out[3]).toContain('STATE is the agent in it')
+    expect(out.join('\n')).not.toContain('undefined')
+  })
+})
+
 describe('tether hosts', () => {
-  it('prints each host with its link state, Tether API and last update', () => {
+  it('prints each host with a header, its link state and last update', () => {
     const out: string[] = []
     const io = { out: (line: string) => out.push(line), err: () => {} }
     render(io as never, false, 200, {
@@ -344,9 +422,9 @@ describe('tether hosts', () => {
         },
       ],
     })
-    expect(out[0]).toMatch(/^ {2}neri-hunters +live +api 27 {2}sessions 2$/)
-    expect(out[1]).toContain('api ?')
-    expect(out[1]).toContain('update failed: the host has no flock')
-    expect(out.join('\n')).not.toContain('undefined')
+    expect(out[0]).toMatch(/^HOST +LINK +SESSIONS +UPDATE$/)
+    expect(out[1]).toMatch(/^neri-hunters +live +2 +-$/)
+    expect(out[2]).toContain('failed: the host has no flock')
+    expect(out.join('\n')).not.toMatch(/undefined|api/)
   })
 })

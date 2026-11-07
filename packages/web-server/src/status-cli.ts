@@ -1,9 +1,12 @@
-// `st status`: this machine's Status rows from aico-web (GET /api/status), problems
+// `aico status`: this machine's Status rows from aico-web (GET /api/status), problems
 // first with what each means and what to do, healthy rows folded into a count.
 
+import { localClock, localTime } from '@aico/shared/time'
 import { counted, type ShownRow, type StatusView } from '@aico/status'
 
-const STATUS_USAGE = `Usage: ${process.env.AICO_CLI_NAME || 'aico'} status [options]
+const cliName = () => process.env.AICO_CLI_NAME || 'aico'
+
+const STATUS_USAGE = `Usage: ${cliName()} status [options]
 
 Shows every check, job, backup, service, VM and machine that reports to Aico on this
 machine: problems first (failed, late, unknown, warn), healthy rows folded into a count.
@@ -53,20 +56,16 @@ const ACTION_LABELS: Record<string, string> = {
   look: 'Look into it',
 }
 
-const pad = (value: number) => String(value).padStart(2, '0')
-
-/** A time in local words: "today 03:30", "yesterday 22:10", "tomorrow 04:30", else "Nov 1 14:00". */
+/** A time in local words with its zone: "today 10:30 PM EST", "yesterday 10:10 PM EST", else "Nov 1, 2:00 PM EST". */
 export function when(iso: string, now: number): string {
   const at = new Date(iso)
-  const clock = `${pad(at.getHours())}:${pad(at.getMinutes())}`
   const day = (date: Date) =>
     new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
   const days = Math.round((day(at) - day(new Date(now))) / 86_400_000)
-  if (days === 0) return `today ${clock}`
-  if (days === -1) return `yesterday ${clock}`
-  if (days === 1) return `tomorrow ${clock}`
-  const month = at.toLocaleString('en-US', { month: 'short' })
-  return `${month} ${at.getDate()} ${clock}`
+  if (days === 0) return `today ${localClock(at)}`
+  if (days === -1) return `yesterday ${localClock(at)}`
+  if (days === 1) return `tomorrow ${localClock(at)}`
+  return localTime(at)
 }
 
 function rowLines(row: ShownRow, now: number): string[] {
@@ -165,12 +164,19 @@ export async function runStatusCli(argv: string[], io: StatusCliIo): Promise<num
     }
     if (arg === '--all') all = true
     else if (arg === '--json') json = true
-    else if (FILTERS[arg] && argv[index + 1] !== undefined) {
-      query.set(FILTERS[arg] as string, argv[index + 1] as string)
+    else if (FILTERS[arg]) {
+      const value = argv[index + 1]
+      if (value === undefined || value.startsWith('--')) {
+        io.err(
+          `${cliName()} status: ${arg} needs a value (${cliName()} status --help lists them)\n`,
+        )
+        return 2
+      }
+      query.set(FILTERS[arg] as string, value)
       index += 1
     } else {
       io.err(
-        `${process.env.AICO_CLI_NAME || 'aico'} status: unknown or incomplete option '${arg}'\n\n${STATUS_USAGE}`,
+        `${cliName()} status: unknown option '${arg}'; ${cliName()} status --help lists the options\n`,
       )
       return 2
     }
@@ -188,7 +194,7 @@ export async function runStatusCli(argv: string[], io: StatusCliIo): Promise<num
   const body = (await response.json().catch(() => null)) as StatusView | { detail?: string } | null
   if (!response.ok || !body || !('rows' in body)) {
     const detail = body && 'detail' in body && body.detail ? body.detail : `HTTP ${response.status}`
-    io.err(`st status: ${detail}\n`)
+    io.err(`${cliName()} status: ${detail}\n`)
     return response.status === 422 ? 2 : 1
   }
   io.out(

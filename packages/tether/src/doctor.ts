@@ -271,13 +271,13 @@ export async function runDoctor(paths: TetherPaths): Promise<Check[]> {
   if (socketCheck?.status === 'ok') {
     try {
       const health = await callSocket(paths.socket, 'GET', '/v1/health', undefined, 2_000)
-      const body = health.body as { apiVersion?: number; version?: string } | null
+      const body = health.body as { version?: string } | null
       checks.push(
         health.status === 200
           ? {
               name: 'daemon',
               status: 'ok',
-              detail: `tether ${body?.version} api v${body?.apiVersion} (${paths.instance})`,
+              detail: `tether ${body?.version} is answering (${paths.instance})`,
             }
           : { name: 'daemon', status: 'fail', detail: `health returned HTTP ${health.status}` },
       )

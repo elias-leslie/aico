@@ -1,6 +1,8 @@
 // Aico owns the schedule, run receipts, coverage and scratch-only restore boundary.
 import { existsSync, mkdirSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
+import { nearest } from '@aico/shared/suggest'
+import { localTime } from '@aico/shared/time'
 import { machineId, outboxDir, postOrKeep, type StatusRow } from '@aico/status'
 import { backupJob, driveBackup, stageSqlite } from './backup-drive'
 import { observeExternal } from './backup-external'
@@ -32,6 +34,7 @@ import {
   saveRun,
   saveState,
 } from './backup-runtime'
+import { Refusal } from './deploy'
 import { recovery } from './recovery'
 
 export interface Snapshot {
@@ -333,28 +336,95 @@ export async function runBackup(
 /** Exit code for "another run of this backup holds the lock": the scheduler records it as busy, not failed. */
 const BUSY_EXIT = 75
 
-const USAGE = `Usage: aico backups list [--json] | request native|drive|append
-  recover bootstrap --machine workstation|gem --to /srv/scratch/NEW_FOLDER [--plan]
-  recover check|snapshots|restore|repair --repository REPO --password-file FILE [--to NEW_FOLDER] [--snapshot ID]
-  drill [--plan] [--scheduled]                         monthly scratch restore and live Aico counts
-  run native|drive|append|snapshots|guard|verify
-  run snapshots --pressure                             disk pressure: keep only the newest work points
-  snapshots SOURCE [--target native|drive|append]       copies available to restore
-  browse SOURCE SNAPSHOT PATH [--target native|drive|append]
-  restore SOURCE SNAPSHOT PATH --to /srv/scratch/NEW_FOLDER [--target native|drive|append]
-  cutover host|snapshots|guard|verify                    disable the old timer after clean Aico runs
-  rollback                                     print how to restore the old schedules
+const USAGE = `Usage:
+  aico backups [list] [--json]                          backup health: problems first, one line per target
+  aico backups request native|drive|append              run that backup now
+  aico backups recover bootstrap --machine workstation|gem --to /srv/scratch/NEW_FOLDER [--plan]
+  aico backups recover check|snapshots|restore|repair --repository REPO --password-file FILE [--to NEW_FOLDER] [--snapshot ID]
+  aico backups drill [--plan] [--scheduled]             monthly scratch restore and live Aico counts
+  aico backups run native|drive|append|snapshots|guard|verify
+  aico backups run snapshots --pressure                 disk pressure: keep only the newest work points
+  aico backups snapshots SOURCE [--target native|drive|append]       copies available to restore
+  aico backups browse SOURCE SNAPSHOT PATH [--target native|drive|append]
+  aico backups restore SOURCE SNAPSHOT PATH --to /srv/scratch/NEW_FOLDER [--target native|drive|append]
+  aico backups cutover host|snapshots|guard|verify      disable the old timer after clean Aico runs
+  aico backups rollback                                 print how to restore the old schedules
 Run commands hold the existing backup lock. Restores only create a new scratch folder.
 No key setup, prune or forget commands. Settings: AICO_BACKUPS_CONFIG.`
+
+const VERBS = [
+  'list',
+  'request',
+  'recover',
+  'drill',
+  'run',
+  'snapshots',
+  'browse',
+  'restore',
+  'cutover',
+  'rollback',
+]
+
+/** The usage lines of one backups command ("aico backups restore ..."), or all of them. */
+export function backupsUsage(verb?: string): string {
+  const mine = USAGE.split('\n').filter((line) => line.startsWith(`  aico backups ${verb} `))
+  return mine.length ? `Usage:\n${mine.join('\n')}` : USAGE
+}
+
+/** The mistakes a command line can have, named before anything runs (exit 2). */
+function check(verb: string, args: string[]): void {
+  const need = (what: string) => {
+    throw new Refusal(`${verb} needs ${what}\n${backupsUsage(verb)}`, 2)
+  }
+  const [first, second, third] = args
+  const target = args.indexOf('--target')
+  if (target >= 0 && !['native', 'drive', 'append'].includes(args[target + 1] ?? ''))
+    throw new Refusal(`${verb}: --target is native, drive or append`, 2)
+  if (verb === 'request' && !['native', 'drive', 'append'].includes(first ?? ''))
+    need('native, drive or append')
+  else if (
+    verb === 'run' &&
+    !['native', 'drive', 'append', 'snapshots', 'guard', 'verify'].includes(first ?? '')
+  )
+    need('what to run: native, drive, append, snapshots, guard or verify')
+  else if (verb === 'cutover' && !['host', 'snapshots', 'guard', 'verify'].includes(first ?? ''))
+    need('host, snapshots, guard or verify')
+  else if (verb === 'snapshots' && !first) need('a SOURCE (aico backups list names them)')
+  else if (verb === 'browse' && !(first && second && third)) need('SOURCE SNAPSHOT PATH')
+  else if (verb === 'restore') {
+    if (!(first && second && third && !first.startsWith('--') && !second.startsWith('--')))
+      need('SOURCE SNAPSHOT PATH --to FOLDER')
+    if (!args[args.indexOf('--to') + 1] || args.indexOf('--to') < 0)
+      need('--to FOLDER (a new scratch folder)')
+  }
+}
+
 export async function backups(argv: string[], env = process.env): Promise<number> {
+  // Bare `aico backups` (or only --json) lists.
+  const [verb, ...args] =
+    !argv[0] || (argv[0].startsWith('-') && !['--help', '-h'].includes(argv[0]))
+      ? ['list', ...argv]
+      : argv
+  if (['help', '--help', '-h'].includes(verb as string)) {
+    console.log(USAGE)
+    return 0
+  }
+  // Mistakes and help are answered before any configuration or host is read.
+  if (!VERBS.includes(verb as string)) {
+    const near = nearest(verb as string, VERBS)
+    throw new Refusal(
+      `unknown command ${verb}${near ? ` (did you mean ${near}?)` : ''}; aico backups --help lists them`,
+      2,
+    )
+  }
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(backupsUsage(verb))
+    return 0
+  }
+  if (verb !== 'recover' && verb !== 'drill') check(verb as string, args)
   const cfg = config(env),
     machine = env.AICO_BACKUP_MACHINE || machineId()
   const rt: Runtime = { cfg, run: execute, now: () => new Date() }
-  const [verb, ...args] = argv
-  if (!verb || ['help', '--help', '-h'].includes(verb)) {
-    console.log(USAGE)
-    return verb ? 0 : 2
-  }
   if (verb === 'recover' || verb === 'drill') return recovery([verb, ...args], cfg, env)
   if (verb === 'rollback') {
     for (const [scope, unit] of Object.values(cfg.legacyTimers))
@@ -653,7 +723,7 @@ export function listText(
       .filter((at): at is string => !!at)
       .sort()[0]
     lines.push(
-      `  ${(TARGET_NAME[target] ?? target).padEnd(13)} ${ok}/${rows.length} ok; newest data ${since(newest, now)}${last}${next ? `; next ${new Date(next).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}`,
+      `  ${(TARGET_NAME[target] ?? target).padEnd(13)} ${ok}/${rows.length} ok; newest data ${since(newest, now)}${last}${next ? `; next ${localTime(next)}` : ''}`,
     )
   }
   if (gone.length)
