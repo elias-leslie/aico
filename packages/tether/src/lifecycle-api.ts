@@ -4,7 +4,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { hostname } from 'node:os'
-import { agentStateOf, type HookReport, reportAgentState } from './agent-state'
+import { agentSessionIdOf, agentStateOf, type HookReport, reportAgentState } from './agent-state'
 import { type AskDelivery, AskStore, sessionAsks, transferAskNotices } from './asks'
 import type { TetherPaths } from './config'
 import type { EventBus } from './events'
@@ -41,7 +41,14 @@ import {
   transferCoordinator,
   type WidgetRow,
 } from './lifecycle/catalog'
-import { badge, displayTitle, rememberProjects } from './lifecycle/display'
+import {
+  autoName,
+  badge,
+  conversationDoing,
+  displayTitle,
+  rememberProjects,
+  taskName,
+} from './lifecycle/display'
 import {
   agentExitOf,
   cachedSessionStatus,
@@ -96,6 +103,7 @@ import {
   sessionName,
   type TmuxTarget,
 } from './lifecycle/tmux'
+import { agyDoing } from './lifecycle/tui/adapters/agy-doing'
 import {
   createBlankSlateWorkspace,
   ensureBlankSlateWorkspace,
@@ -249,7 +257,13 @@ function contextHookOf(row: WidgetRow): Record<string, unknown> {
   }
 }
 
+/** agy's own database says what it is doing; the others' transcripts do (the session history). */
+function doingNow(row: WidgetRow): string | null {
+  return row.tool === 'agy' ? agyDoing(agentSessionIdOf(row.id)) : conversationDoing(row.id)
+}
+
 function descriptor(row: WidgetRow, status: SessionStatus): Record<string, unknown> {
+  const agent = agentStateOf(row.id)
   const server = row.tmuxServerId ? getTmuxServer(row.tmuxServerId) : undefined
   const target = tmuxTargetForWidget(row.id)
   return {
@@ -260,7 +274,11 @@ function descriptor(row: WidgetRow, status: SessionStatus): Record<string, unkno
     available: status === 'running',
     tool: row.tool,
     name: row.name,
-    label: row.name ?? `Session ${row.seq}`,
+    // What the tool running in it calls the conversation (or its first prompt): used when no name was typed.
+    autoName: autoName(row.id),
+    // The task part of `displayTitle` (typed name, else autoName...), without the project.
+    taskName: taskName(row),
+    label: row.name ?? autoName(row.id) ?? `Session ${row.seq}`,
     projectId: row.projectId,
     projectRoot: row.projectRoot,
     origin: row.origin,
@@ -283,7 +301,9 @@ function descriptor(row: WidgetRow, status: SessionStatus): Record<string, unkno
     },
     contextHook: contextHookOf(row),
     instructions: sessionInstructions(row.id),
-    ...agentStateOf(row.id),
+    ...agent,
+    // One line on what a working agent is doing now (null when it is not working).
+    doing: agent.state === 'working' ? doingNow(row) : null,
     wakes: sessionWakes(row.id),
     waitingOn: sessionWaitingOn(row.id),
     modelSwitch: sessionModelSwitch(row.id),
