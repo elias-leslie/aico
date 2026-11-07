@@ -1,0 +1,1062 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Aico mockup 2 · canvases</title>
+<!-- Lantern tokens and vendored fonts, referenced in place (no copies). -->
+<link rel="stylesheet" href="file:///srv/workspaces/projects/aico/packages/ui-kit/src/tokens.css">
+<link rel="stylesheet" href="file:///srv/workspaces/projects/aico/packages/ui-kit/fonts/fonts.css">
+<style>
+/* Colours, fonts and easing come only from packages/ui-kit tokens.
+   The aliases below are strengths of those tokens, not a new palette. */
+:root {
+  --line: rgb(var(--glass-rgb) / 0.07);
+  --line-2: rgb(var(--glass-rgb) / 0.12);
+  --wash: rgb(var(--glass-rgb) / 0.035);
+  --wash-2: rgb(var(--glass-rgb) / 0.06);
+  --amber-tint: rgb(var(--lantern-rgb) / 0.12);
+  --amber-line: rgb(var(--lantern-rgb) / 0.42);
+  --jade-tint: rgb(122 214 138 / 0.12);
+  --ember-tint: rgb(201 72 61 / 0.15);
+  --pop: rgb(var(--umber-rgb));
+  --t: 0.18s;
+  --bar: 36px;  /* mockup controls */
+  --top: 48px;  /* app top bar */
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--ink); color: var(--bone); font: 14px/1.45 var(--font-ui); -webkit-font-smoothing: antialiased; overflow: hidden; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; background: none; border: 0; padding: 0; }
+:focus-visible { outline: 2px solid var(--lantern); outline-offset: 2px; }
+svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.mono { font-family: var(--font-mono); }
+.mist { color: var(--mist); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+/* ---------- mockup controls (not the product) ---------- */
+.mock { position: fixed; inset: 0 0 auto 0; height: var(--bar); z-index: 90; display: flex; align-items: center; gap: 14px; padding: 0 12px; background: var(--pop); border-bottom: 1px dashed var(--line-2); font-size: 12px; color: var(--mist); }
+.mock b { color: var(--bone); font-weight: 600; }
+.mock .seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: 6px; overflow: hidden; }
+.mock .seg button { padding: 3px 9px; color: var(--mist); }
+.mock .seg button[aria-pressed=true] { background: var(--wash-2); color: var(--bone); }
+.mock label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.stage { position: fixed; inset: var(--bar) 0 0 0; display: flex; align-items: center; justify-content: center; }
+.stage.phone { background: rgb(var(--shade-rgb) / 0.4); }
+
+/* ---------- app frame ---------- */
+.app { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; background: var(--ink); overflow: hidden; }
+.phone .app { width: 390px; height: 844px; border-radius: 28px; box-shadow: var(--shadow-soft), 0 0 0 1px var(--line-2); }
+
+/* top bar: global state only */
+.topbar { height: var(--top); flex: none; display: flex; align-items: center; gap: 10px; padding: 0 12px 0 14px; background: var(--rim); border-bottom: 1px solid var(--line); }
+.brand { font: 600 18px/1 var(--font-display); letter-spacing: 0.01em; margin-right: 6px; }
+.cur { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 5px 8px; border-radius: 8px; }
+.cur:hover { background: var(--wash); }
+.cur .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cur .sub { color: var(--mist); font-size: 12.5px; white-space: nowrap; }
+.spacer { flex: 1; }
+.tb-btn { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 10px; border-radius: 8px; font-size: 13px; white-space: nowrap; color: var(--bone); transition: background var(--t) var(--ease-arrival); }
+.tb-btn:hover { background: var(--wash-2); }
+.tb-btn .count { font-weight: 600; }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--mist); }
+.dot.ok { background: var(--jade); } .dot.warn { background: var(--lantern); } .dot.bad { background: var(--ember); } .dot.need { background: var(--beacon); }
+.tb-need { background: var(--beacon-tint); color: var(--beacon); }
+.tb-need:hover { background: rgb(255 189 82 / 0.25); }
+.qglance { display: inline-flex; gap: 3px; align-items: flex-end; height: 14px; }
+.qglance i { width: 4px; border-radius: 1px; background: var(--line-2); position: relative; height: 14px; overflow: hidden; }
+.qglance i::after { content: ""; position: absolute; inset: auto 0 0 0; height: var(--h); background: var(--bone); opacity: .75; }
+.qglance i.out::after { background: var(--mist); opacity: .5; }
+
+.body { flex: 1; min-height: 0; display: flex; position: relative; }
+
+/* ---------- the left pane ---------- */
+.pane { position: relative; flex: none; display: flex; flex-direction: column; background: var(--rim); border-right: 1px solid var(--line); width: 360px; min-width: 64px; max-width: 100%; transition: width 0.22s var(--ease-arrival); z-index: 5; }
+.pane.dragging { transition: none; }
+.app[data-tier=rail] .pane { width: 64px; }
+.app[data-tier=panel] .pane { width: 360px; }
+.app[data-tier=wide] .pane { width: 58%; }
+.app[data-tier=full] .pane { width: 100%; border-right: 0; }
+.pane-head { flex: none; display: flex; align-items: center; gap: 6px; height: 46px; padding: 0 8px 0 10px; border-bottom: 1px solid var(--line); }
+.pane-head .title { display: none; font: 500 15px/1 var(--font-display); color: var(--bone); padding-left: 2px; }
+.phone .pane-head .title { display: inline; }
+.pane-scroll { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+.cols { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr; grid-template-rows: 100%; }
+.col-now, .col-more, .dig-nav { overflow-y: auto; overscroll-behavior: contain; min-height: 0; }
+.app[data-tier=wide] .cols { grid-template-columns: 340px minmax(0, 1fr); }
+.app[data-tier=full] .cols { grid-template-columns: 200px minmax(0, 1fr); }
+.col-now, .col-more, .dig-nav, .rail { display: none; }
+.app[data-tier=panel] .col-now, .app[data-tier=wide] .col-now { display: block; }
+.app[data-tier=wide] .col-more, .app[data-tier=full] .col-more { display: block; }
+.app[data-tier=full] .dig-nav { display: block; }
+.app[data-tier=rail] .rail { display: flex; }
+.app[data-tier=rail] .pane-scroll .cols { display: none; }
+.app[data-tier=wide] .col-more { border-left: 1px solid var(--line); }
+.col-now { padding: 4px 12px 24px; }
+.col-more { padding: 4px 18px 28px; }
+.app[data-tier=full] .col-more { padding: 6px 28px 40px; max-width: 1080px; }
+
+/* buttons */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--wash); font-size: 13px; font-weight: 600; white-space: nowrap; transition: background var(--t) var(--ease-arrival), border-color var(--t); }
+.btn:hover { background: var(--wash-2); border-color: rgb(var(--glass-rgb) / 0.2); }
+.btn.primary { border-color: var(--amber-line); background: var(--amber-tint); color: var(--lantern); }
+.btn.primary:hover { background: rgb(var(--lantern-rgb) / 0.2); }
+.btn.quiet { border-color: transparent; background: none; color: var(--mist); font-weight: 500; }
+.btn.quiet:hover { color: var(--bone); background: var(--wash); }
+.btn.sm { height: 28px; padding: 0 9px; font-size: 12.5px; }
+.icon-btn { width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; color: var(--mist); transition: background var(--t), color var(--t); }
+.icon-btn:hover { background: var(--wash-2); color: var(--bone); }
+.icon-btn[disabled] { opacity: .35; cursor: default; }
+
+/* section heads */
+.sh { display: flex; align-items: baseline; gap: 8px; margin: 18px 2px 8px; }
+.sh h2 { margin: 0; font-size: 11.5px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--mist); }
+.sh .n { font-size: 12px; color: var(--bone); font-weight: 600; }
+.sh .more { margin-left: auto; font-size: 12.5px; color: var(--mist); }
+.sh .more:hover { color: var(--bone); }
+.stale-tag { display: none; font-size: 11.5px; color: var(--mist); border: 1px dashed var(--line-2); border-radius: 5px; padding: 0 5px; }
+.app.down .stale-tag { display: inline; }
+.app.down .stale { opacity: 0.62; }
+
+/* chips */
+.chip { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 7px; border-radius: 10px; font-size: 11.5px; font-weight: 600; white-space: nowrap; background: var(--wash-2); color: var(--mist); }
+.chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .9; }
+.chip.plain::before { display: none; }
+.chip.need { background: var(--beacon-tint); color: var(--beacon); }
+.chip.work { background: var(--jade-tint); color: var(--jade); }
+.chip.bad { background: var(--ember-tint); color: #e0796f; }
+.chip.warn { background: var(--amber-tint); color: var(--lantern); }
+.chip.helm { background: var(--helm-tint); color: var(--helm); }
+
+/* digest */
+.digest { margin: 10px 0 0; padding: 9px 10px; border-radius: 10px; background: var(--wash); font-size: 12.5px; color: var(--mist); display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+.digest b { color: var(--bone); font-weight: 600; }
+.digest .bad { color: #e0796f; }
+.digest a, .digest button { color: var(--bone); text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 3px; }
+
+/* Needs you */
+.ask { border: 1px solid var(--line-2); border-radius: 12px; background: var(--wash); padding: 11px 12px; margin-bottom: 8px; }
+.ask.blocking { border-color: var(--amber-line); }
+.ask .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; color: var(--mist); }
+.ask h3 { margin: 7px 0 4px; font-size: 14.5px; line-height: 1.35; font-weight: 600; }
+.ask p { margin: 0 0 8px; color: var(--mist); font-size: 13px; }
+.files { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 9px; }
+.file { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 10px 0 7px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--ink); font-size: 12.5px; max-width: 100%; }
+.file:hover { border-color: var(--amber-line); }
+.file .ext { font: 600 9.5px/1 var(--font-mono); color: var(--lantern); background: var(--amber-tint); border-radius: 4px; padding: 3px 4px; }
+.file .sz { color: var(--mist); }
+.opts { display: grid; gap: 6px; }
+.opt { display: flex; align-items: center; gap: 9px; min-height: 36px; padding: 6px 10px; border-radius: 9px; border: 1px solid var(--line-2); text-align: left; font-size: 13px; }
+.opt:hover { border-color: var(--amber-line); background: var(--amber-tint); }
+.opt .k { font: 600 12px var(--font-mono); color: var(--lantern); }
+.opt .rec { margin-left: auto; font-size: 11px; color: var(--lantern); font-weight: 600; }
+.ask .foot { display: flex; align-items: center; gap: 6px; margin-top: 9px; }
+.ask .foot .notnow { margin-left: auto; }
+.ask.compact h3 { font-size: 13.5px; margin: 6px 0 6px; }
+.ask.compact .opts { display: none; }
+.ask.compact.open .opts, .ask.compact.viewing .opts { display: grid; }
+.ask .clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ask.compact .files { margin-bottom: 4px; flex-wrap: nowrap; overflow: hidden; }
+.ask.compact .file { min-width: 0; flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ask.grant h3 { margin-bottom: 8px; }
+.viewer { display: none; }
+.ask.viewing .ask-q > p, .ask.viewing .ask-q > .files { display: none; }
+.ask.viewing .viewer { display: block; margin-bottom: 8px; }
+.viewer .vh { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-bottom: 8px; }
+.viewer .vh .fn { min-width: 0; overflow-wrap: anywhere; }
+.viewer .vh .fn { font-weight: 600; font-size: 13px; }
+.viewer pre { margin: 0; max-height: 260px; overflow: auto; background: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 10px; font: 12px/1.55 var(--font-mono); color: var(--bone); white-space: pre-wrap; }
+.viewer .md { background: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 13px; max-height: 260px; overflow: auto; }
+.viewer .md h4 { margin: 0 0 6px; font-size: 13.5px; }
+.viewer .md p { margin: 0 0 6px; color: var(--bone); }
+.viewer .vpath { font-size: 11.5px; color: var(--mist); margin-top: 6px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.down-note { display: none; margin: 10px 0 0; padding: 9px 10px; border-radius: 10px; background: var(--ember-tint); font-size: 12.5px; align-items: center; gap: 8px; }
+.app.down .down-note { display: flex; }
+.app.down .digest { display: none; }
+
+/* sessions */
+.grp { margin-top: 2px; }
+.grp-h { display: flex; align-items: center; gap: 6px; padding: 8px 6px 4px; font-size: 12px; color: var(--mist); }
+.grp-h b { color: var(--bone); font-weight: 600; }
+.srow { width: 100%; display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; align-items: center; gap: 0 9px; padding: 7px 6px; border-radius: 9px; text-align: left; transition: background var(--t); }
+.srow:hover { background: var(--wash); }
+.srow.current { background: var(--wash-2); box-shadow: inset 2px 0 0 var(--lantern); }
+.srow .nm { font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.srow .ds { font-size: 12px; color: var(--mist); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.srow .rt { font-size: 12px; color: var(--mist); text-align: right; white-space: nowrap; }
+.mark { width: 26px; height: 26px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; font: 600 10.5px/1 var(--font-mono); background: var(--wash-2); color: var(--bone); position: relative; }
+.mark .st { position: absolute; right: -2px; bottom: -2px; width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--rim); background: var(--mist); }
+.mark .st.work { background: var(--jade); } .mark .st.need { background: var(--beacon); } .mark .st.bad { background: var(--ember); } .mark .st.idle { background: var(--mist); } .mark .st.done { background: transparent; border-color: var(--mist); }
+/* The one thing that moves at rest: a session waiting on the owner. */
+@keyframes beacon { 0%, 100% { box-shadow: 0 0 0 0 rgb(255 189 82 / 0.55); } 50% { box-shadow: 0 0 0 4px rgb(255 189 82 / 0); } }
+.mark .st.need { animation: beacon 1.8s var(--ease-arrival) infinite; }
+@media (prefers-reduced-motion: reduce) { .mark .st.need { animation: none; } * { transition-duration: 0.01s !important; } }
+
+/* worst problem */
+.worst { border: 1px solid var(--line-2); border-radius: 12px; padding: 11px 12px; background: var(--wash); }
+.worst h3 { margin: 7px 0 3px; font-size: 14px; font-weight: 600; }
+.worst p { margin: 0 0 9px; font-size: 12.5px; color: var(--mist); }
+.worst .meta { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--mist); flex-wrap: wrap; }
+
+/* quota: used vs time gone in the window */
+.q { padding: 7px 2px; }
+.q .l { display: flex; align-items: baseline; gap: 6px; font-size: 13px; }
+.q .l b { font-weight: 600; }
+.q .l .r { margin-left: auto; font-size: 12px; color: var(--mist); white-space: nowrap; }
+.qbar { position: relative; height: 6px; border-radius: 3px; background: var(--wash-2); margin-top: 6px; }
+.qbar .used { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--bone); opacity: .7; }
+.qbar .used.out { background: var(--mist); opacity: .55; }
+.qbar .pace { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--lantern); border-radius: 1px; }
+.q .s { font-size: 11.5px; color: var(--mist); margin-top: 4px; }
+.legend { font-size: 11.5px; color: var(--mist); display: flex; gap: 12px; margin: 2px 2px 0; }
+.legend i { display: inline-block; width: 10px; height: 4px; border-radius: 2px; background: var(--bone); opacity: .7; vertical-align: middle; margin-right: 4px; }
+.legend i.p { width: 2px; height: 10px; background: var(--lantern); opacity: 1; }
+
+/* everything else: one quiet list with a glance value */
+.else { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.else button { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 6px 9px; border-radius: 9px; text-align: left; transition: background var(--t); }
+.else button:hover { background: var(--wash); }
+.else .lb { font-size: 13px; font-weight: 600; }
+.else .gv { display: block; font-size: 11.5px; color: var(--mist); font-weight: 400; }
+.else .gv.warn { color: var(--lantern); }
+.else svg.i { color: var(--mist); }
+.app[data-tier=wide] .else .w { display: none; }
+
+/* wide/full sections */
+.sec { display: none; }
+.app[data-tier=wide] .sec.w { display: block; }
+.app[data-tier=full] .sec.on { display: block; }
+.sec + .sec { margin-top: 6px; }
+.sec-h { display: flex; align-items: baseline; gap: 10px; margin: 16px 0 10px; }
+.sec-h h2 { margin: 0; font: 500 19px/1.2 var(--font-display); }
+.sec-h .sum { color: var(--mist); font-size: 13px; }
+.sec-h .act { margin-left: auto; }
+.app[data-tier=wide] .sec-h h2 { font-size: 16px; }
+.list { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; padding: 9px 12px; border-top: 1px solid var(--line); }
+.li:first-child { border-top: 0; }
+.li .t { font-weight: 600; font-size: 13.5px; }
+.li .d { font-size: 12.5px; color: var(--mist); }
+.li .x { display: flex; gap: 6px; align-items: center; }
+.li.clickable { cursor: pointer; transition: background var(--t); }
+.li.clickable:hover { background: var(--wash); }
+.cap { min-width: 74px; }
+
+/* dig nav (full tier) */
+.dig-nav { padding: 12px 8px; border-right: 1px solid var(--line); }
+.dig-nav button { width: 100%; display: flex; align-items: center; gap: 9px; height: 36px; padding: 0 10px; border-radius: 8px; font-size: 13.5px; color: var(--mist); text-align: left; }
+.dig-nav button:hover { background: var(--wash); color: var(--bone); }
+.dig-nav button[aria-current=true] { background: var(--wash-2); color: var(--bone); font-weight: 600; }
+.dig-nav .gv { margin-left: auto; font-size: 11.5px; color: var(--mist); font-weight: 400; }
+.dig-nav hr { border: 0; border-top: 1px solid var(--line); margin: 8px 6px; }
+
+/* charts */
+.chart { border: 1px solid var(--line); border-radius: 12px; padding: 12px 12px 8px; }
+.chart svg { display: block; max-width: 100%; height: auto; overflow: visible; }
+.chart text { font: 11px var(--font-ui); fill: var(--mist); }
+.chart .lab { fill: var(--bone); font-size: 11.5px; }
+.chart-note { font-size: 12px; color: var(--mist); margin-top: 6px; }
+
+/* roadmap */
+.road { display: none; padding: 4px 12px 12px 12px; border-top: 1px dashed var(--line); background: var(--wash); }
+.li.open + .road { display: block; }
+.road h4 { margin: 10px 0 4px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--mist); }
+.road ul { margin: 0; padding-left: 16px; font-size: 13px; }
+.road li { margin: 2px 0; }
+.road .tag { font-size: 10.5px; font-weight: 700; color: var(--lantern); margin-right: 6px; letter-spacing: .04em; }
+
+/* chat pane: unchanged in spirit — the session the owner types in */
+.chat { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--ink); }
+.app[data-tier=full] .chat { display: none; }
+.log { flex: 1; min-height: 0; overflow-y: auto; padding: 22px max(20px, calc((100% - 760px) / 2)) 16px; }
+.msg { margin: 0 0 18px; }
+.msg .who { font-size: 12px; color: var(--mist); margin-bottom: 4px; font-weight: 600; }
+.msg.you .body-t { background: var(--wash-2); border-radius: 12px; padding: 9px 12px; display: inline-block; max-width: 100%; }
+.msg .body-t p { margin: 0 0 6px; } .msg .body-t p:last-child { margin: 0; }
+.tool { font: 12.5px/1.6 var(--font-mono); color: var(--mist); border-left: 2px solid var(--line-2); padding: 2px 0 2px 10px; margin: 6px 0; }
+.composer { flex: none; padding: 10px max(20px, calc((100% - 760px) / 2)) 16px; }
+.composer .box { display: flex; align-items: flex-end; gap: 8px; border: 1px solid var(--line-2); border-radius: 14px; padding: 8px 8px 8px 14px; background: var(--rim); }
+.composer textarea { flex: 1; resize: none; border: 0; background: none; outline: none; min-height: 24px; max-height: 120px; padding: 4px 0; }
+.composer .hint { font-size: 11.5px; color: var(--mist); margin-top: 6px; text-align: center; }
+.down-banner { display: none; margin: 0 0 8px; padding: 8px 12px; border-radius: 10px; background: var(--ember-tint); color: var(--bone); font-size: 13px; align-items: center; gap: 10px; }
+.app.down .down-banner { display: flex; }
+.app.down .composer textarea { opacity: .5; }
+
+/* resize handle with snap points */
+.handle { position: absolute; top: 0; bottom: 0; right: -5px; width: 10px; cursor: col-resize; z-index: 6; touch-action: none; }
+.handle::after { content: ""; position: absolute; top: 0; bottom: 0; left: 4px; width: 2px; background: transparent; transition: background var(--t); }
+.handle:hover::after, .handle:focus-visible::after, .pane.dragging .handle::after { background: var(--amber-line); }
+.handle .grip { position: absolute; top: 50%; left: 1px; width: 8px; height: 36px; margin-top: -18px; border-radius: 4px; background: var(--rim); border: 1px solid var(--line-2); display: flex; align-items: center; justify-content: center; }
+.handle .grip::before { content: ""; width: 2px; height: 14px; border-left: 1px solid var(--mist); border-right: 1px solid var(--mist); opacity: .6; }
+.app[data-tier=full] .handle { display: none; }
+.snaps { position: absolute; inset: 0; pointer-events: none; z-index: 7; display: none; }
+.snaps.on { display: block; }
+.snaps .sp { position: absolute; bottom: 14px; transform: translateX(-50%); font-size: 11.5px; padding: 2px 8px; border-radius: 6px; background: var(--pop); border: 1px solid var(--line-2); color: var(--mist); }
+.snaps .sp.near { color: var(--lantern); border-color: var(--amber-line); }
+.snaps .ln { position: absolute; bottom: 0; height: 12px; width: 2px; background: var(--amber-line); }
+.tip { position: absolute; z-index: 60; max-width: 300px; padding: 8px 10px; border-radius: 8px; background: var(--pop); border: 1px solid var(--line-2); box-shadow: var(--shadow-soft); font-size: 12px; color: var(--bone); pointer-events: none; opacity: 0; transition: opacity var(--t); }
+.tip.on { opacity: 1; }
+.tip kbd { font: 11px var(--font-mono); padding: 0 4px; border: 1px solid var(--line-2); border-radius: 4px; color: var(--bone); }
+.tip .r { display: flex; justify-content: space-between; gap: 14px; color: var(--mist); margin-top: 3px; }
+
+/* rail: icons + counts */
+.rail { flex-direction: column; align-items: center; gap: 4px; padding: 8px 0; }
+.rail .rb { position: relative; width: 40px; height: 40px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; color: var(--mist); }
+.rail .rb:hover { background: var(--wash-2); color: var(--bone); }
+.rail .rb .c { position: absolute; top: 1px; right: 0; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px; font-size: 10.5px; font-weight: 700; line-height: 17px; text-align: center; background: var(--wash-2); color: var(--bone); }
+.rail .rb .c.need { background: var(--beacon); color: var(--pop); }
+.rail .rb .c.warn { background: var(--amber-tint); color: var(--lantern); }
+.rail .sep { width: 28px; border-top: 1px solid var(--line); margin: 4px 0; }
+.rail .mark { width: 30px; height: 30px; }
+.rail .rb.cur { background: var(--wash-2); box-shadow: inset 2px 0 0 var(--lantern); }
+
+/* dialogs and the popped-out notes window */
+.scrim { position: absolute; inset: 0; background: var(--scrim); display: none; align-items: center; justify-content: center; z-index: 40; }
+.scrim.on { display: flex; }
+.dlg { width: min(440px, calc(100% - 32px)); background: var(--rim); border: 1px solid var(--line-2); border-radius: 14px; box-shadow: var(--shadow-soft); padding: 16px; }
+.dlg h2 { margin: 0 0 12px; font: 500 19px/1.2 var(--font-display); }
+.field { margin-bottom: 12px; }
+.field label, .field .lbl { display: block; font-size: 12.5px; color: var(--mist); margin-bottom: 5px; font-weight: 600; }
+.field select, .field input { width: 100%; height: 36px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--ink); padding: 0 10px; }
+.agents { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.agents button { height: 40px; border-radius: 8px; border: 1px solid var(--line-2); font-size: 12.5px; font-weight: 600; color: var(--mist); }
+.agents button[aria-pressed=true] { border-color: var(--amber-line); background: var(--amber-tint); color: var(--lantern); }
+.dlg .help { font-size: 12px; color: var(--mist); margin-top: 5px; }
+.dlg .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+.notes-win { position: absolute; right: 28px; top: 70px; width: 340px; height: 440px; z-index: 50; display: none; flex-direction: column; background: var(--rim); border: 1px solid var(--line-2); border-radius: 10px; box-shadow: var(--shadow-soft); overflow: hidden; }
+.notes-win.on { display: flex; }
+.notes-win .wt { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 6px 0 12px; background: var(--pop); border-bottom: 1px solid var(--line); font-size: 12.5px; color: var(--mist); }
+.notes-win .wt b { color: var(--bone); font-weight: 600; }
+.note { padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.note .nt { font-weight: 600; font-size: 13.5px; }
+.note .np { font-size: 12.5px; color: var(--mist); margin-top: 2px; }
+.mask { font-family: var(--font-mono); background: var(--wash-2); border-radius: 4px; padding: 0 4px; color: var(--mist); }
+@keyframes flash { from { background: var(--amber-tint); } to { background: transparent; } }
+.flash { animation: flash 0.9s var(--ease-departure) 1; border-radius: 10px; }
+.toast { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%) translateY(8px); background: var(--pop); border: 1px solid var(--line-2); border-radius: 10px; padding: 8px 12px; font-size: 13px; opacity: 0; transition: opacity var(--t) var(--ease-arrival), transform var(--t) var(--ease-arrival); z-index: 70; pointer-events: none; }
+.toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ---------- phone: the pane is a full-width slide-over on the chat ---------- */
+.phone .topbar { gap: 6px; padding: 0 6px; height: 52px; }
+.phone .brand, .phone .tb-quota, .phone .tb-need .lbl { display: none; }
+.phone .tb-health .lbl { font-size: 0; } .phone .tb-health .lbl .count { font-size: 13px; }
+.app.down.phone .tb-health .lbl { font-size: 0; }
+.phone .cur { flex-direction: column; align-items: flex-start; gap: 1px; padding: 4px 6px; flex: 1; }
+.phone .cur .mark { display: none; }
+.phone .tb-btn { height: 44px; min-width: 44px; justify-content: center; padding: 0 8px; }
+.menu-btn { display: none; position: relative; }
+.phone .menu-btn { display: inline-flex; width: 44px; height: 44px; }
+.menu-btn .c { position: absolute; top: 5px; right: 3px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px; font-size: 10.5px; font-weight: 700; line-height: 17px; background: var(--beacon); color: var(--pop); }
+.phone .pane { position: absolute; inset: 0; width: 100% !important; transform: translateX(-102%); transition: transform 0.22s var(--ease-departure); border-right: 0; z-index: 20; }
+.phone.sheet .pane { transform: none; transition-timing-function: var(--ease-arrival); }
+.phone .handle, .phone .tier-step, .phone .dig-nav, .phone .rail { display: none !important; }
+.phone .cols { grid-template-columns: 1fr !important; display: grid !important; }
+.phone .col-now { display: block !important; }
+.phone .col-more { display: none !important; border: 0; }
+.phone.sub .col-now { display: none !important; }
+.phone.sub .col-more { display: block !important; padding: 0 14px 28px; }
+.phone .sec { display: none !important; }
+.phone .sec.on { display: block !important; }
+.phone .chat { display: flex !important; }
+.phone .else button { min-height: 48px; }
+.phone .btn { height: 40px; }
+.phone .opt { min-height: 44px; }
+.phone .file { height: 40px; }
+.phone .srow { padding: 9px 6px; }
+.phone .li, .app[data-tier=wide] .li { grid-template-columns: minmax(0, 1fr) auto; }
+.phone .li > .chip, .app[data-tier=wide] .li > .chip { grid-column: 1 / -1; justify-self: start; }
+.phone .li > span:empty, .app[data-tier=wide] .li > span:empty { display: none; }
+.phone .li:has(> .mark), .app[data-tier=wide] .li:has(> .mark), .phone .li:has(> svg), .app[data-tier=wide] .li:has(> svg) { grid-template-columns: auto minmax(0, 1fr) auto; }
+.phone .log { padding: 16px 14px; }
+.phone .composer { padding: 8px 10px 14px; }
+.phone .dlg { width: calc(100% - 24px); }
+.phone .agents button { height: 44px; }
+.phone .notes-win { inset: 60px 10px 10px 10px; width: auto; height: auto; }
+.phone-back { display: none; }
+.phone.sub .phone-back { display: inline-flex; }
+.phone.sub .pane-head .title { display: none; }
+</style>
+</head>
+<body>
+
+<div class="mock" role="toolbar" aria-label="Mockup controls">
+  <b>Mockup 2</b><span>not the product</span>
+  <span class="seg" id="m-dev"><button data-dev="desktop" aria-pressed="true">Desktop</button><button data-dev="phone" aria-pressed="false">Phone</button></span>
+  <label><input type="checkbox" id="m-down"> Server down</label>
+  <span>Tier</span>
+  <span class="seg" id="m-tier"><button data-t="rail">Rail</button><button data-t="panel" aria-pressed="true">Panel</button><button data-t="wide">Wide</button><button data-t="full">Full</button></span>
+  <button class="btn quiet sm" id="m-reset">Reset</button>
+</div>
+
+<div class="stage" id="stage">
+<div class="app" id="app" data-tier="panel">
+
+  <!-- ===== top bar: global state only ===== -->
+  <header class="topbar">
+    <button class="icon-btn menu-btn" id="menu-btn" aria-label="Open sessions and everything else"><span data-i="menu"></span></button>
+    <span class="brand">Aico</span>
+    <button class="cur" id="tb-cur" title="This session in the list">
+      <span class="mark" id="cur-mark">CC</span>
+      <span class="name" id="cur-name">Aico coordinator</span>
+      <span class="sub" id="cur-sub">Live · working · sized here</span>
+    </button>
+    <span class="spacer"></span>
+    <button class="tb-btn tb-need" id="tb-need" title="Needs you: 2 questions, 1 grant"><span class="dot need"></span><span class="count">3</span><span class="lbl">need you</span></button>
+    <button class="tb-btn tb-health" id="tb-health" title="Status: 7 warnings, nothing failed, 304 healthy"><span class="dot warn" id="health-dot"></span><span class="lbl" id="health-lbl"><span class="count">7</span> warnings</span></button>
+    <button class="tb-btn tb-quota" id="tb-quota" title="Quota: Claude 82% of the week left · Codex and OpenCode Go used up for the week">
+      <span class="qglance" aria-hidden="true"><i style="--h:82%"></i><i class="out" style="--h:0%"></i><i class="out" style="--h:5%"></i></span>
+      <span class="lbl">Claude 82% · Codex, OpenCode used up</span>
+    </button>
+  </header>
+
+  <div class="body" id="body">
+    <!-- ===== the left pane: what you have to work with ===== -->
+    <aside class="pane" id="pane" aria-label="Sessions and everything else">
+      <div class="pane-head">
+        <button class="icon-btn phone-back" id="phone-back" aria-label="Back"><span data-i="back"></span></button>
+        <span class="title" id="pane-title">Aico</span>
+        <button class="btn primary sm" id="new-btn" title="New session"><span data-i="plus"></span><span class="nlbl">New session</span></button>
+        <span class="spacer"></span>
+        <button class="icon-btn tier-step" id="narrow" aria-label="Narrower" title="Narrower · Alt+["><span data-i="left"></span></button>
+        <button class="icon-btn tier-step" id="wider" aria-label="Wider" title="Wider · Alt+]"><span data-i="right"></span></button>
+        <button class="icon-btn" id="sheet-close" aria-label="Back to the session" title="Back to the session" style="display:none"><span data-i="x"></span></button>
+      </div>
+
+      <!-- rail: icons + counts -->
+      <nav class="rail" aria-label="Rail">
+        <button class="rb" data-tier-go="panel" title="Open the panel · Alt+2"><span data-i="right"></span></button>
+        <button class="rb" data-go="panel:needs" title="Needs you: 3"><span data-i="inbox"></span><span class="c need">3</span></button>
+        <div class="sep"></div>
+        <button class="rb" data-sess="noise" title="Rule noise cleanup · needs you"><span class="mark">CC<span class="st need"></span></span></button>
+        <button class="rb cur" data-sess="coord" title="Aico coordinator · working"><span class="mark">CC<span class="st work"></span></span></button>
+        <button class="rb" data-sess="proj" title="Projects page build · working"><span class="mark">CC<span class="st work"></span></span></button>
+        <button class="rb" data-sess="hunt" title="Security hunt · working"><span class="mark">CX<span class="st work"></span></span></button>
+        <button class="rb" data-sess="cockpit" title="Portfolio cockpit fixes · idle 40 min"><span class="mark">CX<span class="st idle"></span></span></button>
+        <button class="rb" data-sess="gem" title="Shell on Proxmox host · idle 2 h"><span class="mark">&gt;_<span class="st idle"></span></span></button>
+        <div class="sep"></div>
+        <button class="rb" data-go="wide:status" title="Status: 7 warnings"><span data-i="pulse"></span><span class="c warn">7</span></button>
+        <button class="rb" data-go="wide:quota" title="Quota: 2 used up"><span data-i="gauge"></span><span class="c">2</span></button>
+        <button class="rb" data-go="wide:projects" title="Projects"><span data-i="folder"></span></button>
+        <button class="rb" data-go="full:backups" title="Backups: all up to date"><span data-i="db"></span></button>
+        <button class="rb" data-pop="notes" title="Pop out notes"><span data-i="note"></span></button>
+      </nav>
+
+      <div class="pane-scroll" id="pane-scroll">
+       <div class="cols">
+
+        <!-- full tier: where to dig -->
+        <nav class="dig-nav" aria-label="Everything else">
+          <button data-sec="status"><span data-i="pulse"></span>Status<span class="gv">7 warnings</span></button>
+          <button data-sec="projects"><span data-i="folder"></span>Projects<span class="gv">2 active</span></button>
+          <button data-sec="recent"><span data-i="clock"></span>Recent</button>
+          <button data-sec="quota"><span data-i="gauge"></span>Quota and spend</button>
+          <hr>
+          <button data-sec="backups"><span data-i="db"></span>Backups<span class="gv">up to date</span></button>
+          <button data-sec="grants"><span data-i="key"></span>Grants<span class="gv">1 waiting</span></button>
+          <button data-sec="logins"><span data-i="user"></span>Logins</button>
+          <button data-sec="machines"><span data-i="server"></span>Machines<span class="gv">1 off</span></button>
+          <button data-sec="recovery"><span data-i="undo"></span>Recovery<span class="gv">1 to resume</span></button>
+          <button data-sec="notes"><span data-i="note"></span>Notes</button>
+          <button data-sec="settings"><span data-i="gear"></span>Settings</button>
+        </nav>
+
+        <!-- ===== now: glance + act ===== -->
+        <div class="col-now">
+          <div class="down-note" role="status"><span>Can’t reach Aico since 4:23 PM. Showing what it last knew.</span><span class="spacer"></span><button class="btn sm" data-toast="Retrying…">Retry</button></div>
+          <div class="digest stale">
+            <span>Since 11:40 PM</span>
+            <span><b>3</b> finished, <span class="bad">1 of them failed</span></span>
+            <button data-go="wide:activity">See the day</button>
+          </div>
+
+          <div class="sh" id="needs"><h2>Needs you</h2><span class="n">3</span><span class="mist" style="font-size:12px">2 questions · 1 grant</span><span class="stale-tag">as of 4:23 PM</span></div>
+
+          <article class="ask blocking stale" id="ask1">
+            <div class="ask-q">
+              <div class="meta"><span class="chip need">Waiting on this</span><span>Rule noise cleanup · OmniNull · 12 min ago</span></div>
+              <h3>Stop paging for the “upload to a new place” rule on the build machine?</h3>
+              <p class="clamp">It paged 3 times this week, all from the nightly build uploading release files. Other machines keep paging.</p>
+              <div class="files"><button class="file" data-file="f1"><span class="ext">TXT</span>upload-incidents.txt<span class="sz">2.4 KB</span></button></div>
+              <div class="viewer" data-viewer="f1">
+              <div class="vh"><button class="btn sm" data-close-file><span data-i="back"></span>Back to the question</button><span class="fn">upload-incidents.txt</span></div>
+<pre>Nov 3 02:14  build-01  upload to a new place  /srv/release/aico-1.41.tgz
+Nov 4 02:11  build-01  upload to a new place  /srv/release/aico-1.42.tgz
+Nov 5 02:16  build-01  upload to a new place  /srv/release/omni-0.9.tgz
+
+All three: nightly build, release files, same destination.
+No other machine matched this rule this week.</pre>
+              <div class="vpath" title="/srv/workspaces/projects/ominull/evidence/upload-incidents.txt">ominull/evidence/upload-incidents.txt</div>
+            </div>
+              <div class="opts">
+                <button class="opt" data-answer="ask1"><span class="k">1</span>Yes, mute it for the build machine only<span class="rec">Recommended</span></button>
+                <button class="opt" data-answer="ask1"><span class="k">2</span>No, keep paging</button>
+              </div>
+              <div class="foot"><button class="btn sm" data-sess="noise">Open session</button><button class="btn quiet sm notnow" data-answer="ask1">Not now</button></div>
+            </div>
+            
+          </article>
+
+          <article class="ask compact stale" id="ask2">
+            <div class="ask-q">
+              <div class="meta"><span class="chip plain">No rush</span><span>Aico coordinator · Aico · 48 min ago</span></div>
+              <h3>Approve the 28 Aico fixes from the user testing?</h3>
+              <div class="files">
+                <button class="file" data-file="f2" title="recommendations.md · 9 KB"><span class="ext">MD</span>recommendations.md</button>
+                <button class="file" data-file="f3" title="tester-report.md · 3 KB"><span class="ext">MD</span>tester-report.md</button>
+              </div>
+              <div class="viewer" data-viewer="f2">
+              <div class="vh"><button class="btn sm" data-close-file><span data-i="back"></span>Back to the question</button><span class="fn">recommendations.md</span></div>
+              <div class="md"><h4>Post-consolidation recommendations</h4><p><b>A. Wrong or misleading (fix first).</b> Session state tells the truth; honest failed states; Needs you card renders markdown; note previews mask secrets; usage wording; roadmap labels.</p><p><b>B. Finding your way.</b> Home becomes triage; phone parity; one name per concept…</p><p class="mist">28 items in 8 groups.</p></div>
+              <div class="vpath" title="/srv/workspaces/projects/aico/docs/plans/post-consolidation/recommendations.md">aico/docs/plans/post-consolidation/recommendations.md</div>
+            </div>
+            <div class="viewer" data-viewer="f3">
+              <div class="vh"><button class="btn sm" data-close-file><span data-i="back"></span>Back to the question</button><span class="fn">tester-report.md</span></div>
+              <div class="md"><h4>Desktop tester report</h4><p>Status pass, no ranking. Backups partly: no overall health line. Needs you renders raw markdown.</p></div>
+              <div class="vpath" title="/srv/workspaces/projects/aico/evidence/user-test-2026-11-06/web/report.md">aico/evidence/user-test-2026-11-06/web/report.md</div>
+            </div>
+              <div class="opts">
+                <button class="opt" data-answer="ask2"><span class="k">1</span>Yes, all 28<span class="rec">Recommended</span></button>
+                <button class="opt" data-answer="ask2"><span class="k">2</span>Only A and B first</button>
+              </div>
+              <div class="foot"><button class="btn sm" data-expand>Answer</button><button class="btn sm quiet" data-sess="coord">Open session</button><button class="btn quiet sm notnow" data-answer="ask2">Not now</button></div>
+            </div>
+            
+          </article>
+
+          <article class="ask compact grant stale" id="ask3">
+            <div class="meta"><span class="chip plain">Grant</span><span>Jobinator release · expires in 9 min</span></div>
+            <h3>GitHub admin for 10 min, to create Jobinator’s release repo?</h3>
+            <div class="foot" style="margin-top:0"><button class="btn sm primary" data-answer="ask3">Allow 10 min</button><button class="btn sm" data-answer="ask3">Deny</button><button class="btn quiet sm notnow" data-go="full:grants">All grants</button></div>
+          </article>
+
+          <div class="sh" id="sessions"><h2>Sessions</h2><span class="n" id="sess-n">9</span><span class="stale-tag">as of 4:23 PM</span></div>
+          <div class="stale" id="slist">
+            <div class="grp"><div class="grp-h"><b>Needs you</b> <span>1 session, stopped until you answer it</span></div>
+              <button class="srow" data-sess="noise"><span class="mark">CC<span class="st need"></span></span><span><span class="nm" style="display:block">Rule noise cleanup</span><span class="ds" style="display:block">Claude Code · OmniNull · Workstation</span></span><span class="rt">12 min</span></button>
+            </div>
+            <div class="grp"><div class="grp-h"><b>Working</b> 3</div>
+              <button class="srow current" data-sess="coord"><span class="mark">CC<span class="st work"></span></span><span><span class="nm" style="display:block">Aico coordinator</span><span class="ds" style="display:block">Claude Code · Aico · Workstation</span></span><span class="rt"><span class="chip helm plain">Coordinator</span></span></button>
+              <button class="srow" data-sess="proj"><span class="mark">CC<span class="st work"></span></span><span><span class="nm" style="display:block">Projects page build</span><span class="ds" style="display:block">Claude Code · Aico · edited a file 2 min ago</span></span><span class="rt"></span></button>
+              <button class="srow" data-sess="hunt"><span class="mark">CX<span class="st work"></span></span><span><span class="nm" style="display:block">Security hunt</span><span class="ds" style="display:block">Codex · hunt VM · thinking, no output 14 min</span></span><span class="rt"></span></button>
+            </div>
+            <div class="grp"><div class="grp-h"><b>Idle</b> 2</div>
+              <button class="srow" data-sess="cockpit"><span class="mark">CX<span class="st idle"></span></span><span><span class="nm" style="display:block">Portfolio cockpit fixes</span><span class="ds" style="display:block">Codex · Portfolio AI · stopped after its reply</span></span><span class="rt">40 min</span></button>
+              <button class="srow" data-sess="gem"><span class="mark">&gt;_<span class="st idle"></span></span><span><span class="nm" style="display:block">Shell on Proxmox host</span><span class="ds" style="display:block">Shell · Proxmox host</span></span><span class="rt">2 h</span></button>
+            </div>
+            <div class="grp"><div class="grp-h"><b>Finished</b> 3 since you looked</div>
+              <button class="srow" data-go="wide:recent"><span class="mark">CC<span class="st done"></span></span><span><span class="nm" style="display:block">Weekly job search</span><span class="ds" style="display:block">Claude Code · Jobinator · 3:52 PM</span></span><span class="rt"></span></button>
+              <button class="srow" data-go="wide:recent"><span class="mark">CC<span class="st bad"></span></span><span><span class="nm" style="display:block">Restore drill</span><span class="ds" style="display:block">Claude Code · Aico · stopped 1:10 PM</span></span><span class="rt"><span class="chip bad">Failed</span></span></button>
+              <button class="srow" data-go="wide:recent"><span class="mark">PI<span class="st done"></span></span><span><span class="nm" style="display:block">Skill sync</span><span class="ds" style="display:block">Pi · Agent Skills · 11:20 AM</span></span><span class="rt"></span></button>
+            </div>
+          </div>
+
+          <div class="sh" id="worst"><h2>Worst problem</h2><button class="more" data-go="wide:status">See all 7 in Status</button></div>
+          <div class="worst stale">
+            <div class="meta"><span class="chip bad">Lost work</span><span>Workstation · 1:10 PM</span></div>
+            <h3>Restore drill was stopped for memory</h3>
+            <p>It checked 3 of 5 backup sets. Google Drive and T7 weren’t checked. First because work was lost; security comes next.</p>
+            <div style="display:flex;gap:6px"><button class="btn sm primary" data-toast="Resuming the restore drill on Workstation">Resume</button><button class="btn sm quiet" data-go="wide:status">Open Status</button></div>
+          </div>
+
+          <div class="sh" id="quota"><h2>Quota</h2><button class="more" data-go="wide:quota">Spend by day</button></div>
+          <div class="stale">
+            <div class="q"><div class="l"><b>Claude</b><span>82% of the week left</span><span class="r">resets Fri 5 AM</span></div><div class="qbar"><span class="used" style="width:18%"></span><span class="pace" style="left:14%"></span></div></div>
+            <div class="q"><div class="l"><b>Codex</b><span>used up · on credits</span><span class="r">resets Wed 5:35 AM</span></div><div class="qbar"><span class="used out" style="width:100%"></span><span class="pace" style="left:36%"></span></div><div class="s">4.6K credits, about 2.9 days at this pace: runs out before the reset.</div></div>
+            <div class="q"><div class="l"><b>OpenCode Go</b><span>week used up</span><span class="r">back Sun 7 PM</span></div><div class="qbar"><span class="used out" style="width:100%"></span><span class="pace" style="left:72%"></span></div></div>
+            <div class="legend"><span><i></i>used</span><span><i class="p"></i>time gone in the window</span></div>
+          </div>
+
+          <div class="sh"><h2>Everything else</h2></div>
+          <div class="else">
+            <button class="w" data-go="wide:status"><span data-i="pulse"></span><span><span class="lb">Status</span><span class="gv warn">7 warnings</span></span></button>
+            <button class="w" data-go="wide:projects"><span data-i="folder"></span><span><span class="lb">Projects</span><span class="gv">2 active · roadmaps</span></span></button>
+            <button class="w" data-go="wide:recent"><span data-i="clock"></span><span><span class="lb">Recent</span><span class="gv">past sessions</span></span></button>
+            <button data-go="full:backups"><span data-i="db"></span><span><span class="lb">Backups</span><span class="gv">all 96 up to date</span></span></button>
+            <button data-go="full:grants"><span data-i="key"></span><span><span class="lb">Grants</span><span class="gv warn">1 waiting</span></span></button>
+            <button data-go="full:machines"><span data-i="server"></span><span><span class="lb">Machines</span><span class="gv">7 on · 1 off</span></span></button>
+            <button data-go="full:recovery"><span data-i="undo"></span><span><span class="lb">Recovery</span><span class="gv warn">1 to resume</span></span></button>
+            <button data-go="full:logins"><span data-i="user"></span><span><span class="lb">Logins</span><span class="gv">6 signed in</span></span></button>
+            <button data-go="full:settings"><span data-i="gear"></span><span><span class="lb">Settings</span><span class="gv">agents, phone app</span></span></button>
+            <button data-pop="notes" title="Opens notes in their own window"><span data-i="note"></span><span><span class="lb">Notes <span data-i="popout"></span></span><span class="gv">pop out</span></span></button>
+          </div>
+        </div>
+
+        <!-- ===== more: wide sections, and the full-tier dig ===== -->
+        <div class="col-more">
+
+          <section class="sec w" data-sec="status" id="s-status">
+            <div class="sec-h"><h2>Status</h2><span class="sum">7 warnings · nothing failed · 304 healthy · lost work first, then security, then the rest</span><span class="stale-tag">as of 4:23 PM</span></div>
+            <div class="list stale">
+              <div class="li"><span class="chip bad cap">Lost work</span><span><span class="t">Restore drill stopped for memory</span><div class="d">Workstation · 6 memory kills today, Restore drill twice</div></span><span class="x"><button class="btn sm" data-toast="Resuming the restore drill">Resume</button></span></div>
+              <div class="li"><span class="chip warn cap">Security</span><span><span class="t">2 new sudo commands</span><div class="d">userdel by Aico coordinator, release signer by OmniNull build · not declared</div></span><span class="x"><button class="btn sm quiet">Details</button></span></div>
+              <div class="li"><span class="chip warn cap">Paging</span><span><span class="t">Detection paged 3 times this week</span><div class="d">OmniNull hub · budget is 1 a week · question waiting</div></span><span class="x"><button class="btn sm quiet" data-go="panel:needs">Answer</button></span></div>
+              <div class="li"><span class="chip warn cap">Errors</span><span><span class="t">4 Portfolio jobs finished with errors</span><div class="d">apps VM · put/call ratio, valuations, rules, source health</div></span><span class="x"><button class="btn sm quiet">Log</button></span></div>
+              <div class="li"><span class="chip plain cap">Updates</span><span><span class="t">Laptop updates failed</span><div class="d">LAPTOP · off since Tue, will retry when it’s on</div></span><span class="x"></span></div>
+              <div class="li"><span class="chip plain cap">Quota</span><span><span class="t">OpenCode Go used up for the week</span><div class="d">back Sun 7 PM · sessions skip it until then</div></span><span class="x"></span></div>
+              <div class="li"><span class="chip plain cap">Speed</span><span><span class="t">Swap 81% full with 22 GiB free</span><div class="d">Workstation · slower, nothing lost</div></span><span class="x"></span></div>
+            </div>
+          </section>
+
+          <section class="sec w" data-sec="activity" id="s-activity">
+            <div class="sec-h"><h2>Today</h2><span class="sum">who worked when · asks and failures marked</span></div>
+            <div class="chart stale" id="activity-chart"></div>
+          </section>
+
+          <section class="sec w" data-sec="projects" id="s-projects">
+            <div class="sec-h"><h2>Projects</h2><span class="sum">2 active · 4 with a roadmap · 18 quiet</span></div>
+            <div class="list stale">
+              <div class="li clickable" data-road="aico"><span class="chip work">Running</span><span><span class="t">Aico</span><div class="d">Now: enroll VMs 200 and 201 · 1 question waiting</div></span><span class="x mist">1 agent <span data-i="down"></span></span></div>
+              <div class="road">
+                <h4>Now</h4><ul><li>Enroll VMs 200 and 201 (Aico fleet and OmniNull agent)</li><li>Projects page build</li></ul>
+                <h4>Next</h4><ul><li>The 28 fixes from user testing, once approved</li><li>Performance run: anything over 1 s</li></ul>
+                <h4>Later</h4><ul><li>Leftover sweep across repos</li></ul>
+                <div class="plan" hidden><h4>plan.md · Aico</h4><div class="md" style="background:var(--ink);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:13px"><p><b>Goal:</b> one place to steer every agent on every machine.</p><p><b>M11 Fleet:</b> enroll VMs 200 and 201; sessions show which machine they run on.</p><p><b>M12 Calm UI:</b> the 28 fixes, then the canvases (this mockup).</p><p class="mist">docs/plans/aico/plan.md</p></div></div>
+                <h4>Shipped this week</h4><ul><li>Tether takes projects from Aico’s registry</li><li>“That was me” verdicts go to the OmniNull hub</li><li>Ask files open from the question</li></ul>
+                <div style="margin-top:10px;display:flex;gap:6px"><button class="btn sm" data-plan>Open the plan</button><button class="btn sm quiet" data-sess="coord">Open its session</button></div>
+              </div>
+              <div class="li clickable" data-road="omni"><span class="chip work">Running</span><span><span class="t">OmniNull</span><div class="d">Now: stop writing noise findings · 2 warnings</div></span><span class="x mist"><span data-i="down"></span></span></div>
+              <div class="road">
+                <h4>Now</h4><ul><li>Stop writing noise findings (off-hours, novel process)</li></ul>
+                <h4>Next</h4><ul><li>Page budget per rule</li></ul>
+              </div>
+              <div class="li clickable" data-road="job"><span class="chip plain">Stopped</span><span><span class="t">Jobinator</span><div class="d">Next: deploy the Aico rename commit</div></span><span class="x mist"><span data-i="down"></span></span></div>
+              <div class="road"><h4>Next</h4><ul><li>Deploy the Aico rename commit</li></ul></div>
+              <div class="li clickable" data-road="pai"><span class="chip plain">Stopped</span><span><span class="t">Portfolio AI</span><div class="d">Next: ship the Aico rename commits</div></span><span class="x mist"><span data-i="down"></span></span></div>
+              <div class="road"><h4>Next</h4><ul><li>Ship the Aico rename commits</li></ul></div>
+              <div class="li clickable" data-road="cw"><span class="chip plain">Quiet</span><span><span class="t">Cinderwake</span><div class="d">No roadmap yet</div></span><span class="x mist"><span data-i="down"></span></span></div>
+              <div class="road"><p class="mist" style="margin:10px 0 4px;font-size:13px">No roadmap for Cinderwake yet. An agent writes one when it plans work here.</p><button class="btn sm" data-toast="New session in Cinderwake, asked to draft a roadmap">Ask an agent to draft one</button></div>
+              <div class="li"><span></span><span class="d">18 more with no activity this week</span><span class="x"><button class="btn sm quiet">Show</button></span></div>
+            </div>
+          </section>
+
+          <section class="sec w" data-sec="recent" id="s-recent">
+            <div class="sec-h"><h2>Recent</h2><span class="sum">finished sessions, newest first</span></div>
+            <div class="list stale">
+              <div class="li clickable" data-road="r1"><span class="mark">CC<span class="st done"></span></span><span><span class="t">Weekly job search</span><div class="d">Jobinator · 3:52 PM · 41 min</div></span><span class="x"><span class="chip plain">Finished</span></span></div>
+              <div class="road"><h4>Final reply</h4><p style="margin:2px 0 8px;font-size:13px">Scanned 4 boards, 12 new postings, 3 worth a look. Ranked list is in the jobs queue.</p><button class="btn sm" data-toast="Opens the transcript in the chat pane">Open transcript</button></div>
+              <div class="li clickable" data-road="r2"><span class="mark">CC<span class="st bad"></span></span><span><span class="t">Restore drill</span><div class="d">Aico · stopped 1:10 PM · out of memory</div></span><span class="x"><span class="chip bad">Failed</span></span></div>
+              <div class="road"><h4>Last reply</h4><p style="margin:2px 0 8px;font-size:13px">Checked native, snapshots and append sets. Starting Google Drive…</p><button class="btn sm primary" data-toast="Resuming the restore drill">Resume</button> <button class="btn sm" data-toast="Opens the transcript in the chat pane">Open transcript</button></div>
+              <div class="li clickable" data-road="r3"><span class="mark">PI<span class="st done"></span></span><span><span class="t">Skill sync</span><div class="d">Agent Skills · 11:20 AM · 6 min</div></span><span class="x"><span class="chip plain">Finished</span></span></div>
+              <div class="road"><h4>Final reply</h4><p style="margin:2px 0 8px;font-size:13px">Synced 14 skills to Claude Code, Codex and Pi. No conflicts.</p><button class="btn sm" data-toast="Opens the transcript in the chat pane">Open transcript</button></div>
+            </div>
+          </section>
+
+          <section class="sec w" data-sec="quota" id="s-quota">
+            <div class="sec-h"><h2>Quota and spend</h2><span class="sum">last 7 days, share of each window</span></div>
+            <div class="chart stale" id="spend-chart"></div>
+            <div class="chart-note">Codex has been on credits since Tue. At this pace they run out Mon, two days before the reset.</div>
+          </section>
+
+          <!-- dig sections: full tier only -->
+          <section class="sec" data-sec="backups" id="s-backups">
+            <div class="sec-h"><h2>Backups</h2><span class="sum" id="bk-sum">All 96 copies up to date · newest copy 4:29 PM · restore last proven Nov 5</span><span class="stale-tag">as of 4:23 PM</span></div>
+            <div class="down-only" style="display:none"></div>
+            <div class="chart stale" id="backup-chart"></div>
+            <div class="chart-note">Up to date means a recent copy exists; the restore drill below is what proves it can be restored. Age of the newest copy per destination. The tick is how old it may get before it counts as late.</div>
+            <div class="sh"><h2>By source</h2></div>
+            <div class="list stale">
+              <div class="li"><span class="chip work">Up to date</span><span><span class="t">Workstation · system and projects</span><div class="d">native 3 h old · snapshots 9 min · T7 2 days · Google Drive 11 h</div></span><span class="x"><button class="btn sm quiet">Restore…</button></span></div>
+              <div class="li"><span class="chip work">Up to date</span><span><span class="t">Proxmox host · VMs and containers</span><div class="d">9 VMs and containers · newest 2 h · oldest 21 h</div></span><span class="x"><button class="btn sm quiet">Restore…</button></span></div>
+              <div class="li"><span class="chip work">Up to date</span><span><span class="t">Databases</span><div class="d">Aico, OmniNull, Jobinator, Portfolio · hourly</div></span><span class="x"><button class="btn sm quiet">Restore…</button></span></div>
+              <div class="li"><span class="chip plain">Archived</span><span><span class="t">36 retired sources</span><div class="d">SummitFlow, Agent Hub, Nightshift and older VMs · kept, not updated</div></span><span class="x"><button class="btn sm quiet">Show</button></span></div>
+            </div>
+            <div class="sh"><h2>Last restore drill</h2></div>
+            <div class="list stale"><div class="li"><span class="chip bad">Stopped</span><span><span class="t">3 of 5 sets checked, 1:10 PM</span><div class="d">Google Drive and T7 not checked · last full pass Nov 5</div></span><span class="x"><button class="btn sm primary" data-toast="Resuming the restore drill">Resume</button></span></div></div>
+          </section>
+
+          <section class="sec" data-sec="grants" id="s-grants">
+            <div class="sec-h"><h2>Grants</h2><span class="sum">1 waiting · none active</span></div>
+            <div class="sh"><h2>Waiting</h2></div>
+            <div class="list stale"><div class="li"><span class="chip need">Waiting</span><span><span class="t">GitHub admin for 10 min</span><div class="d">Jobinator release · to create its release repo · expires in 9 min</div></span><span class="x"><button class="btn sm primary" data-answer="ask3">Allow</button><button class="btn sm" data-answer="ask3">Deny</button></span></div></div>
+            <div class="sh"><h2>History</h2></div>
+            <div class="list stale">
+              <div class="li"><span class="chip plain">Ended</span><span><span class="t">Your main Chrome for 15 min</span><div class="d">the security hunt · used 11 min · yesterday 1:45 AM</div></span><span class="x"></span></div>
+              <div class="li"><span class="chip plain">Expired</span><span><span class="t">Your email inbox for 10 min</span><div class="d">Weekly job search · not answered · Wed</div></span><span class="x"></span></div>
+              <div class="li"><span class="chip plain">Ended</span><span><span class="t">GitHub admin for 10 min</span><div class="d">Aico coordinator · repo settings · Tue</div></span><span class="x"></span></div>
+            </div>
+          </section>
+
+          <section class="sec" data-sec="logins" id="s-logins">
+            <div class="sec-h"><h2>Logins</h2><span class="sum">sites agents can use while signed in as you</span></div>
+            <div class="list stale">
+              <div class="li"><span class="chip work">Signed in</span><span><span class="t">LinkedIn</span><div class="d">used by Weekly job search · checked today</div></span><span class="x"><button class="btn sm quiet">Sign out</button></span></div>
+              <div class="li"><span class="chip work">Signed in</span><span><span class="t">GitHub</span><div class="d">read only · checked today</div></span><span class="x"><button class="btn sm quiet">Sign out</button></span></div>
+              <div class="li"><span class="chip warn">Expiring</span><span><span class="t">Google Drive</span><div class="d">backups use it · token renews in 2 days</div></span><span class="x"><button class="btn sm">Renew</button></span></div>
+              <div class="li"><span class="chip plain">Signed out</span><span><span class="t">Greenhouse</span><div class="d">not needed since Oct</div></span><span class="x"><button class="btn sm quiet">Sign in</button></span></div>
+            </div>
+          </section>
+
+          <section class="sec" data-sec="machines" id="s-machines">
+            <div class="sec-h"><h2>Machines</h2><span class="sum">8 machines · 3 can host sessions</span></div>
+            <div class="list stale">
+              <div class="li"><span class="chip work">On</span><span><span class="t">Workstation <span class="chip plain" style="margin-left:4px">Session host</span></span><div class="d">6 sessions · memory 41 of 64 GiB · swap 81%</div></span><span class="x"></span></div>
+              <div class="li"><span class="chip work">On</span><span><span class="t">Proxmox host</span><div class="d">9 VMs and containers · 1 shell session</div></span><span class="x"></span></div>
+              <div class="li"><span class="chip work">On</span><span><span class="t">hunt VM <span class="chip plain" style="margin-left:4px">Session host</span></span><div class="d">the security hunt · 1 session</div></span><span class="x"></span></div>
+              <div class="li"><span class="chip plain">Off</span><span><span class="t">agent-work VM <span class="chip plain" style="margin-left:4px">Session host</span></span><div class="d">off since 4:05 AM · sleeps when idle</div></span><span class="x"><button class="btn sm" data-toast="Asks before powering on agent-work">Power on…</button></span></div>
+              <div class="li"><span class="chip work">On</span><span><span class="t">OmniNull hub</span><div class="d">detection and paging</div></span><span class="x"></span></div>
+              <div class="li"><span class="chip work">On</span><span><span class="t">apps VM</span><div class="d">Portfolio and other apps · 4 jobs with errors</div></span><span class="x"></span></div>
+              <div class="li"><span class="chip work">On</span><span><span class="t">Jobinator VM</span><div class="d">scans and screening</div></span><span class="x"></span></div>
+              <div class="li"><span class="chip work">On</span><span><span class="t">Phone</span><div class="d">Aico app · last push 4:12 PM</div></span><span class="x"></span></div>
+            </div>
+          </section>
+
+          <section class="sec" data-sec="recovery" id="s-recovery">
+            <div class="sec-h"><h2>Recovery</h2><span class="sum">what stopped, what came back</span></div>
+            <div class="list stale">
+              <div class="li"><span class="chip bad">Stopped</span><span><span class="t">Restore drill</span><div class="d">out of memory at 1:10 PM · not resumed</div></span><span class="x"><button class="btn sm primary" data-toast="Resuming the restore drill">Resume</button></span></div>
+              <div class="li"><span class="chip work">Resumed</span><span><span class="t">Security hunt</span><div class="d">connection reset at 9:02 AM · resumed by itself 9:03 AM</div></span><span class="x"></span></div>
+              <div class="li"><span class="chip work">Resumed</span><span><span class="t">Aico coordinator</span><div class="d">Aico redeploy at 2:40 PM · back in 6 s</div></span><span class="x"></span></div>
+            </div>
+          </section>
+
+          <section class="sec" data-sec="notes" id="s-notes">
+            <div class="sec-h"><h2>Notes</h2><span class="sum">4 notes</span><span class="act"><button class="btn sm" data-pop="notes"><span data-i="popout"></span>Pop out</button></span></div>
+            <div class="list stale">
+              <div class="li"><span></span><span><span class="t">Owner ideas: left pane canvases</span><div class="d">drag the left side over the chat; notes detach…</div></span><span class="x mist">today</span></div>
+              <div class="li"><span></span><span><span class="t">Telegram bot</span><div class="d">token <span class="mask">•••••••• hidden</span> · rotate after the hunt</div></span><span class="x mist">Wed</span></div>
+              <div class="li"><span></span><span><span class="t">Omarchy workstation</span><div class="d">inventory first, restore test before any wipe</div></span><span class="x mist">Oct 30</span></div>
+            </div>
+          </section>
+
+          <section class="sec" data-sec="settings" id="s-settings">
+            <div class="sec-h"><h2>Settings</h2></div>
+            <div class="list stale">
+              <div class="li"><span data-i="user"></span><span><span class="t">Agents</span><div class="d">Claude Code, Codex, Pi · models, roles, what each one is told at start</div></span><span class="x"><button class="btn sm quiet">Open</button></span></div>
+              <div class="li"><span data-i="phone"></span><span><span class="t">Phone app</span><div class="d">Pixel paired · pushes on: questions, failures, morning digest</div></span><span class="x"><button class="btn sm quiet">Open</button></span></div>
+              <div class="li"><span data-i="gear"></span><span><span class="t">New sessions</span><div class="d">start with the last agent used · Workstation</div></span><span class="x"><button class="btn sm quiet">Open</button></span></div>
+            </div>
+          </section>
+        </div>
+       </div>
+      </div>
+      <div class="handle" id="handle" role="separator" aria-orientation="vertical" aria-label="Drag to widen or narrow: rail, panel, wide, full" tabindex="0"><span class="grip"></span></div>
+    </aside>
+
+    <!-- ===== the session pane: stays like it is ===== -->
+    <main class="chat" aria-label="Session">
+      <div class="log" id="log"></div>
+      <div class="composer">
+        <div class="down-banner"><span data-i="alert"></span><span id="down-text">Can’t reach Aico since 4:23 PM. Your message stays here until it’s back.</span><span class="spacer"></span><button class="btn sm" data-toast="Retrying…">Retry</button></div>
+        <div class="box"><textarea rows="1" placeholder="Message Aico coordinator" aria-label="Message"></textarea><button class="btn primary sm" aria-label="Send"><span data-i="send"></span></button></div>
+        <div class="hint">Enter to send · Shift+Enter for a new line</div>
+      </div>
+    </main>
+
+    <div class="snaps" id="snaps"></div>
+  </div>
+
+  <!-- new session -->
+  <div class="scrim" id="dlg-new">
+    <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="dlg-new-h">
+      <h2 id="dlg-new-h">New session</h2>
+      <div class="field"><span class="lbl">Agent</span>
+        <div class="agents" id="agents"><button aria-pressed="true">Claude Code</button><button aria-pressed="false">Codex</button><button aria-pressed="false">Pi</button><button aria-pressed="false">Shell</button></div>
+        <div class="help">Claude Code was the last one you used.</div></div>
+      <div class="field"><label for="f-proj">Project</label><select id="f-proj"><option>Aico</option><option>OmniNull</option><option>Jobinator</option><option>Portfolio AI</option><option>Cinderwake</option></select></div>
+      <div class="field"><label for="f-host">Machine</label><select id="f-host"><option>Workstation</option><option>hunt VM</option><option>agent-work VM (off, powers on first)</option></select></div>
+      <div class="field"><label for="f-name">Name <span class="mist" style="font-weight:400">(optional)</span></label><input id="f-name" placeholder="Named after its first message if blank"></div>
+      <div class="row"><button class="btn quiet" data-close>Cancel</button><button class="btn primary" id="start-btn">Start Claude Code</button></div>
+    </div>
+  </div>
+
+  <!-- notes popped out: its own window (app/notes) -->
+  <div class="notes-win" id="notes-win" role="dialog" aria-label="Notes window">
+    <div class="wt"><span data-i="note"></span><b>Notes · Aico</b><span>window blocked, shown here</span><span class="spacer"></span><button class="icon-btn" id="notes-close" aria-label="Close notes window"><span data-i="x"></span></button></div>
+    <div style="padding:8px 10px;border-bottom:1px solid var(--line)"><button class="btn sm">New note</button></div>
+    <div class="note"><div class="nt">Owner ideas: left pane canvases</div><div class="np">drag the left side over the chat; notes detach…</div></div>
+    <div class="note"><div class="nt">Telegram bot</div><div class="np">token <span class="mask">•••••••• hidden</span> · rotate after the hunt</div></div>
+    <div class="note"><div class="nt">Omarchy workstation</div><div class="np">inventory first, restore test before any wipe</div></div>
+  </div>
+
+  <div class="toast" id="toast" role="status"></div>
+  <div class="tip" id="tip" role="tooltip"></div>
+</div>
+</div>
+
+<script>
+const ICONS = {
+  menu: '<path d="M4 6h16M4 12h16M4 18h16"/>', plus: '<path d="M12 5v14M5 12h14"/>', left: '<path d="M15 6l-6 6 6 6"/>', right: '<path d="M9 6l6 6-6 6"/>',
+  back: '<path d="M19 12H5M11 6l-6 6 6 6"/>', x: '<path d="M6 6l12 12M18 6L6 18"/>', inbox: '<path d="M3 13h5l2 3h4l2-3h5"/><path d="M5 5h14l2 8v6H3v-6z"/>',
+  pulse: '<path d="M3 12h4l3-7 4 14 3-7h4"/>', gauge: '<path d="M4 18a8 8 0 1 1 16 0"/><path d="M12 18l4-6"/>', folder: '<path d="M3 6h6l2 2h10v11H3z"/>',
+  db: '<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>', note: '<path d="M6 3h9l4 4v14H6z"/><path d="M9 11h7M9 15h5"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>', key: '<circle cx="8" cy="14" r="4"/><path d="M11 11l9-9M17 5l2 2"/>', user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/>',
+  server: '<rect x="4" y="4" width="16" height="7" rx="1.5"/><rect x="4" y="13" width="16" height="7" rx="1.5"/><path d="M8 7.5h.01M8 16.5h.01"/>', undo: '<path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-4"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
+  popout: '<path d="M14 4h6v6M20 4l-8 8M18 14v6H4V6h6"/>', down: '<path d="M6 9l6 6 6-6"/>', alert: '<path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01"/>',
+  send: '<path d="M5 12h14M13 6l6 6-6 6"/>', phone: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>'
+};
+document.querySelectorAll('[data-i]').forEach(el => { el.outerHTML = `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICONS[el.dataset.i] || ''}</svg>`; });
+
+const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+const app = $('#app'), pane = $('#pane'), stage = $('#stage');
+const TIERS = ['rail', 'panel', 'wide', 'full'];
+const state = { tier: 'panel', sec: 'status', phone: false, sheet: false, sub: null, session: 'coord' };
+
+/* ---------- sessions and the chat pane ---------- */
+const SESS = {
+  coord: { name: 'Aico coordinator', mark: 'CC', sub: 'Live · working · sized here', log: [
+    ['you', 'Build mockup 2 of the left side: much calmer than the first one. Same 28 items.'],
+    ['agent', 'On it. Reading the live app, the tester reports and the first mockup first.', ['Read  SessionSidebar.tsx', 'Fetch /api/status · 7 warnings, 304 healthy', 'Fetch /api/backups · 134 entries']],
+    ['agent', 'Ranking what you need by how often and how urgent: questions and stuck sessions at a glance, quota and the worst problem one look away, backups and grants when you dig.'],
+    ['you', 'Keep the chat where it is. The left side just slides over it.'],
+    ['agent', 'Done that way: drag its edge, it snaps at rail, panel, wide and full. The chat stays beside it until full.', ['Write mockup-2/index.html', 'Screenshot 4 tiers, desktop and phone']]
+  ]},
+  noise: { name: 'Rule noise cleanup', mark: 'CC', sub: 'Live · needs you · sized here', log: [
+    ['agent', 'Found the source of the pages: the nightly build uploads release files and trips “upload to a new place”.', ['Read  rules/upload_new_place.yaml', 'Query incidents · 3 this week, all build-01']],
+    ['agent', 'Asked you whether to mute it for the build machine only. Waiting on your answer before changing the rule.']
+  ]},
+  proj: { name: 'Projects page build', mark: 'CC', sub: 'Live · working', log: [['agent', 'Wiring the roadmap Now / Next labels.', ['Edit  components/projects/Roadmap.tsx', 'st check --quick --changed-only · passed']]] },
+  hunt: { name: 'Security hunt', mark: 'CX', sub: 'Live · working · quiet 14 min', log: [['agent', 'Still reading the target’s public docs. Nothing to report yet.']] },
+  cockpit: { name: 'Portfolio cockpit fixes', mark: 'CX', sub: 'Live · idle 40 min', log: [['agent', 'Fixed the chart overflow and committed. Anything else on the cockpit?']] },
+  gem: { name: 'Shell on Proxmox host', mark: '>_', sub: 'Live · idle 2 h', log: [['agent', 'root@davion-gem:~# qm list', ['VMID NAME          STATUS', ' 200 aico-fleet     running', ' 201 omninull-agent running']]] },
+  fresh: { name: 'New session', mark: 'CC', sub: 'Connecting…', log: [['agent', 'Starting Claude Code in Aico on Workstation…']] }
+};
+function esc(s) { return s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]); }
+function showSession(id) {
+  const s = SESS[id]; state.session = id;
+  $('#cur-name').textContent = s.name; $('#cur-mark').textContent = s.mark;
+  $('#cur-sub').textContent = app.classList.contains('down') ? 'Disconnected · Reconnect' : s.sub;
+  $('#log').innerHTML = s.log.map(([who, text, tools]) => `<div class="msg ${who}"><div class="who">${who === 'you' ? 'You' : s.name}</div><div class="body-t"><p>${esc(text)}</p>${(tools || []).map(t => `<div class="tool">${esc(t)}</div>`).join('')}</div></div>`).join('');
+  $('.composer textarea').placeholder = 'Message ' + s.name;
+  $$('.srow').forEach(r => r.classList.toggle('current', r.dataset.sess === id));
+  $$('.rail .rb[data-sess]').forEach(r => r.classList.toggle('cur', r.dataset.sess === id));
+  if (state.tier === 'full') setTier('panel');
+  if (state.phone) closeSheet();
+}
+
+/* ---------- tiers ---------- */
+function setTier(t, opts = {}) {
+  state.tier = t; app.dataset.tier = t; pane.style.width = '';
+  $$('#m-tier button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.t === t)));
+  $('#narrow').disabled = t === 'rail'; $('#wider').disabled = t === 'full';
+  $('#wider').style.display = t === 'full' || t === 'rail' ? 'none' : '';
+  $('#sheet-close').style.display = t === 'full' && !state.phone ? '' : (state.phone ? '' : 'none');
+  $('#sheet-close').title = state.phone ? 'Back to the session' : 'Back to the session · Esc';
+  $('.nlbl').style.display = t === 'rail' ? 'none' : '';
+  $('#new-btn').classList.toggle('icon', t === 'rail');
+  $('#narrow').style.display = t === 'rail' ? 'none' : '';
+  $('.pane-head').style.padding = t === 'rail' ? '0 0 0 14px' : '';
+  if (t === 'full') selectSec(state.sec);
+  chartsSoon();
+}
+function selectSec(sec) {
+  state.sec = sec;
+  $$('.sec').forEach(s => s.classList.toggle('on', s.dataset.sec === sec));
+  $$('.dig-nav button').forEach(b => b.setAttribute('aria-current', String(b.dataset.sec === sec)));
+  chartsSoon();
+}
+function go(spec) {
+  const [tier, target] = spec.split(':');
+  if (state.phone) { // tiers collapse to one on the phone
+    openSheet();
+    if (tier === 'panel') { setSub(null); scrollTo(target); }
+    else { setSub(target); }
+    return;
+  }
+  const wideSecs = ['status', 'activity', 'projects', 'recent', 'quota'];
+  if (tier === 'wide' && state.tier === 'full') { selectSec(target); return; }
+  if (tier === 'panel' && (state.tier === 'wide')) { scrollTo(target); return; }
+  if (tier === state.tier) { scrollTo(target); return; }
+  setTier(tier);
+  if (tier === 'full') selectSec(target); else state.sec = wideSecs.includes(target) ? target : state.sec;
+  setTimeout(() => scrollTo(tier === 'full' ? null : target), 260);
+}
+function scrollTo(id) {
+  const cols = $$('.col-now, .col-more');
+  if (!id) { cols.forEach(c => c.scrollTop = 0); return; }
+  const el = (state.tier === 'wide' && document.getElementById('s-' + id)) || document.getElementById(id) || document.getElementById('s-' + id);
+  if (!el || !el.offsetParent) { cols.forEach(c => c.scrollTop = 0); return; }
+  const sc = el.closest('.col-now, .col-more');
+  const top = el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - 8;
+  sc.scrollTo({ top, behavior: 'instant' });
+  el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+}
+
+/* ---------- phone sheet ---------- */
+function openSheet() { state.sheet = true; stage.querySelector('.app').classList.add('sheet'); }
+function closeSheet() { state.sheet = false; setSub(null); app.classList.remove('sheet'); }
+function setSub(sec) {
+  state.sub = sec; app.classList.toggle('sub', !!sec);
+  if (sec) { selectSec(sec); $('.col-more').scrollTop = 0; }
+  const names = { status: 'Status', activity: 'Today', projects: 'Projects', recent: 'Recent', quota: 'Quota', backups: 'Backups', grants: 'Grants', logins: 'Logins', machines: 'Machines', recovery: 'Recovery', notes: 'Notes', settings: 'Settings' };
+  $('#phone-back').setAttribute('aria-label', 'Back to Aico');
+}
+function setDevice(d) {
+  state.phone = d === 'phone';
+  stage.classList.toggle('phone', state.phone); app.classList.toggle('phone', state.phone);
+  $$('#m-dev button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.dev === d)));
+  closeSheet(); setTier(state.phone ? 'panel' : state.tier);
+  $('#sheet-close').style.display = state.phone ? '' : 'none';
+}
+
+/* ---------- drag with snap points ---------- */
+const handle = $('#handle'), snaps = $('#snaps'), tip = $('#tip');
+function snapPoints() { const W = $('#body').clientWidth; return { rail: 64, panel: 360, wide: Math.round(W * 0.58), full: W }; }
+function tierFor(w) { const p = snapPoints(); return w < (p.rail + p.panel) / 2 ? 'rail' : w < (p.panel + p.wide) / 2 ? 'panel' : w < (p.wide + p.full) / 2 ? 'wide' : 'full'; }
+let drag = null;
+handle.addEventListener('pointerdown', e => {
+  if (e.button !== 0) return; e.preventDefault(); handle.setPointerCapture(e.pointerId);
+  drag = { x: e.clientX, w: pane.getBoundingClientRect().width }; pane.classList.add('dragging'); hideTip();
+  const p = snapPoints();
+  snaps.innerHTML = Object.entries(p).map(([k, x]) => `<span class="ln" style="left:${Math.min(x, p.full - 1)}px"></span><span class="sp" data-k="${k}" style="left:${Math.min(Math.max(x, 40), p.full - 40)}px">${k[0].toUpperCase() + k.slice(1)}</span>`).join('');
+  snaps.classList.add('on');
+});
+handle.addEventListener('pointermove', e => {
+  if (!drag) return;
+  const W = $('#body').clientWidth, w = Math.max(64, Math.min(W, drag.w + e.clientX - drag.x));
+  pane.style.width = w + 'px'; const t = tierFor(w); app.dataset.tier = t;
+  $$('#snaps .sp').forEach(s => s.classList.toggle('near', s.dataset.k === t));
+});
+function endDrag() { if (!drag) return; const t = tierFor(pane.getBoundingClientRect().width); drag = null; pane.classList.remove('dragging'); snaps.classList.remove('on'); setTier(t); }
+handle.addEventListener('pointerup', endDrag); handle.addEventListener('pointercancel', endDrag);
+handle.addEventListener('dblclick', () => setTier('panel'));
+handle.addEventListener('keydown', e => {
+  const i = TIERS.indexOf(state.tier);
+  if (e.key === 'ArrowRight') setTier(TIERS[Math.min(3, i + 1)]); else if (e.key === 'ArrowLeft') setTier(TIERS[Math.max(0, i - 1)]);
+  else if (e.key === 'Home') setTier('rail'); else if (e.key === 'End') setTier('full'); else return; e.preventDefault();
+});
+const TIP = `<b>Drag to resize</b> · snaps to Rail, Panel, Wide, Full
+<div class="r"><span>Rail · Panel · Wide · Full</span><span><kbd>Alt+1</kbd>–<kbd>Alt+4</kbd></span></div>
+<div class="r"><span>Narrower · wider</span><span><kbd>Alt+[</kbd> <kbd>Alt+]</kbd></span></div>
+<div class="r"><span>Back to Panel</span><span>double-click · <kbd>Esc</kbd></span></div>`;
+function showTip() { if (drag) return; const r = handle.getBoundingClientRect(), b = app.getBoundingClientRect(); tip.innerHTML = TIP; tip.style.left = (r.right - b.left + 10) + 'px'; tip.style.top = (r.top - b.top + r.height / 2 - 50) + 'px'; tip.classList.add('on'); }
+function hideTip() { tip.classList.remove('on'); }
+handle.addEventListener('pointerenter', showTip); handle.addEventListener('pointerleave', hideTip); handle.addEventListener('focus', showTip); handle.addEventListener('blur', hideTip);
+document.addEventListener('keydown', e => {
+  if (e.altKey && /^[1-4]$/.test(e.key)) { setTier(TIERS[+e.key - 1]); e.preventDefault(); }
+  else if (e.altKey && (e.key === '[' || e.key === ']')) { const i = TIERS.indexOf(state.tier); setTier(TIERS[Math.max(0, Math.min(3, i + (e.key === ']' ? 1 : -1)))]); e.preventDefault(); }
+  else if (e.key === 'Escape') { if ($('.scrim.on')) $('.scrim.on').classList.remove('on'); else if (state.phone && state.sheet) closeSheet(); else if (state.tier === 'full' || state.tier === 'wide') setTier('panel'); }
+});
+
+/* ---------- charts: only where a picture answers faster ---------- */
+function activityChart() {
+  const el = $('#activity-chart'), W = el.clientWidth - 24; if (W < 100) return;
+  const rows = [
+    ['Aico coordinator', [[8.2, 16.52, 'w']], [[11.7, 'a']]], ['Rule noise cleanup', [[13.1, 16.3, 'w']], [[16.3, 'a']]],
+    ['Projects page build', [[14.4, 16.52, 'w']], []], ['Security hunt', [[6.0, 9.03, 'w'], [9.05, 16.52, 'w']], [[9.03, 'r']]],
+    ['Portfolio cockpit fixes', [[10.5, 15.85, 'w']], []], ['Weekly job search', [[15.18, 15.87, 'w']], []],
+    ['Restore drill', [[11.9, 13.17, 'w']], [[13.17, 'f']]], ['Skill sync', [[11.23, 11.33, 'w']], []]
+  ];
+  const L = Math.min(150, W * 0.34), R = W - 12, x0 = 6, x1 = 17, X = h => L + (h - x0) / (x1 - x0) * (R - L), rh = 22, H = rows.length * rh + 24;
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="${W}" role="img" aria-label="Session activity from 6 AM to now">`;
+  for (let h = 6; h <= 16; h += 2) s += `<line x1="${X(h)}" x2="${X(h)}" y1="0" y2="${rows.length * rh}" stroke="rgb(255 255 255 / 0.06)"/><text x="${X(h)}" y="${rows.length * rh + 16}" text-anchor="middle">${h > 12 ? h - 12 + ' PM' : h + (h === 12 ? ' PM' : ' AM')}</text>`;
+  s += `<line x1="${X(16.52)}" x2="${X(16.52)}" y1="0" y2="${rows.length * rh}" stroke="var(--lantern)" stroke-dasharray="2 3"/><text x="${X(16.52)}" y="${rows.length * rh + 16}" text-anchor="middle" fill="var(--lantern)">now</text>`;
+  rows.forEach(([n, segs, marks], i) => {
+    const y = i * rh + 5;
+    s += `<text class="lab" x="0" y="${y + 10}">${n}</text>`;
+    segs.forEach(([a, b]) => s += `<rect x="${X(a)}" y="${y + 2}" width="${Math.max(2, X(b) - X(a))}" height="9" rx="3" fill="var(--bone)" opacity="0.35"/>`);
+    marks.forEach(([t, k]) => {
+      if (k === 'a') s += `<circle cx="${X(t)}" cy="${y + 6.5}" r="4.5" fill="var(--beacon)"/>`;
+      if (k === 'f') s += `<rect x="${X(t) - 4}" y="${y + 2.5}" width="8" height="8" fill="var(--ember)" transform="rotate(45 ${X(t)} ${y + 6.5})"/>`;
+      if (k === 'r') s += `<circle cx="${X(t)}" cy="${y + 6.5}" r="3.5" fill="none" stroke="var(--mist)" stroke-width="1.5"/>`;
+    });
+  });
+  s += '</svg>';
+  el.innerHTML = s + `<div class="legend" style="margin-top:6px"><span><i></i>working</span><span><svg width="9" height="9"><circle cx="4.5" cy="4.5" r="4" fill="var(--beacon)"/></svg> asked you</span><span><svg width="9" height="9"><rect x="1.5" y="1.5" width="6" height="6" fill="var(--ember)" transform="rotate(45 4.5 4.5)"/></svg> failed</span><span><svg width="9" height="9"><circle cx="4.5" cy="4.5" r="3" fill="none" stroke="var(--mist)" stroke-width="1.5"/></svg> reconnected</span></div>`;
+}
+function spendChart() {
+  const el = $('#spend-chart'), W = el.clientWidth - 24; if (W < 100) return;
+  const days = ['Fri', 'Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu'];
+  const data = { Claude: [3, 2, 1, 4, 3, 3, 2], Codex: [9, 7, 8, 11, 14, 0, 0], 'Codex credits': [0, 0, 0, 0, 0, 1.6, 1.9], 'OpenCode Go': [10, 12, 0, 22, 30, 26, 0] };
+  const rows = [['Claude', '% of week'], ['Codex', '% of week'], ['OpenCode Go', '% of week']];
+  const L = Math.min(110, W * 0.26), cw = Math.min(64, (W - L) / 7), H = 30, gap = 14;
+  let s = `<svg viewBox="0 0 ${W} ${rows.length * (H + gap) + 18}" width="${W}" role="img" aria-label="Spend per day per provider, last 7 days">`;
+  rows.forEach(([p], i) => {
+    const y = i * (H + gap), max = 30;
+    s += `<text class="lab" x="0" y="${y + H - 10}">${p}</text>`;
+    days.forEach((d, j) => {
+      const v = data[p][j], h = Math.max(v ? 2 : 0, v / max * H), x = L + j * cw;
+      s += `<rect x="${x}" y="${y + H - h}" width="${cw * 0.7}" height="${h}" rx="2" fill="var(--bone)" opacity="0.5"/>`;
+      if (p === 'Codex' && data['Codex credits'][j]) { const ch = data['Codex credits'][j] * 8; s += `<rect x="${x}" y="${y + H - ch}" width="${cw * 0.7}" height="${ch}" rx="2" fill="var(--lantern)" opacity="0.8"/><text x="${x + cw * 0.35}" y="${y + H - ch - 4}" text-anchor="middle">${data['Codex credits'][j]}K</text>`; }
+      else if (v) s += `<text x="${x + cw * 0.35}" y="${y + H - h - 4}" text-anchor="middle">${v}%</text>`;
+      if (!v && !(p === 'Codex' && data['Codex credits'][j])) s += `<text x="${x + cw * 0.35}" y="${y + H - 2}" text-anchor="middle">–</text>`;
+    });
+  });
+  days.forEach((d, j) => s += `<text x="${L + j * cw + cw * 0.35}" y="${rows.length * (H + gap) + 10}" text-anchor="middle">${d}</text>`);
+  s += '</svg>';
+  el.innerHTML = s + `<div class="legend" style="margin-top:6px"><span><i></i>share of the weekly window</span><span><i style="background:var(--lantern);opacity:.8"></i>Codex credits spent</span></div>`;
+}
+function backupChart() {
+  const el = $('#backup-chart'), W = Math.min(760, el.clientWidth - 24); if (W < 100) return;
+  const rows = [['Snapshots', 0.15, 2], ['Native copy', 3, 6], ['Databases', 0.6, 2], ['Proxmox VMs', 21, 30], ['Google Drive', 11, 30], ['T7 drive', 48, 192]];
+  const L = Math.min(120, W * 0.3), R = W - 50, max = 200, X = h => L + Math.log10(1 + h) / Math.log10(1 + max) * (R - L), rh = 22;
+  let s = `<svg viewBox="0 0 ${W} ${rows.length * rh + 24}" width="${W}" role="img" aria-label="Backup age per destination against its limit">`;
+  [[1, '1 h'], [6, '6 h'], [24, '1 day'], [72, '3 days'], [192, '8 days']].forEach(([h, l]) => s += `<line x1="${X(h)}" x2="${X(h)}" y1="0" y2="${rows.length * rh}" stroke="rgb(255 255 255 / 0.06)"/><text x="${X(h)}" y="${rows.length * rh + 16}" text-anchor="middle">${l}</text>`);
+  rows.forEach(([n, age, lim], i) => {
+    const y = i * rh + 5;
+    s += `<text class="lab" x="0" y="${y + 10}">${n}</text><rect x="${L}" y="${y + 3}" width="${X(age) - L}" height="8" rx="3" fill="var(--jade)" opacity="0.55"/><line x1="${X(lim)}" x2="${X(lim)}" y1="${y}" y2="${y + 14}" stroke="var(--bone)" stroke-width="2"/><text x="${X(age) + 6}" y="${y + 10}">${age < 1 ? Math.round(age * 60) + ' min' : age < 48 ? age + ' h' : age / 24 + ' days'}</text>`;
+  });
+  el.innerHTML = s + '</svg>';
+}
+function renderCharts() { activityChart(); spendChart(); backupChart(); }
+let chartT; function chartsSoon() { clearTimeout(chartT); chartT = setTimeout(renderCharts, 260); }
+addEventListener('resize', chartsSoon);
+
+/* ---------- clicks ---------- */
+function toast(t) { const el = $('#toast'); el.textContent = t; el.classList.add('on'); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('on'), 2200); }
+document.addEventListener('click', e => {
+  const t = e.target.closest('button, .li.clickable'); if (!t) return;
+  if (t.dataset.go) { go(t.dataset.go); return; }
+  if (t.dataset.tierGo) { setTier(t.dataset.tierGo); return; }
+  if (t.dataset.expand) { t.closest('.ask').classList.toggle('open'); t.textContent = t.closest('.ask').classList.contains('open') ? 'Hide answers' : 'Answer'; return; }
+  if (t.dataset.sess) { if (t.dataset.sess === state.session && !t.classList.contains('srow') && !t.classList.contains('rb')) toast(SESS[t.dataset.sess].name + ' is already on screen'); showSession(t.dataset.sess); return; }
+  if (t.dataset.sec) { selectSec(t.dataset.sec); return; }
+  if (t.dataset.pop) { popNotes(); return; }
+  if (t.dataset.toast) { toast(t.dataset.toast); return; }
+  if (t.dataset.file) { const card = t.closest('.ask'); card.classList.add('viewing'); card.querySelectorAll('.viewer').forEach(v => v.style.display = v.dataset.viewer === t.dataset.file ? 'block' : 'none'); return; }
+  if (t.hasAttribute('data-close-file')) { const card = t.closest('.ask'); card.classList.remove('viewing'); card.querySelectorAll('.viewer').forEach(v => v.style.display = ''); return; }
+  if (t.dataset.answer) { toast('Answer sent'); return; }
+  if (t.dataset.road) { t.classList.toggle('open'); return; }
+  if (t.hasAttribute('data-plan')) { const pl = t.closest('.road').querySelector('.plan'); pl.hidden = !pl.hidden; t.textContent = pl.hidden ? 'Open the plan' : 'Hide the plan'; return; }
+  if (t.hasAttribute('data-close')) { t.closest('.scrim').classList.remove('on'); return; }
+});
+$('#new-btn').onclick = () => $('#dlg-new').classList.add('on');
+$$('#agents button').forEach(b => b.onclick = () => { $$('#agents button').forEach(x => x.setAttribute('aria-pressed', String(x === b))); $('#start-btn').textContent = b.textContent === 'Shell' ? 'Start a shell' : 'Start ' + b.textContent; });
+$('#start-btn').onclick = () => {
+  $('#dlg-new').classList.remove('on');
+  const name = $('#f-name').value.trim() || 'New session'; SESS.fresh.name = name;
+  if (!document.querySelector('.srow[data-sess=fresh]')) {
+    const row = document.createElement('button'); row.className = 'srow'; row.dataset.sess = 'fresh';
+    row.innerHTML = `<span class="mark">CC<span class="st work"></span></span><span><span class="nm" style="display:block">${esc(name)}</span><span class="ds" style="display:block">Claude Code · ${esc($('#f-proj').value)} · renamed after your first message</span></span><span class="rt"></span>`;
+    $$('.grp')[1].querySelector('.grp-h').after(row);
+    $('#sess-n').textContent = '10'; const wh = $$('.grp')[1].querySelector('.grp-h'); wh.innerHTML = '<b>Working</b> 4';
+  }
+  showSession('fresh'); setTimeout(() => { SESS.fresh.sub = 'Live · working · sized here'; if (state.session === 'fresh') $('#cur-sub').textContent = SESS.fresh.sub; }, 900);
+};
+function popNotes() {
+  const html = '<!doctype html><meta charset="utf-8"><title>Notes · Aico</title><style>body{margin:0;background:#1c1f24;color:#e7e2d6;font:14px system-ui}h1{font:600 15px system-ui;padding:12px;margin:0;border-bottom:1px solid #333}.n{padding:10px 12px;border-bottom:1px solid #2a2d33}.n b{display:block}.n span{color:#8b8f94;font-size:12.5px}</style><h1>Notes</h1>' + [...document.querySelectorAll('#notes-win .note')].map(n => '<div class=n><b>' + n.querySelector('.nt').textContent + '</b><span>' + n.querySelector('.np').textContent + '</span></div>').join('');
+  let w = null; try { w = window.open(URL.createObjectURL(new Blob([html], { type: 'text/html' })), 'aico-notes', 'popup,width=380,height=520'); } catch (e) {}
+  if (w) toast('Notes opened in their own window');
+  else { $('#notes-win').classList.add('on'); toast('The browser blocked the window, so notes open here'); }
+}
+$('#notes-close').onclick = () => $('#notes-win').classList.remove('on');
+$('#tb-need').onclick = () => go('panel:needs');
+$('#tb-health').onclick = () => go('wide:status');
+$('#tb-quota').onclick = () => go('wide:quota');
+$('#tb-cur').onclick = () => go('panel:sessions');
+$('#menu-btn').onclick = () => { openSheet(); setSub(null); };
+$('#sheet-close').onclick = () => state.phone ? closeSheet() : setTier('panel');
+$('#phone-back').onclick = () => setSub(null);
+$('#narrow').onclick = () => setTier(TIERS[Math.max(0, TIERS.indexOf(state.tier) - 1)]);
+$('#wider').onclick = () => setTier(TIERS[Math.min(3, TIERS.indexOf(state.tier) + 1)]);
+$$('.rail .rb[data-sess]').forEach(b => b.addEventListener('click', () => {}));
+
+/* ---------- mockup controls ---------- */
+$$('#m-tier button').forEach(b => b.onclick = () => { if (state.phone) setDevice('desktop'); setTier(b.dataset.t); });
+$$('#m-dev button').forEach(b => b.onclick = () => setDevice(b.dataset.dev));
+$('#m-down').onchange = e => {
+  const down = e.target.checked; app.classList.toggle('down', down);
+  $('#health-dot').className = 'dot ' + (down ? 'bad' : 'warn');
+  $('#health-lbl').innerHTML = down ? '<span class="count">Offline</span> · can’t reach Aico since 4:23 PM' : '<span class="count">7</span> warnings';
+  $('#tb-health').title = down ? 'Can’t reach Aico since 4:23 PM. What you see is the last known state.' : 'Status: 7 warnings, nothing failed, 304 healthy';
+  $('#cur-sub').textContent = down ? 'Disconnected · Reconnect' : SESS[state.session].sub;
+  $('#bk-sum').textContent = down ? 'Can’t load backups. Last known: all 96 current at 4:23 PM' : 'All 96 copies up to date · newest copy 4:29 PM · restore last proven Nov 5';
+};
+$('#m-reset').onclick = () => location.reload();
+const q = new URLSearchParams(location.search);
+showSession('coord'); setTier(q.get('tier') || 'panel');
+if (q.get('sec') && q.get('tier') === 'full') selectSec(q.get('sec'));
+</script>
+</body>
+</html>
