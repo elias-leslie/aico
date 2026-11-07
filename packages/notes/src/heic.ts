@@ -13,6 +13,10 @@ export type Runner = (argv: string[]) => Promise<number>
 
 /** Conversions that run longer than this are stopped (a hung decoder, not a slow one). */
 const CONVERT_TIMEOUT_MS = 120_000
+/** The longest edge of a preview, in pixels; a bigger picture is scaled down to fit. */
+export const PREVIEW_MAX_PX = 2000
+/** ImageMagick 7 first, then 6: the first one this machine has does the scaling. */
+const RESIZERS = ['magick', 'convert']
 
 export const execRunner: Runner = (argv) =>
   new Promise((resolve, reject) => {
@@ -39,14 +43,52 @@ async function looksLikeJpeg(path: string): Promise<boolean> {
 }
 
 /**
+ * Scales the JPEG at `path` down to PREVIEW_MAX_PX on its longest edge (smaller
+ * pictures are left alone). Returns false when no ImageMagick is installed or it
+ * fails; the caller then keeps the full-size JPEG, which still works.
+ */
+async function capSize(runner: Runner, path: string): Promise<boolean> {
+  const scaled = `${path}.small.jpg`
+  try {
+    for (const program of RESIZERS) {
+      let code: number
+      try {
+        code = await runner([
+          program,
+          path,
+          '-resize',
+          `${PREVIEW_MAX_PX}x${PREVIEW_MAX_PX}>`,
+          '-quality',
+          '85',
+          scaled,
+        ])
+      } catch {
+        continue // not installed: try the next name
+      }
+      if (code !== 0 || !(await looksLikeJpeg(scaled))) return false
+      await rename(scaled, path)
+      return true
+    }
+    return false
+  } catch {
+    return false
+  } finally {
+    await unlink(scaled).catch(() => {})
+  }
+}
+
+/**
  * `heif-convert -q 85 SRC DST`: converts to a temp `.jpg` (the tool picks the
- * format from the suffix) and renames it into place once it is a JPEG.
+ * format from the suffix), scales it to PREVIEW_MAX_PX, and renames it into
+ * place once it is a JPEG. Without ImageMagick the preview stays full size.
  */
 export async function makePreview(runner: Runner, src: string, dst: string): Promise<boolean> {
   const temp = `${tempPath(dst)}.jpg`
   try {
     if ((await runner(['heif-convert', '-q', '85', src, temp])) !== 0) return false
     if (!(await looksLikeJpeg(temp))) return false
+    if (!(await capSize(runner, temp)))
+      console.warn(`[aico-web] HEIC preview left full size (no ImageMagick to scale it)`)
     await rename(temp, dst)
     return true
   } catch {

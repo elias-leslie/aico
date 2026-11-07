@@ -629,7 +629,8 @@ describe('capture routes', () => {
       expect(row).toMatchObject({ kind: 'image', mime: 'image/heic', previewState: 'pending' })
       await previews.idle()
 
-      expect(runnerCalls).toHaveLength(1)
+      // The conversion, then the scaling to 2000 px.
+      expect(runnerCalls.map((call) => call[0])).toEqual(['heif-convert', 'magick'])
       const original = blobPath(blobs, row.hash as string)
       expect(runnerCalls[0]?.slice(0, 4)).toEqual(['heif-convert', '-q', '85', original])
       expect(runnerCalls[0]?.[4]).toMatch(/\.jpg$/)
