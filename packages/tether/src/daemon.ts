@@ -74,7 +74,7 @@ import { ModelWatch, readAlternates, readWatchEntries, worktreeFacts } from './m
 import { nodeFileTail, nodeProcFs } from './proc-fs'
 import { activeProjectFileFromEnv, ProjectProvider } from './projects'
 import { Continuity } from './reboot'
-import { Recovery, runCommand } from './recovery'
+import { Recovery, runProcess } from './recovery'
 import { generationOf, pressKeysInRunningSession } from './running-session'
 import { createTetherServer } from './server'
 import { type History, historyFromEnv, startHistoryScan } from './sessions/history'
@@ -766,7 +766,7 @@ function startModelWatch(
         },
         interrupt: (id) => pressKeysInRunningSession(id, ['Escape']),
         worktree: (id, since) =>
-          worktreeFacts(getWidget(id)?.projectRoot ?? null, since, runCommand, (path) =>
+          worktreeFacts(getWidget(id)?.projectRoot ?? null, since, runProcess, (path) =>
             nodeProcFs.mtimeMs ? nodeProcFs.mtimeMs(path) : null,
           ),
         changed: (id) => notifySessionChanged(id, { force: true }),

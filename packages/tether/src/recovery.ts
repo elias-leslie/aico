@@ -356,7 +356,7 @@ function defaultEngine(home: string, stateDir: string, markerDir: string): Recov
   }
 }
 
-export async function runCommand(
+export async function runProcess(
   command: string,
   args: string[],
   timeoutMs: number,
@@ -416,7 +416,7 @@ export class Recovery {
     this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)))
     this.log = options.log ?? ((message) => console.log(`[tether:recovery] ${message}`))
     this.awaitingRestore = options.awaitingRestore ?? (() => false)
-    this.run = options.run ?? runCommand
+    this.run = options.run ?? runProcess
     this.engine = {
       ...defaultEngine(this.home, context.paths.stateDir, agentExitMarkerDir(context.paths)),
       ...options.engine,
