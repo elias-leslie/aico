@@ -311,11 +311,13 @@ export function useSessionView({
     () =>
       deriveActiveSessionId(
         sessions,
-        urlSessionId,
+        // Off home the session the owner had open stays open, as if named
+        // in the address (it was, on home).
+        onHome ? urlSessionId : persistedSessionId,
         urlProjectId,
         persistedSessionId,
       ),
-    [sessions, urlSessionId, urlProjectId, persistedSessionId],
+    [sessions, onHome, urlSessionId, urlProjectId, persistedSessionId],
   )
   // Only a session the switcher lists is shown; nothing is picked for the user.
   const activeSessionId =
@@ -341,8 +343,11 @@ export function useSessionView({
   }, [onHome, chosenSessionId, urlSessionId, searchParamsString, router])
 
   useEffect(() => {
+    // Before the list arrives (or while it can't be read) nothing is chosen
+    // yet: keep the remembered session rather than forget it.
+    if (!chosenSessionId && sessions.length === 0) return
     setPersistedSessionId(chosenSessionId)
-  }, [chosenSessionId, setPersistedSessionId])
+  }, [chosenSessionId, sessions.length, setPersistedSessionId])
 
   const switchToSession = useCallback(
     (sessionId: string) => {

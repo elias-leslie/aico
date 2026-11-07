@@ -320,6 +320,7 @@
 .pageCol {
   /* Pages size themselves to the viewport on their own; here they fill the column. */
   --terminal-viewport-height: 100%;
+  container: frame-page / inline-size;
   position: relative;
   flex: 1;
   min-width: 0;
