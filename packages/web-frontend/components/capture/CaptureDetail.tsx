@@ -1,5 +1,6 @@
 'use client'
 
+import { maskSecrets } from '@aico/shared/secrets'
 import { Download, ExternalLink, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -303,7 +304,7 @@ function FiledInNotes({ noteId }: { noteId: string }) {
         className="inline-flex min-h-11 items-center underline underline-offset-2"
         style={{ color: 'var(--lantern)' }}
       >
-        {note ? note.title || 'Untitled' : 'Open the note'}
+        {note ? maskSecrets(note.title) || 'Untitled' : 'Open the note'}
       </Link>
     </p>
   )

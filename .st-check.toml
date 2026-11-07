@@ -723,7 +723,7 @@ coverage = "focused"
 required = false
 covered_by = "biome"
 quick = true
-quick_paths = ["packages/tether-client/**", "packages/ui-kit/**", "packages/web-frontend/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json"]
+quick_paths = ["packages/shared/**", "packages/tether-client/**", "packages/ui-kit/**", "packages/web-frontend/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json"]
 argv = ["node_modules/.bin/biome", "check", "packages/web-frontend"]
 
 [[native.stages]]
@@ -733,7 +733,7 @@ coverage = "focused"
 required = false
 covered_by = "tsc"
 quick = true
-quick_paths = ["packages/tether-client/**", "packages/ui-kit/**", "packages/web-frontend/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json"]
+quick_paths = ["packages/shared/**", "packages/tether-client/**", "packages/ui-kit/**", "packages/web-frontend/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json"]
 argv = ["node_modules/.bin/tsc", "-b", "packages/web-frontend"]
 
 [[native.stages]]
@@ -743,7 +743,7 @@ coverage = "focused"
 required = false
 covered_by = "depcruise"
 quick = true
-quick_paths = ["packages/tether-client/**", "packages/ui-kit/**", "packages/web-frontend/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json", ".dependency-cruiser.cjs", ".dependency-cruiser-known-violations.json", "scripts/packages.cjs"]
+quick_paths = ["packages/shared/**", "packages/tether-client/**", "packages/ui-kit/**", "packages/web-frontend/**", "package.json", "package-lock.json", "tsconfig.json", "tsconfig.base.json", "vitest.config.ts", "biome.json", ".dependency-cruiser.cjs", ".dependency-cruiser-known-violations.json", "scripts/packages.cjs"]
 argv = ["node_modules/.bin/depcruise", "packages/web-frontend", "--config", ".dependency-cruiser.cjs", "--ignore-known"]
 
 [[native.stages]]

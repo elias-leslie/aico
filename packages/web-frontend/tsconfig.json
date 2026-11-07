@@ -48,6 +48,9 @@
   ],
   "references": [
     {
+      "path": "../shared"
+    },
+    {
       "path": "../tether-client"
     },
     {

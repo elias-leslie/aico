@@ -12,6 +12,7 @@ const state = vi.hoisted(() => ({
   deleted: [] as string[],
   retried: [] as string[],
   routed: [] as unknown[],
+  noteTitle: 'Groceries',
 }))
 vi.mock('@/lib/hooks/use-captures', () => ({
   useCapture: () => state.view,
@@ -42,7 +43,7 @@ vi.mock('@/lib/hooks/use-captures', () => ({
   }),
 }))
 vi.mock('@/lib/hooks/use-notes', () => ({
-  useNote: () => ({ note: { title: 'Groceries' } }),
+  useNote: () => ({ note: { title: state.noteTitle } }),
 }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn() }) }))
 
@@ -208,6 +209,23 @@ describe('CaptureDetail route', () => {
       'href',
       '/notes?id=0123456789ab',
     )
+  })
+
+  it('masks a secret in the filed note title', () => {
+    state.noteTitle = 'bot 1234567890:AAH_0123456789abcdefghijklmnopqrstuvw'
+    show({
+      status: 'filed',
+      route: route({
+        state: 'filed',
+        owner: 'notes',
+        ownerLabel: 'Notes',
+        ownerRef: '0123456789ab',
+      }),
+    })
+    const link = screen.getByTestId('filed-note-link')
+    expect(link.textContent).toContain('hidden')
+    expect(link.textContent).not.toContain('AAH_0123456789')
+    state.noteTitle = 'Groceries'
   })
 })
 
