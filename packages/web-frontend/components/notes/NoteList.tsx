@@ -62,7 +62,7 @@ const TextButton = ({
   </button>
 )
 
-export const counts = (note: { unchecked: number; checked: number }) =>
+const counts = (note: { unchecked: number; checked: number }) =>
   [
     note.unchecked > 0 ? `${note.unchecked} open` : null,
     note.checked > 0 ? `${note.checked} done` : null,

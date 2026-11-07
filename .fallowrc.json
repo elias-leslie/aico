@@ -1,6 +1,11 @@
 {
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
-  "entry": ["packages/checks/src/guards.ts", "scripts/perf-bench.cjs"],
+  "entry": [
+    "packages/checks/src/guards.ts",
+    "scripts/perf-bench.cjs",
+    "packages/web-frontend/public/sw.js",
+    "packages/web-frontend/test-stubs/*"
+  ],
   "ignorePatterns": ["docs/plans/**/*.html", "evidence/**"],
   "ignoreDependencies": ["node:sqlite"],
   "audit": {

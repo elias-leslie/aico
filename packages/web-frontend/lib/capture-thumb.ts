@@ -3,7 +3,7 @@
 // Safari) gets none here; the server's preview stands in for it.
 
 const THUMB_EDGE = 480
-export const THUMB_MAX_BYTES = 256 * 1024
+const THUMB_MAX_BYTES = 256 * 1024
 const QUALITIES = [0.82, 0.7, 0.55, 0.4]
 
 export function thumbSize(

@@ -7,7 +7,7 @@ import { machineLabel } from './machine-name'
 
 export { tierLabel, tierOf }
 
-export const SHOWN = ['failed', 'late', 'unknown', 'warn', 'ok', 'off'] as const
+const SHOWN = ['failed', 'late', 'unknown', 'warn', 'ok', 'off'] as const
 export type Shown = (typeof SHOWN)[number]
 export const PROBLEMS = ['failed', 'late', 'unknown', 'warn'] as const
 export type Problem = (typeof PROBLEMS)[number]

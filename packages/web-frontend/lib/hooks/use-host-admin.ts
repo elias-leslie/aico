@@ -41,7 +41,7 @@ export interface HostLogins {
   actions: Record<string, ToolActions>
 }
 
-export interface HostActionAnswer {
+interface HostActionAnswer {
   host?: string
   state?: string
   session?: TerminalSession
