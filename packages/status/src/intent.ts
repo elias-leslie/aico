@@ -35,7 +35,13 @@ export interface MachineIntent {
 
 /** Since when a machine is expected to be off, or null when it is expected on. */
 export function expectedOffSince(m: MachineIntent): number | null {
-  if (m.stoppedAt !== null) return m.stoppedAt
+  // An on-demand machine stopped again after the owner's earlier stop (started since, stopped by
+  // anyone, an agent or Proxmox) is off since that later stop; the older mark would date it
+  // before its own last reports and read as "back".
+  if (m.stoppedAt !== null)
+    return m.intent === 'on-demand' && m.power === 'off' && m.powerSince !== null
+      ? Math.max(m.stoppedAt, m.powerSince)
+      : m.stoppedAt
   if (expectedState(m.intent, m.power === 'on') === 'on') return null
   // An on-demand machine is off since it was seen stopping; before that was ever read, since
   // the expectation began.

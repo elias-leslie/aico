@@ -249,6 +249,31 @@ export function counted(row: ShownRow): boolean {
   return PROBLEMS.includes(row.shown) && !QUIET.includes(row.unknown_why)
 }
 
+/** Where a pile of problems comes from: the machine most of them are on, when that is a crowd. */
+export interface Concentration {
+  machine: string
+  count: number
+}
+
+/** A machine with at least this many counted problems, and at least half of all of them, is named. */
+export const CROWD_MIN = 5
+
+/**
+ * The machine behind a jump in the count (a guest that is down takes all its rows with it), or null.
+ * The badge, `aico status` and the morning digest say it, so a count that leaps is explained where
+ * it is read.
+ */
+export function concentration(rows: readonly ShownRow[]): Concentration | null {
+  const counts = new Map<string, number>()
+  for (const row of rows.filter(counted))
+    counts.set(row.machine, (counts.get(row.machine) ?? 0) + 1)
+  const total = [...counts.values()].reduce((sum, n) => sum + n, 0)
+  const [top] = [...counts.entries()].sort((a, b) => b[1] - a[1])
+  return top && top[1] >= CROWD_MIN && top[1] * 2 >= total
+    ? { machine: top[0], count: top[1] }
+    : null
+}
+
 export function summary(rows: readonly ShownRow[]): Summary {
   const problems = select(rows.filter(counted))
   const counts = Object.fromEntries(PROBLEMS.map((state) => [state, 0])) as Summary['counts']

@@ -2,7 +2,7 @@
 // first with what each means and what to do, healthy rows folded into a count.
 
 import { localClock, localTime } from '@aico/shared/time'
-import { counted, type ShownRow, type StatusView } from '@aico/status'
+import { concentration, counted, type ShownRow, type StatusView } from '@aico/status'
 
 const cliName = () => process.env.AICO_CLI_NAME || 'aico'
 
@@ -124,10 +124,12 @@ export function formatStatus(
   const away = rows.filter((row) => row.machine_off)
   const problems = rollup.problems - quiet.length
   const out: string[] = []
+  // A crowd on one machine is named, so a count that leaps is explained where it is read.
+  const crowd = concentration(rows)
   out.push(
     problems === 0
       ? `No problems: ${healthyParts}.`
-      : `${plural(problems, 'problem')}, ${healthyParts}.`,
+      : `${plural(problems, 'problem')}${crowd ? ` (${crowd.count} on ${crowd.machine})` : ''}, ${healthyParts}.`,
   )
   const shown = all
     ? rows

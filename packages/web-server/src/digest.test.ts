@@ -138,7 +138,7 @@ describe('buildDigest', () => {
   afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
   const status = (problems = 2, failed = 1) =>
-    ({ read: () => ({ summary: { problems, counts: { failed } } }) }) as never
+    ({ read: () => ({ summary: { problems, counts: { failed } }, rows: [] }) }) as never
   const asks = (...createdAt: number[]) => ({
     list: async () => createdAt.map((c) => ({ createdAt: c, state: 'open' as const })),
   })
@@ -211,6 +211,19 @@ describe('buildDigest', () => {
     expect(d.unavailable).toEqual([])
   })
 
+  it('names the machine behind a crowd of problems', async () => {
+    const rows = Array.from({ length: 8 }, (_, n) => ({
+      id: `m/${n}`,
+      machine: 'apps',
+      shown: 'unknown',
+    }))
+    const crowded = {
+      read: () => ({ summary: { problems: 8, counts: { failed: 0 } }, rows }),
+    } as never
+    const d = await buildDigest(deps({ status: crowded }), NOW - 3_600_000, NOW)
+    expect(d.problems).toEqual({ count: 8, failed: 0, crowd: { machine: 'apps', count: 8 } })
+  })
+
   it('counts only questions still waiting, not ones asked and already closed', async () => {
     const since = NOW - 3_600_000
     const ask = (state: 'open' | 'answered' | 'done' | 'withdrawn', createdAt = NOW) => ({
@@ -274,7 +287,7 @@ describe('digest routes', () => {
       tether: fakeTether({ history: [conv('ok'), conv('bad', { outcome: 'error' })] }),
       asks: { list: async () => [] },
       status: {
-        read: () => ({ summary: { problems, counts: { failed: 0 } } }),
+        read: () => ({ summary: { problems, counts: { failed: 0 } }, rows: [] }),
       } as never,
       notifier: { receive: (n: unknown) => notices.push(n as Record<string, unknown>) } as never,
       now: () => now,

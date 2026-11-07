@@ -32,6 +32,9 @@ export {
   type StatusRow,
 } from './row'
 export {
+  type Concentration,
+  CROWD_MIN,
+  concentration,
   counted,
   type Filter,
   PROBLEMS,

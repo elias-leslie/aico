@@ -6,7 +6,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Notifier } from '@aico/notify'
-import type { StatusStore } from '@aico/status'
+import { concentration, type StatusStore } from '@aico/status'
 import type { TetherClient } from '@aico/tether-client'
 import { localDay, openUsage, usageDbPath } from '@aico/usage'
 import type { Ask } from './asks'
@@ -33,7 +33,7 @@ export interface Digest {
   stuck: { quiet: number; waiting: number }
   /** Questions asked since and still waiting on the owner: what Needs you holds, not every ask a lane filed and closed. */
   asks: number
-  problems: { count: number; failed: number }
+  problems: { count: number; failed: number; crowd?: { machine: string; count: number } }
   spend: { sinceDay: string; items: { provider: string; credits: number }[] } | null
   unavailable: DigestPart[]
 }
@@ -107,8 +107,13 @@ export async function buildDigest(deps: DigestDeps, since: number, now: number):
   else unavailable.push('asks')
 
   try {
-    const { summary } = deps.status.read()
-    digest.problems = { count: summary.problems, failed: summary.counts.failed ?? 0 }
+    const { summary, rows } = deps.status.read()
+    const crowd = concentration(rows)
+    digest.problems = {
+      count: summary.problems,
+      failed: summary.counts.failed ?? 0,
+      ...(crowd ? { crowd } : {}),
+    }
   } catch {
     unavailable.push('status')
   }
@@ -175,7 +180,7 @@ function digestWording(d: Digest): { title: string; body: string } {
     d.stuck.quiet && `${plural(d.stuck.quiet, 'session has', 'sessions have')} gone quiet`,
     d.asks && plural(d.asks, 'new question', 'new questions'),
     d.problems.count &&
-      `${plural(d.problems.count, 'problem', 'problems')} in Status${d.problems.failed ? ` (${d.problems.failed} failed)` : ''}`,
+      `${plural(d.problems.count, 'problem', 'problems')} in Status${d.problems.failed ? ` (${d.problems.failed} failed)` : ''}${d.problems.crowd ? `, ${d.problems.crowd.count} on ${d.problems.crowd.machine}` : ''}`,
   ].filter(Boolean) as string[]
   const list =
     facts.length > 1 ? `${facts.slice(0, -1).join(', ')} and ${facts[facts.length - 1]}` : facts[0]

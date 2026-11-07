@@ -91,6 +91,28 @@ describe('machine intent', () => {
     expect(store.expectedOff().get('apps')).toBe(clock.now)
   })
 
+  it('shows an on-demand machine off after a later stop, even with an older owner stop mark', () => {
+    const { store, clock, batches } = watched('on-demand')
+    // The owner stopped it in the morning; it was started again and reported all day; then it
+    // was stopped by someone else (an agent through Proxmox), with no new mark.
+    store.markStopped('apps', T0)
+    store.setObservedPower('apps', true, T0 + HOUR, T0 + HOUR)
+    store.upsert([machineRow(T0 + 6 * HOUR), job(T0 + 6 * HOUR)])
+    clock.now = T0 + 8 * HOUR
+    store.setObservedPower('apps', false, clock.now)
+    clock.now = T0 + 9 * HOUR
+    store.checkAlerts()
+    expect(batches).toEqual([])
+    expect(store.expectedOff().get('apps')).toBe(T0 + 8 * HOUR)
+    const shown = store.read().rows
+    expect(shown.find((r) => r.id === 'apps/machine')?.shown).toBe('off')
+    expect(shown.find((r) => r.id === 'apps/job')).toMatchObject({
+      shown: 'off',
+      machine_off: true,
+    })
+    expect(store.read().summary.problems).toBe(0)
+  })
+
   it('keeps the last observed power and its time when nothing new is read', () => {
     const { store } = watched('on-demand')
     store.setObservedPower('apps', true, T0, T0 - 1000)
