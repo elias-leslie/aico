@@ -74,6 +74,12 @@ export const isNoteId = (value: string | null): value is string =>
 
 export const noteHref = (id: string) => `/notes?id=${id}`
 
+/** A New note (or list) screen: nothing is saved until something is put in it. */
+export type NewNoteKind = 'note' | 'list'
+export const newNoteHref = (kind: NewNoteKind = 'note') => `/notes?new=${kind}`
+export const newNoteKind = (value: string | null): NewNoteKind | null =>
+  value === 'note' || value === 'list' ? value : null
+
 export const attachmentUrl = (
   note: string,
   attachment: string,
@@ -184,9 +190,16 @@ export function fetchNote(id: string, signal?: AbortSignal) {
   ).then(parseNote)
 }
 
-export function createNote(
-  input: { kind: NoteKind; title?: string } = { kind: 'note' },
-) {
+/** What a note can be made with: a New note is made with what it was given first. */
+export interface NoteCreate {
+  kind: NoteKind
+  title?: string
+  body?: string
+  pinned?: boolean
+  labels?: string[]
+}
+
+export function createNote(input: NoteCreate = { kind: 'note' }) {
   return send<unknown>(
     '/api/notes',
     'POST',

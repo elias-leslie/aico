@@ -1,7 +1,7 @@
 {
   "name": "@aico/shared",
   "version": "0.1.0",
-  "description": "Ids, time and clocks every package may use (today the hybrid logical clock).",
+  "description": "Ids, time, clocks and secret masking every package may use.",
   "private": true,
   "license": "Apache-2.0",
   "aico": {
@@ -10,7 +10,8 @@
   },
   "type": "module",
   "exports": {
-    "./hlc": "./src/hlc.ts"
+    "./hlc": "./src/hlc.ts",
+    "./secrets": "./src/secrets.ts"
   },
   "scripts": {
     "test": "vitest run"

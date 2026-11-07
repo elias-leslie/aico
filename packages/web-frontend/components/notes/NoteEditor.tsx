@@ -15,6 +15,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import {
+  createNote,
   deleteNote,
   type NoteDetail,
   type NoteKind,
@@ -24,6 +25,7 @@ import { formatAge } from '@/lib/attention'
 import { formatWhen } from '@/lib/capture-format'
 import { type SaveState, useAutosave } from '@/lib/hooks/use-autosave'
 import {
+  type EnsureNote,
   NOTES_KEY,
   useDeleteNote,
   useNote,
@@ -171,17 +173,30 @@ const blankDeletes = new Map<string, ReturnType<typeof setTimeout>>()
 const handedOff = new Set<string>()
 export const handOffNote = (id: string) => void handedOff.add(id)
 
+/** Keys for the note screen: a New note keeps its key once it is made (and
+ * its link becomes the note's), so typing goes on in the same boxes. */
+let draftSerial = 0
+const madeFromDraft = new Map<string, string>()
+export const noteScreenKey = (id: string | null) =>
+  id === null ? `new-${draftSerial}` : (madeFromDraft.get(id) ?? id)
+
 function Editor({
   id,
   note,
   stale,
+  ensure,
+  onDraftKind,
 }: {
-  id: string
+  /** null: a New note, made on its first change. */
+  id: string | null
   note: NoteDetail
   stale: string | null
+  ensure?: EnsureNote
+  onDraftKind?: (kind: NoteKind) => void
 }) {
   const router = useRouter()
-  const actions = useNoteActions(id)
+  const actions = useNoteActions(id, ensure)
+  const draft = id === null
   const remove = useDeleteNote()
   const [history, setHistory] = useState(false)
   const [confirming, setConfirming] = useState(false)
@@ -201,14 +216,15 @@ function Editor({
       return actions.save(keepRevision ? { ...patch, keepRevision } : patch)
     },
   })
-  const { draft } = auto
+  const { draft: text } = auto
   const client = useQueryClient()
 
   // A note left with nothing in it is deleted, so New note then Back leaves
   // no untitled card behind.
-  const latest = useRef({ note, draft })
-  latest.current = { note, draft }
+  const latest = useRef({ note, draft: text })
+  latest.current = { note, draft: text }
   useEffect(() => {
+    if (id === null) return // a New note not made yet: nothing to remove
     clearTimeout(blankDeletes.get(id))
     blankDeletes.delete(id)
     return () => {
@@ -238,10 +254,13 @@ function Editor({
     if (!box) return
     box.style.height = 'auto'
     box.style.height = `${box.scrollHeight}px`
-  }, [draft.body])
+  }, [text.body])
 
   const change = (patch: NotePatch) => {
     setError(null)
+    // A New note's kind is only a choice until something is in it.
+    if (draft && onDraftKind && patch.kind && Object.keys(patch).length === 1)
+      return onDraftKind(patch.kind)
     void actions
       .save(patch)
       .catch((failure) =>
@@ -253,7 +272,7 @@ function Editor({
 
   const isList = note.kind === 'list'
   const showItems = isList || note.items.length > 0
-  const showBody = !isList || draft.body !== ''
+  const showBody = !isList || text.body !== ''
   const kinds: [NoteKind, string][] = [
     ['note', 'Note'],
     ['list', 'List'],
@@ -276,54 +295,73 @@ function Editor({
         </p>
       )}
       <div className="flex items-center gap-1">
-        <SaveStatus state={auto.state} onRetry={auto.retry} />
-        <button
-          type="button"
-          className="lantern-icon-btn"
-          aria-pressed={note.pinned}
-          aria-label={note.pinned ? 'Unpin' : 'Pin to the top'}
-          title={note.pinned ? 'Unpin' : 'Pin to the top'}
-          onClick={() => change({ pinned: !note.pinned })}
-          style={note.pinned ? { color: 'var(--lantern)' } : undefined}
-        >
-          {note.pinned ? (
-            <PinOff className="h-[18px] w-[18px]" strokeWidth={1.7} />
-          ) : (
-            <Pin className="h-[18px] w-[18px]" strokeWidth={1.7} />
-          )}
-        </button>
-        <button
-          type="button"
-          className="lantern-icon-btn"
-          aria-label="History"
-          title="History"
-          onClick={() => setHistory(true)}
-        >
-          <History className="h-[18px] w-[18px]" strokeWidth={1.7} />
-        </button>
-        <button
-          type="button"
-          className="lantern-icon-btn"
-          aria-label={note.archived ? 'Unarchive' : 'Archive'}
-          title={note.archived ? 'Unarchive' : 'Archive'}
-          onClick={() => change({ archived: !note.archived })}
-        >
-          {note.archived ? (
-            <ArchiveRestore className="h-[18px] w-[18px]" strokeWidth={1.7} />
-          ) : (
-            <Archive className="h-[18px] w-[18px]" strokeWidth={1.7} />
-          )}
-        </button>
-        <button
-          type="button"
-          className="lantern-icon-btn"
-          aria-label="Delete"
-          title="Delete"
-          style={{ color: 'var(--term-error-text)' }}
-          onClick={() => setConfirming(true)}
-        >
-          <Trash2 className="h-[18px] w-[18px]" strokeWidth={1.7} />
-        </button>
+        {draft && auto.state === 'saved' ? (
+          <p
+            role="status"
+            data-testid="note-save-state"
+            data-state="new"
+            className="min-h-11 min-w-0 flex-1 content-center text-[12px]"
+            style={MUTED}
+          >
+            Saves once you type
+          </p>
+        ) : (
+          <SaveStatus state={auto.state} onRetry={auto.retry} />
+        )}
+        {!draft && (
+          <>
+            <button
+              type="button"
+              className="lantern-icon-btn"
+              aria-pressed={note.pinned}
+              aria-label={note.pinned ? 'Unpin' : 'Pin to the top'}
+              title={note.pinned ? 'Unpin' : 'Pin to the top'}
+              onClick={() => change({ pinned: !note.pinned })}
+              style={note.pinned ? { color: 'var(--lantern)' } : undefined}
+            >
+              {note.pinned ? (
+                <PinOff className="h-[18px] w-[18px]" strokeWidth={1.7} />
+              ) : (
+                <Pin className="h-[18px] w-[18px]" strokeWidth={1.7} />
+              )}
+            </button>
+            <button
+              type="button"
+              className="lantern-icon-btn"
+              aria-label="History"
+              title="History"
+              onClick={() => setHistory(true)}
+            >
+              <History className="h-[18px] w-[18px]" strokeWidth={1.7} />
+            </button>
+            <button
+              type="button"
+              className="lantern-icon-btn"
+              aria-label={note.archived ? 'Unarchive' : 'Archive'}
+              title={note.archived ? 'Unarchive' : 'Archive'}
+              onClick={() => change({ archived: !note.archived })}
+            >
+              {note.archived ? (
+                <ArchiveRestore
+                  className="h-[18px] w-[18px]"
+                  strokeWidth={1.7}
+                />
+              ) : (
+                <Archive className="h-[18px] w-[18px]" strokeWidth={1.7} />
+              )}
+            </button>
+            <button
+              type="button"
+              className="lantern-icon-btn"
+              aria-label="Delete"
+              title="Delete"
+              style={{ color: 'var(--term-error-text)' }}
+              onClick={() => setConfirming(true)}
+            >
+              <Trash2 className="h-[18px] w-[18px]" strokeWidth={1.7} />
+            </button>
+          </>
+        )}
       </div>
 
       {note.archived && (
@@ -348,7 +386,7 @@ function Editor({
         }}
         // biome-ignore lint/a11y/noAutofocus: only a note just made, which the owner opened to type in
         autoFocus={fresh}
-        value={draft.title}
+        value={text.title}
         onChange={(event) => auto.edit({ title: event.target.value })}
         onKeyDown={(event) => {
           // Enter goes on to the text, or to the add box of a list.
@@ -391,7 +429,7 @@ function Editor({
           maxLength={200000}
           className="w-full resize-none bg-transparent py-1 text-[15px] leading-relaxed outline-none placeholder:text-[var(--mist)]"
           style={{ color: 'var(--bone)' }}
-          value={draft.body}
+          value={text.body}
           onChange={(event) => auto.edit({ body: event.target.value })}
         />
       )}
@@ -400,6 +438,7 @@ function Editor({
 
       <NoteAttachments
         noteId={id}
+        ensureNote={actions.noteId}
         attachments={note.attachments}
         onChanged={actions.refresh}
       />
@@ -413,11 +452,13 @@ function Editor({
           {error}
         </p>
       )}
-      <p className="text-[12px]" style={MUTED}>
-        Edited {formatWhen(note.editedAt)}
-      </p>
+      {!draft && (
+        <p className="text-[12px]" style={MUTED}>
+          Edited {formatWhen(note.editedAt)}
+        </p>
+      )}
 
-      {history && (
+      {history && id && (
         <NoteHistory
           noteId={id}
           onOpenChange={setHistory}
@@ -449,9 +490,89 @@ function Editor({
   )
 }
 
-/** One note: loading, gone, failed and stale states around the editor. */
-export function NoteEditor({ id }: { id: string }) {
+/** A note screen with nothing saved yet: what the editor shows for a New note. */
+const blankNote = (kind: NoteKind): NoteDetail => ({
+  id: '',
+  kind,
+  title: '',
+  pinned: false,
+  archived: false,
+  source: null,
+  createdAt: 0,
+  editedAt: 0,
+  updatedAt: 0,
+  labels: [],
+  unchecked: 0,
+  checked: 0,
+  body: '',
+  items: [],
+  attachments: [],
+})
+
+/** One note: loading, gone, failed and stale states around the editor. With
+ * `id` null it is a New note of `kind`: nothing is saved until the first
+ * keystroke, paste, label, item or photo, and leaving it empty leaves nothing. */
+export function NoteEditor({
+  id: given,
+  kind: newKind = 'note',
+  onMade,
+}: {
+  id: string | null
+  kind?: NoteKind
+  /** The New note was made: its link can become the note's. */
+  onMade?: (id: string) => void
+}) {
+  const client = useQueryClient()
+  const [made, setMade] = useState<string | null>(null)
+  const [kind, setKind] = useState<NoteKind>(newKind)
+  const id = given ?? made
+  const making = useRef<Promise<string> | null>(null)
+  const kindNow = useRef(kind)
+  kindNow.current = kind
+  const onMadeNow = useRef(onMade)
+  onMadeNow.current = onMade
+  const shown = useRef(true)
+  useEffect(() => {
+    shown.current = true
+    return () => {
+      shown.current = false
+    }
+  }, [])
+
+  const ensure: EnsureNote = async (seed = {}) => {
+    if (making.current) return { id: await making.current, seeded: false }
+    const key = draftSerial
+    making.current = createNote({ ...seed, kind: kindNow.current }).then(
+      (note) => {
+        client.setQueryData([...NOTES_KEY, 'one', note.id], note)
+        void client.invalidateQueries({ queryKey: [...NOTES_KEY, 'list'] })
+        madeFromDraft.set(note.id, `new-${key}`)
+        draftSerial = key + 1
+        // Left already (Back while the first words were saving): stay gone.
+        if (shown.current) {
+          setMade(note.id)
+          onMadeNow.current?.(note.id)
+        }
+        return note.id
+      },
+    )
+    making.current.catch(() => {
+      making.current = null
+    })
+    return { id: await making.current, seeded: true }
+  }
+
   const view = useNote(id)
+  if (id === null)
+    return (
+      <Editor
+        id={null}
+        note={blankNote(kind)}
+        stale={null}
+        ensure={ensure}
+        onDraftKind={setKind}
+      />
+    )
   if (view.isLoading)
     return (
       <p role="status" className="py-3 text-[13px]" style={MUTED}>

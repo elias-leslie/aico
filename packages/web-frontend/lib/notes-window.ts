@@ -1,6 +1,7 @@
 'use client'
 
 import { useSyncExternalStore } from 'react'
+import { newNoteHref } from './api/notes'
 
 /** The name of the popped-out notes window. A window keeps its name across
  * page loads, so the notes page can tell it is in that window. */
@@ -10,8 +11,9 @@ export const NOTES_WINDOW = 'aico-notes'
 const FEATURES = 'popup,width=440,height=860'
 
 /** Opens `href` in the notes window (or brings it to that page when it is
- * already open). Returns false when the browser blocked it. */
-export function popOutNotes(href: string): boolean {
+ * already open). By default a New note with the cursor in it: the window is
+ * for quick notes. Returns false when the browser blocked it. */
+export function popOutNotes(href: string = newNoteHref('note')): boolean {
   const opened = window.open(href, NOTES_WINDOW, FEATURES)
   if (!opened) return false
   opened.focus()

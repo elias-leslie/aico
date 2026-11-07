@@ -5,10 +5,14 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense, useEffect, useState } from 'react'
 import { CaptureLauncher } from '@/components/capture/CaptureLauncher'
-import { handOffNote, NoteEditor } from '@/components/notes/NoteEditor'
+import {
+  handOffNote,
+  NoteEditor,
+  noteScreenKey,
+} from '@/components/notes/NoteEditor'
 import { NoteList } from '@/components/notes/NoteList'
 import { OfflineBanner, ReadOnlyScope } from '@/components/ReadOnly'
-import { isNoteId, noteHref } from '@/lib/api/notes'
+import { isNoteId, newNoteKind, noteHref } from '@/lib/api/notes'
 import { useMediaQuery } from '@/lib/hooks/use-media-query'
 import { popOutNotes, useIsNotesWindow } from '@/lib/notes-window'
 
@@ -39,7 +43,7 @@ function PopOut({ id }: { id: string | null }) {
         title={blocked ? 'Allow pop-ups for Aico, then try again' : POP_OUT}
         data-testid="notes-pop-out"
         onClick={() => {
-          if (!popOutNotes(id ? noteHref(id) : '/notes')) {
+          if (!popOutNotes(id ? noteHref(id) : undefined)) {
             setBlocked(true)
             return
           }
@@ -58,8 +62,12 @@ function PopOut({ id }: { id: string | null }) {
 
 /** The Notes page: the list, or one note when the link carries its id. */
 function Notes() {
-  const id = useSearchParams().get('id')
+  const router = useRouter()
+  const params = useSearchParams()
+  const id = params.get('id')
   const detail = isNoteId(id)
+  // A New note: nothing saved until something is put in it.
+  const fresh = id === null ? newNoteKind(params.get('new')) : null
   // The popped-out window is only notes: no way back to the sessions here.
   const popped = useIsNotesWindow()
   // Closing the window or switching away ends the edit in hand: an item or
@@ -81,12 +89,14 @@ function Notes() {
       <OfflineBanner />
       <ReadOnlyScope>
         <header className="flex flex-none items-center gap-2 py-3">
-          {(detail || !popped) && (
+          {(detail || fresh || !popped) && (
             <Link
-              href={detail ? '/notes' : '/'}
+              href={detail || fresh ? '/notes' : '/'}
               className="lantern-icon-btn"
-              aria-label={detail ? 'Back to notes' : 'Back to sessions'}
-              title={detail ? 'Back to notes' : 'Back to sessions'}
+              aria-label={
+                detail || fresh ? 'Back to notes' : 'Back to sessions'
+              }
+              title={detail || fresh ? 'Back to notes' : 'Back to sessions'}
             >
               <ArrowLeft className="h-[18px] w-[18px]" strokeWidth={1.7} />
             </Link>
@@ -95,14 +105,27 @@ function Notes() {
             className="min-w-0 flex-1"
             style={{ font: '500 18px/1.2 var(--font-display)' }}
           >
-            {detail ? 'Note' : 'Notes'}
+            {detail
+              ? 'Note'
+              : fresh === 'list'
+                ? 'New list'
+                : fresh
+                  ? 'New note'
+                  : 'Notes'}
           </h1>
           {!popped && <PopOut id={detail ? id : null} />}
           <CaptureLauncher variant="row" />
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-6">
           {detail ? (
-            <NoteEditor key={id} id={id} />
+            <NoteEditor key={noteScreenKey(id)} id={id} />
+          ) : fresh ? (
+            <NoteEditor
+              key={noteScreenKey(null)}
+              id={null}
+              kind={fresh}
+              onMade={(made) => router.replace(noteHref(made))}
+            />
           ) : id !== null ? (
             <p className="py-3 text-[13px]" style={{ color: 'var(--mist)' }}>
               That isn&apos;t a note link.

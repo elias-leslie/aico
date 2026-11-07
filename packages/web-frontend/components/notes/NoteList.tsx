@@ -11,14 +11,12 @@ import {
   ShoppingBasket,
 } from 'lucide-react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import {
-  createNote,
   GROCERIES_ID,
   GROCERIES_SOURCE,
-  type NoteKind,
   type NoteSummary,
+  newNoteHref,
   noteHref,
 } from '@/lib/api/notes'
 import { formatAge } from '@/lib/attention'
@@ -215,26 +213,11 @@ function useDebounced<T>(value: T, ms: number): T {
 /** Notes, pinned first and then by latest activity, with search, a label
  * filter, the archive, and Groceries on top. */
 export function NoteList() {
-  const router = useRouter()
   const [text, setText] = useState('')
   const [archived, setArchived] = useState(false)
   const [label, setLabel] = useState<string | null>(null)
-  const [making, setMaking] = useState<NoteKind | null>(null)
-  const [makeError, setMakeError] = useState<string | null>(null)
   const q = useDebounced(text.trim(), 250)
   const list = useNotes(q, archived)
-
-  const make = async (kind: NoteKind) => {
-    setMaking(kind)
-    setMakeError(null)
-    try {
-      const note = await createNote({ kind })
-      router.push(noteHref(note.id))
-    } catch (error) {
-      setMakeError(error instanceof Error ? error.message : "Couldn't make it")
-      setMaking(null)
-    }
-  }
 
   // The chosen label stays a chip even where no note has it (the archive), so
   // the filter can always be turned off.
@@ -258,34 +241,28 @@ export function NoteList() {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex gap-2">
-        <button
-          type="button"
+        {/* Nothing is saved until something is put in it. */}
+        <Link
+          href={newNoteHref('note')}
           className="lantern-btn primary min-h-11 flex-1"
-          disabled={making !== null}
-          onClick={() => void make('note')}
+          data-testid="new-note"
         >
           <Plus className="h-4 w-4" strokeWidth={1.7} aria-hidden="true" />
-          {making === 'note' ? 'Making…' : 'New note'}
-        </button>
-        <button
-          type="button"
+          New note
+        </Link>
+        <Link
+          href={newNoteHref('list')}
           className="lantern-btn min-h-11 flex-1"
-          disabled={making !== null}
-          onClick={() => void make('list')}
+          data-testid="new-list"
         >
           <ListChecks
             className="h-4 w-4"
             strokeWidth={1.7}
             aria-hidden="true"
           />
-          {making === 'list' ? 'Making…' : 'New list'}
-        </button>
+          New list
+        </Link>
       </div>
-      {makeError && (
-        <Message tone="beacon" testId="note-make-failed">
-          {makeError}
-        </Message>
-      )}
 
       {!filtering && <GroceriesShortcut note={groceries} known={list.loaded} />}
 

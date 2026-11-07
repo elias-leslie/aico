@@ -6,6 +6,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
+import { useRef } from 'react'
 import {
   addItem,
   deleteItem,
@@ -13,6 +14,7 @@ import {
   fetchNote,
   fetchNotes,
   fetchRevisions,
+  type NoteCreate,
   type NoteDetail,
   type NoteItem,
   type NotePatch,
@@ -89,32 +91,58 @@ export function useNoteRevisions(id: string) {
   })
 }
 
+/** Makes the note a New note screen stands for, once, the first time it gets
+ * something in it. `seeded` says this call's content went into the new note. */
+export type EnsureNote = (
+  seed?: Partial<NoteCreate>,
+) => Promise<{ id: string; seeded: boolean }>
+
 /** The helpers an open note changes itself through: each writes the server's
- * answer straight into the cache, so the screen follows without waiting for a poll. */
-export function useNoteActions(id: string) {
+ * answer straight into the cache, so the screen follows without waiting for a poll.
+ * `id` is null on a New note not made yet: the first change makes it (`ensure`). */
+export function useNoteActions(id: string | null, ensure?: EnsureNote) {
   const client = useQueryClient()
-  const key = [...NOTES_KEY, 'one', id]
+  const known = useRef(id)
+  if (id) known.current = id
+  const keyOf = (noteId: string) => [...NOTES_KEY, 'one', noteId]
+  const target = async (): Promise<string> => {
+    if (known.current) return known.current
+    if (!ensure) throw new Error('That note is not made yet')
+    known.current = (await ensure()).id
+    return known.current
+  }
   const refreshList = () =>
     client.invalidateQueries({ queryKey: [...NOTES_KEY, 'list'] })
-  const edit = (change: (note: NoteDetail) => NoteDetail) =>
-    client.setQueryData<NoteDetail>(key, (note) => (note ? change(note) : note))
+  const edit = (noteId: string, change: (note: NoteDetail) => NoteDetail) =>
+    client.setQueryData<NoteDetail>(keyOf(noteId), (note) =>
+      note ? change(note) : note,
+    )
   const settle = () => {
-    void client.invalidateQueries({ queryKey: key })
+    if (!known.current) return
+    void client.invalidateQueries({ queryKey: keyOf(known.current) })
     void refreshList()
   }
 
   return {
     /** Saves fields of the note; an older poll still in flight must not land over it. */
-    async save(patch: NotePatch): Promise<NoteDetail> {
-      await client.cancelQueries({ queryKey: key })
-      const saved = await patchNote(id, patch)
-      client.setQueryData(key, saved)
+    async save(patch: NotePatch): Promise<NoteDetail | undefined> {
+      if (!known.current && ensure) {
+        const { keepRevision: _drop, ...content } = patch
+        const made = await ensure(content)
+        known.current = made.id
+        if (made.seeded) return client.getQueryData<NoteDetail>(keyOf(made.id))
+      }
+      const noteId = await target()
+      await client.cancelQueries({ queryKey: keyOf(noteId) })
+      const saved = await patchNote(noteId, patch)
+      client.setQueryData(keyOf(noteId), saved)
       void refreshList()
       return saved
     },
     async add(text: string) {
-      const item = await addItem(id, text)
-      edit((note) => ({
+      const noteId = await target()
+      const item = await addItem(noteId, text)
+      edit(noteId, (note) => ({
         ...note,
         items: [...note.items.filter((x) => x.id !== item.id), item],
         unchecked: note.unchecked + 1,
@@ -126,10 +154,12 @@ export function useNoteActions(id: string) {
       item: NoteItem,
       patch: { text?: string; checked?: boolean; position?: number },
     ) {
+      const noteId = await target()
+      const key = keyOf(noteId)
       await client.cancelQueries({ queryKey: key })
       const before = client.getQueryData<NoteDetail>(key)
       // Shown at once; put back if the server refuses.
-      edit((note) => ({
+      edit(noteId, (note) => ({
         ...note,
         items: note.items.map((x) =>
           x.id === item.id ? { ...x, ...patch } : x,
@@ -142,7 +172,7 @@ export function useNoteActions(id: string) {
           : {}),
       }))
       try {
-        await patchItem(id, item.id, patch)
+        await patchItem(noteId, item.id, patch)
       } catch (error) {
         client.setQueryData(key, before)
         throw error
@@ -151,8 +181,9 @@ export function useNoteActions(id: string) {
       }
     },
     async removeItem(item: NoteItem) {
-      await deleteItem(id, item.id)
-      edit((note) => ({
+      const noteId = await target()
+      await deleteItem(noteId, item.id)
+      edit(noteId, (note) => ({
         ...note,
         items: note.items.filter((x) => x.id !== item.id),
         unchecked: note.unchecked - (item.checked ? 0 : 1),
@@ -161,10 +192,18 @@ export function useNoteActions(id: string) {
       void refreshList()
     },
     async setLabels(labels: string[]) {
-      const saved = await putLabels(id, labels)
-      edit((note) => ({ ...note, labels: saved.labels }))
+      if (!known.current && ensure) {
+        const made = await ensure({ labels })
+        known.current = made.id
+        if (made.seeded) return
+      }
+      const noteId = await target()
+      const saved = await putLabels(noteId, labels)
+      edit(noteId, (note) => ({ ...note, labels: saved.labels }))
       void refreshList()
     },
+    /** The note's id, making it first when it is a New note not made yet. */
+    noteId: target,
     refresh: settle,
   }
 }

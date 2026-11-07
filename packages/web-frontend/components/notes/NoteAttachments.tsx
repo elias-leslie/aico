@@ -77,10 +77,13 @@ function Tile({
  * same picker as Capture. */
 export function NoteAttachments({
   noteId,
+  ensureNote,
   attachments,
   onChanged,
 }: {
-  noteId: string
+  /** null on a New note not made yet: the first photo makes it (`ensureNote`). */
+  noteId: string | null
+  ensureNote?: () => Promise<string>
   attachments: NoteAttachment[]
   onChanged: () => void
 }) {
@@ -97,7 +100,9 @@ export function NoteAttachments({
   const send = async (key: string, file: File) => {
     patch(key, { state: 'sending', progress: 0, error: null })
     try {
-      await addFileToNote(noteId, file, {
+      const target = noteId ?? (await ensureNote?.())
+      if (!target) throw new Error("Couldn't make the note. Try again.")
+      await addFileToNote(target, file, {
         clientId: key,
         onProgress: (progress) => patch(key, { progress }),
       })
@@ -127,7 +132,7 @@ export function NoteAttachments({
   const remove = async (attachment: NoteAttachment) => {
     setError(null)
     try {
-      await removeAttachment(noteId, attachment.id)
+      await removeAttachment(noteId ?? attachment.noteId, attachment.id)
       onChanged()
     } catch (failure) {
       setError(

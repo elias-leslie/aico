@@ -5,6 +5,7 @@
 
 import type { ServerResponse } from 'node:http'
 import { hasBlob } from '@aico/notes/blobs'
+import { maskSecrets } from '@aico/shared/secrets'
 import { sendBlobVariant } from './captures'
 import { objectBody, optionalString, RAW, type Router, requiredString, sendJson } from './http'
 import {
@@ -40,6 +41,8 @@ const LABELS_MAX = 30
 const ITEMS_AT_CREATE_MAX = 500
 const PAGE_DEFAULT = 100
 const SNIPPET = 200
+/** Read past the cut, so a token crossing it is still recognised and hidden whole. */
+const SNIPPET_MARGIN = 400
 const CREATE_KEYS = ['kind', 'title', 'body', 'pinned', 'labels', 'items']
 const PATCH_KEYS = ['title', 'body', 'pinned', 'archived', 'kind', 'keepRevision']
 
@@ -139,15 +142,23 @@ function noteJson(row: NoteRow, labels: string[]): NoteJson {
   }
 }
 
+/** A list row: a preview, so anything that looks like a secret is hidden
+ * (the note itself, opened, shows the real text). */
 function summaryJson(row: NoteSummary): NoteSummaryJson {
   return {
     ...noteJson(row, row.labels),
-    snippet: row.body.replace(/\s+/g, ' ').trim().slice(0, SNIPPET),
+    title: maskSecrets(row.title),
+    snippet: maskSecrets(
+      row.body
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, SNIPPET + SNIPPET_MARGIN),
+    ).slice(0, SNIPPET),
     unchecked: row.unchecked,
     checked: row.checked_count,
     attachmentCount: row.attachment_count,
     activityAt: row.activity_at,
-    preview: row.preview.map(itemJson),
+    preview: row.preview.map((item) => ({ ...itemJson(item), text: maskSecrets(item.text) })),
   }
 }
 

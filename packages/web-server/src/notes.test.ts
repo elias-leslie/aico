@@ -278,4 +278,32 @@ describe('notes', () => {
       await api.close()
     }
   })
+
+  it('hides secret-looking text in list previews, not in the note itself', async () => {
+    const api = await serveRoutes((r) =>
+      registerNoteRoutes(r, { store, blobsDir: join(dir, 'blobs') }),
+    )
+    // Fake, built in pieces; long filler first so the token straddles the cut.
+    const token = `${'7012345678'}:${'AAFakeFakeFake_0123456789abcdefXYZ'}w`
+    const body = `${'x '.repeat(95)}bot ${token} then password: fake-pass`
+    const note = store.notes.create({ title: `key ${token}`, body, items: [{ text: token }] })
+    try {
+      // biome-ignore lint/suspicious/noExplicitAny: test responses are read loosely
+      const list: any = await (await fetch(`${api.base}/api/notes`)).json()
+      const row = list.notes.find((n: { id: string }) => n.id === note.id)
+      const shown = JSON.stringify(row)
+      expect(shown).not.toContain(token.slice(0, 20))
+      expect(shown).not.toContain(token.slice(-20))
+      expect(row.title).toBe('key •••• (hidden: looks like a token)')
+      expect(row.snippet).toMatch(/bot ••••/)
+      expect(row.preview[0].text).toBe('•••• (hidden: looks like a token)')
+      // biome-ignore lint/suspicious/noExplicitAny: test responses are read loosely
+      const detail: any = await (await fetch(`${api.base}/api/notes/${note.id}`)).json()
+      expect(detail.title).toBe(`key ${token}`)
+      expect(detail.body).toBe(body)
+      expect(detail.items[0].text).toBe(token)
+    } finally {
+      await api.close()
+    }
+  })
 })

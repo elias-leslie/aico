@@ -77,8 +77,10 @@ export function useAutosave<T extends Fields>({
   // biome-ignore lint/correctness/useExhaustiveDependencies: baseKey stands for base
   useEffect(() => {
     if (busy.current || changes(latest.current, confirmed.current)) return
+    const before = confirmed.current
     confirmed.current = base
-    setDraft(base)
+    // Typing that lands in the same moment wins over the server's copy.
+    setDraft((now) => (changes(now, before) ? now : base))
   }, [baseKey])
 
   const draftKey = JSON.stringify(draft)

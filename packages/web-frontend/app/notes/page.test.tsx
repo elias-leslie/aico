@@ -16,9 +16,14 @@ vi.mock('@/components/capture/CaptureLauncher', () => ({
   CaptureLauncher: () => null,
 }))
 vi.mock('@/components/notes/NoteList', () => ({ NoteList: () => null }))
+const editor = vi.hoisted(() => ({ props: [] as unknown[] }))
 vi.mock('@/components/notes/NoteEditor', () => ({
-  NoteEditor: () => null,
+  NoteEditor: (props: unknown) => {
+    editor.props.push(props)
+    return null
+  },
   handOffNote: vi.fn(),
+  noteScreenKey: (id: string | null) => id ?? 'new',
 }))
 
 beforeEach(() => {
@@ -41,6 +46,26 @@ describe('Notes pop-out', () => {
       expect.stringContaining('popup'),
     )
     expect(nav.push).toHaveBeenCalledWith('/')
+  })
+
+  it('from the list, opens a New note ready to type in the notes window', () => {
+    const popup = { focus: vi.fn() } as unknown as Window
+    const open = vi.spyOn(window, 'open').mockReturnValue(popup)
+    render(<NotesPage />)
+    fireEvent.click(screen.getByTestId('notes-pop-out'))
+    expect(open).toHaveBeenCalledWith(
+      '/notes?new=note',
+      NOTES_WINDOW,
+      expect.stringContaining('popup'),
+    )
+  })
+
+  it('a New note link shows an unsaved note of that kind', () => {
+    nav.params = new URLSearchParams('new=list')
+    editor.props = []
+    render(<NotesPage />)
+    expect(screen.getByRole('heading').textContent).toBe('New list')
+    expect(editor.props.at(-1)).toMatchObject({ id: null, kind: 'list' })
   })
 
   it('stays put and says so when the browser blocks the window', () => {
