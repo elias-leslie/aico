@@ -44,3 +44,11 @@ Proves that each host comes back on its own after a power cut, that the other ho
 ## Results
 
 (none yet)
+
+## On hold (Nov 7)
+
+The owner paused this. Where it stands:
+- `aico plug` is live on the workstation with two plugs configured (shed 192.168.87.217, house 192.168.87.193); nothing is wired to either yet, so the socket-to-machine mapping in ops.json is a placeholder. CT 190 still runs the one-plug version.
+- Router: fixed addresses and TCP 9999 rules for both plugs (lan → house), nothing else opened.
+- Layout last proposed: everything stays in the shed. Plug A: workstation, davion-gem. Plug B (on Davion wifi): shed Omada + davions wifi. The router is never on a plug.
+- Open: an "away" action (clean shutdown, plug countdown off, no outage alarm; start from the Kasa app), the BIOS settings at both hosts, and the test run itself.
