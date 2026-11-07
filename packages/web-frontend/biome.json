@@ -114,6 +114,8 @@
                       "@aico/tether-client/**",
                       "@aico/usage",
                       "@aico/usage/**",
+                      "@aico/video",
+                      "@aico/video/**",
                       "@aico/web-server",
                       "@aico/web-server/**",
                       "@aico/webtools",

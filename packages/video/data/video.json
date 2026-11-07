@@ -1,0 +1,68 @@
+{
+  "about": "Defaults for `aico video`. Model names, login names, prompts and limits are data: change them here, not in the code.",
+  "gemini": {
+    "endpoint": "https://generativelanguage.googleapis.com/v1beta",
+    "keyEnv": "GEMINI_API_KEY",
+    "loginNames": ["gemini-api_key-2", "gemini-api_key-16"],
+    "videoModel": "gemini-flash-latest",
+    "textModel": "gemini-flash-lite-latest",
+    "mediaResolution": {
+      "low": "MEDIA_RESOLUTION_LOW",
+      "medium": "MEDIA_RESOLUTION_MEDIUM",
+      "high": "MEDIA_RESOLUTION_HIGH"
+    },
+    "defaultResolution": "low"
+  },
+  "ytdlp": {
+    "command": "yt-dlp",
+    "args": ["--js-runtimes", "node", "--no-playlist", "--no-warnings", "--skip-download"],
+    "subLangs": ["{lang}.*", "{lang}"],
+    "defaultLang": "en"
+  },
+  "cache": {
+    "envDir": "AICO_VIDEO_DIR",
+    "dirs": ["/srv/scratch/aico/video", "~/.cache/aico/video"]
+  },
+  "transcript": {
+    "paragraphSeconds": 60
+  },
+  "output": {
+    "reviewWords": 700,
+    "askWords": 350
+  },
+  "descriptionChars": 1500,
+  "prompts": {
+    "review": [
+      "You are reviewing a YouTube video for an engineer who will not watch it. Watch the video closely, using the captions below only for exact wording and timestamps.",
+      "Write the review in Markdown, at most 600 words, with these sections in order:",
+      "## What it is: title, who is speaking, what kind of video, who it is for (2-3 sentences).",
+      "## Key points: 6-12 bullets, each starting with a [mm:ss] timestamp.",
+      "## On screen: what the video shows that the audio does not carry: UI, code, slides, diagrams, demos, terminal output, with [mm:ss] timestamps. Say plainly when it is only a talking head.",
+      "## Claims and reasoning: the main claims, the evidence or reasoning given, and anything shaky, sponsored or overclaimed.",
+      "## Notable quotes: 2-4 short verbatim quotes from the captions with timestamps.",
+      "Be specific (names, numbers, versions, commands). Do not pad or restate the section instructions. If something is unclear or not shown, say so instead of guessing.",
+      "Your knowledge of products, models and versions may be older than this video: do not call a name wrong, fake or speculative just because you do not recognise it."
+    ],
+    "reviewCaptionsOnly": [
+      "You are reviewing a YouTube video for an engineer who will not watch it, from its captions only. You cannot see the video: do not describe visuals, and say so under On screen.",
+      "Write the review in Markdown, at most 500 words, with these sections in order:",
+      "## What it is: title, who is speaking, what kind of video, who it is for (2-3 sentences).",
+      "## Key points: 6-12 bullets, each starting with the [mm:ss] timestamp of the transcript paragraph it comes from.",
+      "## On screen: one line: not seen, review is from captions only; list any places where the speaker refers to something on screen (\"as you can see\", \"this code\") with timestamps.",
+      "## Claims and reasoning: the main claims, the evidence or reasoning given, and anything shaky, sponsored or overclaimed.",
+      "## Notable quotes: 2-4 short verbatim quotes with timestamps.",
+      "Auto-generated captions can mishear names and terms: flag likely errors instead of repeating them.",
+      "Your knowledge of products, models and versions may be older than this video: do not call a name wrong, fake or speculative just because you do not recognise it."
+    ],
+    "ask": [
+      "Answer the question about this YouTube video. Watch the video; use the captions for exact wording and timestamps.",
+      "Answer in at most 250 words. Cite [mm:ss] timestamps for what you rely on. If the video does not show or say it, say that instead of guessing.",
+      "Your knowledge of products, models and versions may be older than this video: do not call a name wrong, fake or speculative just because you do not recognise it."
+    ],
+    "askCaptionsOnly": [
+      "Answer the question about this YouTube video from its captions only. You cannot see the video: if the question needs what is on screen, say so and give what the speaker says about it.",
+      "Answer in at most 250 words. Cite [mm:ss] timestamps. If the captions do not say it, say that instead of guessing.",
+      "Your knowledge of products, models and versions may be older than this video: do not call a name wrong, fake or speculative just because you do not recognise it."
+    ]
+  }
+}

@@ -67,6 +67,7 @@ const NATIVE = new Set([
   'vm',
   'backups',
   'web',
+  'video',
   'prompt-model',
   'nightly',
   'grants',

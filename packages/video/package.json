@@ -1,0 +1,24 @@
+{
+  "name": "@aico/video",
+  "version": "0.1.0",
+  "description": "aico video URL: review or question a YouTube video. Gemini watches it with the cleaned captions attached; captions-only and transcript-only fallbacks are reported; results are cached per video.",
+  "private": true,
+  "license": "Apache-2.0",
+  "aico": {
+    "layer": 4,
+    "imports": [
+      "@aico/fleet"
+    ]
+  },
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "esbuild src/main.ts --bundle --platform=node --format=esm --target=node22 --log-level=error --outfile=dist/aico-video.mjs --banner:js=\"// Aico video bundle. Built by npm run build; do not edit.\nimport { createRequire as __aicoRequire } from 'node:module'; const require = __aicoRequire(import.meta.url);\"",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@aico/fleet": "0.1.0"
+  }
+}

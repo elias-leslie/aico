@@ -20,6 +20,9 @@
       "path": "packages/webtools"
     },
     {
+      "path": "packages/video"
+    },
+    {
       "path": "packages/context"
     },
     {

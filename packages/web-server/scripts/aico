@@ -11,6 +11,7 @@
 # `aico nightly`: the nightly deep lane (full gate on HEAD plus the live checks; packages/checks).
 # `aico deploy | logs | snapshots | vm`: deploys, unit logs, Btrfs points and Proxmox guests (packages/ops).
 # `aico web search|research|fetch|batch|refocus`: public web search and fetch with a call counter (packages/webtools).
+# `aico video URL`: review a YouTube video, or ask it a question (packages/video).
 # `aico prompt-model MODEL "question"`: one question to one model, no tools (packages/agent).
 # Only those commands: anything else (or nothing) prints the usage and exits 2, so this
 # never starts the web server.
@@ -93,12 +94,26 @@ aico_webtools() {
   AICO_REPO_ROOT="$AICO_REPO_ROOT" exec "$node" --disable-warning=ExperimentalWarning "$web_bundle" "$@"
 }
 
+# The video bundle; rebuilt when its sources (or the packages it bundles) are newer.
+aico_video() {
+  local video_dir="$AICO_REPO_ROOT/packages/video" node
+  local video_bundle="$video_dir/dist/aico-video.mjs"
+  node="$(aico_web_node)"
+  if [ ! -r "$video_bundle" ] || [ -n "$(find "$video_dir/src" "$video_dir/data" "$AICO_REPO_ROOT/packages/fleet/src" \
+    "$AICO_REPO_ROOT/packages/fleet/data" "$AICO_REPO_ROOT/packages/store/src" "$AICO_REPO_ROOT/packages/status/src" \
+    "$AICO_REPO_ROOT/packages/shared/src" \( -name '*.ts' -o -name '*.json' \) -newer "$video_bundle" -print -quit 2>/dev/null)" ]; then
+    PATH="$(dirname "$node"):$PATH" npm --prefix "$video_dir" run --silent build >&2
+  fi
+  exec "$node" --disable-warning=ExperimentalWarning "$video_bundle" "$@"
+}
+
 case "${1:-}" in
   grants | elevate) shift; exec /usr/local/lib/host-steward/aico-grants "$@" ;;
   memory | prompt | models | context | usage | logins | app | status | phones) exec_aico_web "$@" ;;
   check | commit | publish | nightly) aico_checks "$@" ;;
   deploy | logs | snapshots | vm | backups) aico_ops "$@" ;;
   web) shift; aico_webtools "$@" ;;
+  video) shift; aico_video "$@" ;;
   jobs)
     shift
     jobs_dir="$AICO_REPO_ROOT/packages/jobs"

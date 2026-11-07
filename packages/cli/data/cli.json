@@ -138,6 +138,10 @@
       "group": "Tools",
       "commands": [
         ["web", "web search and fetch"],
+        [
+          "video",
+          "review a YouTube video or ask it a question (Gemini watches it, with the captions)"
+        ],
         ["db", "read-only queries on Aico's stores"],
         ["tools", "the agent tool manifest; tools run for heavy work"],
         ["skills", "agent skills: status, sync, audit"],
