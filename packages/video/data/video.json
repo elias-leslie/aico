@@ -46,7 +46,7 @@
       "## Claims and reasoning - the main claims, the evidence or reasoning given, and anything shaky, sponsored or overclaimed.",
       "## Notable quotes - 2-4 short verbatim quotes from the captions with timestamps.",
       "Write the headings alone, as just their name (for example '## Key points'), then the content. Be specific (names, numbers, versions, commands). Do not pad or restate these instructions. If something is unclear or not shown, say so instead of guessing.",
-      "Your knowledge of products, models and versions may be older than this video: do not call a name wrong, fake or speculative just because you do not recognise it."
+      "Your knowledge of products, models and versions may be older than this video. Never remark on whether a name or version in it exists, is real or is released; report what the video says."
     ],
     "reviewCaptionsOnly": [
       "You are reviewing a YouTube video for an engineer who will not watch it, from its captions only. You cannot see the video: do not describe visuals.",
@@ -57,17 +57,17 @@
       "## Claims and reasoning - the main claims, the evidence or reasoning given, and anything shaky, sponsored or overclaimed.",
       "## Notable quotes - 2-4 short verbatim quotes with timestamps.",
       "Write the headings alone, as just their name (for example '## Key points'), then the content. Auto-generated captions can mishear names and terms: flag likely errors instead of repeating them.",
-      "Your knowledge of products, models and versions may be older than this video: do not call a name wrong, fake or speculative just because you do not recognise it."
+      "Your knowledge of products, models and versions may be older than this video. Never remark on whether a name or version in it exists, is real or is released; report what the video says."
     ],
     "ask": [
       "Answer the question about this YouTube video. Watch the video; use the captions for exact wording and timestamps.",
       "Answer in at most 250 words. Cite [mm:ss] timestamps for what you rely on. If the video does not show or say it, say that instead of guessing.",
-      "Your knowledge of products, models and versions may be older than this video: do not call a name wrong, fake or speculative just because you do not recognise it."
+      "Your knowledge of products, models and versions may be older than this video. Never remark on whether a name or version in it exists, is real or is released; report what the video says."
     ],
     "askCaptionsOnly": [
       "Answer the question about this YouTube video from its captions only. You cannot see the video: if the question needs what is on screen, say so and give what the speaker says about it.",
       "Answer in at most 250 words. Cite [mm:ss] timestamps. If the captions do not say it, say that instead of guessing.",
-      "Your knowledge of products, models and versions may be older than this video: do not call a name wrong, fake or speculative just because you do not recognise it."
+      "Your knowledge of products, models and versions may be older than this video. Never remark on whether a name or version in it exists, is real or is released; report what the video says."
     ]
   }
 }

@@ -154,7 +154,7 @@ describe('aico video review', () => {
     expect(await go([ID], { exec: yt.exec, post: g.post })).toBe(0)
     expect(g.sent).toHaveLength(1)
     expect(yt.calls).toHaveLength(1)
-    expect(stdout()).toContain('[cached 2026-11-07 15:00]')
+    expect(stdout()).toContain('[cached 2026-11-07 15:00 UTC]')
   })
 
   it('tries the next stored key when one is rate limited', async () => {

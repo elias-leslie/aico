@@ -182,7 +182,7 @@ export async function runVideo(req: Request, deps: Deps): Promise<number> {
     out(
       [
         ...head,
-        `Source: ${sources}${cached ? `   [cached ${answer.created.slice(0, 16).replace('T', ' ')}]` : ''}`,
+        `Source: ${sources}${cached ? `   [cached ${answer.created.slice(0, 16).replace('T', ' ')} UTC]` : ''}`,
         ...(answer.note ? [`Note: ${answer.note}`] : []),
         `${cached ? '' : `Cost: ${k(answer.usage.prompt)} tokens in, ${k(answer.usage.output)} out${answer.usage.thoughts ? `, ${k(answer.usage.thoughts)} thinking` : ''}; ${answer.seconds.toFixed(0)} s.   `}Files: ${[`${at}.md`, ...files].join(', ')}`,
         '---',
