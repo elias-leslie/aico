@@ -22,6 +22,14 @@ const provider = (over: Partial<UsageProvider>): UsageProvider => ({
   credits: null,
   problem: null,
   spend: { unit: null, recorded_since: null, days: [] },
+  by_project: {
+    tracked: false,
+    unit: null,
+    from: '',
+    to: '',
+    total: 0,
+    items: [],
+  },
   ...over,
 })
 const report = (...providers: UsageProvider[]): UsageReport => ({

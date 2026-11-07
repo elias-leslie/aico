@@ -225,7 +225,10 @@ function serve(): void {
   const canaryPoller = new CanaryPoller(canaryFolder, notify.notifier, canaryEvents)
   registerCanaryRoutes(api, notify.notifier, canaryFolder, canaryEvents, canaryPoller)
   registerBackupRoutes(api)
-  registerUsageRoutes(api, { dataDir: config.dataDir })
+  registerUsageRoutes(api, {
+    dataDir: config.dataDir,
+    projects: () => registry.list().map((project) => ({ id: project.id, name: project.name })),
+  })
   registerLoginRoutes(api, process.env, tether)
   registerMockupRoutes(api, { dataDir: config.dataDir, tether })
   registerSharedPageRoutes(api, { shares: () => shows.list('here') })

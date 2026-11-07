@@ -11,7 +11,10 @@ import {
   dayText,
   dayValue,
   localDay,
+  percent,
   sentence,
+  splitDays,
+  splitTitle,
   summarize,
   type UsageProvider,
   type UsageWindow,
@@ -195,6 +198,7 @@ function ProviderCard({
         <p className={styles.credits}>{sentence(provider.credits.text)}.</p>
       )}
       <Spend provider={provider} now={now} />
+      <ByProject provider={provider} />
     </section>
   )
 }
@@ -332,6 +336,58 @@ function Spend({ provider, now }: { provider: UsageProvider; now: number }) {
           </tbody>
         </table>
       </details>
+    </div>
+  )
+}
+
+/** Which projects the last days' use came from (Claude and Codex); other providers cannot say. */
+function ByProject({ provider }: { provider: UsageProvider }) {
+  const split = provider.by_project
+  if (!split.tracked)
+    return (
+      <div className={styles.spend}>
+        <h3>By project</h3>
+        <p className={styles.spendNote}>Not tracked by project.</p>
+      </div>
+    )
+  if (!split.unit || split.items.length === 0)
+    return (
+      <div className={styles.spend}>
+        <h3>By project</h3>
+        <p className={styles.spendNote}>
+          Nothing recorded for {provider.name} in the last {splitDays(split)}{' '}
+          days.
+        </p>
+      </div>
+    )
+  const unit = split.unit
+  return (
+    <div className={styles.spend}>
+      <h3>{splitTitle(split)}</h3>
+      <p className={`${styles.figures} ${styles.muted}`}>
+        <span>
+          {compact(split.total)} {unit} in all
+        </span>
+      </p>
+      <ul className={styles.projects} aria-label="Projects">
+        {split.items.map((item) => (
+          <li key={`${item.kind}:${item.id ?? item.name}`}>
+            <span className={styles.projectName} title={item.name}>
+              {item.name}
+            </span>
+            <span className={styles.projectFigures}>
+              {percent(item.share)} · {compact(item.amount)}
+            </span>
+            <div
+              className={styles.shareBar}
+              role="img"
+              aria-label={`${item.name}: ${percent(item.share)} of ${compact(split.total)} ${unit}`}
+            >
+              <span style={{ width: `${Math.max(item.share * 100, 1)}%` }} />
+            </div>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }

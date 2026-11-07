@@ -19,6 +19,25 @@ export interface SpendDay {
   requests: number
 }
 
+export interface ProjectShare {
+  id: string | null
+  name: string
+  kind: 'project' | 'other' | 'private' | 'unknown' | 'rest'
+  amount: number
+  /** 0..1 of the total. */
+  share: number
+}
+
+/** Where the last days' use came from. `tracked: false`: this provider cannot say. */
+export interface ProjectSplit {
+  tracked: boolean
+  unit: 'credits' | 'tokens' | null
+  from: string
+  to: string
+  total: number
+  items: ProjectShare[]
+}
+
 export interface UsageProvider {
   id: string
   name: string
@@ -39,6 +58,7 @@ export interface UsageProvider {
     recorded_since: string | null
     days: SpendDay[]
   }
+  by_project: ProjectSplit
 }
 
 export interface UsageReport {
@@ -160,4 +180,24 @@ export function windowGone(window: UsageWindow): number | null {
 /** "Weekly used up until Nov 8" -> the window text starts lowercase ("5h 100% left"); lead with a capital. */
 export function sentence(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1)
+}
+
+/** The days a split counts, from its first and last local day: 7. */
+export function splitDays(split: Pick<ProjectSplit, 'from' | 'to'>): number {
+  const at = (day: string) => {
+    const [y, m, d] = day.split('-').map(Number) as [number, number, number]
+    return Date.UTC(y, m - 1, d)
+  }
+  return Math.round((at(split.to) - at(split.from)) / 86_400_000) + 1
+}
+
+/** The heading over a split: "Spent by project, last 7 days" (credits) or "Tokens by project, last 7 days". */
+export function splitTitle(split: ProjectSplit): string {
+  return `${split.unit === 'credits' ? 'Spent' : 'Tokens'} by project, last ${splitDays(split)} days`
+}
+
+/** "62%", or "<1%" for a share that rounds to nothing. */
+export function percent(share: number): string {
+  const value = Math.round(share * 100)
+  return value === 0 && share > 0 ? '<1%' : `${value}%`
 }

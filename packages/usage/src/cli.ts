@@ -10,7 +10,9 @@ import { collect } from './collect'
 import { getState, openUsage, plansPath, usageDbPath } from './db'
 import { loadFacts } from './facts'
 import { loadPlans } from './plans'
-import { brief, type SpendInput, spendRows } from './spend'
+import { usageReport } from './report'
+import { brief, count, type SpendInput, spendRows } from './spend'
+import type { ProjectRef } from './split'
 import { type Facts, micros } from './windows'
 
 export const USAGE_COMMANDS = ['usage'] as const
@@ -28,12 +30,15 @@ export interface UsageCliIo {
   statusUrl: string | null
   fetch: typeof fetch
   now(): Date
+  /** The registered projects, to name the folders usage is filed under. */
+  projects?: () => ProjectRef[]
 }
 
 const USAGE = `Usage: aico usage [command]   (no command: show)
 
   aico usage collect [--no-status]   read each subscription's usage now and update its Status row
-  aico usage [show] [--json]         what each subscription has left, from the last collection
+  aico usage [show] [--json]         what each subscription has left, and for Claude and Codex
+                                     which projects the last 7 days of use came from
 `
 
 class UsageError extends Error {}
@@ -113,6 +118,30 @@ async function collectCommand(argv: string[], io: UsageCliIo): Promise<number> {
   }
 }
 
+/** The by-project lines of `aico usage show`: one block per provider, or why there is none. */
+export function projectLines(report: ReturnType<typeof usageReport>): string {
+  if ('error' in report) return `By project: not available (${report.error})\n`
+  let out = ''
+  for (const provider of report.providers) {
+    const split = provider.by_project
+    if (!split.tracked) {
+      out += `${provider.name} by project: not tracked by project.\n`
+      continue
+    }
+    const days = config.project_split.days
+    if (!split.unit || split.items.length === 0) {
+      out += `${provider.name} by project: nothing recorded in the last ${days} days.\n`
+      continue
+    }
+    const what = split.unit === 'credits' ? 'credits spent' : 'tokens'
+    out += `${provider.name} by project, last ${days} days (${count(split.total)} ${what}):\n`
+    const width = Math.max(...split.items.map((item) => item.name.length))
+    for (const item of split.items)
+      out += `  ${item.name.padEnd(width)}  ${String(Math.round(item.share * 100)).padStart(3)}%  ${count(item.amount)}\n`
+  }
+  return out
+}
+
 function showCommand(argv: string[], io: UsageCliIo): number {
   const { set } = flags('show', argv, [], ['--json'])
   if (!existsSync(usageDbPath(io.dataDir))) {
@@ -122,13 +151,19 @@ function showCommand(argv: string[], io: UsageCliIo): number {
   const db = openUsage(usageDbPath(io.dataDir))
   try {
     const input = spendInput(db, io)
+    const report = usageReport(io.dataDir, input.now, io.projects?.())
     if (set.has('--json')) {
+      const by_project =
+        'error' in report
+          ? { error: report.error }
+          : Object.fromEntries(report.providers.map((p) => [p.id, p.by_project]))
       io.out(
-        `${JSON.stringify({ as_of: input.now, collected_at: input.collectedAt, facts: input.facts, rows: spendRows(input) }, null, 2)}\n`,
+        `${JSON.stringify({ as_of: input.now, collected_at: input.collectedAt, facts: input.facts, rows: spendRows(input), by_project }, null, 2)}\n`,
       )
       return 0
     }
     for (const row of spendRows(input)) io.out(`${row.what}: ${row.meaning}\n`)
+    io.out(projectLines(report))
     io.out(`Collected ${localTime(micros(input.collectedAt) / 1000)}.\n`)
     return 0
   } finally {

@@ -612,6 +612,7 @@ export async function runCli(command: string, argv: string[]): Promise<number> {
       statusUrl: `http://127.0.0.1:${port}/api/status/rows`,
       fetch,
       now: () => new Date(),
+      projects: () => registryProjects(process.env),
     })
   }
   const env = process.env

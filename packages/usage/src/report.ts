@@ -8,6 +8,7 @@ import { type Database, getState, openUsage, plansPath, usageDbPath } from './db
 import { loadFacts } from './facts'
 import { currentPlan, loadPlans, localDay } from './plans'
 import { capital, creditText, windowText } from './spend'
+import { type ProjectRef, type ProjectSplit, projectSplit } from './split'
 import { micros, optionUsage, type Usage, type Window, windowFacts } from './windows'
 
 /** Days of spend the report carries, today included. */
@@ -54,6 +55,8 @@ export interface ReportProvider {
     recorded_since: string | null
     days: ReportDay[]
   }
+  /** Where the last days' use came from, by project; `tracked: false` for a provider that cannot say. */
+  by_project: ProjectSplit
 }
 
 export interface UsageReport {
@@ -115,7 +118,11 @@ function spendOf(db: Database, provider: string, days: string[]): ReportProvider
 }
 
 /** The report for a data directory, or why there is none (never collected, or unreadable). */
-export function usageReport(dataDir: string, now: string): UsageReport | { error: string } {
+export function usageReport(
+  dataDir: string,
+  now: string,
+  projects?: readonly ProjectRef[],
+): UsageReport | { error: string } {
   const path = usageDbPath(dataDir)
   if (!existsSync(path) || statSync(path).size === 0)
     return { error: 'Aico has not collected usage yet.' }
@@ -128,6 +135,7 @@ export function usageReport(dataDir: string, now: string): UsageReport | { error
     const facts = loadFacts(db, plans, now)
     const windows = windowFacts(facts.readings, now)
     const days = lastDays(now, SPEND_DAYS)
+    const splitDays = lastDays(now, config.project_split.days)
     const providers = config.providers.map((provider): ReportProvider => {
       const usage = optionUsage(provider.id, windows, facts.credits)
       const shown = usage.windows.filter((window) => window.state !== 'not_reported')
@@ -141,6 +149,7 @@ export function usageReport(dataDir: string, now: string): UsageReport | { error
             : usage.status === 'unknown'
               ? 'Unknown'
               : null
+      const spend = spendOf(db as Database, provider.id, days)
       return {
         id: provider.id,
         name: provider.name,
@@ -164,7 +173,8 @@ export function usageReport(dataDir: string, now: string): UsageReport | { error
             }
           : null,
         problem: saved.problems?.[provider.id] ?? facts.unreadable?.[provider.id] ?? null,
-        spend: spendOf(db as Database, provider.id, days),
+        spend,
+        by_project: projectSplit(db as Database, provider.id, spend.unit, splitDays, projects),
       }
     })
     return { as_of: now, collected_at: saved.at, providers }

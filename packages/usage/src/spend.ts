@@ -18,7 +18,7 @@ function ago(seconds: number): string {
   return `${Math.round(seconds / 86400)} days ago`
 }
 
-const count = (value: number) =>
+export const count = (value: number) =>
   value >= 10000
     ? `${(value / 1000).toFixed(0)}K`
     : value >= 1000
