@@ -150,6 +150,17 @@ function ProviderCard({
       : provider.status === 'unknown'
         ? 'unknown'
         : null
+  // A summary that only repeats a window's own line ("Weekly used up until
+  // Nov 8" over "weekly used up until Nov 8") is said once, in the window.
+  const summary =
+    provider.summary &&
+    !provider.windows.some(
+      (window) =>
+        sentence(window.text).toLowerCase() ===
+        sentence(provider.summary ?? '').toLowerCase(),
+    )
+      ? provider.summary
+      : null
   return (
     <section className={styles.card} aria-label={`${provider.name} usage`}>
       <div className={styles.cardHead}>
@@ -163,9 +174,7 @@ function ProviderCard({
           <span className={styles.muted}>{provider.plan} plan</span>
         )}
       </div>
-      {provider.summary && (
-        <p className={styles.summary}>{provider.summary}.</p>
-      )}
+      {summary && <p className={styles.summary}>{summary}.</p>}
       {provider.problem && (
         <p className={styles.problem}>
           Couldn’t read it fully: {provider.problem}.

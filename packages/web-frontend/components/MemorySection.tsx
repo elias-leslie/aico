@@ -8,6 +8,7 @@ import {
 import { Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { apiFetch } from '@/lib/api-fetch'
+import { shortWhen } from '@/lib/short-when'
 import { ConfirmationDialog } from './ConfirmationDialog'
 import styles from './MemorySection.module.css'
 import { PlainMarkdown } from './PlainMarkdown'
@@ -63,9 +64,7 @@ function Memory({
         {memory.tags.length > 0 && (
           <p className={styles.meta}>Tags: {memory.tags.join(', ')}</p>
         )}
-        <p className={styles.meta}>
-          Updated {new Date(memory.updatedAt).toLocaleString()}
-        </p>
+        <p className={styles.meta}>Updated {shortWhen(memory.updatedAt)}</p>
       </details>
       <button
         type="button"

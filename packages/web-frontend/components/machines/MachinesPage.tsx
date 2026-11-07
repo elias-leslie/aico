@@ -247,7 +247,12 @@ function MachineRow({
         <div className={styles.title}>
           {name}
           {machine.sessionHost && (
-            <span className={styles.tag}>Session host</span>
+            <span
+              className={styles.tag}
+              title="Sessions can be started and run on this machine"
+            >
+              Runs sessions
+            </span>
           )}
         </div>
         {machine.purpose && <p className={styles.line}>{machine.purpose}</p>}

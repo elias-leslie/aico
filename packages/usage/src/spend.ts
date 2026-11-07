@@ -29,17 +29,33 @@ export function windowText(window: Window): string {
   if (window.state === 'used_up')
     return `${window.label} used up${window.resets_at ? ` until ${when(window.resets_at)}` : ''}`
   if (window.state === 'unknown')
-    return `${window.label} unknown (last read ${ago(window.age_seconds)})`
+    return `${window.label} not reported this time; last known ${ago(window.age_seconds)}`
   // A window nothing has drawn from yet has no reset to speak of (OpenCode names "now + 5h").
   const resets = window.resets_at && window.left_percent !== 100
   return `${window.label} ${window.left_percent}% left${resets ? `, resets ${when(window.resets_at as string)}` : ''}`
 }
 
-export function creditText(credit: NonNullable<Usage['credits']>): string {
+/** A day in this machine's local time: "Nov 9". */
+const day = (at: Date | number | string) =>
+  new Date(typeof at === 'string' ? micros(at) / 1000 : at).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  })
+
+/** The balance and how long it lasts, as a date against the reset: "runs out about Nov 9, before
+ * the Nov 11 reset", "lasts past the Nov 11 reset". `now` is when the facts were read. */
+export function creditText(
+  credit: NonNullable<Usage['credits']>,
+  now: string | number = Date.now(),
+): string {
   let text = `${count(credit.balance)} credits left`
-  if (credit.lasts_past_reset === false && credit.lasts_days !== null)
-    text += `, enough for about ${credit.lasts_days} days at the recent pace, so not until the reset`
-  else if (credit.lasts_days !== null)
+  const nowMs = typeof now === 'string' ? micros(now) / 1000 : now
+  const reset = credit.reset_at ? ` ${day(credit.reset_at)} reset` : ' reset'
+  if (credit.lasts_past_reset === false && credit.lasts_days !== null && credit.balance > 0)
+    text += `, runs out about ${day(nowMs + credit.lasts_days * 86_400_000)}, before the${reset}`
+  else if (credit.lasts_past_reset === true && credit.reset_at)
+    text += `, lasts past the ${day(credit.reset_at)} reset at the recent pace`
+  else if (credit.lasts_days !== null && credit.balance > 0)
     text += ` (about ${credit.lasts_days} days at the recent pace)`
   if (credit.earliest_expiry) text += `, the earliest expire ${when(credit.earliest_expiry)}`
   return text
@@ -79,7 +95,7 @@ export function spendRow(provider: { id: string; name: string }, input: SpendInp
     ? `${capital(out.map(windowText).join('; '))}. `
     : (LEAD[usage.status] ?? '')
   const parts = shown.filter((w) => !out.includes(w)).map(windowText)
-  if (usage.credits) parts.push(creditText(usage.credits))
+  if (usage.credits) parts.push(creditText(usage.credits, input.now))
   const problem = input.problems[provider.id]
   let meaning =
     `${lead}${parts.length ? `${parts.join('; ')}.` : out.length ? '' : 'No usage readings yet.'}`.trim()

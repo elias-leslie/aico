@@ -90,13 +90,13 @@ describe('MachinesPage', () => {
   it('says what the list is and tags the session hosts', () => {
     renderPage()
     expect(screen.getByRole('status')).toHaveTextContent(
-      '3 machines; 2 can run sessions.',
+      '3 machines. Sessions can run on 2;',
     )
     const work = screen.getByTestId('machine-agent-work')
-    expect(within(work).getByText('Session host')).toBeInTheDocument()
+    expect(within(work).getByText('Runs sessions')).toBeInTheDocument()
     expect(
       within(screen.getByTestId('machine-ominull-hub')).queryByText(
-        'Session host',
+        'Runs sessions',
       ),
     ).toBeNull()
   })

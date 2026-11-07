@@ -57,7 +57,9 @@ describe('buildMachines', () => {
       'apps',
       'ominull-hub',
     ])
-    expect(machinesLine(list)).toBe('5 machines; 3 can run sessions.')
+    expect(machinesLine(list)).toBe(
+      '5 machines. Sessions can run on 3; 2 are on.',
+    )
   })
 
   it('tags session hosts and offers power only where Aico has it', () => {

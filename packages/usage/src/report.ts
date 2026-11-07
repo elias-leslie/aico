@@ -160,7 +160,7 @@ export function usageReport(dataDir: string, now: string): UsageReport | { error
           ? {
               balance: usage.credits.balance,
               lasts_days: usage.credits.lasts_days,
-              text: creditText(usage.credits),
+              text: creditText(usage.credits, now),
             }
           : null,
         problem: saved.problems?.[provider.id] ?? facts.unreadable?.[provider.id] ?? null,

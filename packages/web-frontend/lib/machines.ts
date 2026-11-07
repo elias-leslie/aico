@@ -244,11 +244,19 @@ export function machineCount(rows: readonly StatusRow[]): number {
   ).size
 }
 
-/** "8 machines; 4 can run sessions", from the list as shown. */
+/** "8 machines. Sessions can run on 4; 2 are on.", from the list as shown. */
 export function machinesLine(list: Machines): string {
   const total = list.machines.length
-  const hosts = list.machines.filter((m) => m.sessionHost).length
+  const hosts = list.machines.filter((m) => m.sessionHost)
   if (list.partial)
-    return `${plural(hosts, 'machine')} can run sessions. The other machines couldn’t be read.`
-  return `${plural(total, 'machine')}; ${hosts} can run sessions${list.hostsUnknown ? ' (the session hosts couldn’t be checked)' : ''}.`
+    return `${plural(hosts.length, 'machine')} can run sessions. The other machines couldn’t be read.`
+  const on = hosts.filter((m) => m.up === 'on').length
+  const state = list.hostsUnknown
+    ? ' (the session hosts couldn’t be checked)'
+    : on === hosts.length
+      ? `; ${hosts.length === 1 ? 'it is' : 'all are'} on`
+      : on === 0
+        ? '; none are on'
+        : `; ${on} ${on === 1 ? 'is' : 'are'} on`
+  return `${plural(total, 'machine')}. Sessions can run on ${hosts.length}${state}.`
 }

@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import styles from '@/components/BackupsPage.module.css'
+import { shortWhen } from '@/lib/short-when'
+import { at } from '@/lib/status'
 
 interface View {
   published: boolean
@@ -103,12 +105,7 @@ export default function PhoneAppPage() {
               <a className="lantern-btn small" href={pair.link}>
                 Open in the app
               </a>{' '}
-              This pairing link expires at{' '}
-              {new Date(pair.expires).toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
-              .
+              This pairing link expires at {at(pair.expires, Date.now())}.
             </p>
           )}
           <h2>Paired phones</h2>
@@ -125,7 +122,7 @@ export default function PhoneAppPage() {
                   <strong>{phone.name}</strong>
                   <small>
                     {phone.last_ack
-                      ? `Last heard ${new Date(phone.last_ack * 1000).toLocaleString()}`
+                      ? `Last heard ${shortWhen(phone.last_ack * 1000)}`
                       : 'No confirmation received yet.'}
                   </small>
                 </li>

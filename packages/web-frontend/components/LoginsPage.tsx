@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useHosts } from '@/lib/hooks/use-hosts'
+import { shortWhen } from '@/lib/short-when'
 import { HostSignIn } from './HostsSheet'
 import styles from './LoginsPage.module.css'
 
@@ -69,8 +70,7 @@ const title = (kind: Kind) =>
     'backup key': 'Backup keys',
     'lab login': 'Lab logins',
   })[kind]
-const when = (time: string | null) =>
-  time ? new Date(time).toLocaleString() : 'Not recorded'
+const when = (time: string | null) => shortWhen(time)
 
 export function LoginsPage() {
   const [data, setData] = useState<Data | null>(null),
