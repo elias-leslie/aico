@@ -6,7 +6,6 @@ import { useState } from 'react'
 import { apiFetch } from '@/lib/api-fetch'
 import { useHosts } from '@/lib/hooks/use-hosts'
 import { useLocalStorageState } from '@/lib/hooks/use-local-storage-state'
-import { useMediaQuery } from '@/lib/hooks/use-media-query'
 import { useSessionAttention } from '@/lib/hooks/use-session-attention'
 import { useStatus } from '@/lib/hooks/use-status'
 import {
@@ -97,7 +96,9 @@ function Glances() {
     {},
   )
   const folds = stored && typeof stored === 'object' ? stored : {}
-  const phone = useMediaQuery('(max-width: 1023px)')
+  // A phone is where the side slides over the session; a snapped desktop window keeps the desktop defaults.
+  const frame = useFrame()
+  const phone = frame !== null && !frame.docked
   const status = useStatusGlance()
   const quota = useQuotaGlance()
   const backups = useBackupsGlance()

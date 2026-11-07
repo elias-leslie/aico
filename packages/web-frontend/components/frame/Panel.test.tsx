@@ -32,7 +32,6 @@ const state = vi.hoisted(() => ({
   },
   open: vi.fn(),
   phone: false,
-  docked: true,
   notes: vi.fn((_path: string) => true),
   backups: {
     entries: [] as unknown[] | null,
@@ -62,7 +61,7 @@ const state = vi.hoisted(() => ({
   lastLook: null as number | null,
 }))
 vi.mock('./FrameContext', () => ({
-  useFrame: () => ({ open: state.open, docked: state.docked }),
+  useFrame: () => ({ open: state.open, docked: !state.phone }),
 }))
 vi.mock('@/lib/frame/digest', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/frame/digest')>()),
@@ -77,9 +76,6 @@ vi.mock('@tanstack/react-query', async (real) => ({
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: state.push }) }))
 vi.mock('@/lib/hooks/use-hosts', () => ({
   useHosts: () => ({ hosts: [], isLoading: false, isError: false }),
-}))
-vi.mock('@/lib/hooks/use-media-query', () => ({
-  useMediaQuery: () => state.phone,
 }))
 vi.mock('@/lib/hooks/use-backups', () => ({ useBackups: () => state.backups }))
 vi.mock('@/lib/hooks/use-history', () => ({ useHistory: () => state.history }))
@@ -205,7 +201,6 @@ describe('Panel', () => {
   beforeEach(() => {
     localStorage.clear()
     state.phone = false
-    state.docked = true
     state.notes.mockClear()
   })
 
@@ -336,7 +331,7 @@ describe('Panel', () => {
   })
 
   it('on a phone the gear opens a Settings page in the sheet, with Back to the list', () => {
-    state.docked = false
+    state.phone = true
     render(<Panel slots={slots} onSelect={vi.fn()} />)
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
     expect(screen.queryByRole('navigation', { name: 'Sessions' })).toBeNull()

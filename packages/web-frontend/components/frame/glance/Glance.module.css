@@ -271,6 +271,9 @@
 
 /* Phone and tablet: the heading's tap targets are 44px. */
 @media (max-width: 1023px) {
+  .disclosure {
+    margin-block: -6px;
+  }
   .toggle {
     min-height: 44px;
   }
