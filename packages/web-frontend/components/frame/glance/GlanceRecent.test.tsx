@@ -103,7 +103,8 @@ describe('GlanceRecent', () => {
     ])
     render(<GlanceRecent />)
     expect(screen.getByText('Failed')).toHaveClass('failed')
-    expect(screen.getByText(/Project 2 · Codex · 12 min ago/)).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'Project 2' })).toBeVisible()
+    expect(screen.getByText(/Codex · 12 min ago/)).toBeVisible()
     fireEvent.click(screen.getByRole('button', { name: 'Failed only' }))
     expect(screen.getAllByRole('listitem')).toHaveLength(1)
     expect(screen.queryByText('Task 1')).toBeNull()
@@ -192,6 +193,25 @@ describe('GlanceRecent groups', () => {
   })
 })
 
+describe('Recent by project', () => {
+  it('lists today’s sessions under their project, newest project first, and leaves earlier days flat', () => {
+    state.history = ok([
+      session('1', { endedAt: Date.now() - 5000, project: 'Alpha' }),
+      session('2', { endedAt: Date.now(), project: 'Beta' }),
+      session('3', { endedAt: Date.now() - 9000, project: 'Alpha' }),
+      session('old', { startedAt: 1, endedAt: 2, project: 'Gamma' }),
+    ])
+    render(<GlanceRecent />)
+    expect(
+      screen
+        .getAllByRole('heading', { level: 4 })
+        .map((heading) => heading.textContent),
+    ).toEqual(['Beta', 'Alpha'])
+    expect(screen.queryByText('Today: 3 sessions')).toBeNull()
+    expect(screen.queryByText('See the day')).toBeNull()
+  })
+})
+
 describe('useRecentGlance', () => {
   const Line = () => <p>{useRecentGlance().value}</p>
   it('counts today’s sessions, leaving test runs and earlier days out', () => {
@@ -203,6 +223,16 @@ describe('useRecentGlance', () => {
     ])
     render(<Line />)
     expect(screen.getByText('2 today')).toBeVisible()
+  })
+  it('names the last session’s time when none ran today, and says none yet', () => {
+    state.history = ok([
+      session('old', { startedAt: 1, endedAt: Date.now() - 3 * 86_400_000 }),
+    ])
+    const { rerender } = render(<Line />)
+    expect(screen.getByText(/^last /)).toBeVisible()
+    state.history = ok([])
+    rerender(<Line />)
+    expect(screen.getByText('none yet')).toBeVisible()
   })
   it('says why there is nothing to count', () => {
     state.history = { items: null, loading: true, failed: false, stale: false }

@@ -1,7 +1,6 @@
 'use client'
 
 import { Inbox } from 'lucide-react'
-import { useRouter } from 'next/navigation'
 import { type ReactNode, useRef, useState } from 'react'
 import {
   openNeedsYou,
@@ -23,6 +22,9 @@ import { useNeedsYouCounts } from '@/lib/hooks/use-needs-you'
 import { PRODUCT_NAME } from '@/lib/project-branding'
 import { at, plural } from '@/lib/status'
 import { useFrame } from '../frame/FrameContext'
+import { Disclosure } from '../frame/glance/Disclosure'
+import { GlancePopover } from '../frame/glance/GlancePopover'
+import type { GlanceHead } from '../frame/glance/glance-types'
 import { RailPopover, usePopoverClose } from '../frame/RailPopover'
 import { AnsweredCard } from './AnsweredCard'
 import { ApprovalCard } from './ApprovalCard'
@@ -52,9 +54,7 @@ export function NeedsYouLauncher() {
         </>
       }
     >
-      <div className="p-3">
-        <NeedsYouSection />
-      </div>
+      <NeedsYouSection popout />
     </RailPopover>
   )
 }
@@ -227,8 +227,7 @@ function NeedsYouBody({
                     {sent}{' '}
                     <button
                       type="button"
-                      className="underline"
-                      style={{ color: 'var(--lantern)' }}
+                      className="lantern-btn ghost small"
                       onClick={() => setTab('answered')}
                     >
                       See Answered
@@ -324,68 +323,84 @@ function AsOfNote() {
   )
 }
 
-/** Needs you at the top of the side's list: the first few questions as full
- * cards (a push link or a session's own question puts one first), the rest
- * and the answered ones on the Needs you page. */
-export function NeedsYouSection() {
+/** The Waiting | Answered switch inside the section. */
+type Show = 'waiting' | 'answered'
+
+function SegmentButton({
+  id,
+  show,
+  onSelect,
+  children,
+}: {
+  id: Show
+  show: Show
+  onSelect: (show: Show) => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={show === id}
+      onClick={() => onSelect(id)}
+      data-testid={`needs-you-${id}`}
+    >
+      {children}
+    </button>
+  )
+}
+
+/** Needs you at the top of the side's list and in the rail's pop-out: the same
+ * row as the other sections (chevron, label, one value), open to everything
+ * that waits whenever something does, and to what was answered when it is
+ * opened with nothing waiting. A push link or a session's own question opens
+ * it on that question. */
+export function NeedsYouSection({ popout = false }: { popout?: boolean }) {
   const { asks, known, isLoading, isError, refetch } = useOwnerAsks()
   const { approvals } = useApprovals()
   const unreachable = useServerReach().down && !known
-  const router = useRouter()
   const frame = useFrame()
   const closePopover = usePopoverClose()
-  const ref = useRef<HTMLElement>(null)
+  const ref = useRef<HTMLDivElement>(null)
   const [focus, setFocus] = useState<string | null>(null)
   /** The section was asked for (the side's count): it flashes once, so a tap
    * when it is already showing still answers. */
   const [called, setCalled] = useState(false)
-  const [showAll, setShowAll] = useState(false)
+  /** What the owner chose; until then it follows what is there. */
+  const [folded, setFolded] = useState<boolean | null>(null)
+  const [picked, setPicked] = useState<Show | null>(null)
   const [sent, setSent] = useSentNote()
   const now = Date.now()
   const waiting = orderFocused(openAsks(asks), focus)
+  const answered = orderFocused(answeredAsks(asks, now), focus)
   const taps = approvals?.taps ?? []
   useNeedsYouRequests((request) => {
     setFocus(request.focus)
+    setFolded(false)
+    setPicked(null)
     setCalled(true)
     window.setTimeout(() => setCalled(false), 1400)
     window.requestAnimationFrame(() =>
       ref.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }),
     )
   })
-  const shown = showAll ? waiting : waiting.slice(0, 3)
   const total = waiting.length + taps.length
-  // Known and empty: the heading says so in one line, no body below it.
-  const empty = total === 0 && !unreachable && !isLoading && !isError
-  const openPage = () => {
-    router.push('/needs-you')
+  const problem = unreachable || isError
+  const head: GlanceHead = problem
+    ? { value: unreachable ? 'Can’t reach' : 'Couldn’t read', tone: 'failed' }
+    : isLoading && !known
+      ? { value: 'Checking…', tone: null }
+      : total > 0
+        ? { value: `${total} waiting`, tone: 'warn' }
+        : { value: 'Nothing waiting', tone: null }
+  const open =
+    popout || (folded === null ? total > 0 || problem || !!sent : !folded)
+  const show: Show = picked ?? (total > 0 ? 'waiting' : 'answered')
+  const leave = () => {
     if (frame && !frame.docked) frame.close()
     closePopover?.()
   }
-  return (
-    <section
-      ref={ref}
-      aria-label="Needs you"
-      data-testid="needs-you-section"
-      data-called={called ? 'true' : undefined}
-      className="lantern-called flex flex-col gap-2"
-    >
-      <div className="lantern-sec">
-        <h2>Needs you</h2>
-        {total > 0 && <span className="n">{total}</span>}
-        {empty && !sent && (
-          <span className="n" style={{ color: 'var(--mist)' }}>
-            Nothing waiting
-          </span>
-        )}
-        <button
-          type="button"
-          className="ml-auto text-[11px] normal-case tracking-normal max-lg:min-h-11"
-          style={{ color: 'var(--lantern)' }}
-          onClick={openPage}
-        >
-          All and answered
-        </button>
-      </div>
+  const body = (
+    <>
       {sent && (
         <p
           role="status"
@@ -402,38 +417,69 @@ export function NeedsYouSection() {
         isError={isError}
         refetch={refetch}
       >
-        {total === 0 ? (
-          sent && <Note>Nothing else waiting.</Note>
+        <div role="group" aria-label="Show" className="lantern-seg self-start">
+          <SegmentButton id="waiting" show={show} onSelect={setPicked}>
+            Waiting{total ? ` ${total}` : ''}
+          </SegmentButton>
+          <SegmentButton id="answered" show={show} onSelect={setPicked}>
+            Answered
+          </SegmentButton>
+        </div>
+        {show === 'waiting' ? (
+          total === 0 ? (
+            <Note>
+              {sent ? 'Nothing else waiting.' : 'Nothing waiting for you.'}
+            </Note>
+          ) : (
+            <ul className="flex flex-col gap-2" aria-label="Questions">
+              {taps.map((tap) => (
+                <ApprovalCard key={tap.id} tap={tap} />
+              ))}
+              {waiting.map((ask) => (
+                <AskCard
+                  key={ask.id}
+                  ask={ask}
+                  now={now}
+                  compact
+                  onSent={setSent}
+                  onOpenSession={leave}
+                />
+              ))}
+            </ul>
+          )
+        ) : answered.length === 0 ? (
+          <Note>Nothing answered in the last day.</Note>
         ) : (
-          <ul className="flex flex-col gap-2" aria-label="Questions">
-            {taps.map((tap) => (
-              <ApprovalCard key={tap.id} tap={tap} />
-            ))}
-            {shown.map((ask) => (
-              <AskCard
-                key={ask.id}
-                ask={ask}
-                now={now}
-                compact
-                onSent={setSent}
-                onOpenSession={() => {
-                  if (frame && !frame.docked) frame.close()
-                  closePopover?.()
-                }}
-              />
+          <ul className="flex flex-col gap-2" aria-label="Answered">
+            {answered.map((ask) => (
+              <AnsweredCard key={ask.id} ask={ask} now={now} />
             ))}
           </ul>
         )}
       </AsksState>
-      {!showAll && waiting.length > shown.length && (
-        <button
-          type="button"
-          className="lantern-btn ghost small self-start"
-          onClick={() => setShowAll(true)}
+    </>
+  )
+  return (
+    <div
+      ref={ref}
+      data-testid="needs-you-section"
+      data-called={called ? 'true' : undefined}
+      className="lantern-called"
+    >
+      {popout ? (
+        <GlancePopover title="Needs you" head={head}>
+          <div className="flex flex-col gap-2 px-1.5 pt-1 pb-3">{body}</div>
+        </GlancePopover>
+      ) : (
+        <Disclosure
+          title="Needs you"
+          head={head}
+          open={open}
+          onToggle={() => setFolded(open)}
         >
-          Show {waiting.length - shown.length} more
-        </button>
+          <div className="flex flex-col gap-2">{body}</div>
+        </Disclosure>
       )}
-    </section>
+    </div>
   )
 }

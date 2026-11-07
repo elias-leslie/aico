@@ -328,14 +328,54 @@ describe('Needs you in the side', () => {
     expect(push).toHaveBeenCalled()
   })
 
-  it('shows three cards and offers the rest', () => {
+  it('shows every waiting question, scrolling inside the section, with no Show more', () => {
     state.asks = ['a', 'b', 'c', 'd'].map((c) =>
       ask({ id: c.repeat(12), question: `Question ${c}` }),
     )
     render(<NeedsYouSection />)
-    expect(screen.getAllByTestId('ask-card')).toHaveLength(3)
-    fireEvent.click(screen.getByRole('button', { name: 'Show 1 more' }))
     expect(screen.getAllByTestId('ask-card')).toHaveLength(4)
+    expect(screen.queryByRole('button', { name: /more/ })).toBeNull()
+  })
+
+  it('is the same row as the other sections: chevron, label and the count as a chip, open while something waits', () => {
+    state.asks = [ask(), ask({ id: '222222222222' })]
+    render(<NeedsYouSection />)
+    const row = screen.getByRole('button', { name: /^Needs you/ })
+    expect(row).toHaveAttribute('aria-expanded', 'true')
+    expect(row).toHaveTextContent('2 waiting')
+    expect(row.querySelector('.status-chip')).not.toBeNull()
+    expect(screen.queryByRole('link', { name: /answered/i })).toBeNull()
+    expect(screen.queryByText('All and answered')).toBeNull()
+    fireEvent.click(row)
+    expect(row).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByTestId('ask-card')).toBeNull()
+  })
+
+  it('is folded when nothing waits, and opens to what was answered', () => {
+    state.asks = [
+      ask({
+        state: 'answered',
+        answer: 'Stop here',
+        delivery: 'wake',
+        answeredAt: NOW - 60_000,
+        updatedAt: NOW - 60_000,
+      }),
+    ]
+    render(<NeedsYouSection />)
+    const row = screen.getByRole('button', { name: /^Needs you/ })
+    expect(row).toHaveAttribute('aria-expanded', 'false')
+    expect(row).toHaveTextContent('Nothing waiting')
+    expect(screen.queryByTestId('answered-card')).toBeNull()
+    fireEvent.click(row)
+    expect(screen.getByRole('button', { name: 'Answered' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    expect(screen.getByTestId('answered-card')).toHaveTextContent(
+      'You answered Stop here',
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Waiting' }))
+    expect(screen.getByText('Nothing waiting for you.')).toBeVisible()
   })
 
   it('counts each kind by itself in the page header', () => {
@@ -363,11 +403,18 @@ describe('Needs you in the side', () => {
   it('has its own loading, failed and empty copy', () => {
     state.isLoading = true
     const { rerender } = render(<NeedsYouSection />)
+    expect(
+      screen.getByRole('button', { name: /^Needs you/ }),
+    ).toHaveTextContent('Checking…')
+    fireEvent.click(screen.getByRole('button', { name: /^Needs you/ }))
     expect(screen.getByText('Loading questions…')).toBeInTheDocument()
     state.isLoading = false
     state.isError = true
     rerender(<NeedsYouSection />)
     expect(screen.getByText(/Couldn’t load questions/)).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /^Needs you/ }),
+    ).toHaveTextContent('Couldn’t read')
     state.isError = false
     rerender(<NeedsYouSection />)
     expect(screen.getByText('Nothing waiting')).toBeInTheDocument()

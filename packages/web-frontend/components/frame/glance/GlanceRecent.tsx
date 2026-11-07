@@ -9,10 +9,11 @@ import {
   agoAt,
   clock,
   countOf,
+  groupByProject,
   type HistorySession,
+  projectOf,
   STANDING_CHIP,
   STANDING_TEXT,
-  shortFolder,
   standing,
   TOOLS,
   tokenLine,
@@ -26,9 +27,6 @@ import { useWiden } from '../Widen'
 import notes from './Glance.module.css'
 import styles from './GlanceRecent.module.css'
 import type { GlanceHead } from './glance-types'
-
-const nameOf = (session: HistorySession) =>
-  session.project ?? (shortFolder(session.cwd) || 'Session')
 
 const startOfDay = (ms: number) => {
   const date = new Date(ms)
@@ -49,10 +47,13 @@ export function useRecentGlance(): GlanceHead {
       ? { value: 'Checking…', tone: null }
       : { value: 'Couldn’t read', tone: 'failed' }
   const day = startOfDay(now)
-  const today = history.items.filter(
-    (session) => !session.test && isToday(session, day),
-  ).length
-  return { value: `${today} today`, tone: null }
+  const real = history.items.filter((session) => !session.test)
+  const today = real.filter((session) => isToday(session, day)).length
+  if (today > 0 || real.length === 0)
+    return { value: today ? `${today} today` : 'none yet', tone: null }
+  // Nothing today: when the last one was.
+  const last = Math.max(...real.map((s) => s.endedAt ?? s.startedAt ?? 0))
+  return { value: `last ${agoAt(last, now)}`, tone: null }
 }
 
 /** A session's whole transcript inline, in a wider side while it is open. */
@@ -134,6 +135,7 @@ function SessionRow({
   liveSession,
   open,
   onToggle,
+  inProject = false,
 }: {
   session: HistorySession
   label: string
@@ -142,6 +144,8 @@ function SessionRow({
   liveSession: string | null
   open: boolean
   onToggle: () => void
+  /** Listed under its project, so the line does not repeat it. */
+  inProject?: boolean
 }) {
   const inside = useId()
   const Chevron = open ? ChevronDown : ChevronRight
@@ -160,8 +164,8 @@ function SessionRow({
         <span className={styles.text}>
           <span className={styles.title}>{label}</span>
           <span className={styles.line}>
-            {nameOf(session)} · {toolName(session.tool)} ·{' '}
-            {agoAt(session.endedAt, now)}
+            {inProject ? '' : `${projectOf(session)} · `}
+            {toolName(session.tool)} · {agoAt(session.endedAt, now)}
           </span>
         </span>
         <Chevron
@@ -296,24 +300,35 @@ export function GlanceRecent() {
           .map((group) => (
             <section key={group.name} aria-label={group.name}>
               <h3 className={styles.group}>{group.name}</h3>
-              <ul className={styles.list}>
-                {group.rows.map(({ session, live: owner }) => (
-                  <SessionRow
-                    key={session.id}
-                    session={session}
-                    label={labelOf(session)}
-                    now={now}
-                    state={standing(session, now, owner)}
-                    liveSession={owner?.session ?? null}
-                    open={openId === session.id}
-                    onToggle={() =>
-                      setOpenId((current) =>
-                        current === session.id ? null : session.id,
-                      )
-                    }
-                  />
-                ))}
-              </ul>
+              {(group.name === 'Today'
+                ? groupByProject(group.rows)
+                : [{ project: null, rows: group.rows }]
+              ).map((sub) => (
+                <div key={sub.project ?? 'all'}>
+                  {sub.project && (
+                    <h4 className={styles.project}>{sub.project}</h4>
+                  )}
+                  <ul className={styles.list}>
+                    {sub.rows.map(({ session, live: owner }) => (
+                      <SessionRow
+                        key={session.id}
+                        session={session}
+                        label={labelOf(session)}
+                        now={now}
+                        state={standing(session, now, owner)}
+                        liveSession={owner?.session ?? null}
+                        inProject={sub.project !== null}
+                        open={openId === session.id}
+                        onToggle={() =>
+                          setOpenId((current) =>
+                            current === session.id ? null : session.id,
+                          )
+                        }
+                      />
+                    ))}
+                  </ul>
+                </div>
+              ))}
             </section>
           ))
       )}

@@ -214,6 +214,24 @@ export function clock(ms: number | null): string {
   })
 }
 
+/** The name a session goes under: its project, else its folder, else "Session". */
+export function projectOf(session: HistorySession): string {
+  return session.project ?? (shortFolder(session.cwd) || 'Session')
+}
+
+/** Sessions grouped by project, the project with the latest session first and each group newest first. */
+export function groupByProject<T extends { session: HistorySession }>(
+  rows: T[],
+): { project: string; rows: T[] }[] {
+  const when = (row: T) => row.session.endedAt ?? row.session.startedAt ?? 0
+  const groups = new Map<string, T[]>()
+  for (const row of [...rows].sort((a, b) => when(b) - when(a))) {
+    const name = projectOf(row.session)
+    groups.set(name, [...(groups.get(name) ?? []), row])
+  }
+  return [...groups].map(([project, list]) => ({ project, rows: list }))
+}
+
 /** The folder's last two parts: enough to tell sessions apart. */
 export function shortFolder(cwd: string | null): string {
   if (!cwd) return ''

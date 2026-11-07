@@ -115,8 +115,7 @@ export function AsksState({
         Couldn’t load questions.{' '}
         <button
           type="button"
-          className="underline"
-          style={{ color: 'var(--lantern)' }}
+          className="lantern-btn ghost small"
           onClick={() => void refetch()}
         >
           Try again

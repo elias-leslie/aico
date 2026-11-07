@@ -164,8 +164,7 @@ export function AskHead({
       {ask.share && !ask.attached?.length && (
         <button
           type="button"
-          className="lantern-btn ghost small mb-2 -ml-2.5"
-          style={{ color: 'var(--lantern)' }}
+          className="lantern-btn ghost small mb-2"
           onClick={() =>
             openFiles({ kind: 'shared', showId: ask.share ?? undefined })
           }

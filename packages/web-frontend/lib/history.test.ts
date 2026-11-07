@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   agoAt,
   count,
+  groupByProject,
   plainLine,
   standing,
   tokenLine,
@@ -62,5 +63,33 @@ describe('plainLine', () => {
       plainLine('\n**Done.** See [the report](/files?path=a.md) now\nmore'),
     ).toBe('Done. See the report now')
     expect(plainLine('')).toBe('')
+  })
+})
+
+describe('groupByProject', () => {
+  const at = (id: string, project: string | null, endedAt: number) => ({
+    session: {
+      id,
+      project,
+      cwd: null,
+      endedAt,
+      startedAt: endedAt - 1,
+    } as never,
+  })
+  it('groups by project, latest project first, newest session first', () => {
+    const groups = groupByProject([
+      at('a', 'Alpha', 100),
+      at('b', 'Beta', 300),
+      at('c', 'Alpha', 200),
+      at('d', null, 50),
+    ])
+    expect(groups.map((group) => group.project)).toEqual([
+      'Beta',
+      'Alpha',
+      'Session',
+    ])
+    expect(
+      groups[1]?.rows.map((row) => (row.session as { id: string }).id),
+    ).toEqual(['c', 'a'])
   })
 })
