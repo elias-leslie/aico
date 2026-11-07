@@ -4,7 +4,7 @@ import { main } from './main'
 
 afterEach(() => vi.restoreAllMocks())
 
-it.each(['deploy', 'logs', 'snapshots', 'vm'])(
+it.each(['deploy', 'logs', 'snapshots', 'vm', 'plug'])(
   'aico %s --help prints that command only, exit 0, without a project or host',
   async (verb) => {
     for (const flag of ['--help', '-h']) {
@@ -17,7 +17,7 @@ it.each(['deploy', 'logs', 'snapshots', 'vm'])(
       expect(err).toEqual([])
       const text = out.join('\n')
       expect(text).toContain(`aico ${verb} `)
-      for (const other of ['deploy', 'logs', 'snapshots', 'vm'].filter((v) => v !== verb))
+      for (const other of ['deploy', 'logs', 'snapshots', 'vm', 'plug'].filter((v) => v !== verb))
         expect(text).not.toContain(`aico ${other} `)
       vi.restoreAllMocks()
     }

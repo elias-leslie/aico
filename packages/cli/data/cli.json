@@ -81,6 +81,7 @@
         ["monitor", "this machine's load, memory, connections, processes and mounts"],
         ["machines", "every machine once: Proxmox guest, power, session host, projects"],
         ["vm", "Proxmox guests: list, start, stop, snapshot"],
+        ["plug", "the power plug: which machine each socket feeds; switch or cycle one"],
         ["phones", "paired phones: list, remove"],
         ["app", "the phone app's published version and outage drills"],
         ["declare", "record a host change you made, so Status knows it was you"],

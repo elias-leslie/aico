@@ -61,5 +61,15 @@
   "snapshots": {
     "catalogue": "~/.local/share/st/snaps",
     "workspacesRoot": "/srv/workspaces"
+  },
+  "plug": {
+    "address": "192.168.87.217",
+    "port": 9999,
+    "timeoutSeconds": 5,
+    "cycleSeconds": 10,
+    "sockets": [
+      { "machine": "davion-sidarli", "hostnames": ["davion-sidarli"] },
+      { "machine": "davion-gem", "hostnames": ["davion-gem", "aico"] }
+    ]
   }
 }

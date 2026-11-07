@@ -108,6 +108,7 @@ describe('CLI cutover', () => {
     'web',
     'video',
     'vm',
+    'plug',
     'backups',
     'publish',
     'usage',
