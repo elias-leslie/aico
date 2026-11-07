@@ -77,6 +77,12 @@ a.main:hover .title {
   color: var(--mist);
   overflow-wrap: anywhere;
 }
+.detail[data-clamp] {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  overflow: hidden;
+}
 
 .final {
   display: block;

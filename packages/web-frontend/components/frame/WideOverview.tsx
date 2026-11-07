@@ -152,7 +152,21 @@ function StatusSection() {
 function ProjectsSection() {
   const query = useProjectOverview()
   const active = query.data ? splitProjects(query.data, '').active : null
-  const shown = active?.slice(0, 5) ?? []
+  const lineOf = (project: NonNullable<typeof active>[number]) => {
+    const problem = project.problems[0]
+    return [
+      project.top ? `Now: ${project.top}` : null,
+      project.waiting ? '1 question waiting' : null,
+      project.agents ? agentsText(project.agents) : null,
+      problem ? problemText(problem.kind, problem.count, problem.worst) : null,
+    ]
+      .filter(Boolean)
+      .join(' · ')
+  }
+  // Projects with nothing to say share one line instead of a row each.
+  const busy = active?.filter((project) => lineOf(project)) ?? []
+  const quiet = active?.filter((project) => !lineOf(project)) ?? []
+  const shown = busy.slice(0, 5)
   return (
     <Section
       title="Projects"
@@ -164,7 +178,7 @@ function ProjectsSection() {
         <p className={styles.note}>Loading projects…</p>
       ) : !active ? (
         <p className={styles.note}>Projects couldn’t be read.</p>
-      ) : shown.length === 0 ? (
+      ) : active.length === 0 ? (
         <p className={styles.note}>No active projects.</p>
       ) : (
         <ul
@@ -172,31 +186,25 @@ function ProjectsSection() {
           data-stale={query.isError ? 'true' : undefined}
         >
           {shown.map((project) => {
-            const problem = project.problems[0]
+            const line = lineOf(project)
             return (
               <li key={project.id}>
                 <span className={styles.main}>
                   <span className={styles.title}>{project.name}</span>
-                  <span className={styles.detail}>
-                    {[
-                      project.top ? `Now: ${project.top}` : null,
-                      project.waiting ? '1 question waiting' : null,
-                      project.agents ? agentsText(project.agents) : null,
-                      problem
-                        ? problemText(
-                            problem.kind,
-                            problem.count,
-                            problem.worst,
-                          )
-                        : null,
-                    ]
-                      .filter(Boolean)
-                      .join(' · ') || 'Quiet'}
+                  <span className={styles.detail} data-clamp title={line}>
+                    {line}
                   </span>
                 </span>
               </li>
             )
           })}
+          {quiet.length > 0 && (
+            <li>
+              <span className={styles.detail}>
+                Quiet: {quiet.map((project) => project.name).join(', ')}
+              </span>
+            </li>
+          )}
         </ul>
       )}
     </Section>
