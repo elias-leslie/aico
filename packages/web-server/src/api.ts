@@ -213,24 +213,13 @@ export function buildApi(deps: ApiDeps): Router {
   router.on('GET', '/api/sessions', async () => {
     // Tabs are never detached any more, so include_detached changes nothing.
     const seen = store.seenAt()
-    const items = [
-      ...(await listSessions()),
-      ...(deps.chats
-        ? deps.chats
-            .list()
-            .filter((chat) => chat.state !== 'ended')
-            .map((chat) => chatSession(chat, [], seen.get(chat.id) ?? 0))
-        : []),
-    ]
+    const items = [...(await listSessions())] as unknown[]
     if (deps.chats) {
-      const asks = await deps.asks.list()
-      for (let i = 0; i < items.length; i++) {
-        if (deps.chats.has(items[i].id))
-          items[i] = chatSession(
-            deps.chats.summary(items[i].id),
-            asks,
-            seen.get(items[i].id) ?? 0,
-          ) as (typeof items)[number]
+      // Only open chats are listed; each summary is built once, with the asks read once.
+      const open = deps.chats.listOpen()
+      if (open.length > 0) {
+        const asks = await deps.asks.list()
+        for (const chat of open) items.push(chatSession(chat, asks, seen.get(chat.id) ?? 0))
       }
     }
     return { items, total: items.length }

@@ -12,6 +12,7 @@
 // - deliveries and delivery_items: what each context delivery loaded into a
 //   session, item by item with its size (deliver.ts), for the context cost view.
 
+import { statSync } from 'node:fs'
 import { join } from 'node:path'
 import { type Database, openDatabase } from '@aico/store'
 
@@ -229,6 +230,21 @@ const MIGRATIONS = [
 /** The context DB file in a data directory. */
 export function contextDbPath(dataDir: string): string {
   return join(dataDir, 'context.db')
+}
+
+/** Changes whenever context.db is written: a cache key for what is derived from it. */
+export function contextSignature(dataDir: string): string {
+  const file = contextDbPath(dataDir)
+  return [file, `${file}-wal`]
+    .map((path) => {
+      try {
+        const stat = statSync(path)
+        return `${stat.mtimeMs}:${stat.size}`
+      } catch {
+        return '-'
+      }
+    })
+    .join('|')
 }
 
 /** Opens (creating and migrating) context.db; `':memory:'` for tests. */

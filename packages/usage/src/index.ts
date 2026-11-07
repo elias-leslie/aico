@@ -4,7 +4,15 @@
 
 export { routeFacts, runUsageCli, USAGE_COMMANDS, type UsageCliIo } from './cli'
 export { type Collected, collect } from './collect'
-export { type Database, getState, openUsage, plansPath, putState, usageDbPath } from './db'
+export {
+  type Database,
+  getState,
+  openUsage,
+  plansPath,
+  putState,
+  usageDbPath,
+  usageSignature,
+} from './db'
 export { latestReadings, loadFacts, recordRefusal } from './facts'
 export {
   creditFacts,

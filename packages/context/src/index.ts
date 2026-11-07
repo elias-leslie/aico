@@ -2,7 +2,7 @@
 // project permissions and the models the launch policy names; route() answers
 // `models route`; deliver() builds each session's context.
 
-export { routeFacts } from '@aico/usage'
+export { routeFacts, usageSignature } from '@aico/usage'
 export { CONTEXT_COMMANDS, type ContextCliIo, runContextCli } from './cli'
 export {
   bindContextSession,
@@ -18,7 +18,7 @@ export {
   type UseEvent,
   unusedItems,
 } from './cost'
-export { contextDbPath, type Database, openContext } from './db'
+export { contextDbPath, contextSignature, type Database, openContext } from './db'
 export {
   type Activity,
   DELIVERY,

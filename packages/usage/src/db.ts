@@ -9,6 +9,7 @@
 // - refusals: models a provider refused, newest first in facts.
 // - cursors: how far each Codex log file was read; state: collector memory (JSON values).
 
+import { statSync } from 'node:fs'
 import { join } from 'node:path'
 import { type Database, openDatabase } from '@aico/store'
 
@@ -75,6 +76,20 @@ export function usageDbPath(dataDir: string): string {
 /** The plans and credit lots file in a data directory (owner data: never committed). */
 export function plansPath(dataDir: string): string {
   return join(dataDir, 'usage-plans.json')
+}
+
+/** Changes whenever the files route facts are read from change (collect, plans edits): a cache key. */
+export function usageSignature(dataDir: string): string {
+  return [usageDbPath(dataDir), `${usageDbPath(dataDir)}-wal`, plansPath(dataDir)]
+    .map((file) => {
+      try {
+        const stat = statSync(file)
+        return `${stat.mtimeMs}:${stat.size}`
+      } catch {
+        return '-'
+      }
+    })
+    .join('|')
 }
 
 /** Opens (creating and migrating) usage.db; `':memory:'` for tests. */

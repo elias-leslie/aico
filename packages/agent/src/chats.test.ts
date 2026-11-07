@@ -156,3 +156,56 @@ describe('chat model choice and used-up subscriptions', () => {
     expect(direct.skipped?.map((entry) => entry.id)).toEqual(['codex/gpt-6.1-sol'])
   })
 })
+
+describe('listing chats stays cheap', () => {
+  const seed = (
+    db: ReturnType<typeof openAgentDb>,
+    id: string,
+    state: string,
+    startedBy: string,
+  ) => {
+    new Transcript(db, id, {
+      role: 'implementation',
+      cwd: '/scratch',
+      task: id,
+      chain: rules.chain,
+    })
+    db.prepare(
+      'INSERT INTO chats (run_id, title, state, updated_at, started_by) VALUES (?, ?, ?, 1, ?)',
+    ).run(id, id, state, startedBy)
+  }
+  const build = () => {
+    const db = openAgentDb(':memory:')
+    seed(db, 'aaaa0001', 'ended', 'a-term:12345678')
+    seed(db, 'aaaa0002', 'idle', 'a-term:87654321')
+    let reads = 0
+    const chats = new ChatSessions(db, {
+      dataDir: '/scratch/none',
+      push: async () => {},
+      rules: () => rules,
+      facts: () => {
+        reads++
+        return { error: 'not collected' }
+      },
+    })
+    return { chats, reads: () => reads }
+  }
+  it('listOpen leaves ended chats out without summarising them', () => {
+    const { chats, reads } = build()
+    expect(chats.listOpen().map((chat) => chat.id)).toEqual(['aaaa0002'])
+    expect(reads()).toBe(1)
+  })
+  it('startedBy reads one column and never touches the routing facts', () => {
+    const { chats, reads } = build()
+    expect(chats.startedBy('aaaa0001')).toBe('a-term:12345678')
+    expect(chats.startedBy('nope0000')).toBeNull()
+    expect(reads()).toBe(0)
+  })
+  it('summaries share one rules read until usage or context files change', () => {
+    const { chats, reads } = build()
+    chats.summary('aaaa0001')
+    chats.summary('aaaa0002')
+    chats.summary('aaaa0002')
+    expect(reads()).toBe(1)
+  })
+})

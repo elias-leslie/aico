@@ -2,7 +2,13 @@
 // Tether receives pushed state/totals and never opens this database.
 import { randomBytes } from 'node:crypto'
 import { statSync } from 'node:fs'
-import { Catalog, contextDbPath, type routeFacts } from '@aico/context'
+import {
+  Catalog,
+  contextDbPath,
+  contextSignature,
+  type routeFacts,
+  usageSignature,
+} from '@aico/context'
 import type { Database } from '@aico/store'
 import type { AgentEvent } from '@earendil-works/pi-agent-core'
 import type { ImageContent, Models } from '@earendil-works/pi-ai'
@@ -158,6 +164,21 @@ export class ChatSessions {
       }[]
     ).map(({ run_id }) => this.summary(run_id))
   }
+  /** The chats still open (not ended), as summaries; ended ones cost nothing here. */
+  listOpen() {
+    return (
+      this.db
+        .prepare("SELECT run_id FROM chats WHERE state != 'ended' ORDER BY updated_at DESC")
+        .all() as { run_id: string }[]
+    ).map(({ run_id }) => this.summary(run_id))
+  }
+  /** Who started this chat (its `startedBy`), without building the whole summary. */
+  startedBy(id: string): string | null {
+    const row = this.db.prepare('SELECT started_by FROM chats WHERE run_id = ?').get(id) as
+      | { started_by: string | null }
+      | undefined
+    return row?.started_by ?? null
+  }
   summary(id: string) {
     const row = this.row(id)
     const run = findRun(this.db, id)
@@ -192,12 +213,21 @@ export class ChatSessions {
       last: last ? assistantText(parse(last.content, [])) : '',
     }
   }
+  /** Rules as summaries show them. Reading them opens the usage and context files, so the
+   * answer is kept until one of those files changes or the minute turns (windows lapse). */
+  private shown = new Map<string, { key: string; rules: RoleRules | null }>()
   private rulesOrNull(role: string, cwd: string) {
+    const key = `${contextSignature(this.options.dataDir)}#${usageSignature(this.options.dataDir)}#${Math.floor(Date.now() / 60_000)}`
+    const kept = this.shown.get(`${role}\n${cwd}`)
+    if (kept?.key === key) return kept.rules
+    let rules: RoleRules | null = null
     try {
-      return this.rules(role, cwd)
+      rules = this.rules(role, cwd)
     } catch {
-      return null
+      rules = null
     }
+    this.shown.set(`${role}\n${cwd}`, { key, rules })
+    return rules
   }
   get(id: string) {
     const row = this.row(id)

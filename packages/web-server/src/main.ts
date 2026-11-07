@@ -89,7 +89,9 @@ function serve(): void {
     notices: notify.notifier,
     files: { store: notes, blobsDir, hostName: config.hostName },
     starterOf: (ask) =>
-      ask.session && chatsRef?.has(ask.session) ? chatStarter(chatsRef.summary(ask.session)) : null,
+      ask.session && chatsRef?.has(ask.session)
+        ? chatStarter({ startedBy: chatsRef.startedBy(ask.session) })
+        : null,
     answerUrl: `http://${config.host}:${config.port}`,
   })
   let chatsRef: ChatSessions | undefined
