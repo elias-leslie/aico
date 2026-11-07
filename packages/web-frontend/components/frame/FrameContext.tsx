@@ -11,6 +11,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { homeHref } from '@/lib/frame/shown-session'
 import {
   DEFAULT_TIER,
   type DockedTier,
@@ -119,7 +120,7 @@ export function FrameProvider({
       setFull(false)
       setStored(next)
       // Only Wide and Full have room for a page; the narrower ones go home.
-      if (onPage && next !== 'wide') router.push('/')
+      if (onPage && next !== 'wide') router.push(homeHref())
     },
     [onPage, router, setStored],
   )
@@ -142,11 +143,11 @@ export function FrameProvider({
     if (docked) setTier('panel')
     else {
       setSheetOpen(false)
-      if (onPage) router.push('/')
+      if (onPage) router.push(homeHref())
     }
   }, [docked, onPage, router, setTier])
   const home = useCallback(() => {
-    if (onPage) router.push('/')
+    if (onPage) router.push(homeHref())
   }, [onPage, router])
 
   // The keys: Alt+1..4 and Alt+[ / Alt+] anywhere, even while typing in a

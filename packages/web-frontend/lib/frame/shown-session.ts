@@ -51,6 +51,12 @@ export function publishShownSession(next: Omit<ShownSession, 'holder'> | null) {
   emit()
 }
 
+/** Home with the session on screen: leaving a page comes back to it, not to
+ * whatever home would pick on its own. */
+export function homeHref(): string {
+  return shown ? `/?session=${encodeURIComponent(shown.id)}` : '/'
+}
+
 /** Which device holds the open session's size (null: this one, or not heard yet). */
 export function publishSizeHolder(sessionId: string, holder: string | null) {
   if (!shown || shown.id !== sessionId || shown.holder === holder) return

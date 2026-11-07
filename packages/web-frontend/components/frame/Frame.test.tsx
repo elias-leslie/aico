@@ -13,6 +13,7 @@ import {
   markFailed,
   resetServerReachForTest,
 } from '@/lib/frame/server-reach'
+import { publishShownSession } from '@/lib/frame/shown-session'
 import { TIER_STORAGE_KEY } from '@/lib/frame/tiers'
 import { FrameProvider, useFrame } from './FrameContext'
 import { LeftSide } from './LeftSide'
@@ -132,6 +133,22 @@ describe('the left side on a desktop', () => {
     fireEvent.click(screen.getByTestId('frame-close'))
     expect(tier()).toBe('panel')
     expect(nav.push).toHaveBeenCalledWith('/')
+  })
+
+  it('coming back from a page returns to the session that was on screen', () => {
+    publishShownSession({
+      id: 's1',
+      name: 'aico',
+      agent: 'shell',
+      agentName: 'Shell',
+      status: 'connected',
+      attention: null,
+    })
+    nav.pathname = '/grants'
+    show('Grants')
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(nav.push).toHaveBeenCalledWith('/?session=s1')
+    publishShownSession(null)
   })
 
   it('the narrower and wider buttons step, and double-clicking the edge resets to Panel', () => {
