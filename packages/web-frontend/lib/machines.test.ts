@@ -225,6 +225,20 @@ describe('buildMachines with Proxmox guests', () => {
     expect(work({ name: 'agent-work', state: 'connected' })?.up).toBe('on')
   })
 
+  it('calls a running guest behind a powered-off link a shutdown finishing, and behind an off report a boot', () => {
+    const work = (state: HostChoice['state']) =>
+      buildMachines(view(ROWS), [{ name: 'agent-work', state }], NOW, [
+        guest({ machine: 'agent-work', vmid: 200, state: 'running' }),
+      ]).machines.find((m) => m.key === 'agent-work')?.up
+    expect(work('powered_off')).toBe('stopping')
+    // Status still says apps is off, Proxmox says it is running: it is booting.
+    expect(
+      buildMachines(view(ROWS), [], NOW, [
+        guest({ state: 'running' }),
+      ]).machines.find((m) => m.key === 'apps')?.up,
+    ).toBe('starting')
+  })
+
   it('has no guest while Proxmox could not be read', () => {
     expect(by(null).apps?.guest).toBeNull()
   })

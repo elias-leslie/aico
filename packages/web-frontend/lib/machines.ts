@@ -237,7 +237,12 @@ function noteFor(
 }
 
 /** Proxmox knows better than a lagging report whether a guest is running or being stopped. */
-function upWithGuest(up: Up, guest: MachineGuest, linked: boolean): Up {
+function upWithGuest(
+  up: Up,
+  guest: MachineGuest,
+  linked: boolean,
+  powerOffByAico: boolean,
+): Up {
   if (guest.busy === 'shutdown') return 'stopping'
   if (guest.busy === 'restart') return 'restarting'
   if (guest.busy === 'start' || guest.state === 'starting') return 'starting'
@@ -250,7 +255,10 @@ function upWithGuest(up: Up, guest: MachineGuest, linked: boolean): Up {
     !linked
   )
     return 'off'
-  if (guest.state === 'running' && up === 'off') return 'starting'
+  // Proxmox says it is running while its link says it was powered off: that is a shutdown still
+  // finishing; any other off link with a running guest is a boot the link has not caught up with.
+  if (guest.state === 'running' && up === 'off')
+    return powerOffByAico ? 'stopping' : 'starting'
   return up
 }
 
@@ -297,7 +305,13 @@ export function buildMachines(
       isWorkstation || GUEST_FREE.has(key)
         ? null
         : (guests?.find((g) => g.machine === key) ?? null)
-    if (guest) up = upWithGuest(up, guest, host?.state === 'connected')
+    if (guest)
+      up = upWithGuest(
+        up,
+        guest,
+        host?.state === 'connected',
+        host?.state === 'powered_off',
+      )
     const sessionHost = isWorkstation || !!host || (!!link && hosts === null)
     const sessionHostName = host?.name ?? null
     const note =

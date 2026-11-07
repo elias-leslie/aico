@@ -56,7 +56,7 @@ function setup(link?: { state: string; sessions: number; canSleep?: boolean }) {
   const source: GuestSource & { down?: boolean; refuse?: boolean; stuck?: boolean } = {
     async list() {
       if (source.down) throw new Error('ssh: connect timed out')
-      return list
+      return list.map((g) => ({ ...g }))
     },
     async act(g, action) {
       calls.push(`${g.vmid}:${action}`)
@@ -68,7 +68,8 @@ function setup(link?: { state: string; sessions: number; canSleep?: boolean }) {
       if (!source.stuck) list.find((candidate) => candidate.vmid === g.vmid)!.onboot = on
     },
   }
-  const status = new StatusStore(':memory:', () => T0)
+  const clock = { now: T0 }
+  const status = new StatusStore(':memory:', () => clock.now)
   const projects = [
     project('portfolio-ai', 'Portfolio AI', [APPS]),
     project('ominull', 'OmniNull', [HUB]),
@@ -81,13 +82,13 @@ function setup(link?: { state: string; sessions: number; canSleep?: boolean }) {
     machine: 'davion-sidarli',
     pollMs: 30_000,
     busyMs: 600_000,
-    now: () => T0,
+    now: () => clock.now,
   })
   const hosts = link ? [{ name: 'agent-work', ...link }] : []
   const request = vi.fn(async () => ({ host: 'agent-work', state: 'starting' }))
   const tether = { hosts: async () => hosts, request } as unknown as TetherClient
   const service = new MachinesService(places, { list: () => projects }, tether)
-  return { service, places, source, calls, request, status, list }
+  return { service, places, source, calls, request, status, list, clock }
 }
 
 describe('MachinesService.guests', () => {
@@ -126,6 +127,16 @@ describe('MachinesService.guests', () => {
     delete list[0]!.onboot
     await places.refresh()
     expect(service.guests().items[0]?.autostart).toBeNull()
+  })
+
+  it('takes a fresh reading when the one it has is older than a few seconds, and only then', async () => {
+    const { service, places, source, list, clock } = setup()
+    await places.refresh()
+    list[0]!.status = 'running'
+    expect((await service.guestsNow()).items[0]?.state).toBe('stopped')
+    clock.now += 6_000
+    expect((await service.guestsNow()).items[0]?.state).toBe('running')
+    expect(source.down).toBeUndefined()
   })
 
   it('gives no guests and a reason when Proxmox cannot be read', async () => {

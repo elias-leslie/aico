@@ -2,7 +2,7 @@
 
 import { useQueryClient } from '@tanstack/react-query'
 import { RefreshCw } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ConfirmationDialog } from '@/components/ConfirmationDialog'
 import styles from '@/components/pages/FullPage.module.css'
 import { useClock } from '@/lib/hooks/use-clock'
@@ -29,6 +29,9 @@ import mine from './MachinesPage.module.css'
 const messageOf = (failure: unknown, fallback: string) =>
   failure instanceof Error && failure.message ? failure.message : fallback
 
+/** How long Proxmox is read every 2 s after a power move (a clean shutdown takes about this long). */
+const SETTLE_MS = 60_000
+
 type Confirm = {
   kind: 'off' | 'restart' | 'trust'
   message: string
@@ -39,7 +42,14 @@ type Confirm = {
 export function MachinesPage() {
   const status = useStatus()
   const hosts = useHosts()
-  const proxmox = useMachineGuests(hosts.hosts.some(isStarting))
+  // After a power move, Proxmox is read often until the machine has settled.
+  const [settling, setSettling] = useState(false)
+  useEffect(() => {
+    if (!settling) return
+    const timer = setTimeout(() => setSettling(false), SETTLE_MS)
+    return () => clearTimeout(timer)
+  }, [settling])
+  const proxmox = useMachineGuests(settling || hosts.hosts.some(isStarting))
   const now = useClock()
   const queryClient = useQueryClient()
 
@@ -87,6 +97,7 @@ export function MachinesPage() {
             key={machine.key}
             machine={machine}
             onChanged={() => {
+              setSettling(true)
               void queryClient.invalidateQueries({ queryKey: ['hosts'] })
               void queryClient.invalidateQueries({
                 queryKey: ['machine-guests'],

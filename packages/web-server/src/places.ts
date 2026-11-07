@@ -101,6 +101,13 @@ export class Places {
     return this.reading
   }
 
+  /** Reads Proxmox now unless it was read within `ms`: what a page asks for is at most that old. */
+  refreshIfOlder(ms: number): Promise<void> {
+    return this.readAt !== null && this.now() - this.readAt < ms
+      ? Promise.resolve()
+      : this.refresh()
+  }
+
   private async read(): Promise<void> {
     const { guests } = this.options
     this.syncIntents()

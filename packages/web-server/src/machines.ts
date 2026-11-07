@@ -40,6 +40,8 @@ export interface MachineGuest {
 type Registry = { list(options?: { all?: boolean }): Project[] }
 
 const MIB = 1024 * 1024
+/** How old a reading may be when the page asks. */
+const FRESH_MS = 5000
 const kindOf = (guest: Guest): 'vm' | 'ct' => (guest.type === 'qemu' ? 'vm' : 'ct')
 
 export class MachinesService {
@@ -71,6 +73,12 @@ export class MachinesService {
         intent: 'on-demand',
       }
     )
+  }
+
+  /** The guests as Proxmox says now: a reading older than a few seconds is taken again first. */
+  async guestsNow() {
+    await this.places.refreshIfOlder(FRESH_MS)
+    return this.guests()
   }
 
   guests(): { items: MachineGuest[]; asOf: string | null; failure: string | null } {
@@ -157,7 +165,7 @@ export function registerMachineRoutes(router: Router, service: MachinesService) 
     if (!MACHINE.test(value)) throw new HttpError(422, 'Unknown machine')
     return value
   }
-  router.on('GET', '/api/machines/guests', () => service.guests())
+  router.on('GET', '/api/machines/guests', () => service.guestsNow())
   router.on('POST', '/api/machines/:machine/power', async (ctx) => {
     const machine = machineName(ctx.params.machine)
     const body = objectBody(await ctx.body())
