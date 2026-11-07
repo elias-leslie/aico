@@ -19,7 +19,6 @@ import type { ConnectionStatus, HostAway } from '@/components/terminal.types'
 import { UnifiedTerminalHeaderContent as UnifiedTerminalHeader } from '@/components/terminal-header'
 import type { ProjectSource } from '@/lib/api/pane-files'
 import { type FilesRequest, setFilesOpener } from '@/lib/files-opener'
-import { publishSizeHolder } from '@/lib/frame/shown-session'
 import { useAgentTools } from '@/lib/hooks/use-agent-tools'
 import {
   powerHost,
@@ -179,12 +178,6 @@ export function SessionView({
   useEffect(() => {
     if (status === 'connected') setConnectedKey(termKey)
   }, [status, termKey])
-  // The top bar says who holds the size too.
-  const shownHolder = sizeHolder?.key === termKey ? sizeHolder.name : null
-  useEffect(() => {
-    if (sessionId) publishSizeHolder(sessionId, shownHolder)
-  }, [sessionId, shownHolder])
-
   const refresh = useCallback(() => {
     setRefreshVersion((current) => current + 1)
     if (typeof window !== 'undefined') {

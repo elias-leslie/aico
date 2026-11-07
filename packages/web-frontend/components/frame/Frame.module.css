@@ -1,4 +1,4 @@
-/* The one frame (mockup 2): top bar over a left side and the session.
+/* The one frame (mockup 2): a left side beside the session.
    Colours, fonts and easing come only from the Lantern tokens; the washes
    below are strengths of those tokens, not a new palette. */
 
@@ -25,226 +25,8 @@
   min-width: 0;
 }
 
-/* ---------- top bar: global state only ---------- */
-.topbar {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 52px;
-  padding: 0 6px;
-  background: var(--rim);
-  border-bottom: 1px solid var(--line);
-  min-width: 0;
-}
-.topbar[data-docked] {
-  height: 48px;
-  gap: 8px;
-  padding: 0 10px 0 14px;
-}
-.brand {
-  font: 600 18px / 1 var(--font-display);
-  letter-spacing: 0.01em;
-  margin-right: 4px;
-  flex: none;
-}
-.current {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  flex: 1 1 auto;
-  min-height: 44px;
-  padding: 4px 6px;
-  border-radius: 8px;
-  text-align: left;
-  transition: background var(--t) var(--ease-arrival);
-}
-.topbar[data-docked] .current {
-  flex: 0 1 auto;
-  min-height: 36px;
-  padding: 5px 8px;
-}
-.current:hover {
-  background: var(--wash);
-}
-.currentMark {
-  width: 26px;
-  height: 26px;
-  flex: none;
-  border-radius: 7px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--wash-2);
-}
-.currentText {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  gap: 1px;
-}
-.topbar[data-docked] .currentText {
-  flex-direction: row;
-  align-items: baseline;
-  gap: 8px;
-}
-.currentName {
-  font-weight: 600;
-  font-size: 14px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.currentSub {
-  color: var(--mist);
-  font-size: 12.5px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 .spacer {
   flex: 1;
-}
-.topbar[data-docked] .spacer {
-  min-width: 8px;
-}
-/* Phone: the session's name takes all the free width, none goes to a gap. */
-.topbar:not([data-docked]) .spacer {
-  display: none;
-}
-.tbBtn,
-.tbIcon {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  height: 44px;
-  min-width: 44px;
-  padding: 0 8px;
-  border-radius: 8px;
-  font-size: 13px;
-  white-space: nowrap;
-  color: var(--bone);
-  transition: background var(--t) var(--ease-arrival);
-}
-.topbar[data-docked] .tbBtn {
-  height: 30px;
-  min-width: 0;
-  padding: 0 10px;
-}
-.tbBtn:hover,
-.tbIcon:hover {
-  background: var(--wash-2);
-}
-.tbBtn:focus-visible,
-.tbIcon:focus-visible,
-.current:focus-visible {
-  outline: 2px solid var(--lantern);
-  outline-offset: 2px;
-}
-.tbNeed {
-  background: var(--beacon-tint);
-  color: var(--beacon);
-}
-.tbNeed:hover {
-  background: color-mix(in srgb, var(--beacon) 25%, transparent);
-}
-.count {
-  font-weight: 600;
-}
-.wideOnly {
-  display: none;
-}
-.topbar[data-docked] .wideOnly {
-  display: inline;
-}
-/* Phone: a short word beside the count, so a number is never alone. */
-.phoneOnly {
-  display: inline;
-}
-.topbar[data-docked] .phoneOnly {
-  display: none;
-}
-.dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex: none;
-  background: var(--mist);
-}
-.dot[data-tone="ok"] {
-  background: var(--jade);
-}
-.dot[data-tone="warn"] {
-  background: var(--lantern);
-}
-.dot[data-tone="bad"] {
-  background: var(--ember);
-}
-.dot[data-tone="need"] {
-  background: var(--beacon);
-}
-.dot[data-tone="quiet"] {
-  background: var(--line-2);
-}
-.menu {
-  position: relative;
-}
-.menuCount {
-  position: absolute;
-  top: 5px;
-  right: 3px;
-  min-width: 17px;
-  height: 17px;
-  padding: 0 4px;
-  border-radius: 9px;
-  font-size: 10.5px;
-  font-weight: 700;
-  line-height: 17px;
-  background: var(--beacon);
-  color: rgb(var(--umber-rgb));
-}
-.downGroup {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  flex: none;
-  font-size: 13px;
-  padding-left: 6px;
-}
-.downText b {
-  font-weight: 600;
-}
-.qglance {
-  display: inline-flex;
-  gap: 3px;
-  align-items: flex-end;
-  height: 14px;
-}
-.qglance i {
-  position: relative;
-  width: 4px;
-  height: 14px;
-  border-radius: 1px;
-  overflow: hidden;
-  background: var(--line-2);
-}
-.qglance i::after {
-  content: "";
-  position: absolute;
-  inset: auto 0 0 0;
-  height: var(--h);
-  background: var(--bone);
-  opacity: 0.75;
-}
-.qglance i[data-out]::after {
-  background: var(--mist);
-  opacity: 0.5;
-}
-.stale {
-  opacity: 0.62;
 }
 
 /* ---------- the left side ---------- */
@@ -302,7 +84,7 @@
   width: 360px;
   border-right: 1px solid var(--line);
 }
-.col[data-stale] > :not(.downNote) {
+.col[data-stale] > * {
   opacity: 0.62;
 }
 .railBody {
@@ -337,19 +119,18 @@
   color: var(--mist);
   font-size: 13px;
 }
-.downNote {
+.offline {
+  flex: none;
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 10px 10px 4px;
-  padding: 9px 10px;
-  border-radius: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 6px 12px;
   background: color-mix(in srgb, var(--ember) 15%, transparent);
+  border-bottom: 1px solid var(--line);
   font-size: 12.5px;
-  flex: none;
-}
-.downNote > span {
-  flex: 1;
+  text-align: center;
 }
 
 /* the edge, with its grip */

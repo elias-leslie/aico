@@ -13,9 +13,6 @@ import {
   type Tier,
   tierWidth,
 } from '@/lib/frame/tiers'
-import { useClock } from '@/lib/hooks/use-clock'
-import { PRODUCT_NAME } from '@/lib/project-branding'
-import { at } from '@/lib/status'
 import styles from './Frame.module.css'
 import { type Frame, useFrame } from './FrameContext'
 import { SideList } from './SideList'
@@ -39,7 +36,7 @@ interface LeftSideProps extends SideSlots {
 
 /** The left side: one frame for the session list and every other page. It
  * sits beside the session at Rail, Panel and Wide and covers it at Full; on
- * a narrow window it slides over the session from the top bar's menu. */
+ * a narrow window it slides over the session from the session header's menu. */
 export function LeftSide(props: LeftSideProps) {
   const frame = useFrame()
   if (!frame) return null
@@ -50,24 +47,7 @@ export function LeftSide(props: LeftSideProps) {
   )
 }
 
-/** The server can't be reached: say since when, and whether what is shown is
- * its last answer or nothing yet. Retry is in the top bar, once. */
-function DownNote() {
-  const reach = useServerReach()
-  const now = useClock(30_000)
-  if (!reach.down) return null
-  return (
-    <div className={styles.downNote} role="status" data-testid="side-down-note">
-      <span>
-        {reach.answered
-          ? `Showing what ${PRODUCT_NAME} last knew, as of ${at(reach.since, now)}.`
-          : `Nothing to show yet; sessions come back once ${PRODUCT_NAME} answers.`}
-      </span>
-    </div>
-  )
-}
-
-/** The first read of the session list; while the server is down the note above says why nothing is here. */
+/** The first read of the session list; while the server is down the offline strip says why nothing is here. */
 function Loading() {
   if (useServerReach().down) return null
   return (
@@ -104,7 +84,6 @@ function Body({
   const down = useServerReach().down
   const panelColumn = (
     <div className={styles.col} data-stale={down ? 'true' : undefined}>
-      <DownNote />
       {loading ? <Loading /> : panel}
     </div>
   )
@@ -347,7 +326,7 @@ function Handle({
 }
 
 /** Narrow windows: the side slides over the session, full width, from the
- * top bar's menu. A page opens in it with Back to the list. */
+ * session header's menu. A page opens in it with Back to the list. */
 function SheetSide({
   frame,
   onNewSession,
@@ -378,7 +357,7 @@ function SheetSide({
             <ArrowLeft className="h-5 w-5" strokeWidth={1.7} />
           </button>
         )}
-        {!onPage && <span className={styles.sheetTitle}>{PRODUCT_NAME}</span>}
+        {!onPage && <span className={styles.sheetTitle}>Sessions</span>}
         {!onPage && (
           <NewSessionButton
             onClick={
@@ -412,7 +391,6 @@ function SheetSide({
         // which then opens over the session as before.
         frame.sheetOpen && (
           <div className={styles.col} data-stale={down ? 'true' : undefined}>
-            <DownNote />
             {slots.loading ? <Loading /> : slots.panel}
           </div>
         )

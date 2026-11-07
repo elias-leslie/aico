@@ -105,7 +105,7 @@ export function ProjectList({
   onSearch: (value: string) => void
 }) {
   const now = useClock(30_000)
-  // When the whole server is down the top bar's Retry is the only one.
+  // When the whole server is down the offline strip's Retry is the only one.
   const down = useServerReach().down
   const [archivedOpen, setArchivedOpen] = useState(false)
   const { active, archived } = splitProjects(projects ?? [], search)

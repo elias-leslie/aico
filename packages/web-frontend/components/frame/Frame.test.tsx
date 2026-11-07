@@ -165,14 +165,7 @@ describe('the left side on a desktop', () => {
   })
 
   it('coming back from a page returns to the session that was on screen', () => {
-    publishShownSession({
-      id: 's1',
-      name: 'aico',
-      agent: 'shell',
-      agentName: 'Shell',
-      status: 'connected',
-      attention: null,
-    })
+    publishShownSession('s1')
     nav.pathname = '/grants'
     show('Grants')
     fireEvent.keyDown(document.body, { key: 'Escape' })
@@ -266,26 +259,8 @@ describe('the left side on a phone', () => {
 })
 
 describe('when the server cannot be reached', () => {
-  it('says as of when, keeps what it last knew, and leaves Retry to the top bar', () => {
-    show()
-    expect(screen.queryByTestId('side-down-note')).toBeNull()
-    act(() => {
-      const today = new Date()
-      today.setHours(16, 23, 0, 0)
-      markAnswered(today.getTime())
-      markFailed()
-    })
-    expect(screen.getByTestId('side-down-note')).toHaveTextContent(
-      /Showing what Aico last knew, as of 4:23\s?PM\./,
-    )
-    expect(screen.getByText('Session list')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
-    act(() => markAnswered())
-    expect(screen.queryByTestId('side-down-note')).toBeNull()
-  })
-
-  it('with nothing from it yet, says so and does not keep saying Loading sessions', () => {
-    render(
+  it('keeps what it last knew and stops saying Loading sessions (the offline strip says why)', () => {
+    const side = (
       <FrameProvider page={null}>
         <LeftSide
           loading
@@ -294,14 +269,13 @@ describe('when the server cannot be reached', () => {
           panel={null}
           wideExtra={null}
         />
-      </FrameProvider>,
+      </FrameProvider>
     )
+    render(side)
     expect(screen.getByText('Loading sessions…')).toBeVisible()
     act(() => markFailed(Date.now()))
-    expect(screen.getByTestId('side-down-note')).toHaveTextContent(
-      'Nothing to show yet; sessions come back once Aico answers.',
-    )
     expect(screen.queryByText('Loading sessions…')).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
+    expect(screen.queryByTestId('side-down-note')).toBeNull()
+    act(() => markAnswered())
   })
 })

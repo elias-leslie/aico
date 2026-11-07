@@ -11,7 +11,11 @@ import {
   useRef,
   useState,
 } from 'react'
-import { useNeedsYouRequests } from '@/lib/frame/needs-you-request'
+import {
+  openNeedsYou,
+  takeAskFromUrl,
+  useNeedsYouRequests,
+} from '@/lib/frame/needs-you-request'
 import { homeHref } from '@/lib/frame/shown-session'
 import {
   COMPACT_DEFAULT_TIER,
@@ -179,6 +183,13 @@ export function FrameProvider({
     },
     { replay: false },
   )
+
+  // A push link (?ask=ID) opens Needs you on that question, once.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: on load only
+  useEffect(() => {
+    const id = takeAskFromUrl()
+    if (id) openNeedsYou(id)
+  }, [])
 
   // The keys: Alt+1..4 and Alt+[ / Alt+] anywhere, even while typing in a
   // session (caught before the session sees them); Esc back to Panel from

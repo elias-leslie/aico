@@ -12,7 +12,7 @@ import { StatusPage } from '@/components/status/StatusPage'
 function Status() {
   const params = useSearchParams()
   // Quota and Machines have their own views at the addresses Status used to
-  // filter to (the top bar and the side list link there).
+  // filter to (the side list links there).
   if (params.get('q') === 'usage') return <QuotaPage />
   if (params.get('kind') === 'machine') return <MachinesPage />
   return (

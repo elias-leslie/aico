@@ -31,18 +31,6 @@ import { AsksState, askTitle, Note, useSentNote } from './ask-shared'
 
 type Tab = 'asks' | 'approvals' | 'answered'
 
-/** The push link (`?ask=<id>`): read once on load, then dropped from the URL
- * so a reload does not reopen it. */
-export function takeAskFromUrl(): string | null {
-  if (typeof window === 'undefined') return null
-  const url = new URL(window.location.href)
-  const id = url.searchParams.get('ask')
-  if (id === null) return null
-  url.searchParams.delete('ask')
-  window.history.replaceState(window.history.state, '', url)
-  return /^[0-9a-f]{12}$/.test(id) ? id : null
-}
-
 /** The "N need you" icon button (the Rail's): it shows Needs you in the side. */
 /** (`variant` is kept for the Rail's call; there is only the icon now.) */
 export function NeedsYouLauncher(_props: { variant?: 'icon' }) {
@@ -344,7 +332,7 @@ export function NeedsYouSection() {
   const frame = useFrame()
   const ref = useRef<HTMLElement>(null)
   const [focus, setFocus] = useState<string | null>(null)
-  /** The section was asked for (the top bar's count): it flashes once, so a tap
+  /** The section was asked for (the side's count): it flashes once, so a tap
    * when it is already showing still answers. */
   const [called, setCalled] = useState(false)
   const [showAll, setShowAll] = useState(false)

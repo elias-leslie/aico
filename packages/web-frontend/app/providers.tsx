@@ -18,7 +18,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       }),
   )
 
-  // The top bar's "Can't reach Aico since ..." follows the app's own polls.
+  // The offline strip's "Can't reach Aico since ..." follows the app's own polls.
   useEffect(() => watchServerReach(queryClient), [queryClient])
 
   // The service worker makes the phone app installable. Registered from here,

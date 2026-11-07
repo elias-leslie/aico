@@ -180,7 +180,7 @@ function AgeChart({ entries }: { entries: Entry[] }) {
 }
 
 export function BackupsPage() {
-  // When the whole server is down the top bar's Retry is the only one.
+  // When the whole server is down the offline strip's Retry is the only one.
   const down = useServerReach().down
   const [data, setData] = useState<Overview | null>(null),
     [error, setError] = useState(''),

@@ -9,7 +9,7 @@ const USAGE_QUERY_KEY = ['usage']
 
 /**
  * GET /api/usage: the one read of the providers' windows, shared by the Quota page, the Panel's
- * quota bars and the top bar's glance, so they all show the same numbers.
+ * quota bars and the side's glance, so they all show the same numbers.
  */
 export function useUsage() {
   const query = useQuery({

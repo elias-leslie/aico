@@ -17,6 +17,18 @@ export function openNeedsYou(focus: string | null = null): void {
   window.dispatchEvent(new CustomEvent(NEEDS_YOU_EVENT, { detail: { focus } }))
 }
 
+/** The push link (`?ask=<id>`): read once on load, then dropped from the URL
+ * so a reload does not reopen it. */
+export function takeAskFromUrl(): string | null {
+  if (typeof window === 'undefined') return null
+  const url = new URL(window.location.href)
+  const id = url.searchParams.get('ask')
+  if (id === null) return null
+  url.searchParams.delete('ask')
+  window.history.replaceState(window.history.state, '', url)
+  return /^[0-9a-f]{12}$/.test(id) ? id : null
+}
+
 /** Hear requests to show Needs you: `onRequest` runs for each, and for one
  * made before this was mounted (the side opens after the click). */
 export function useNeedsYouRequests(

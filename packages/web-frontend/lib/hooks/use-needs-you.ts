@@ -24,7 +24,7 @@ export interface NeedsYouCounts {
 }
 
 /** What waits on the owner: agent questions, notices, failed checks and
- * access requests. One count for the top bar, the launchers and the side, so
+ * access requests. One count for the side button, the Rail and the side, so
  * they never disagree; the words name each kind for what it is. */
 export function useNeedsYouCounts(): NeedsYouCounts {
   const { asks, known: asksKnown } = useOwnerAsks()

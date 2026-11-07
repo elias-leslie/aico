@@ -1,5 +1,5 @@
 // The left side's widths (mockup 2): hidden (the session takes the whole
-// window; the edge and the top bar's side button bring it back), a rail of icons and counts, the
+// window; the edge and the session header's side button bring it back), a rail of icons and counts, the
 // panel beside the session (the default), wide (the panel plus a second
 // column) and full (covers the session; Esc or close brings it back).
 // Dragging its edge snaps to the nearest one; the width never decides which
@@ -20,7 +20,7 @@ export const TIER_LABEL: Record<Tier, string> = {
 
 export const RAIL_PX = 64
 export const PANEL_PX = 360
-/** Wide takes this share of the window beside the top bar. */
+/** Wide takes this share of the window beside the session. */
 const WIDE_SHARE = 0.58
 export const DEFAULT_TIER: DockedTier = 'panel'
 /** The kept tier on this device. */

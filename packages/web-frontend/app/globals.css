@@ -117,7 +117,7 @@ select {
   font-size: 11px;
 }
 
-/* A section asked for by a tap (the top bar's count) shows an amber edge for a
+/* A section asked for by a tap (the side button's count) shows an amber edge for a
    moment, so the tap answers even when the section is already on screen. */
 .lantern-called {
   border-radius: 10px;

@@ -1,9 +1,7 @@
 import { clsx } from 'clsx'
 import { useCallback, useEffect, useRef } from 'react'
 import { publishShownSession } from '@/lib/frame/shown-session'
-import { useAgentTools } from '@/lib/hooks/use-agent-tools'
 import { useLocalStorageState } from '@/lib/hooks/use-local-storage-state'
-import { useSessionAttention } from '@/lib/hooks/use-session-attention'
 import {
   getSlotName,
   getSlotPanelId,
@@ -19,7 +17,6 @@ import { Panel } from './frame/Panel'
 import { Rail } from './frame/Rail'
 import { WideOverview } from './frame/WideOverview'
 import { NativeKeyboardInput } from './keyboard/NativeKeyboardInput'
-import { sessionLabel, slotMode, toolName } from './SessionList'
 import { getShownSlot } from './SessionView'
 import { TerminalFileSection } from './terminal-content/TerminalFileSection'
 import { TerminalMobileSection } from './terminal-content/TerminalMobileSection'
@@ -90,7 +87,7 @@ function TerminalContentBody({
     }
     setSheetOpen?.(false)
   }, [activeSessionId])
-  useShownSessionPublisher(terminalSlots, shownSlot, terminalStatuses)
+  useShownSessionPublisher(shownSlot)
   const atFull = frame?.docked === true && frame.tier === 'full'
   const select = (slot: TerminalSlot | PaneSlot) => {
     onSlotSwitch(slot)
@@ -232,34 +229,13 @@ function TerminalContentBody({
   )
 }
 
-/** Tell the top bar which session is on screen and how it is doing. */
+/** Tell the frame which session is on screen, so leaving a page comes back to it. */
 function useShownSessionPublisher(
-  slots: Array<TerminalSlot | PaneSlot>,
   slot: TerminalSlot | PaneSlot | null | undefined,
-  statuses: TerminalContentProps['terminalStatuses'],
 ) {
-  const attention = useSessionAttention()
-  const { agentTools } = useAgentTools()
   const sessionId = slot ? getSlotSessionId(slot) : null
-  const state = slot ? attention.forSlot(slot) : null
-  const status = sessionId ? (statuses?.get(sessionId) ?? null) : null
-  const name = slot ? sessionLabel(slots, slot) : null
-  const mode = slot ? slotMode(slot) : null
-  const chat = slot?.chat === true
   useEffect(() => {
-    if (!slot || !sessionId || !name || !mode) {
-      publishShownSession(null)
-      return
-    }
-    publishShownSession({
-      id: sessionId,
-      name,
-      agent: mode,
-      agentName: toolName(agentTools, mode),
-      status: chat ? null : status,
-      attention: state,
-      doing: slot.doing ?? null,
-    })
-  })
-  useEffect(() => () => publishShownSession(null), [])
+    publishShownSession(sessionId)
+    return () => publishShownSession(null)
+  }, [sessionId])
 }

@@ -6,7 +6,7 @@ import { TerminalSkeleton } from '../TerminalSkeleton'
 import { TerminalTabs } from '../TerminalTabs'
 import styles from './Frame.module.css'
 import { FrameProvider } from './FrameContext'
-import { TopBar } from './TopBar'
+import { OfflineStrip } from './OfflineStrip'
 
 /** Pages that stand alone: the popped-out notes window and the phone's
  * offline captures and mockups (they work from the saved copy). */
@@ -37,16 +37,16 @@ function Sessions() {
   )
 }
 
-/** One frame for every page (#18): the top bar over the left side and the
- * session. Pages render inside the left side; the session stays mounted
- * while they change. */
+/** One frame for every page (#18): the left side beside the session, with the
+ * offline strip over both while the server can't be reached. Pages render
+ * inside the left side; the session stays mounted while they change. */
 export function AppFrame({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? '/'
   if (isStandalone(pathname)) return children
   return (
     <FrameProvider page={children}>
       <div className={styles.frame} data-testid="app-frame">
-        <TopBar />
+        <OfflineStrip />
         <div className={styles.body}>
           {/* The page is a static file, so the query is read in the browser;
               the export renders the skeleton in its place. */}
