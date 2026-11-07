@@ -427,3 +427,25 @@ describe('Needs you', () => {
     expect(asks.created).toHaveLength(1)
   })
 })
+
+describe('phone route for info notices', () => {
+  const base = {
+    v: 1,
+    kind: 'info',
+    severity: 'info',
+    push: 'phone',
+    title: 'While you were away',
+    body: 'x',
+  }
+  it('keeps info off the phone', () => {
+    expect(() => parseNotice({ ...base, source: 'aico', key: 'other:1' })).toThrow(
+      /stay on the desktop/,
+    )
+    expect(() => parseNotice({ ...base, source: 'jobs', key: 'digest:2026-11-07' })).toThrow(
+      /stay on the desktop/,
+    )
+  })
+  it("lets Aico's morning digest reach the phone", () => {
+    expect(parseNotice({ ...base, source: 'aico', key: 'digest:2026-11-07' }).push).toBe('phone')
+  })
+})

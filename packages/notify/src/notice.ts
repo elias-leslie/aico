@@ -242,7 +242,9 @@ export function parseNotice(value: unknown): Notice {
         ? 'phone'
         : 'tray'
       : oneOf(body.push, 'push', PUSH)
-  if (push === 'phone' && (severity === 'info' || severity === 'ok'))
+  // The one owner-approved info push: Aico's own morning digest, once a day.
+  const digest = source === 'aico' && kind === 'info' && notice.key?.startsWith('digest:') === true
+  if (push === 'phone' && (severity === 'info' || severity === 'ok') && !digest)
     throw new NoticeError(
       'push',
       'info and ok stay on the desktop; the phone gets warnings and criticals',
