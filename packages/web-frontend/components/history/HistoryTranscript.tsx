@@ -25,6 +25,7 @@ import {
   useHistoryEvents,
   useHistorySession,
 } from '@/lib/hooks/use-history'
+import { useSessionLabels } from '@/lib/hooks/use-session-labels'
 
 /** A file the agent linked: opens in the session view's Files, when one is on screen. */
 const openPath = (path: string) => openFiles({ kind: 'path', path })
@@ -120,6 +121,7 @@ export function HistoryTranscript({
   }, [id, newest.dataUpdatedAt])
 
   const session = detail.data
+  const labelOf = useSessionLabels()
   const now = Date.now()
   const olderCursor =
     cursor === undefined ? (newest.data?.older ?? null) : cursor
@@ -164,7 +166,7 @@ export function HistoryTranscript({
         <span className="crumb">
           <Link href="/history">Recent sessions</Link> /
         </span>
-        <h1>{session ? (session.project ?? 'Session') : 'Session'}</h1>
+        <h1>{session ? labelOf(session) : 'Session'}</h1>
         {session && state && (
           <span className={`status-chip ${STANDING_CHIP[state]}`}>
             {STANDING_TEXT[state]}
@@ -213,6 +215,10 @@ export function HistoryTranscript({
             <dd>
               {toolName(session.tool)} · {session.model ?? 'model not recorded'}
             </dd>
+          </div>
+          <div>
+            <dt>Project</dt>
+            <dd>{session.project ?? 'not recorded'}</dd>
           </div>
           <div>
             <dt>Folder</dt>
