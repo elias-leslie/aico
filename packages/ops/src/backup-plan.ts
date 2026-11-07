@@ -6,7 +6,9 @@ import type { StatusRow } from '@aico/status'
 import defaults from '../data/backups.json' with { type: 'json' }
 import imported from '../data/backups-import.json' with { type: 'json' }
 
-export type BackupConfig = typeof defaults
+/** A machine's own Google Drive repository, when it backs itself up there (`driveClients`). */
+export type DriveClient = (typeof defaults.driveClients)[keyof typeof defaults.driveClients]
+export type BackupConfig = typeof defaults & { drive?: DriveClient }
 export type Source = (typeof imported.sources)[number]
 export type BackupTarget = 'native' | 'drive' | 'append'
 export interface BackupPoint {
@@ -53,7 +55,8 @@ export function config(env = process.env): BackupConfig {
     cfg.append = { repository: client.repository, passwordFile: client.passwordFile }
     cfg.pve.appendKey = client.key
   }
-  return cfg
+  const drive = cfg.driveClients[machine as keyof typeof cfg.driveClients]
+  return drive ? { ...cfg, drive } : cfg
 }
 export const migrated = imported
 export function driveTarget() {
@@ -67,6 +70,8 @@ export function driveTarget() {
     pruneQualified: backend.config.restic_offsite_prune_qualified === true,
   }
 }
+/** The Drive repository this machine writes: its own (`driveClients`), else the workstation's migrated one. */
+export const driveSpec = (cfg: BackupConfig) => cfg.drive ?? driveTarget()
 export const contains = (parent: string, path: string) =>
   path === parent || path.startsWith(`${parent}/`)
 export function coverage(source: Source, target: BackupTarget, cfg: BackupConfig): string | null {
@@ -214,7 +219,7 @@ export function entries(
         ),
       )
   }
-  for (const target of (machine === cfg.workstation
+  for (const target of (machine === cfg.workstation || cfg.drive
     ? ['append', 'drive']
     : ['append']) as readonly ('append' | 'drive')[])
     all.push(
@@ -240,7 +245,7 @@ export function entries(
       now,
     )
     remote.meaning =
-      `${remote.meaning} Copied from gem by the workstation; no Drive copy runs while the workstation is off.`.slice(
+      `${remote.meaning} Copied from gem by the workstation; gem also copies itself to Drive on its own.`.slice(
         0,
         300,
       )

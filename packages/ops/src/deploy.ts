@@ -18,6 +18,7 @@ import { spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import {
   existsSync,
+  linkSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
@@ -914,6 +915,11 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
               ]),
             ],
             deps,
+            {
+              packages: peerPackages(project, packages, cfg, template),
+              workspace: packages,
+              cfg,
+            },
           )
         } catch (error) {
           await finish(
@@ -971,7 +977,11 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
         }
       }
       const seconds = Math.round((Date.now() - started) / 1000)
-      if (release) pruneReleases(deps, release, cfg)
+      if (release) {
+        // The newest accepted release: the one a peer is sent (scripts/peer-release.sh).
+        writeFileSync(join(deps.releasesDir, ACCEPTED), `${sha}\n`)
+        pruneReleases(deps, release, cfg)
+      }
       const parts = [
         ...restart.map((unit) => unit.replace(/\.service$/, '')),
         ...swaps.map((unit) => `the ${unit.replace(/\.service$/, '')} page (no restart)`),
@@ -998,12 +1008,101 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
   }
 }
 
-/** Export the commit, install, and build the packages the units need; an existing release is reused. */
+/** In the releases folder: the commit of the newest accepted deploy's release. */
+export const ACCEPTED = '.accepted'
+
+/** What a release must hold built so a peer can run it: the packages, the workspace and the config. */
+export interface Completion {
+  packages: string[]
+  workspace: Pkg[]
+  cfg: DeployConfig
+}
+
+/**
+ * The packages a standalone peer runs from one release: what the deploy's units run (the backend and
+ * default workers, with the frontend a unit serves) and the ops and CLI bundles. Tether is the peer's own.
+ */
+export function peerPackages(
+  project: Project,
+  workspace: Pkg[],
+  cfg: DeployConfig,
+  template: (unit: string) => string,
+): string[] {
+  const has = (dir: string) => workspace.some((pkg) => pkg.dir === dir)
+  return [
+    ...new Set([
+      ...[project.backend, ...project.defaultWorkers]
+        .filter(Boolean)
+        .flatMap((unit) => unitBuilds(unit, template(unit), cfg)),
+      ...Object.values(cfg.frontends as Record<string, FrontendSpec>).map((spec) => spec.package),
+      ...['ops', 'cli'],
+    ]),
+  ].filter(has)
+}
+
+/** A release folder's build marker (`.aico-release.json`), or null when unreadable. */
+const releaseMarker = (dir: string) => {
+  try {
+    return JSON.parse(readFileSync(join(dir, '.aico-release.json'), 'utf8')) as {
+      sha: string
+      built: string[]
+    }
+  } catch {
+    return null
+  }
+}
+
+/** Build output is never tracked: the donor's files the export does not have, hard-linked in. */
+const HOST_LOCAL = new Set(['node_modules', '.next', '.venv', '__pycache__', '.dev-tools'])
+function linkMissing(from: string, to: string) {
+  mkdirSync(to, { recursive: true })
+  for (const entry of readdirSync(from, { withFileTypes: true })) {
+    if (HOST_LOCAL.has(entry.name)) continue
+    const source = join(from, entry.name)
+    const target = join(to, entry.name)
+    if (entry.isDirectory()) linkMissing(source, target)
+    else if (!existsSync(target)) {
+      if (entry.isSymbolicLink()) symlinkSync(readlinkSync(source), target)
+      else linkSync(source, target)
+    }
+  }
+}
+
+/**
+ * Take a package's build from the newest earlier release that has it, when no source it is built from
+ * changed between that release's commit and this one. The release stays one commit's exact content.
+ */
+function carryBuild(
+  root: string,
+  dir: string,
+  sha: string,
+  pkg: string,
+  completion: Completion,
+  deps: DeployDeps,
+): boolean {
+  const sources = [...completion.cfg.rootSources, ...cone(completion.workspace, pkg)]
+  for (const name of releases(deps)) {
+    if (name === sha || !releaseMarker(join(deps.releasesDir, name))?.built.includes(pkg)) continue
+    const diff = deps.run('git', ['-C', root, 'diff', '--name-only', name, sha])
+    if (diff.code !== 0 || touches(diff.out.split('\n').filter(Boolean), sources)) continue
+    linkMissing(join(deps.releasesDir, name, 'packages', pkg), join(dir, 'packages', pkg))
+    deps.out(`[deploy] ${pkg}: build carried over from release ${name.slice(0, 10)} (unchanged)`)
+    return true
+  }
+  return false
+}
+
+/**
+ * Export the commit, install, and build the packages the units need; an existing release is reused.
+ * With a `completion`, every package a peer runs that was not rebuilt here is carried over from an
+ * earlier release (or built when none matches), so each accepted release stands alone on a peer.
+ */
 export function prepareRelease(
   root: string,
   sha: string,
   builds: string[],
   deps: DeployDeps,
+  completion?: Completion,
 ): string {
   const dir = join(deps.releasesDir, sha)
   const marker = join(dir, '.aico-release.json')
@@ -1046,15 +1145,26 @@ export function prepareRelease(
     }
   }
   const state = JSON.parse(readFileSync(marker, 'utf8')) as { sha: string; built: string[] }
-  for (const pkg of builds) {
-    if (state.built.includes(pkg)) continue
+  const build = (pkg: string) => {
     const manifest = JSON.parse(readFileSafe(join(dir, 'packages', pkg, 'package.json')) ?? '{}')
     if (manifest.scripts?.build) {
       if (pkg === 'web-frontend') seedNextCache(dir, deps)
       step(`building ${pkg}`, 'npm', ['run', 'build', '-w', `packages/${pkg}`], dir)
     }
+  }
+  const done = (pkg: string) => {
     state.built.push(pkg)
     writeFileSync(marker, `${JSON.stringify(state)}\n`)
+  }
+  for (const pkg of builds) {
+    if (state.built.includes(pkg)) continue
+    build(pkg)
+    done(pkg)
+  }
+  for (const pkg of completion?.packages ?? []) {
+    if (state.built.includes(pkg)) continue
+    if (!carryBuild(root, dir, sha, pkg, completion as Completion, deps)) build(pkg)
+    done(pkg)
   }
   return dir
 }

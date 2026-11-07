@@ -4,10 +4,12 @@
 #
 #   scripts/peer-release.sh <ssh-host> <fleet-machine>     e.g. aico-gem aico
 #
-# - The Aico release: the one the workstation's web app runs. A routine deploy builds only what changed,
-#   so a release that changed only the scheduler or ops holds no web build and cannot stand alone; the
-#   web app's release is the newest complete one. When the peer runs another commit,
-#   scripts/deploy-remote.sh sends it (and keeps the peer's Tether when that release built none).
+# - The Aico release: the newest accepted deploy's (releases/.accepted, written by `aico deploy`). A
+#   deploy builds only what changed and carries every other package's build over from an earlier release
+#   with no source change since, so each accepted release holds everything a peer runs, including an ops,
+#   jobs or CLI-only one. Without that file (before the first such deploy) it is the release the web app runs.
+#   When the peer runs another commit, scripts/deploy-remote.sh sends it (and keeps the peer's Tether when
+#   that release built none).
 # - Tether: the workstation's installed, signed Tether goes over the fleet link with
 #   `tether fleet push-update`; the peer installs it only when it differs and is newer.
 # While a deploy holds this machine's releases lock, the run does nothing and the next one sends it.
@@ -29,10 +31,13 @@ flock -s -n 9 || {
   exit 0
 }
 
-web="$(systemctl --user show -p WorkingDirectory --value aico-web.service)"
-want="$(basename "$(dirname "$(dirname "$web")")")"
+want="$(tr -d '[:space:]' <"$RELEASES/.accepted" 2>/dev/null || true)"
+if [ -z "$want" ]; then
+  web="$(systemctl --user show -p WorkingDirectory --value aico-web.service)"
+  want="$(basename "$(dirname "$(dirname "$web")")")"
+fi
 [[ "$want" =~ ^[0-9a-f]{40}$ ]] || {
-  echo "Not sent: the web app here runs from no release folder ($web)"
+  echo "Not sent: no accepted release folder here (${want:-none})"
   exit 1
 }
 have="$(ssh -o BatchMode=yes -o ConnectTimeout=10 "$HOST" 'basename "$(readlink -f "$HOME/.local/lib/aico/ops")"')"

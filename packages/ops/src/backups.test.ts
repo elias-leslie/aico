@@ -453,6 +453,28 @@ it('gem has one append copy and the workstation owns its single real Drive recei
     ),
   ).toHaveLength(1)
 })
+it('gem backs itself up to its own Drive repository with its own login, reported from gem', async () => {
+  const c = config({ AICO_BACKUP_MACHINE: 'aico' })
+  c.stateDir = temp()
+  c.scratchRoot = temp()
+  expect(c.drive?.repository).toBe('rclone:aico-notes-drive:SummitFlow-Aico-gem-backup')
+  const drive = entries(emptyState(), c, 'aico', now).filter((e) => e.target === 'drive')
+  expect(drive.map((e) => [e.id, e.name])).toEqual([
+    ['drive/aico-aico', 'Aico databases and photos'],
+  ])
+  // The workstation's Drive repository is not touched by gem's config, and gem's is not the workstation's.
+  expect(config({ AICO_BACKUP_MACHINE: 'davion-sidarli' }).drive).toBeUndefined()
+  const run = vi.fn(async (_argv: string[], _options?: { env?: NodeJS.ProcessEnv }) => ({
+    code: 0,
+    out: '[]',
+    err: '',
+  }))
+  await restic({ cfg: c, run, now: () => new Date(now) }, 'drive', ['snapshots'])
+  const argv = run.mock.calls[0]?.[0] as string[]
+  expect(argv[argv.indexOf('--repo') + 1]).toBe(c.drive?.repository)
+  expect(argv[argv.indexOf('--password-file') + 1]).toBe(homePath(c.drive?.passwordFile as string))
+  expect(run.mock.calls[0]?.[1]?.env?.RCLONE_CONFIG).toBe(homePath(c.drive?.rcloneConfig as string))
+})
 it('a native volume root restores into scratch and success includes a byte comparison', async () => {
   const c = cfg(),
     source = temp(),

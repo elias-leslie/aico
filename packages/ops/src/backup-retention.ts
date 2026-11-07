@@ -13,7 +13,7 @@ import {
 } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import ops from '../data/ops.json' with { type: 'json' }
-import { type BackupConfig, type BackupState, driveTarget, homePath, migrated } from './backup-plan'
+import { type BackupConfig, type BackupState, driveSpec, homePath, migrated } from './backup-plan'
 import { checked, type Runtime, resticArgs, resticJson } from './backup-runtime'
 import type { Point } from './snapshots'
 
@@ -426,7 +426,7 @@ function legacyRetentionIds(
 }
 /** Called only by the scheduled Drive run, never by Run now or the restore path. */
 export async function retainDrive(rt: Runtime, state: BackupState): Promise<void> {
-  if (!driveTarget().pruneQualified)
+  if (!driveSpec(rt.cfg).pruneQualified)
     throw new Error('Automatic Drive retention is not qualified; backup data is preserved.')
   const request = resticArgs(rt.cfg, 'drive', driveRetentionArgs(rt.cfg))
   request.argv.splice(
@@ -436,7 +436,8 @@ export async function retainDrive(rt: Runtime, state: BackupState): Promise<void
     'rclone.args=serve restic --stdio --drive-use-trash=true',
   )
   await checked(rt.run, request.argv, { env: request.env })
-  if ((state.goodDriveRuns ?? 0) >= rt.cfg.retention.drive.legacyAfterGoodRuns) {
+  // A machine's own repository holds only its tagged copies; the legacy sweep is the workstation's.
+  if (!rt.cfg.drive && (state.goodDriveRuns ?? 0) >= rt.cfg.retention.drive.legacyAfterGoodRuns) {
     const snapshots = (await resticJson(rt, 'drive', ['snapshots'])) as {
       id: string
       time: string
@@ -465,7 +466,7 @@ export async function verifyDrive(rt: Runtime, scheduled: boolean): Promise<void
   const check = resticArgs(rt.cfg, 'drive', ['check', `--read-data-subset=${rt.cfg.verify.sample}`])
   await checked(rt.run, check.argv, { env: check.env })
   if (scheduled) {
-    if (!driveTarget().pruneQualified)
+    if (!driveSpec(rt.cfg).pruneQualified)
       throw new Error('Automatic Drive retention is not qualified; backup data is preserved.')
     const prune = resticArgs(rt.cfg, 'drive', [
       '-o',

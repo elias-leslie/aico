@@ -7,6 +7,7 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  statSync,
   symlinkSync,
   utimesSync,
   writeFileSync,
@@ -16,6 +17,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import ops from '../data/ops.json' with { type: 'json' }
 import {
+  ACCEPTED,
   cone,
   configApiVersion,
   type DeployDeps,
@@ -28,6 +30,8 @@ import {
   NOT_HANDLED,
   type Project,
   parseDeployArgs,
+  peerPackages,
+  prepareRelease,
   procPaths,
   pruneReleases,
   type Refusal,
@@ -401,6 +405,10 @@ describe('deploy', () => {
           return { ...(options.guard?.(args) ?? { code: 0, out: '' }), err: '' }
         if (cmd === 'aico')
           return { code: options.accept ? options.accept(root, args) : 0, out: '', err: '' }
+        if (cmd === 'nice' && args.join(' ') === '-n 10 npm run build -w packages/web-server') {
+          mkdirSync(join(opts?.cwd as string, 'packages/web-server/dist'), { recursive: true })
+          writeFileSync(join(opts?.cwd as string, 'packages/web-server/dist/x.mjs'), '// web\n')
+        }
         if (cmd === 'nice' && args.join(' ') === '-n 10 npm run build -w packages/ops') {
           mkdirSync(join(opts?.cwd as string, 'packages/ops/dist'), { recursive: true })
           writeFileSync(join(opts?.cwd as string, 'packages/ops/dist/aico-ops.mjs'), '// ops\n')
@@ -848,6 +856,67 @@ describe('deploy', () => {
     expect(installedOpsSha(deps)).toBe(changed)
     expect(calls).toContain('nice -n 10 npm run build -w packages/cli')
     expect(calls.filter((call) => call.includes('restart'))).toEqual([])
+  })
+
+  describe('every accepted release stands alone on a peer', () => {
+    const commit = (git: ReturnType<typeof setup>['git'], file: string, text: string) => {
+      writeFileSync(file, text)
+      git('-c', 'user.email=t@t', '-c', 'user.name=t', 'add', '-A')
+      git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'change')
+      return git('rev-parse', 'HEAD').out.trim()
+    }
+    const built = (deps: DeployDeps, sha: string) =>
+      (
+        JSON.parse(readFileSync(join(deps.releasesDir, sha, '.aico-release.json'), 'utf8')) as {
+          built: string[]
+        }
+      ).built
+
+    it('a CLI-only deploy carries the unchanged web build over as hard links', async () => {
+      const { root, git, deps, calls, head } = setup({ ops: true, cli: true })
+      expect(await deploy(request(), root, deps)).toBe(0)
+      expect(built(deps, head).sort()).toEqual(['cli', 'ops', 'web-server'])
+      calls.length = 0
+      const second = commit(git, join(root, 'packages/cli/src/main.ts'), 'cli v2\n')
+      expect(await deploy(request(), root, deps)).toBe(0)
+      expect(calls).not.toContain('nice -n 10 npm run build -w packages/web-server')
+      expect(built(deps, second).sort()).toEqual(['cli', 'ops', 'web-server'])
+      const first = join(deps.releasesDir, head, 'packages/web-server/dist/x.mjs')
+      const carried = join(deps.releasesDir, second, 'packages/web-server/dist/x.mjs')
+      expect(statSync(carried).ino).toBe(statSync(first).ino)
+      expect(
+        readFileSync(join(deps.releasesDir, second, 'packages/web-server/main.ts'), 'utf8'),
+      ).toBe('v1\n')
+      expect(readFileSync(join(deps.releasesDir, ACCEPTED), 'utf8').trim()).toBe(second)
+    })
+
+    it('builds what changed since the earlier release instead of carrying it', async () => {
+      const { root, git, deps, calls, head } = setup({ ops: true, cli: true })
+      expect(await deploy(request(), root, deps)).toBe(0)
+      const second = commit(git, join(root, 'packages/web-server/main.ts'), 'v2\n')
+      calls.length = 0
+      const project = loadProject(root)
+      const workspace = readPackages(gitAt(root), second)
+      const template = (unit: string) =>
+        run('git', ['-C', root, 'show', `${second}:scripts/systemd/${unit}`]).out
+      expect(peerPackages(project, workspace, ops.deploy, template).sort()).toEqual([
+        'cli',
+        'ops',
+        'web-server',
+      ])
+      // Only ops was asked for: web-server's source changed since `head`, so it is built here.
+      prepareRelease(root, second, ['ops'], deps, {
+        packages: ['ops', 'cli', 'web-server'],
+        workspace,
+        cfg: ops.deploy,
+      })
+      expect(calls).toContain('nice -n 10 npm run build -w packages/web-server')
+      expect(built(deps, second).sort()).toEqual(['cli', 'ops', 'web-server'])
+      const own = join(deps.releasesDir, second, 'packages/web-server/dist/x.mjs')
+      expect(statSync(own).ino).not.toBe(
+        statSync(join(deps.releasesDir, head, 'packages/web-server/dist/x.mjs')).ino,
+      )
+    })
   })
 
   it('installs the host-steward root sources signed, and again only when they changed', async () => {

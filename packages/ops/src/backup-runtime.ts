@@ -16,7 +16,7 @@ import {
   type BackupState,
   type BackupTarget,
   copyKey,
-  driveTarget,
+  driveSpec,
   emptyState,
   homePath,
   migrated,
@@ -160,7 +160,7 @@ export function resticArgs(
   args: string[],
   root = false,
 ): { argv: string[]; env: NodeJS.ProcessEnv } {
-  const spec = target === 'drive' ? driveTarget() : cfg.append
+  const spec = target === 'drive' ? driveSpec(cfg) : cfg.append
   const cache = join(cfg.scratchRoot, root ? 'cache-root' : 'cache')
   const temp = join(
     process.env.XDG_RUNTIME_DIR || `/run/user/${process.getuid?.() ?? 0}`,
@@ -191,13 +191,13 @@ export function resticArgs(
   }
   if (root) env.HOME = temp
   if (target === 'drive') {
-    const rclone = driveTarget().rcloneConfig
+    const rclone = driveSpec(cfg).rcloneConfig
     if (rclone) {
       if (root) {
         const copy = join(temp, `drive-${process.pid}.conf`)
-        copyRootAuth(rclone, copy)
+        copyRootAuth(homePath(rclone), copy)
         env.RCLONE_CONFIG = copy
-      } else env.RCLONE_CONFIG = rclone
+      } else env.RCLONE_CONFIG = homePath(rclone)
     }
   }
   if (target === 'append') {
