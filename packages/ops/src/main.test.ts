@@ -78,8 +78,11 @@ it('lists backups for a person: problems, one line per target, retired sources f
     },
     now,
   )
-  expect(text.split('\n')[0]).toBe('Backups on ws: 2 ok, 1 need a look, 1 retired sources.')
-  expect(text).toContain('  off    Owner backups Jobs DB: Machine is off.')
+  expect(text.split('\n')[0]).toBe(
+    'Backups on ws: 2 ok, 0 need a look, 1 on a machine that is off, 1 retired sources.',
+  )
+  expect(text).toContain('On a machine that is off:')
+  expect(text).toContain('Owner backups Jobs DB: no good copy date known')
   expect(text).toMatch(
     / {2}T7 +1\/1 ok; newest data 30 min ago; last run 30 min ago, ok; next Nov 7, 12:30 AM EST/,
   )

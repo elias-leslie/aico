@@ -693,10 +693,23 @@ export function listText(
   const lines: string[] = []
   const gone = list.entries.filter((e) => e.gone)
   const live = list.entries.filter((e) => !e.gone)
-  const problems = live.filter((e) => e.state !== 'ok')
-  lines.push(
-    `Backups on ${list.machine}: ${live.length - problems.length} ok, ${problems.length} need a look${gone.length ? `, ${new Set(gone.map((e) => e.source)).size} retired sources` : ''}.`,
-  )
+  // A machine that is off is not a problem Status raises: it is counted apart, with its last good copy.
+  const away = live.filter((e) => e.state === 'off')
+  const problems = live.filter((e) => e.state !== 'ok' && e.state !== 'off')
+  const parts = [
+    `${live.length - problems.length - away.length} ok`,
+    `${problems.length} need a look`,
+    away.length ? `${away.length} on a machine that is off` : '',
+    gone.length ? `${new Set(gone.map((e) => e.source)).size} retired sources` : '',
+  ].filter(Boolean)
+  lines.push(`Backups on ${list.machine}: ${parts.join(', ')}.`)
+  if (away.length) {
+    lines.push('', 'On a machine that is off:')
+    for (const e of away)
+      lines.push(
+        `  ${(TARGET_NAME[e.target] ?? e.target).padEnd(13)} ${e.name}: ${e.dataAt ? `last good copy ${since(e.dataAt, now)}` : 'no good copy date known'}`,
+      )
+  }
   if (problems.length) {
     lines.push('', 'Need a look:')
     for (const e of problems)

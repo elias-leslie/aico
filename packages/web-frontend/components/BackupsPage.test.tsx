@@ -39,19 +39,43 @@ describe('BackupsPage', () => {
     answer([
       copy({}),
       copy({ target: 'drive' }),
-      copy({ source: 'old', name: 'Old tool', state: 'off', dataAt: null }),
+      copy({
+        source: 'old',
+        name: 'Old tool',
+        state: 'off',
+        dataAt: null,
+        gone: true,
+      }),
+      copy({
+        source: 'old',
+        name: 'Old tool',
+        target: 'drive',
+        state: 'off',
+        dataAt: null,
+        gone: true,
+      }),
+      copy({
+        source: 'jobs',
+        name: 'Jobs database',
+        target: 'external',
+        state: 'off',
+        meaning: 'Machine is off; its last good backup date is shown.',
+      }),
     ])
     render(<BackupsPage />)
     expect(await screen.findByTestId('backups-summary')).toHaveTextContent(
-      'All 2 current, 1 archived.',
+      'All 1 current, 1 archived, 1 on a machine that is off.',
     )
-    expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(2)
+    // Sources are counted once, whatever number of places hold a copy: the summary and the
+    // folded list agree.
+    expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(3)
+    expect(screen.getByText(/^On a machine that is off \(1\)/)).toBeVisible()
     const archived = screen
       .getByText(/^Archived \(1\)/)
       .closest('details') as HTMLDetailsElement
     expect(archived.open).toBe(false)
     expect(screen.getAllByText('T7')).toHaveLength(2)
-    expect(screen.getByText('Drive')).toBeInTheDocument()
+    expect(screen.getAllByText('Drive')).toHaveLength(2)
   })
 
   it('shows a failed copy first with its reason', async () => {

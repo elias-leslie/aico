@@ -184,7 +184,10 @@ export function BackupsPage() {
   )
   const groups = rows ? groupBySource(rows) : []
   const live = groups.filter((group) => group.state !== 'off')
-  const archived = groups.filter((group) => group.state === 'off')
+  const archived = groups.filter(
+    (group) => group.state === 'off' && group.retired,
+  )
+  const away = groups.filter((group) => group.state === 'off' && !group.retired)
   const machines = new Set(data?.entries.map((row) => row.machine))
   const manyMachines = machines.size > 1
   const runnable = (['native', 'drive', 'append'] as const).filter((target) =>
@@ -276,6 +279,23 @@ export function BackupsPage() {
                   />
                 ))}
               </ul>
+              {away.length > 0 && (
+                <details className={styles.archived} open>
+                  <summary>
+                    On a machine that is off ({away.length}): new copies wait
+                    until it is back
+                  </summary>
+                  <ul className={styles.groups}>
+                    {away.map((group) => (
+                      <Group
+                        key={group.source}
+                        group={group}
+                        machine={manyMachines}
+                      />
+                    ))}
+                  </ul>
+                </details>
+              )}
               {archived.length > 0 && (
                 <details className={styles.archived}>
                   <summary>

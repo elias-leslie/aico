@@ -20,9 +20,22 @@ describe('backupSummary', () => {
   it('says all current and how many are archived', () => {
     const list = [
       ...Array.from({ length: 3 }, (_, i) => entry({ source: `s${i}` })),
-      entry({ source: 'old', state: 'off' }),
+      entry({ source: 'old', state: 'off', gone: true }),
+      entry({ source: 'old', state: 'off', gone: true, target: 'drive' }),
     ]
     expect(backupSummary(list)).toBe('All 3 current, 1 archived.')
+  })
+
+  it('counts a machine that is off apart from archived sources, one per source', () => {
+    const list = [
+      entry({ source: 'a' }),
+      entry({ source: 'old', state: 'off', gone: true }),
+      entry({ source: 'jobs', state: 'off' }),
+      entry({ source: 'jobs', state: 'off', target: 'external' }),
+    ]
+    expect(backupSummary(list)).toBe(
+      'All 1 current, 1 archived, 1 on a machine that is off.',
+    )
   })
 
   it('leads with what is wrong', () => {

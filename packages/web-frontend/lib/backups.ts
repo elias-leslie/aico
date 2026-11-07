@@ -17,6 +17,8 @@ export interface BackupEntry {
   path: string | null
   machine: string
   running?: boolean
+  /** The source path is gone: older copies are kept, no new ones are made. */
+  gone?: boolean
 }
 
 export interface BackupGroup {
@@ -25,6 +27,8 @@ export interface BackupGroup {
   /** The worst of its copies: failed, then late, then current. */
   state: 'failed' | 'warn' | 'ok' | 'off'
   copies: BackupEntry[]
+  /** Off because the source is gone for good (archived), or only because its machine is off. */
+  retired: boolean
 }
 
 const TARGET_LABEL: Record<BackupTarget, string> = {
@@ -45,25 +49,31 @@ interface BackupCounts {
   current: number
   late: number
   failed: number
+  /** Sources whose path is gone; older copies are kept. */
   archived: number
+  /** Sources on a machine that is off: no new copy until it is back. */
+  away: number
 }
 
-function countBackups(entries: readonly BackupEntry[]): BackupCounts {
-  const counts = { current: 0, late: 0, failed: 0, archived: 0 }
-  for (const entry of entries) {
-    const state = known(entry.state)
-    if (state === 'ok') counts.current += 1
-    else if (state === 'failed') counts.failed += 1
-    else if (state === 'off') counts.archived += 1
+/** Counts sources, as the list shows them, not each copy of a source. */
+function countBackups(groups: readonly BackupGroup[]): BackupCounts {
+  const counts = { current: 0, late: 0, failed: 0, archived: 0, away: 0 }
+  for (const group of groups) {
+    if (group.state === 'ok') counts.current += 1
+    else if (group.state === 'failed') counts.failed += 1
+    else if (group.state === 'off')
+      counts[group.retired ? 'archived' : 'away'] += 1
     else counts.late += 1
   }
   return counts
 }
 
-/** "All 98 current, 36 archived." or what is wrong first: "2 failed, 1 needs a fresh copy, 95 current, 36 archived." */
+/** "All 47 current, 17 archived, 2 on a machine that is off." or what is wrong first. Counts sources, like the list. */
 export function backupSummary(entries: readonly BackupEntry[]): string {
   if (!entries.length) return 'No backups are registered yet.'
-  const { current, late, failed, archived } = countBackups(entries)
+  const { current, late, failed, archived, away } = countBackups(
+    groupBySource(entries),
+  )
   const live = current + late + failed
   const parts: string[] = []
   if (failed) parts.push(`${failed} failed`)
@@ -73,8 +83,9 @@ export function backupSummary(entries: readonly BackupEntry[]): string {
       !failed && !late ? `All ${current} current` : `${current} current`,
     )
   if (archived) parts.push(`${archived} archived`)
-  if (!live && archived)
-    return `Nothing is backed up now; ${archived} archived.`
+  if (away) parts.push(`${away} on a machine that is off`)
+  if (!live && (archived || away))
+    return `Nothing is backed up now; ${parts.join(', ')}.`
   return `${parts.join(', ')}.`
 }
 
@@ -103,6 +114,7 @@ export function groupBySource(entries: readonly BackupEntry[]): BackupGroup[] {
       name: sorted[0]?.name ?? source,
       state: state ?? 'off',
       copies: sorted,
+      retired: sorted.every((copy) => copy.gone === true),
     }
   })
   return groups.sort(
