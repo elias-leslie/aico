@@ -163,6 +163,11 @@ export class AgentStateTracker {
     this.onChange(id, entry.record)
   }
 
+  /** The agent's own id for the conversation it is in, once a poll named it (agy: the conversation). */
+  agentSessionId(id: string): string | null {
+    return this.entries.get(id)?.agentSessionId ?? null
+  }
+
   /** A poll result; null means no agent was found (the state is unknown). */
   observe(id: string, signal: AgentSignal | null): void {
     const entry = this.entry(id)
@@ -404,6 +409,11 @@ export function agentStateOf(id: string): Record<string, unknown> {
     stateAgentAt: 0,
   }
   return { ...record, stateAt: record.stateAt || null, stateAgentAt: record.stateAgentAt || null }
+}
+
+/** The conversation id the session's agent last reported, or null. */
+export function agentSessionIdOf(id: string): string | null {
+  return bound?.agentSessionId(id) ?? null
 }
 
 /** Apply a hook report to the bound tracker; false when unbound or ignored. */

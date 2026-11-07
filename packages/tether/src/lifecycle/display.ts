@@ -46,18 +46,72 @@ function projectName(row: WidgetRow): string | null {
   return namesByRoot.get(row.projectRoot) ?? null
 }
 
-/** The session's task: its name, unless that only repeats the project. An
- * unnamed root goes by its work-role name, else its request ID, so roots a
- * coordinator started are told apart before anyone titles them. */
+/** What a session's conversation is called by the tool running in it (`title`: its terminal
+ * title, thread or session name) or by what the owner first asked (`prompt`). */
+export interface ConversationName {
+  title: string | null
+  prompt: string | null
+  /** What the agent is doing as of its last record (meaningful while it works). */
+  doing: string | null
+}
+
+let conversationNames: (id: string) => ConversationName | undefined = () => undefined
+
+/** Where to ask what a session's conversation is called (the session history). */
+export function useConversationNames(source: (id: string) => ConversationName | undefined): void {
+  conversationNames = source
+}
+
+/** What the session's conversation says it is doing, one line, or null. */
+export function conversationDoing(id: string): string | null {
+  return conversationNames(id)?.doing?.trim() || null
+}
+
+/** The name a session gets when its owner typed none: the tool's own name for the conversation,
+ * else its first prompt (already trimmed). null: none yet. */
+export function autoName(id: string): string | null {
+  const found = conversationNames(id)
+  return found?.title?.trim() || found?.prompt?.trim() || null
+}
+
+/** The typed name without a project prefix it was typed with ("Aico — ux-test" under Aico). */
+function typedName(row: WidgetRow, project: string | null): string | null {
+  const name = row.name?.trim()
+  if (!name) return null
+  if (project) {
+    const prefix = `${project} — `
+    if (name.toLowerCase().startsWith(prefix.toLowerCase()) && name.length > prefix.length)
+      return name.slice(prefix.length).trim()
+  }
+  return name
+}
+
+/** The session's task: the name its owner typed, else what its tool calls the conversation (a
+ * terminal title, thread name, session name), else the work role of a root, else the first prompt,
+ * else a root's request ID. A name that only repeats the project is no task. An unnamed root goes
+ * by its work-role name, so roots a coordinator started are told apart before anyone titles them. */
 function task(row: WidgetRow, project: string | null): string | null {
-  const name = row.name?.trim() || rootName(row.id)
+  const conversation = conversationNames(row.id)
+  const name =
+    typedName(row, project) ||
+    conversation?.title?.trim() ||
+    rootName(row.id, true) ||
+    conversation?.prompt?.trim() ||
+    rootName(row.id, false)
   if (!name || (project && name.toLowerCase() === project.toLowerCase())) return null
   return name
 }
 
-function rootName(id: string): string | null {
+/** A root's work-role name, or (not `roleOnly`) its request ID when it has no role. */
+function rootName(id: string, roleOnly: boolean): string | null {
   const root = rootRequestForWidget(id)
-  return root ? root.workRoleDisplayName?.trim() || root.requestId : null
+  if (!root) return null
+  return root.workRoleDisplayName?.trim() || (roleOnly ? null : root.requestId)
+}
+
+/** The task part of the display title (what follows the project), or null. */
+export function taskName(row: WidgetRow): string | null {
+  return task(row, projectName(row))
 }
 
 /** `Project — Task`; either alone when the other is missing; else `Session <n>`.

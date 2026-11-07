@@ -34,7 +34,12 @@ import {
   listSessions,
   listWidgets,
 } from './lifecycle/catalog'
-import { displayTitle, leadName, setPersonalWorkspaceRoot } from './lifecycle/display'
+import {
+  displayTitle,
+  leadName,
+  setPersonalWorkspaceRoot,
+  useConversationNames,
+} from './lifecycle/display'
 import {
   agentExitOf,
   cachedSessionStatus,
@@ -228,6 +233,7 @@ function startSessionHistory(context: DaemonContext, env: NodeJS.ProcessEnv): vo
   const { store, events, projectRoots } = context
   context.history = historyFromEnv(store.db, env, projectRoots)
   context.history.endRetired()
+  useConversationNames(context.history.conversationName)
   events.subscribe((event) => {
     if (
       event.type === 'session.ended' &&

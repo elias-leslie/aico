@@ -191,6 +191,21 @@ export function agySignal(snapshot: AgySnapshot, conversationId: string): AgentS
   }
 }
 
+/** The newest `limit` steps of an agy conversation database (newest first), for the doing-now line. */
+export function agyRecentSteps(
+  path: string,
+  limit: number,
+): { step_type: number; step_payload: Uint8Array | null }[] {
+  const db = new DatabaseSync(path, { readOnly: true, timeout: 50 })
+  try {
+    return db
+      .prepare('SELECT step_type, step_payload FROM steps ORDER BY idx DESC LIMIT ?')
+      .all(limit) as { step_type: number; step_payload: Uint8Array | null }[]
+  } finally {
+    db.close()
+  }
+}
+
 /** Reads an agy conversation database, read-only, one short connection per
  * look (agy writes it in WAL mode; nothing is held open between polls). */
 export const nodeAgyRead: AgyRead = (path) => {

@@ -12,11 +12,14 @@ import {
   type WidgetRow,
 } from './catalog'
 import {
+  autoName,
   badge,
   displayTitle,
   FALLBACK_BADGE_COLOR,
   rememberProjects,
   setPersonalWorkspaceRoot,
+  taskName,
+  useConversationNames,
 } from './display'
 
 const store = new Store(':memory:')
@@ -53,6 +56,29 @@ describe('display title', () => {
     setWidgetProject('d0000001', null, PERSONAL)
     setWidgetName('d0000001', null)
     expect(displayTitle(row('d0000001'))).toBe('Personal Workspace')
+  })
+
+  it('names an unnamed session by the name its tool gives the conversation, else its first prompt, never over a typed name', () => {
+    insertWidget('d0000009', 'claude-code')
+    setWidgetProject('d0000009', 'summitflow', '/srv/summitflow')
+    const names = new Map<
+      string,
+      { title: string | null; prompt: string | null; doing: string | null }
+    >()
+    useConversationNames((id) => names.get(id))
+    expect(displayTitle(row('d0000009'))).toBe('SummitFlow')
+    names.set('d0000009', { title: null, prompt: 'Fix the login form', doing: null })
+    expect(displayTitle(row('d0000009'))).toBe('SummitFlow — Fix the login form')
+    expect(autoName('d0000009')).toBe('Fix the login form')
+    names.set('d0000009', { title: 'Login form fix', prompt: 'Fix the login form', doing: null })
+    expect(displayTitle(row('d0000009'))).toBe('SummitFlow — Login form fix')
+    expect(taskName(row('d0000009'))).toBe('Login form fix')
+    setWidgetName('d0000009', 'ux-test')
+    expect(displayTitle(row('d0000009'))).toBe('SummitFlow — ux-test')
+    // A project prefix typed into the name is not shown twice.
+    setWidgetName('d0000009', 'SummitFlow — ux-test')
+    expect(displayTitle(row('d0000009'))).toBe('SummitFlow — ux-test')
+    useConversationNames(() => undefined)
   })
 
   it('names an untitled root by its work-role name, else its request ID', () => {
