@@ -437,7 +437,7 @@ describe('private root workload control', () => {
     expect(
       await widgetMutationOperation(row.id, '0'.repeat(64), operations, { ms: 2_000, pollMs: 5 }),
     ).toBe(false)
-    expect(Date.now() - started).toBeLessThan(500)
+    expect(Date.now() - started).toBeLessThan(1_500)
     // A probe that never settles is refused once the wait runs out.
     verify.mockImplementation(async () => 'inert')
     expect(

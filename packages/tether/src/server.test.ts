@@ -3,7 +3,7 @@ import { request, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { peerRequest, peerStream } from '@aico/fleet/peer-http'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { callSocket } from './client'
 import { resolvePaths, type TetherPaths } from './config'
 import { type RunningDaemon, startDaemon } from './daemon'
@@ -430,7 +430,7 @@ describe('event stream', () => {
     req.end()
     await ready
     await call('PATCH', '/v1/tools/pi', { enabled: false })
-    await new Promise((resolve) => setTimeout(resolve, 50))
+    await vi.waitFor(() => expect(lines).toHaveLength(2))
     req.destroy()
     expect(lines[0]).toMatchObject({ type: 'hello', data: { apiVersion: 32, instance: 'test' } })
     expect(lines[1]).toMatchObject({ type: 'tools.changed', seq: 1, data: { slug: 'pi' } })

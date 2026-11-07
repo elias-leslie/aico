@@ -234,7 +234,7 @@ describe('claude -p', () => {
     const started = Date.now()
     const result = await ask(request('haiku'), { context, bins: { claude }, silenceMs: 300 })
     expect(result.outcome).toMatchObject({ kind: 'silent', model: 'claude-haiku-5-5' })
-    expect(Date.now() - started).toBeLessThan(3000)
+    expect(Date.now() - started).toBeLessThan(4_500)
     // Output arriving inside the bound keeps the call alive past it.
     const chatty = fakeBin(
       'claude-chatty',
@@ -409,7 +409,7 @@ describe('pi-ai models', () => {
     const started = Date.now()
     const result = await ask(request('codex'), { context, models, silenceMs: 300 })
     expect(result.outcome).toMatchObject({ kind: 'silent', model: 'codex/gpt-6.1-sol' })
-    expect(Date.now() - started).toBeLessThan(3000)
+    expect(Date.now() - started).toBeLessThan(4_500)
   })
 })
 

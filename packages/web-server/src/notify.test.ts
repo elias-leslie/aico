@@ -321,9 +321,10 @@ describe('the pieces', () => {
     })
     try {
       door.start()
-      await new Promise((resolve) => setTimeout(resolve, 50))
-      expect(errors).toContain(
-        '[notify] OmniNull door on 10.255.255.254:3012 is closed: listen EADDRNOTAVAIL: address not available 10.255.255.254:3012',
+      await vi.waitFor(() =>
+        expect(errors).toContain(
+          '[notify] OmniNull door on 10.255.255.254:3012 is closed: listen EADDRNOTAVAIL: address not available 10.255.255.254:3012',
+        ),
       )
       expect((await call('GET', '/api/notices')).status).toBe(200)
     } finally {

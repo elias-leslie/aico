@@ -1045,8 +1045,7 @@ describe('guardBash', () => {
     expect(await guardBash(hook, 'ls', dir, 'c1', 300)).toMatch(/timeout/)
     expect(Date.now() - started).toBeLessThan(5_000)
     const pid = Number(readFileSync(pidFile, 'utf8'))
-    await new Promise((done) => setTimeout(done, 100))
-    expect(() => process.kill(pid, 0)).toThrow()
+    await vi.waitFor(() => expect(() => process.kill(pid, 0)).toThrow())
   })
 
   it.skipIf(!existsSync(HARNESS.guard_hook))(

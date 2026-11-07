@@ -3,6 +3,7 @@
   "entry": [
     "packages/checks/src/guards.ts",
     "scripts/perf-bench.cjs",
+    "vitest.load-proof.ts",
     "packages/web-frontend/public/sw.js",
     "packages/web-frontend/test-stubs/*"
   ],

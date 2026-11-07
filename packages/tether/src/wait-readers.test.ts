@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PullKind } from './wait-kinds'
 import {
   anchorWidget,
@@ -265,8 +265,7 @@ describe('PullReaders', () => {
     r.watch()
     try {
       job('running')
-      for (let i = 0; i < 50 && pokes.length < 1; i += 1)
-        await new Promise((resolve) => setTimeout(resolve, 20))
+      await vi.waitFor(() => expect(pokes.length).toBeGreaterThan(0))
       expect(pokes).toEqual(expect.arrayContaining([`job:${JOB}`]))
     } finally {
       r.stop()

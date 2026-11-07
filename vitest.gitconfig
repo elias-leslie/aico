@@ -1,0 +1,5 @@
+# Git identity for tests that commit in throwaway repos. vitest.config.ts points GIT_CONFIG_GLOBAL here,
+# so a test commit does not run the owner's global hooks (the credential guard costs ~0.3 s per commit).
+[user]
+	name = Test
+	email = test@example.invalid

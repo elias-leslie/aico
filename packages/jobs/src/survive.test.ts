@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -38,6 +38,19 @@ function fakeUnits() {
   return { host, started }
 }
 
+/** A command that prints `line` once the test creates DIR/release: the run lasts exactly as long as the test needs, not a guessed delay. */
+const held = (dir: string, line: string) => [
+  'sh',
+  '-c',
+  `while [ ! -e "${dir}/release" ]; do sleep 0.02; done; echo '${line}'`,
+]
+const release = (dir: string) => writeFileSync(join(dir, 'release'), '')
+
+/** Waits for a condition the code under test reaches by itself (no fixed sleep to outrun a loaded machine). */
+async function until(condition: () => boolean) {
+  while (!condition()) await new Promise((resolve) => setTimeout(resolve, 5))
+}
+
 const job: JobDef = {
   kind: 'backup',
   what: 'Backup',
@@ -70,6 +83,7 @@ const runnerFor = (
 describe('a run survives a scheduler restart', () => {
   it('adopts the live run: one start, one recorded result, the old holder fenced out', async () => {
     const dir = scratch()
+    const command = held(dir, 'copied 3 files')
     const { host, started } = fakeUnits()
     const units = { host, dir, pollMs: 20 }
     const store = new JobStore(':memory:')
@@ -79,10 +93,7 @@ describe('a run survives a scheduler restart', () => {
       store,
       'a:1',
       async (j) => {
-        await host.start(
-          unitName(j.kind),
-          unitArgv(join(dir, j.kind), (j.run as { command: string[] }).command),
-        )
+        await host.start(unitName(j.kind), unitArgv(join(dir, j.kind), command))
         return new Promise(() => {})
       },
       units,
@@ -94,15 +105,10 @@ describe('a run survives a scheduler restart', () => {
     expect(store.get('backup')?.holder).toBe('a:1')
 
     // The next scheduler finds the lease held by a dead holder and the unit live: it adopts.
-    const second = runnerFor(
-      store,
-      'a:2',
-      (j) => unitJob(j.kind, (j.run as { command: string[] }).command, units),
-      units,
-      logs,
-    )
+    const second = runnerFor(store, 'a:2', (j) => unitJob(j.kind, command, units), units, logs)
     second.start()
     await second.tick()
+    release(dir)
     await second.idle()
     expect(logs.some((line) => line.includes('adopted the run a:1 left'))).toBe(true)
     expect(started).toEqual(['aico-job-backup'])
@@ -142,24 +148,21 @@ describe('a run survives a scheduler restart', () => {
     const dir = scratch()
     const { host, started } = fakeUnits()
     const units = { host, dir, pollMs: 20 }
-    const run = ['sh', '-c', 'sleep 0.3; echo once']
-    const [one, two] = await Promise.all([
-      unitJob('backup', run, units),
-      unitJob('backup', run, units),
-    ])
+    const run = held(dir, 'once')
+    const both = Promise.all([unitJob('backup', run, units), unitJob('backup', run, units)])
+    await until(() => started.length > 0)
+    release(dir)
+    const [one, two] = await both
     expect(started).toHaveLength(1)
     // One of them takes the code file; the other, finding it gone, reports it was not left.
     expect([one.meaning, two.meaning].sort()).toContain('once')
-    expect(readFileSync(join(dir, 'backup.log'), 'utf8')).toBe('once\n')
   })
 })
 
 describe('a POST job survives a scheduler restart too', () => {
   // Stands in for `node aico-jobs.mjs`: `post PATH` holds "the request" open, then prints the result.
-  const self = [
-    'sh',
-    '-c',
-    'sleep 0.4; echo "{\\"state\\":\\"warn\\",\\"meaning\\":\\"Copied; one peer behind.\\"}"',
+  const self = (dir: string) => [
+    ...held(dir, '{"state":"warn","meaning":"Copied; one peer behind."}'),
     'self',
   ]
   const postJobDef: JobDef = {
@@ -186,18 +189,22 @@ describe('a POST job survives a scheduler restart too', () => {
         log: (line) => logs.push(line),
       })
     // The first scheduler starts the unit and is killed before it records anything.
+    // It only starts the unit: a scheduler still polling in this process would race the next one for the code file.
     const first = make('a:1', async (j) => {
-      void act(self, units)(j)
+      await host.start(
+        unitName(j.kind),
+        unitArgv(join(dir, j.kind), [...self(dir), 'post', '/api/export/notes']),
+      )
       return new Promise(() => {})
     })
     first.start()
     await first.tick()
-    await new Promise((resolve) => setTimeout(resolve, 50))
     expect(started).toEqual(['aico-job-notes-export'])
 
-    const second = make('a:2', act(self, units))
+    const second = make('a:2', act(self(dir), units))
     second.start()
     await second.tick()
+    release(dir)
     await second.idle()
     expect(logs.some((line) => line.includes('adopted the run a:1 left'))).toBe(true)
     expect(started).toEqual(['aico-job-notes-export'])

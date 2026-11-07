@@ -206,7 +206,8 @@ export async function unitJob(
   const base = join(dir, kind)
   mkdirSync(dir, { recursive: true, mode: 0o700 })
   if (!(await host.active(unit)) && readIf(`${base}.code`) === null) {
-    rmSync(`${base}.log`, { force: true })
+    // No log cleanup here: the wrapper truncates it as the run begins, and a second caller racing this
+    // start would otherwise delete the log the first caller's run is already writing.
     try {
       await host.start(unit, unitArgv(base, argv))
     } catch (error) {
@@ -220,6 +221,7 @@ export async function unitJob(
   const code = readIf(`${base}.code`)
   const log = readIf(`${base}.log`) ?? ''
   rmSync(`${base}.code`, { force: true })
+  rmSync(`${base}.log`, { force: true })
   if (code === null) return { state: 'failed', meaning: 'It was stopped before it left a result.' }
   return read(Number(code.trim()), log.slice(-TAIL_BYTES))
 }

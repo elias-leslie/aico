@@ -198,8 +198,9 @@ describe('the runner', () => {
     store.complete = () => {
       throw new Error('database is locked')
     }
-    await new Promise((resolve) => setTimeout(resolve, 40))
-    expect(home.logs).toContain('export: could not renew lease 1: disk I/O error')
+    await vi.waitFor(() =>
+      expect(home.logs).toContain('export: could not renew lease 1: disk I/O error'),
+    )
     finish({ state: 'ok', meaning: 'Copied.' })
     await home.runner.idle()
     expect(home.logs.at(-1)).toBe(
