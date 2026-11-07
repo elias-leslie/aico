@@ -1,0 +1,207 @@
+/* The look Machines and Grants share: a page that scrolls inside the frame, a title, a one-line
+   summary, titled lists. Tokens only; the frame owns the background and the way home. */
+.page {
+  height: 100%;
+  overflow: auto;
+  padding: 18px 24px 40px;
+  color: var(--bone);
+  font: 14px / 1.45 var(--font-ui);
+}
+
+.inner {
+  max-width: 880px;
+}
+
+.page :is(button, a):focus-visible {
+  outline: 2px solid var(--lantern);
+  outline-offset: 2px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 10px 12px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.head h1 {
+  flex: 1;
+  margin: 0;
+  font: 500 22px / 1.2 var(--font-display);
+}
+
+.sum {
+  margin: 0 0 14px;
+  color: var(--mist);
+  font-size: 13px;
+}
+
+.sec {
+  margin-top: 20px;
+}
+
+.sec h2 {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 8px;
+  font: 600 12px / 1.2 var(--font-ui);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mist);
+}
+
+.sec h2 .n {
+  font-weight: 500;
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--paper-veil);
+  border-radius: 10px;
+  background: var(--paper);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 4px 12px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--paper-veil);
+}
+
+.row:first-child {
+  border-top: 0;
+}
+
+.chipCol {
+  padding-top: 1px;
+  min-width: 96px;
+}
+
+.main {
+  min-width: 0;
+}
+
+.title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border: 1px solid color-mix(in srgb, var(--lantern) 36%, transparent);
+  border-radius: 10px;
+  color: var(--lantern);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.line {
+  margin: 2px 0 0;
+  color: var(--mist);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+.line.strong {
+  color: var(--bone);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.err {
+  grid-column: 2 / -1;
+  margin: 2px 0 0;
+  color: var(--term-error-text);
+  font-size: 12.5px;
+}
+
+.empty {
+  padding: 16px 14px;
+  border: 1px dashed var(--paper-veil);
+  border-radius: 10px;
+  color: var(--mist);
+  font-size: 13px;
+}
+
+.notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--beacon) 32%, transparent);
+  border-radius: 8px;
+  background: var(--beacon-tint);
+  font-size: 13px;
+}
+
+.notice.bad {
+  border-color: var(--term-danger-border);
+  background: var(--term-danger-soft);
+}
+
+.notice p {
+  flex: 1;
+  min-width: 200px;
+  margin: 0;
+}
+
+.skeleton {
+  height: 64px;
+  border-top: 1px solid var(--paper-veil);
+  background:
+    linear-gradient(90deg, transparent, var(--paper-veil), transparent) 0 0 /
+    200% 100%;
+  opacity: 0.35;
+}
+
+.skeleton:first-child {
+  border-top: 0;
+}
+
+@media (max-width: 760px) {
+  .page {
+    padding: 14px 16px 32px;
+  }
+
+  .row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .chipCol {
+    min-width: 0;
+  }
+
+  .actions {
+    justify-content: flex-start;
+  }
+
+  .actions :global(.lantern-btn),
+  .head :global(.lantern-btn) {
+    min-height: 44px;
+  }
+
+  .err {
+    grid-column: 1;
+  }
+}

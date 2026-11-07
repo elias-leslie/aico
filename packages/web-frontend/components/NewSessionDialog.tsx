@@ -17,6 +17,7 @@ import {
   type ProjectSetting,
   useProjectSettings,
 } from '@/lib/hooks/use-project-settings'
+import { sessionHostLabel } from '@/lib/machines'
 import { AgentIcon, getAgentColor } from './AgentIcon'
 
 const SHELL_MODE = 'shell'
@@ -157,7 +158,9 @@ export function NewSessionDialog({
     : tool
       ? `Start ${tool.name} in ${project.name}`
       : `Start a shell in ${project.name}`
-  const startText = host ? `${startLabel} on ${host}` : startLabel
+  const startText = host
+    ? `${startLabel} on ${sessionHostLabel(host)}`
+    : startLabel
 
   return (
     <Dialog.Root
@@ -273,7 +276,7 @@ export function NewSessionDialog({
                           className="lantern-tool"
                         >
                           <span className="truncate">
-                            {h.name ?? 'This computer'}
+                            {sessionHostLabel(h.name)}
                           </span>
                           {note && (
                             <span
@@ -313,14 +316,14 @@ export function NewSessionDialog({
               </label>
             </div>
             {away && (
-              <Note>{`${host} is off or out of reach. Starting a session there turns it on first.`}</Note>
+              <Note>{`${sessionHostLabel(host)} is off or out of reach. Starting a session there turns it on first.`}</Note>
             )}
             {isLoading ? (
               <Note>Loading projects…</Note>
             ) : isError ? (
               <Note>
                 {host
-                  ? `${remote.error?.message || `Couldn’t load projects on ${host}`}.`
+                  ? `${remote.error?.message || `Couldn’t load projects on ${sessionHostLabel(host)}`}.`
                   : "Couldn't load projects."}{' '}
                 <button
                   type="button"
@@ -332,7 +335,11 @@ export function NewSessionDialog({
                 </button>
               </Note>
             ) : projects.length === 0 ? (
-              <Note>{host ? `No projects on ${host}.` : 'No projects.'}</Note>
+              <Note>
+                {host
+                  ? `No projects on ${sessionHostLabel(host)}.`
+                  : 'No projects.'}
+              </Note>
             ) : visibleProjects.length === 0 ? (
               <Note>No project matches “{query.trim()}”.</Note>
             ) : (

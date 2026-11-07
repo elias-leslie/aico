@@ -32,6 +32,7 @@ import {
   syncLine,
   useSyncStatus,
 } from '@/lib/hooks/use-sync-status'
+import { sessionHostLabel } from '@/lib/machines'
 import { ConfirmationDialog } from './ConfirmationDialog'
 
 const LOGIN_LABELS: Record<LoginState, string> = {
@@ -213,6 +214,20 @@ export function HostsSheet({
               <X className="h-[18px] w-[18px]" strokeWidth={1.7} />
             </Dialog.Close>
           </div>
+          <p
+            className="px-[18px] pb-2 text-[12.5px]"
+            style={{ color: 'var(--mist)' }}
+          >
+            Where sessions can run. Every machine is on{' '}
+            <Link
+              href="/status?kind=machine"
+              onClick={() => onOpenChange(false)}
+              style={{ color: 'var(--lantern)' }}
+            >
+              Machines
+            </Link>
+            .
+          </p>
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-[18px] pb-[18px]">
             {isLoading ? (
               <Note>Loading hosts…</Note>
@@ -336,7 +351,7 @@ function HostCard({ host, sync }: { host: HostChoice; sync?: PeerSync }) {
           className="min-w-0 break-words"
           style={{ font: '500 15px/1.2 var(--font-display)' }}
         >
-          {host.name}
+          {sessionHostLabel(host.name)}
         </h3>
         <Chip tone={status.tone} testId="host-status">
           {status.text}
@@ -605,106 +620,103 @@ function LoginRows({
     return <Note flush>No tools to sign in to on {host}.</Note>
   }
   return (
-    <>
-      <ul className="flex flex-col gap-2">
-        {data.tools.map((tool) => {
-          const { text, tone } = loginText(tool)
-          const actions = data.actions[tool.tool]
-          // Nothing to sign out of while it needs a sign-in; unknown may be signed in.
-          const canSignOut =
-            !!actions?.signOut && tool.state !== 'needs_sign_in'
-          const signInFirst = !!actions?.signIn && needsSignIn(tool)
-          const signInLater = !!actions?.signIn && !signInFirst
-          const busy = busyTool === tool.tool
-          const name = toolName(tool.tool)
-          const credentials = tool.credentials.length
-            ? tool.credentials
-            : [{ name: '', state: tool.state, source: tool.source }]
-          return (
-            <li
-              key={tool.tool}
-              data-testid={`login-${tool.tool}`}
-              className="flex flex-wrap items-center gap-x-3 gap-y-1.5"
-            >
-              <span className="min-w-[7ch] text-[14px]">{name}</span>
-              <Chip tone={tone}>{text}</Chip>
-              {signInFirst && (
-                <button
-                  type="button"
-                  className="lantern-btn small ml-auto"
-                  aria-label={`Sign in to ${name} on ${host}`}
-                  disabled={busyTool !== null}
-                  onClick={() => onSignIn(tool.tool)}
-                >
-                  {busy ? 'Opening…' : 'Sign in'}
-                </button>
+    <ul className="flex flex-col gap-2">
+      {data.tools.map((tool) => {
+        const { text, tone } = loginText(tool)
+        const actions = data.actions[tool.tool]
+        // Nothing to sign out of while it needs a sign-in; unknown may be signed in.
+        const canSignOut = !!actions?.signOut && tool.state !== 'needs_sign_in'
+        const signInFirst = !!actions?.signIn && needsSignIn(tool)
+        const signInLater = !!actions?.signIn && !signInFirst
+        const busy = busyTool === tool.tool
+        const name = toolName(tool.tool)
+        const credentials = tool.credentials.length
+          ? tool.credentials
+          : [{ name: '', state: tool.state, source: tool.source }]
+        return (
+          <li
+            key={tool.tool}
+            data-testid={`login-${tool.tool}`}
+            className="flex flex-wrap items-center gap-x-3 gap-y-1.5"
+          >
+            <span className="min-w-[7ch] text-[14px]">{name}</span>
+            <Chip tone={tone}>{text}</Chip>
+            {signInFirst && (
+              <button
+                type="button"
+                className="lantern-btn small ml-auto"
+                aria-label={`Sign in to ${name} on ${host}`}
+                disabled={busyTool !== null}
+                onClick={() => onSignIn(tool.tool)}
+              >
+                {busy ? 'Opening…' : 'Sign in'}
+              </button>
+            )}
+            <details className="basis-full text-[12px]">
+              <summary
+                className="w-fit cursor-pointer"
+                style={{ color: 'var(--mist)' }}
+              >
+                Details
+              </summary>
+              <ul className="mt-1.5 flex flex-col gap-1">
+                {credentials.map((credential) => {
+                  const source = sourceLabel(credential.source)
+                  const extra =
+                    'detail' in credential ? credential.detail : undefined
+                  return (
+                    <li
+                      key={credential.name || 'tool'}
+                      className="break-words"
+                      style={{ color: 'var(--mist)' }}
+                    >
+                      {[
+                        credential.name,
+                        LOGIN_LABELS[credential.state],
+                        source.label,
+                        extra,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </li>
+                  )
+                })}
+              </ul>
+              {(signInLater || canSignOut) && (
+                <span className="mt-2 flex flex-wrap gap-2">
+                  {signInLater && (
+                    <button
+                      type="button"
+                      className="lantern-btn small ghost"
+                      aria-label={`Sign in to ${name} on ${host} again`}
+                      disabled={busyTool !== null}
+                      onClick={() => onSignIn(tool.tool)}
+                    >
+                      {busy
+                        ? 'Opening…'
+                        : tool.state === 'signed_in'
+                          ? 'Sign in again'
+                          : 'Sign in'}
+                    </button>
+                  )}
+                  {canSignOut && (
+                    <button
+                      type="button"
+                      className="lantern-btn small ghost"
+                      aria-label={`Sign out of ${name} on ${host}`}
+                      disabled={busyTool !== null}
+                      onClick={() => onSignOut(tool.tool)}
+                    >
+                      Sign out
+                    </button>
+                  )}
+                </span>
               )}
-              <details className="basis-full text-[12px]">
-                <summary
-                  className="w-fit cursor-pointer"
-                  style={{ color: 'var(--mist)' }}
-                >
-                  Details
-                </summary>
-                <ul className="mt-1.5 flex flex-col gap-1">
-                  {credentials.map((credential) => {
-                    const source = sourceLabel(credential.source)
-                    const extra =
-                      'detail' in credential ? credential.detail : undefined
-                    return (
-                      <li
-                        key={credential.name || 'tool'}
-                        className="break-words"
-                        style={{ color: 'var(--mist)' }}
-                      >
-                        {[
-                          credential.name,
-                          LOGIN_LABELS[credential.state],
-                          source.label,
-                          extra,
-                        ]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      </li>
-                    )
-                  })}
-                </ul>
-                {(signInLater || canSignOut) && (
-                  <span className="mt-2 flex flex-wrap gap-2">
-                    {signInLater && (
-                      <button
-                        type="button"
-                        className="lantern-btn small ghost"
-                        aria-label={`Sign in to ${name} on ${host} again`}
-                        disabled={busyTool !== null}
-                        onClick={() => onSignIn(tool.tool)}
-                      >
-                        {busy
-                          ? 'Opening…'
-                          : tool.state === 'signed_in'
-                            ? 'Sign in again'
-                            : 'Sign in'}
-                      </button>
-                    )}
-                    {canSignOut && (
-                      <button
-                        type="button"
-                        className="lantern-btn small ghost"
-                        aria-label={`Sign out of ${name} on ${host}`}
-                        disabled={busyTool !== null}
-                        onClick={() => onSignOut(tool.tool)}
-                      >
-                        Sign out
-                      </button>
-                    )}
-                  </span>
-                )}
-              </details>
-            </li>
-          )
-        })}
-      </ul>
-    </>
+            </details>
+          </li>
+        )
+      })}
+    </ul>
   )
 }
 

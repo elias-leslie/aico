@@ -100,16 +100,17 @@ describe('NewSessionDialog', () => {
     expect(screen.queryByRole('group', { name: 'Runs on' })).toBeNull()
   })
 
-  it('starts on a chosen host, with This computer as the default', () => {
+  it('starts on a chosen host, with Workstation as the default', () => {
     hostState.hosts = [
       { name: 'agent-work', state: 'connected' },
       { name: 'lab', state: 'offline' },
     ]
     const { onStart } = renderDialog('neri')
     const hosts = screen.getByRole('group', { name: 'Runs on' })
-    expect(
-      screen.getByRole('button', { name: 'This computer' }),
-    ).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Workstation' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
     expect(hosts).toHaveTextContent('offline')
     fireEvent.click(screen.getByRole('button', { name: 'agent-work' }))
     fireEvent.click(
