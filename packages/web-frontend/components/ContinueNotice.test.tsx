@@ -44,7 +44,7 @@ const slot = (over: Partial<ProjectSlot> = {}): ProjectSlot =>
     projectId: 'aico',
     projectName: 'Aico',
     rootPath: '/srv/aico',
-    activeMode: 'claude',
+    activeMode: 'claude-code',
     activeSessionId: 'a1b2c3d4',
     can: {},
     showsSessionTitle: false,
@@ -58,6 +58,14 @@ describe('continueTargets', () => {
     const fine = [glance('claude', 'left'), glance('codex', 'left')]
     expect(continueTargets('claude', fine, [CLAUDE, CODEX])).toEqual([])
     expect(continueTargets('shell', used, [CLAUDE, CODEX])).toEqual([])
+  })
+
+  it('knows a Claude session by its tool slug, though its usage glance is named claude', () => {
+    const used = [glance('claude', 'used_up'), glance('codex', 'left')]
+    expect(continueTargets('claude-code', used, [CLAUDE, CODEX])).toEqual([
+      CODEX,
+    ])
+    expect(continueTargets('codex', used, [CLAUDE, CODEX])).toEqual([])
   })
 
   it('counts credits as room and skips a tool that is used up or not known', () => {

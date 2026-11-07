@@ -9,6 +9,16 @@ import { useUsage } from '@/lib/hooks/use-usage'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
 import { getSlotSessionId } from '@/lib/utils/slot'
 
+/** The usage glance for the session's tool: its mode is the tool slug (`claude-code`), the glance id a name or alias (`claude`). */
+function ownGlance(
+  glances: readonly QuotaGlance[],
+  mode: string,
+  tool: AgentTool | undefined,
+): QuotaGlance | undefined {
+  const names = tool ? [tool.slug, ...tool.aliases] : [mode]
+  return glances.find((glance) => names.includes(glance.id))
+}
+
 /**
  * The agent tools that could take over from `mode`'s: another enabled tool whose
  * subscription still has room (time left, or paid by credits). The tool and its
@@ -19,14 +29,15 @@ export function continueTargets(
   glances: readonly QuotaGlance[],
   tools: readonly AgentTool[],
 ): AgentTool[] {
-  const own = glances.find((glance) => glance.id === mode)
+  const named = (tool: AgentTool) => [tool.slug, ...tool.aliases]
+  const active = tools.find((tool) => named(tool).includes(mode))
+  const own = ownGlance(glances, mode, active)
   if (own?.state !== 'used_up') return []
   const open = new Set(
     glances
       .filter((glance) => glance.state === 'left' || glance.state === 'credits')
       .map((glance) => glance.id),
   )
-  const named = (tool: AgentTool) => [tool.slug, ...tool.aliases]
   return tools.filter(
     (tool) =>
       !named(tool).includes(mode) && named(tool).some((name) => open.has(name)),
@@ -52,7 +63,13 @@ export function ContinueNotice({ slot }: { slot: TerminalSlot | PaneSlot }) {
   const glances = quotaGlances(report)
   const targets = continueTargets(slot.activeMode, glances, enabledTools)
   if (targets.length === 0) return null
-  const own = glances.find((glance) => glance.id === slot.activeMode)
+  const own = ownGlance(
+    glances,
+    slot.activeMode,
+    enabledTools.find((tool) =>
+      [tool.slug, ...tool.aliases].includes(slot.activeMode),
+    ),
+  )
 
   const start = async (tool: AgentTool) => {
     setStarting(tool.slug)
