@@ -51,6 +51,7 @@ import { registerStatusActions, StatusRuns, statusNotice } from './status-action
 import { registerSyncRoutes, startSync } from './sync/start'
 import { TerminalHub } from './terminal'
 import { registerTrayRoutes } from './tray'
+import { registerUsageRoutes } from './usage-routes'
 
 function serve(): void {
   const config = loadConfig()
@@ -209,6 +210,7 @@ function serve(): void {
   const canaryPoller = new CanaryPoller(canaryFolder, notify.notifier, canaryEvents)
   registerCanaryRoutes(api, notify.notifier, canaryFolder, canaryEvents, canaryPoller)
   registerBackupRoutes(api)
+  registerUsageRoutes(api, { dataDir: config.dataDir })
   registerLoginRoutes(api, process.env, tether)
   registerMockupRoutes(api, { dataDir: config.dataDir, tether })
   registerSharedPageRoutes(api, { shares: () => shows.list('here') })
