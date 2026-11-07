@@ -18,6 +18,7 @@ import {
 } from '@/lib/capture-queue'
 import { useCaptureLimits, useRefreshCaptures } from '@/lib/hooks/use-captures'
 import { useMediaQuery } from '@/lib/hooks/use-media-query'
+import { SheetHandle } from '../SheetChrome'
 import { CapturePicker } from './CapturePicker'
 import { FileThumb } from './CaptureThumb'
 
@@ -238,13 +239,7 @@ export function CaptureSheet({
           )}
           style={{ color: 'var(--bone)' }}
         >
-          {isMobile && (
-            <div
-              aria-hidden="true"
-              className="mx-auto mt-2 h-1 w-9 rounded-full"
-              style={{ backgroundColor: 'var(--paper-veil)' }}
-            />
-          )}
+          {isMobile && <SheetHandle />}
           <div className="flex items-center gap-3 pt-3.5 pr-2 pb-2 pl-[18px]">
             <Dialog.Title style={{ font: '500 18px/1.2 var(--font-display)' }}>
               Capture

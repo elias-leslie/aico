@@ -2,7 +2,7 @@
 
 import * as Dialog from '@radix-ui/react-dialog'
 import { clsx } from 'clsx'
-import { Search, X } from 'lucide-react'
+import { Search } from 'lucide-react'
 import { type ReactNode, useMemo, useState } from 'react'
 import { useAgentTools } from '@/lib/hooks/use-agent-tools'
 import {
@@ -18,6 +18,7 @@ import {
 } from '@/lib/hooks/use-project-settings'
 import { sessionHostLabel } from '@/lib/machines'
 import { AgentIcon, getAgentColor } from './AgentIcon'
+import { SheetHandle, SheetTitleBar } from './SheetChrome'
 
 const SHELL_MODE = 'shell'
 const LAST_PROJECT_KEY = 'aico:new-session-project'
@@ -209,24 +210,8 @@ export function NewSessionDialog({
           )}
           style={{ color: 'var(--bone)' }}
         >
-          {isMobile && (
-            <div
-              aria-hidden="true"
-              className="mx-auto mt-2 h-1 w-9 rounded-full"
-              style={{ backgroundColor: 'var(--paper-veil)' }}
-            />
-          )}
-          <div className="flex items-center gap-2 pt-3.5 pr-2 pb-2 pl-[18px]">
-            <Dialog.Title
-              className="flex-1"
-              style={{ font: '500 18px/1.2 var(--font-display)' }}
-            >
-              New session
-            </Dialog.Title>
-            <Dialog.Close aria-label="Close" className="lantern-icon-btn">
-              <X className="h-[18px] w-[18px]" strokeWidth={1.7} />
-            </Dialog.Close>
-          </div>
+          {isMobile && <SheetHandle />}
+          <SheetTitleBar title="New session" />
 
           <div className="flex-none pb-1">
             <SectionTitle>Start</SectionTitle>

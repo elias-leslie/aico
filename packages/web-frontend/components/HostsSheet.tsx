@@ -3,7 +3,6 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import { useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
-import { X } from 'lucide-react'
 import Link from 'next/link'
 import { type ReactNode, useState } from 'react'
 import { formatAge } from '@/lib/attention'
@@ -35,6 +34,7 @@ import {
 import { sessionHostLabel } from '@/lib/machines'
 import { plural } from '@/lib/status'
 import { ConfirmationDialog } from './ConfirmationDialog'
+import { SheetHandle, SheetTitleBar } from './SheetChrome'
 
 const LOGIN_LABELS: Record<LoginState, string> = {
   signed_in: 'Signed in',
@@ -194,24 +194,8 @@ export function HostsSheet({
           )}
           style={{ color: 'var(--bone)' }}
         >
-          {isMobile && (
-            <div
-              aria-hidden="true"
-              className="mx-auto mt-2 h-1 w-9 rounded-full"
-              style={{ backgroundColor: 'var(--paper-veil)' }}
-            />
-          )}
-          <div className="flex items-center gap-2 pt-3.5 pr-2 pb-2 pl-[18px]">
-            <Dialog.Title
-              className="flex-1"
-              style={{ font: '500 18px/1.2 var(--font-display)' }}
-            >
-              Hosts
-            </Dialog.Title>
-            <Dialog.Close aria-label="Close" className="lantern-icon-btn">
-              <X className="h-[18px] w-[18px]" strokeWidth={1.7} />
-            </Dialog.Close>
-          </div>
+          {isMobile && <SheetHandle />}
+          <SheetTitleBar title="Hosts" />
           <p
             className="px-[18px] pb-2 text-[12.5px]"
             style={{ color: 'var(--mist)' }}

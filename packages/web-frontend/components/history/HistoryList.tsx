@@ -21,6 +21,7 @@ import {
 import { useClock } from '@/lib/hooks/use-clock'
 import { useHistory } from '@/lib/hooks/use-history'
 import { useSessionLabels } from '@/lib/hooks/use-session-labels'
+import { SkeletonRows } from '../status/SkeletonRows'
 import styles from './HistoryList.module.css'
 
 /** The list of recent sessions, newest first, one link each to its transcript. */
@@ -157,23 +158,7 @@ export function HistoryList({ failedOnly = false }: { failedOnly?: boolean }) {
       {loading && (
         <>
           <p className="status-muted">Loading recent sessions…</p>
-          <div className="status-rows skeleton" aria-hidden="true">
-            {[30, 45, 25].map((width) => (
-              <div key={width} className="status-row">
-                <div>
-                  <span className="bar pill" />
-                </div>
-                <div>
-                  <div className="bar" style={{ width: `${width}%` }} />
-                  <div
-                    className="bar dim"
-                    style={{ width: `${width + 20}%` }}
-                  />
-                </div>
-                <div className="when">—</div>
-              </div>
-            ))}
-          </div>
+          <SkeletonRows />
         </>
       )}
       {failed && (
