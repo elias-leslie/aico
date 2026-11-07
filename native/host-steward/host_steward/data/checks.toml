@@ -550,7 +550,6 @@ own_projects = { host-steward = "Host steward" }
 # services, plus host-steward's. A "name@.service" entry covers that template's
 # instances. Adding one is a loosening.
 [site.trusted_units.system]
-"summitflow-backup-window-guard.service" = "summitflow"
 "summitflow-host-monitor.service" = "summitflow"
 "host-steward-check.service" = "host-steward"
 "host-steward-collect-usage.service" = "host-steward"
@@ -567,6 +566,16 @@ own_projects = { host-steward = "Host steward" }
 "host-steward-fcm-token.service" = "host-steward"
 
 [site.trusted_units.user]
+# Aico's backups: `aico backups run TARGET` runs each as aico-backup-TARGET (packages/ops/src/backups.ts) and they
+# call the root backup helpers through sudo -n on their schedule (the guard every 5 minutes).
+"aico-jobs.service" = "aico"
+"aico-backup-guard.service" = "aico"
+"aico-backup-native.service" = "aico"
+"aico-backup-native-pressure.service" = "aico"
+"aico-backup-drive.service" = "aico"
+"aico-backup-append.service" = "aico"
+"aico-backup-snapshots.service" = "aico"
+"aico-backup-verify.service" = "aico"
 "host-steward-memctl.service" = "host-steward"
 "host-steward-display-guard.service" = "host-steward"
 "agent-browser-idle-reaper.service" = "browser-automation"

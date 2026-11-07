@@ -539,7 +539,7 @@ def test_new_family_from_a_known_automation_service_is_only_a_note(tmp_path):
     state = hours_state(5)
     hour = sudo._hour(NOW)
     state["hours"][hour]["backup"] = 3
-    state["callers"] = {hour: {"backup": {"summitflow-backup-window-guard.service": 3}}}
+    state["callers"] = {hour: {"backup": {"aico-backup-guard.service": 3}}}
     site = site_for(tmp_path)
     ctx = mkctx("sudo", site=site)
     rule = sudo.Rules(**{**RULES.__dict__, "trusted": site["trusted_units"]})
@@ -548,6 +548,26 @@ def test_new_family_from_a_known_automation_service_is_only_a_note(tmp_path):
         codes(out)["sudo.new_family.auto"] == "ok"
         and next(s for s in out if s.code == "sudo.new_family.auto").note
     )
+
+
+def test_backup_guard_volume_from_aicos_backup_units_is_only_a_note(tmp_path):
+    """The backup guard runs the window helper every 5 minutes from Aico's user unit: its volume follows that
+    schedule (288 a day against an older baseline of 13) and never warns."""
+    family = "summitflow-backup-window"
+    state = hours_state(5, per_hour=0, family=family)
+    for h in range(5 * 24 + 1):  # the older schedule: about 13 a day
+        state["hours"][sudo._hour(NOW - h * 3600)][family] = 1 if h % 2 else 0
+    callers = {}
+    for h in range(24):
+        hour = sudo._hour(NOW - h * 3600)
+        state["hours"][hour][family] = 12
+        callers[hour] = {family: {"aico-backup-guard.service": 12}}
+    state["callers"] = callers
+    site = site_for(tmp_path)
+    ctx = mkctx("sudo", site=site)
+    rule = sudo.Rules(**{**RULES.__dict__, "trusted": site["trusted_units"]})
+    out = codes(sudo.evaluate(state, NOW, ctx, rule, "h", 3))
+    assert "sudo.family_spike" not in out and out["sudo.family_spike.auto"] == "ok"
 
 
 def sensitive(at, **k):
