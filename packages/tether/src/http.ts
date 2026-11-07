@@ -3,7 +3,7 @@ import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import { createConnection } from 'node:net'
 import { dirname } from 'node:path'
 
-export const MAX_BODY_BYTES = 128 * 1024
+const MAX_BODY_BYTES = 128 * 1024
 
 export class HttpError extends Error {
   constructor(

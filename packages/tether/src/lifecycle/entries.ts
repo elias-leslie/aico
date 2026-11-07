@@ -24,10 +24,9 @@ import { ENTRY_HOME_ENV, ENTRY_TOOL_ENV, ENTRY_TOOLS, type EntryTool } from '../
 import { getSessionEntry, getWidget, type SessionEntry } from './catalog'
 import { shellQuote } from './tui/launch'
 
-export type { SessionEntry }
 /** Set on the entry process only: state readers find it in the pane by this
  * marker and read the agent's files under its home (continuity.ts). */
-export { ENTRY_HOME_ENV, ENTRY_TOOL_ENV, ENTRY_TOOLS, type EntryTool }
+export type { EntryTool, SessionEntry }
 
 /** Whether an entry can run this tool. */
 export function isEntryTool(tool: unknown): tool is EntryTool {
@@ -35,9 +34,9 @@ export function isEntryTool(tool: unknown): tool is EntryTool {
 }
 
 /** An entry name in entries.json and in `entry.name`. */
-export const ENTRY_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/
+const ENTRY_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/
 /** `entry.arg`: one word, no path or shell characters. */
-export const ENTRY_ARG = /^[a-z0-9][a-z0-9-]{0,79}$/
+const ENTRY_ARG = /^[a-z0-9][a-z0-9-]{0,79}$/
 /** What the launch line exits with when the entry is gone from entries.json. */
 export const ENTRY_MISSING_EXIT = 78
 /** EX_TEMPFAIL: an entry's prerequisites can return without changing its configuration. */

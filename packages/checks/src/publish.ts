@@ -110,7 +110,7 @@ export function publicationRow(result: Publication, now = new Date()): StatusRow
 }
 
 /** Captured diagnostics never escape: Git/transport errors may contain credentials. */
-export function deliver(root: string, sha: string, authorized: string[]): Promise<Delivery> {
+function deliver(root: string, sha: string, authorized: string[]): Promise<Delivery> {
   return new Promise((done) => {
     const child = spawn(
       policy.transport[0],

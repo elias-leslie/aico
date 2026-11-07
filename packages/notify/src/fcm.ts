@@ -11,7 +11,7 @@ import { createCipheriv, createECDH, hkdfSync, randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { asksOwner, type Notice } from './notice'
 
-export const FCM_URL = 'https://fcm.googleapis.com/v1/projects/{project}/messages:send'
+const FCM_URL = 'https://fcm.googleapis.com/v1/projects/{project}/messages:send'
 /** Plaintext bytes: FCM data is 4096 bytes, less base64 and the record overhead. */
 export const PAYLOAD_MAX = 2900
 /** How long FCM keeps an undelivered message, by severity. */

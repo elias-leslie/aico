@@ -33,7 +33,7 @@ export interface Collected {
 }
 
 /** The first local day Aico counts daily rows itself, set once (by the import or the first pass). */
-export function cutoverDay(db: Database, now: number): string {
+function cutoverDay(db: Database, now: number): string {
   const saved = getState<string>(db, 'cutover_day')
   if (saved) return saved
   const today = localDay(now)

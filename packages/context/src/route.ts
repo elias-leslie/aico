@@ -252,11 +252,7 @@ export function route(
 // -- usage facts ------------------------------------------------------------------------------
 
 /** The subscription a tool/model draws on: a model id's prefix when listed, else the tool's. */
-export function usageProvider(
-  policy: LaunchPolicy,
-  tool: string,
-  model: string | null,
-): string | null {
+function usageProvider(policy: LaunchPolicy, tool: string, model: string | null): string | null {
   const prefix = model?.includes('/') ? (model.split('/')[0] as string) : null
   if (prefix && policy.usageProviders.includes(prefix)) return prefix
   return policy.tools.find((entry) => entry.name === tool)?.usageProvider ?? null

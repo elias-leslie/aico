@@ -40,7 +40,7 @@ import { basename, dirname, join } from 'node:path'
 import { promisify } from 'node:util'
 import { GIB, type KillOrder, type MemoryPolicy } from '../memory-policy'
 
-export const TICK_MS = 5_000
+const TICK_MS = 5_000
 const GROWTH_WINDOW = 12 // ticks (60 s) used to rank pane growth
 const MIN_GROWTH = 256 * 2 ** 20
 const NOTE_GAP_MS = 1_800_000
@@ -127,7 +127,7 @@ export function isAgentProcess(comm: string, argv: string[], names: ReadonlySet<
  * `agentOf(p, seed)`: seed is true for a direct child of the root (or a
  * process whose parent is outside the pane).
  */
-export function makePane(
+function makePane(
   scope: string,
   procs: Map<number, Proc>,
   agentOf: (p: Proc, seed: boolean) => boolean,

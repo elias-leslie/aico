@@ -136,7 +136,7 @@ function effectiveUid(uid: number | undefined): number {
 }
 
 /** Reject relative, traversal, NUL and overlong socket paths before binding. */
-export function assertSocketPath(path: string, label: string): string {
+function assertSocketPath(path: string, label: string): string {
   if (
     !path.startsWith('/') ||
     path.includes('\0') ||

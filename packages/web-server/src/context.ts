@@ -41,7 +41,7 @@ export interface ContextDeps {
  * session's resumeId. Never guess: older passes saved `tool:<Tether id>` (and
  * `tool:aico-widget-…`, from before ids were normalized) when Tether no longer knew
  * the session, which matches no transcript; such a saved source is ignored. */
-export function knownSource(d: CostDelivery, saved: string | undefined): string | null {
+function knownSource(d: CostDelivery, saved: string | undefined): string | null {
   if (d.channel.startsWith('hook:') && d.session) return `${d.tool}:${d.session}`
   if (!saved) return null
   const id = saved.slice(saved.indexOf(':') + 1)

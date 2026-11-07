@@ -106,7 +106,7 @@ function executable(config: Config, command: string): string {
 }
 
 /** The line a reader needs first: an error line on failure, else the last line. */
-export function hint(output: string, failed: boolean): string {
+function hint(output: string, failed: boolean): string {
   const lines = output
     .split('\n')
     // biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI colour codes

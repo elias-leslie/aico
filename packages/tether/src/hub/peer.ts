@@ -115,7 +115,7 @@ export function downReason(name: string, state: string): string {
 }
 
 /** Jittered, capped exponential retry delay. */
-export function retryDelay(attempt: number, random: () => number): number {
+function retryDelay(attempt: number, random: () => number): number {
   const ceiling = Math.min(RETRY_MAX_MS, RETRY_MIN_MS * 2 ** Math.max(0, attempt))
   return Math.round(ceiling / 2 + (random() * ceiling) / 2)
 }

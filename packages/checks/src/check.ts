@@ -269,5 +269,3 @@ export function trackedFiles(root: string): string[] {
     .split('\0')
     .filter(Boolean)
 }
-
-export { resultLine }

@@ -79,7 +79,7 @@ export interface WaitingTool {
 /** Which agent a state came from (`Claude Code`, `Codex`): the tool the state
  * source names by its first word (`claude-status` names the tool whose slug,
  * process name or alias is `claude`), else the session's own tool. */
-export function agentName(session: WaitingSession, tools: readonly WaitingTool[]): string {
+function agentName(session: WaitingSession, tools: readonly WaitingTool[]): string {
   const own = tools.find((t) => t.slug === session.tool)?.name ?? session.tool ?? 'An agent'
   const word = session.stateSource?.split('-')[0]
   if (!word || word === 'none') return own

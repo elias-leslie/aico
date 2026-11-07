@@ -131,7 +131,7 @@ const text = (value: unknown): string | null =>
   typeof value === 'string' && value.trim() ? value : null
 
 /** Tether's `modelSwitch`, checked field by field; null when it is not one. */
-export function modelSwitchOf(value: unknown): ModelSwitch | null {
+function modelSwitchOf(value: unknown): ModelSwitch | null {
   if (!value || typeof value !== 'object') return null
   const v = value as Record<string, unknown>
   const key = text(v.key)

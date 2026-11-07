@@ -15,7 +15,7 @@ export const NOTE_KINDS = ['note', 'list', 'prompt'] as const
 export type NoteKind = (typeof NOTE_KINDS)[number]
 
 /** The one well-known list captures of groceries are appended to. */
-export const GROCERIES_SOURCE = 'aico:groceries'
+const GROCERIES_SOURCE = 'aico:groceries'
 /** The only fields whose old text is kept as a revision. */
 export const REVISED_FIELDS = ['title', 'body'] as const
 export type RevisedField = (typeof REVISED_FIELDS)[number]

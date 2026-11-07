@@ -22,7 +22,7 @@ export const openCounter = (dataDir: string): Database =>
   openDatabase(webtoolsDbPath(dataDir), MIGRATIONS)
 
 /** The local calendar day, YYYY-MM-DD. */
-export const localDay = (at: Date) =>
+const localDay = (at: Date) =>
   `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')}`
 
 export function count(

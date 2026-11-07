@@ -131,7 +131,7 @@ export function findEntryProcess(fs: ProcFs, pids: number[]): EntryProcess | nul
  * given (a test's fake fs). null: the home is refused, read nothing. */
 /** An entry session's agent: its state from the entry home, standing on the
  * entry process (the pane's agent exits when it does). Never the host home. */
-export function observeEntryAgent(fs: ProcFs, entry: EntryProcess): AgentObservation | null {
+function observeEntryAgent(fs: ProcFs, entry: EntryProcess): AgentObservation | null {
   const readers = entry.tool ? entryReaders(fs, entry.home) : null
   if (!readers) return null
   return adapterOf(entry.tool)?.state.observeInEntry?.(readers, entry) ?? null

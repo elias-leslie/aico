@@ -400,7 +400,7 @@ function looksLikeProject(dir: string): boolean {
 }
 
 /** `$ST_WORKSPACES_ROOT`, else the folder holding `projects/` when this checkout sits in one. */
-export function workspacesRoot(io: CliIo): string | null {
+function workspacesRoot(io: CliIo): string | null {
   if (io.env.ST_WORKSPACES_ROOT !== undefined) return io.env.ST_WORKSPACES_ROOT || null
   const parent = dirname(io.repoRoot)
   return basename(parent) === 'projects' ? dirname(parent) : null

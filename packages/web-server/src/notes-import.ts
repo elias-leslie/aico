@@ -641,7 +641,7 @@ export function keepReport(
 // -- Keep: verify -------------------------------------------------------------------
 
 /** Files in the folder that no note's JSON names. */
-export function unreferenced(folder: KeepFolder): string[] {
+function unreferenced(folder: KeepFolder): string[] {
   const referenced = new Set(
     folder.entries.flatMap((e) =>
       e.attachments.flatMap((a) => (a.found ? [basename(a.found)] : [])),

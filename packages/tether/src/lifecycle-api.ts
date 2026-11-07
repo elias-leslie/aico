@@ -249,7 +249,7 @@ function contextHookOf(row: WidgetRow): Record<string, unknown> {
   }
 }
 
-export function descriptor(row: WidgetRow, status: SessionStatus): Record<string, unknown> {
+function descriptor(row: WidgetRow, status: SessionStatus): Record<string, unknown> {
   const server = row.tmuxServerId ? getTmuxServer(row.tmuxServerId) : undefined
   const target = tmuxTargetForWidget(row.id)
   return {

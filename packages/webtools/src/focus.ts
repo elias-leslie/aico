@@ -59,7 +59,7 @@ function buildChunks(content: string): string[] {
 }
 
 /** BM25 Okapi scores of each chunk for the query terms (duplicates count each time). */
-export function bm25(chunks: string[], query: string[]): number[] {
+function bm25(chunks: string[], query: string[]): number[] {
   const docs = chunks.map(tokens)
   if (!docs.some((d) => d.length)) return []
   const n = docs.length

@@ -32,7 +32,7 @@ export interface CodexRolloutFile {
 /** Codex keeps its thread's rollout file open. Yields each held rollout whose
  * session_meta marks the user thread (not a subagent's): the conversation
  * `codex resume` takes. */
-export function* codexUserRollouts(fs: ProcFs, pids: number[]): Generator<CodexRolloutFile> {
+function* codexUserRollouts(fs: ProcFs, pids: number[]): Generator<CodexRolloutFile> {
   for (const pid of pids) {
     let fds: string[] = []
     try {

@@ -11,7 +11,7 @@ import { type Facts, micros, optionUsage, type Usage, type Window, windowFacts }
 /** A moment in this machine's local time with its zone: "Nov 6, 5:00 AM EST". */
 export const when = (iso: string) => localTime(micros(iso) / 1000)
 
-export function ago(seconds: number): string {
+function ago(seconds: number): string {
   if (seconds < 90) return 'just now'
   if (seconds < 5400) return `${Math.round(seconds / 60)} min ago`
   if (seconds < 172800) return `${Math.round(seconds / 3600)} h ago`

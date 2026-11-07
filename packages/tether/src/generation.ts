@@ -54,6 +54,3 @@ export function sessionGeneration(row: SessionIdentity): string {
     )
     .digest('hex')
 }
-
-export const GENERATION_RE = /^[0-9a-f]{64}$/
-const SESSION_ID_RE = /^[0-9a-f]{8}$/

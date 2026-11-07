@@ -16,7 +16,7 @@ export type DeliveryConfig = typeof config
 export const DELIVERY: DeliveryConfig = config
 
 /** Render order: authority first. */
-export const KINDS = [
+const KINDS = [
   'guardrail',
   'mandate',
   'project',

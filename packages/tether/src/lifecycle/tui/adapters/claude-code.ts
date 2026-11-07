@@ -77,11 +77,7 @@ function claudeJob(fs: ProcFs, home: string, pids: number[], jobId: string): Cla
  * left by a reused pid names another process). A session parked into a
  * background job (`parkedJobId`) stops updating its own file: the pane shows
  * the job, so the job's file stands in for it. */
-export function* claudeSessions(
-  fs: ProcFs,
-  home: string,
-  pids: number[],
-): Generator<ClaudeSession> {
+function* claudeSessions(fs: ProcFs, home: string, pids: number[]): Generator<ClaudeSession> {
   const seen = new Set<number>()
   for (const pid of pids) {
     if (seen.has(pid)) continue

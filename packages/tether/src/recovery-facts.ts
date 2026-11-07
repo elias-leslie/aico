@@ -725,7 +725,7 @@ function clock(ms: number, reference: number): string {
     : full.slice(0, 16)
 }
 
-export function duration(ms: number): string {
+function duration(ms: number): string {
   const minutes = Math.max(0, Math.round(ms / 60_000))
   if (minutes < 1) return 'under a minute'
   if (minutes < 60) return `${minutes} min`
@@ -733,7 +733,7 @@ export function duration(ms: number): string {
   return minutes % 60 ? `${hours}h ${minutes % 60}min` : `${hours}h`
 }
 
-export function size(bytes: number | null): string {
+function size(bytes: number | null): string {
   if (bytes === null) return 'unknown size'
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`
   return `${Math.round(bytes / 1024 ** 2)} MB`

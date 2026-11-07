@@ -11,7 +11,7 @@ import { GitError, repoPaths, repoRoot } from './git'
 import { type Coordination, CoordinationError } from './hook'
 import { ConfigError, LEGACY, loadConfig, type Planned, plan, toolDir } from './plan'
 import { passed, runSteps } from './run'
-import { type CheckSummary, postCheckRow } from './status'
+import type { CheckSummary } from './status'
 
 export interface CliIo {
   out(line: string): void
@@ -45,7 +45,7 @@ interface Parsed {
 }
 
 /** --paths takes several values (--paths a b) or repeats; other value options take one. */
-export function parse(argv: string[], valued: string[]): Parsed {
+function parse(argv: string[], valued: string[]): Parsed {
   const parsed: Parsed = { flags: new Set(), values: new Map(), paths: [], extra: [] }
   for (let i = 0; i < argv.length; i++) {
     const [arg, inline] =
@@ -285,5 +285,3 @@ export async function runCli(verb: 'check' | 'commit', argv: string[], io: CliIo
     throw error
   }
 }
-
-export { postCheckRow }

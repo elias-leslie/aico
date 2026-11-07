@@ -36,7 +36,7 @@ export interface VerdictPort {
 
 export const THAT_WAS_ME = 'That was me'
 export const NOT_ME = 'Not me'
-export const DONE = 'Done'
+const DONE = 'Done'
 const ROW_REQUESTER = 'Aico Status'
 /** The hub's verdict route takes at most this many alerts. */
 const MAX_VERDICT_IDS = 10
@@ -79,7 +79,7 @@ function noticeAsk(id: string, notice: Notice): AskRequest {
   }
 }
 
-export function rowAsk(row: StatusRow): AskRequest {
+function rowAsk(row: StatusRow): AskRequest {
   const run = row.actions?.find((action) => action.owner_only === true && action.kind === 'run')
   return {
     requester: ROW_REQUESTER,

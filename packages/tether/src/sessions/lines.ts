@@ -7,7 +7,7 @@
 import { createHash } from 'node:crypto'
 import { closeSync, openSync, readSync, statSync } from 'node:fs'
 
-export const CHUNK = 1 << 20
+const CHUNK = 1 << 20
 const MAX_LINE = 16 << 20
 const HASH_BYTES = 256
 

@@ -39,7 +39,7 @@ export function setPersonalWorkspaceRoot(root: string): void {
   personalWorkspaceRoot = root
 }
 
-export function projectName(row: WidgetRow): string | null {
+function projectName(row: WidgetRow): string | null {
   if (row.projectId && namesById.has(row.projectId)) return namesById.get(row.projectId) ?? null
   if (!row.projectRoot) return null
   if (row.projectRoot === personalWorkspaceRoot) return PERSONAL_WORKSPACE_NAME

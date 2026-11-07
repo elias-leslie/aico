@@ -214,7 +214,7 @@ const ORDER: Record<Sort, (a: ShownRow, b: ShownRow) => number> = {
 }
 
 /** The rows that pass `filter`, in its sort order (problems first by default). */
-export function select(rows: readonly ShownRow[], filter: Filter = {}): ShownRow[] {
+function select(rows: readonly ShownRow[], filter: Filter = {}): ShownRow[] {
   const needle = filter.search?.trim().toLowerCase()
   const kept = rows.filter((row) => {
     if (filter.state?.length && !filter.state.includes(row.shown)) return false
@@ -231,7 +231,7 @@ export function select(rows: readonly ShownRow[], filter: Filter = {}): ShownRow
   return kept.sort(ORDER[filter.sort ?? 'problems'])
 }
 
-export function rollup(rows: readonly ShownRow[]): Rollup {
+function rollup(rows: readonly ShownRow[]): Rollup {
   const counts = Object.fromEntries(SHOWN.map((state) => [state, 0])) as Record<Shown, number>
   for (const row of rows) counts[row.shown] += 1
   const problems = PROBLEMS.reduce((sum, state) => sum + counts[state], 0)

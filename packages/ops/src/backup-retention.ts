@@ -96,7 +96,7 @@ export function retentionSelection(
     .filter((key) => !keep.has(key))
     .slice(0, policy.maxDeletes)
 }
-export function manifests(
+function manifests(
   root = homePath(ops.snapshots.catalogue),
 ): { path: string; entries: RetentionView[] }[] {
   if (!existsSync(root)) return []

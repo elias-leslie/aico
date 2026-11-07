@@ -37,7 +37,7 @@ const object = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === 'object' && !Array.isArray(value)
 const strings = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((x) => typeof x === 'string')
-export function inside(root: string, path: string): string {
+function inside(root: string, path: string): string {
   if (!path || isAbsolute(path) || path.includes('\\') || path.split('/').includes('..'))
     throw new Error('Expected a project-relative path')
   const target = realpathSync(join(root, path))

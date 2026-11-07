@@ -27,10 +27,10 @@ import type { PeerView } from './placement'
 import { installStarted, pushRelease, releaseId, runningRelease, type Updater } from './update'
 import { defaultGateRuntime, type GateRuntime, readyHost } from './wake'
 
-export const LIST_TIMEOUT_MS = 1_500
+const LIST_TIMEOUT_MS = 1_500
 const QUERY_TIMEOUT_MS = 10_000
 /** Create waits for the peer's own launch (agent admission can be slow). */
-export const CREATE_TIMEOUT_MS = 120_000
+const CREATE_TIMEOUT_MS = 120_000
 const RELOAD_MS = 5_000
 const PERSIST_DEBOUNCE_MS = 2_000
 const IDENTITIES_KEY = 'peer_identities'

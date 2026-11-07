@@ -42,7 +42,7 @@ import {
 } from './model-record'
 import type { FileTail } from './proc-fs'
 
-export const SWITCH_KINDS = ['refusal', 'substituted', 'changed', 'paused'] as const
+const SWITCH_KINDS = ['refusal', 'substituted', 'changed', 'paused'] as const
 export type SwitchKind = (typeof SWITCH_KINDS)[number]
 
 /** The `modelSwitch` a descriptor carries. Typed values only: never refusal

@@ -34,7 +34,7 @@ import { compileSchema, jsonIn } from './schema'
 import { credentialMarkers } from './tools'
 import { type Egress, transportRefusal } from './transport'
 
-export const ASK_USAGE = `Usage: aico prompt-model MODEL "question" [--schema FILE] [--files FILE...] [--role ROLE] [--effort LEVEL] [--json]
+const ASK_USAGE = `Usage: aico prompt-model MODEL "question" [--schema FILE] [--files FILE...] [--role ROLE] [--effort LEVEL] [--json]
 Asks one model one question, with no tools. The answer goes to stdout.
   MODEL           a model id or alias (aico models route --role R names one)
   question        the question; "-" reads it from stdin

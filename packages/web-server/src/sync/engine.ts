@@ -101,7 +101,7 @@ export interface PeerTransport {
 export class SyncError extends Error {}
 
 const DEFAULT_PAGE_LIMIT = 500
-export const MAX_AHEAD_MS = DEFAULT_MAX_AHEAD_HOURS * 3_600_000
+const MAX_AHEAD_MS = DEFAULT_MAX_AHEAD_HOURS * 3_600_000
 
 const clockOf = (table: SyncTable) => table.clock ?? 'updated_at'
 const isMax = (table: SyncTable) => typeof table.merge === 'object'

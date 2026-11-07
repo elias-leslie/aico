@@ -49,7 +49,7 @@ function screenText(text: string): string {
 }
 
 /** The prompt's first line as Claude Code's menu shows it. */
-export function promptLine(prompt: string): string {
+function promptLine(prompt: string): string {
   return screenText(prompt.split('\n').find((line) => line.trim()) ?? '')
 }
 

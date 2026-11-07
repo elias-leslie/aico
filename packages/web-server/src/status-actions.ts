@@ -245,7 +245,7 @@ export function statusKey(batch: AlertBatch): string {
  * project's own rows (its checks, publication and jobs, and the LAN apps' rows) have an owning
  * agent; they stay on the tray, and an app alerts the owner itself through its own notices.
  */
-export function ownerFailure(row: StatusRow): boolean {
+function ownerFailure(row: StatusRow): boolean {
   return !row.project || (row.actions?.some((action) => action.owner_only === true) ?? false)
 }
 

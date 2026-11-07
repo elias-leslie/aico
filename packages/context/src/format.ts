@@ -88,7 +88,7 @@ export function formatPrompt(prompt: Prompt): string {
 // -- models route ----------------------------------------------------------------------------
 
 /** Local time with its zone ("Nov 6, 10:30 PM EST") of an ISO time, or - when it is missing. */
-export function when(iso: unknown): string {
+function when(iso: unknown): string {
   const at = typeof iso === 'string' ? new Date(iso) : null
   if (!at || Number.isNaN(at.getTime())) return '-'
   return localTime(at)
@@ -101,7 +101,7 @@ const day = (iso: string) => when(iso).split(',')[0] as string
 const cliName = () => (process.env.AICO_CLI_NAME === 'aico' ? 'aico' : 'st')
 
 /** A length of time in the largest sensible unit: 5m, 4h, 2.6d. */
-export function span(seconds: unknown): string {
+function span(seconds: unknown): string {
   if (typeof seconds !== 'number') return '?'
   if (seconds < 60) return '<1m'
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m`

@@ -214,12 +214,7 @@ function openFor(since: number | null, now: number, cfg: Policy): string {
   return ` (open ${age(minutes)} since ${day}${stuck})`
 }
 
-export function items(
-  findings: Finding[],
-  projects: ReadonlySet<string>,
-  now: number,
-  cfg: Policy,
-) {
+function items(findings: Finding[], projects: ReadonlySet<string>, now: number, cfg: Policy) {
   return findings.map((f): BriefItem => {
     const tail = openFor(f.since, now, cfg)
     // The first sentence of the finding, and the machine only when it is not this one: `aico pulse` has the rest.
@@ -242,7 +237,7 @@ export function items(
 }
 
 /** (audience, item) pairs this role may see, in display order. */
-export function select(
+function select(
   all: BriefItem[],
   role: Role,
   project: string | null,

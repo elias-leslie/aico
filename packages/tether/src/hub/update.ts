@@ -24,10 +24,6 @@ import { readPins } from '@aico/fleet/trust'
 import { API_VERSION, isInstanceName } from '../config'
 import { type RunResult, shellQuote } from './host-admin'
 
-/** What an installed release holds (scripts/install-release.sh puts them
- * there), as paths inside it. */
-export { RELEASE_FILES } from '@aico/fleet/releases'
-
 /** How long the copy, install, restart and rollback may take in all: two
  * answer waits, two stops and the copies. */
 const UPDATE_RUN_MS = 300_000

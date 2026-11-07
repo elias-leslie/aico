@@ -6,7 +6,7 @@
 import { plainText } from './extract'
 import { normalizeWhitespace } from './focus'
 
-export const USER_AGENT =
+const USER_AGENT =
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36'
 const SEARCH_TIMEOUT_MS = 12_000
 const MAX_RESULTS = 10
