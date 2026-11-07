@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Store } from '../store'
 import { searchLines } from './cli'
-import { lastSentence, patchDoing, promptName, toolDoing } from './doing'
+import { codeDoing, lastSentence, patchDoing, promptName, toolDoing } from './doing'
 import { History } from './history'
 import { prefilterNeedle, snippetAround } from './search'
 
@@ -65,6 +65,18 @@ const only = (h: History) => {
 }
 
 describe('doing-now words', () => {
+  it('Codex exec: says the first tool the JavaScript calls', () => {
+    expect(
+      codeDoing(
+        'const r = await tools.exec_command({cmd:"sleep 90 && echo \\"done\\"",yield_time_ms:30000}); text(r);',
+      ),
+    ).toBe('Running: sleep 90 && echo "done"')
+    expect(codeDoing('const r = await tools.write_stdin({session_id:1,chars:""}); text(r);')).toBe(
+      'Waiting for a command to finish',
+    )
+    expect(codeDoing('text(1 + 1)')).toBe('Running code')
+  })
+
   it('words a tool call from its name and arguments', () => {
     expect(toolDoing('Bash', { command: 'npm test -- --run\nmore' })).toBe(
       'Running: npm test -- --run more',

@@ -142,6 +142,23 @@ export function toolDoing(
   }
 }
 
+/** Codex's `exec` tool takes a few lines of JavaScript that call its tools (`tools.exec_command({cmd:"..."})`):
+ * the first tool call in it, with its plain string arguments, said as any other tool call. */
+export function codeDoing(code: string): string | undefined {
+  const call = /tools\.([A-Za-z_][A-Za-z0-9_]*)\(\s*(\{[\s\S]*?\})?\s*\)/.exec(code)
+  if (!call?.[1]) return 'Running code'
+  if (call[1] === 'write_stdin') return 'Waiting for a command to finish'
+  const args: Record<string, unknown> = {}
+  for (const prop of (call[2] ?? '').matchAll(/([A-Za-z_]\w*)\s*:\s*("(?:[^"\\]|\\.)*")/g)) {
+    try {
+      args[prop[1] ?? ''] = JSON.parse(prop[2] ?? '""')
+    } catch {
+      // a string JSON cannot read: that argument is left out
+    }
+  }
+  return toolDoing(call[1], args)
+}
+
 /** Codex's apply_patch text: the files it adds, updates or deletes. */
 export function patchDoing(patch: string): string {
   const files = [...patch.matchAll(/^\*\*\* (?:Add|Update|Delete) File: (.+)$/gm)].map((m) =>

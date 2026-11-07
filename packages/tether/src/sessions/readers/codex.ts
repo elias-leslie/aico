@@ -7,6 +7,7 @@
 import { readdirSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import {
+  codeDoing,
   INJECTED_PROMPT,
   lastSentence,
   patchDoing,
@@ -130,7 +131,8 @@ function callDoing(name: string, input: string): string | undefined {
   try {
     args = obj(JSON.parse(input))
   } catch {
-    // custom tools take plain text: the whole input is the command
+    // custom tools take plain text: `exec` is JavaScript calling the tools, the others' input is the command
+    if (name === 'exec') return codeDoing(input)
     args = input ? { command: input } : undefined
   }
   return toolDoing(name, args)
