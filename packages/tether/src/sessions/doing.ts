@@ -35,8 +35,9 @@ function plain(text: string): string {
 
 /** The last sentence of what the agent said: "Now I'll update the reader." */
 export function lastSentence(text: string): string | undefined {
-  // Only the end matters, and a long message need not be masked whole.
-  const sentences = flat(plain(text.length > 1500 ? text.slice(-1500) : text))
+  // Only the end matters, but the mask sees the whole message: a token the slice would split stays hidden.
+  const safe = maskKnownSecrets(text)
+  const sentences = flat(plain(safe.length > 1500 ? safe.slice(-1500) : safe))
     .split(/(?<=[.!?:])\s+/)
     .map((part) => part.trim())
     .filter((part) => /[\p{L}\p{N}]/u.test(part))
@@ -46,7 +47,8 @@ export function lastSentence(text: string): string | undefined {
 
 /** A conversation's name from its first prompt: one line, cut at a word. */
 export function promptName(text: string): string | undefined {
-  const line = flat(plain(text.slice(0, 600)))
+  const safe = maskKnownSecrets(text)
+  const line = flat(plain(safe.slice(0, 600)))
   if (!/[\p{L}\p{N}]/u.test(line)) return undefined
   if (line.length <= NAME_MAX) return line
   const head = line.slice(0, NAME_MAX)
@@ -89,7 +91,7 @@ export function toolDoing(
     case 'run_command':
     case 'exec': {
       const command = first(args, 'command', 'cmd', 'CommandLine')
-      return command ? `Running: ${cut(command.slice(0, 400), 90)}` : 'Running a command'
+      return command ? `Running: ${cut(command, 90)}` : 'Running a command'
     }
     case 'edit':
     case 'multiedit':

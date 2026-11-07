@@ -62,7 +62,7 @@ export function toolCallDoing(payload: Uint8Array): string | null {
     (typeof args?.toolAction === 'string' && args.toolAction) ||
     (typeof args?.toolSummary === 'string' && args.toolSummary) ||
     `Using ${name[0]}`
-  return maskKnownSecrets(cut(flat(said)))
+  return cut(maskKnownSecrets(flat(said)))
 }
 
 /** The line for a database's newest steps (newest first): the latest tool call, unless the owner

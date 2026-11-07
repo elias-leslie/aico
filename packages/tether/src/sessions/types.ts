@@ -2,6 +2,8 @@
 // transcript record of one tool into a `Fold` (what the record adds to the
 // session's row) and the `SessionEvent`s the transcript view shows.
 
+import { maskKnownSecrets } from '@aico/shared/secrets'
+
 export type HistoryTool = 'claude-code' | 'codex' | 'pi' | 'aico-agent'
 export type Outcome = 'completed' | 'aborted' | 'error'
 
@@ -87,8 +89,10 @@ export interface TranscriptFile {
 /** The longest text one event carries. */
 const EVENT_TEXT_MAX = 4000
 
+/** `text` cut to `max`: masked first, so a token the cut would split is hidden whole. */
 export function clip(text: string, max = EVENT_TEXT_MAX): string {
-  return text.length > max ? `${text.slice(0, max)}…` : text
+  const safe = maskKnownSecrets(text)
+  return safe.length > max ? `${safe.slice(0, max)}…` : safe
 }
 
 export function num(value: unknown): number {
