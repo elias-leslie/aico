@@ -264,6 +264,20 @@ export function resticArgs(
   }
   return { argv: [...argv, ...args], env }
 }
+/**
+ * Runs a restic command, and once more after `restic unlock` if a lock refuses it (exit 11). A backup's
+ * shared lock passes a dead process's lock; forget, check and prune want the repository alone and don't.
+ * restic unlock removes stale locks only. Never use --remove-all or disturb a live writer.
+ */
+export const pastStaleLock =
+  (rt: Runtime, target: 'drive' | 'append'): Execute =>
+  async (argv, options) => {
+    const result = await rt.run(argv, options)
+    if (result.code !== 11) return result
+    const unlock = resticArgs(rt.cfg, target, ['unlock'])
+    const unlocked = await rt.run(unlock.argv, { env: unlock.env })
+    return unlocked.code === 0 ? rt.run(argv, options) : result
+  }
 export async function restic(
   rt: Runtime,
   target: 'drive' | 'append',
@@ -300,13 +314,7 @@ export async function restic(
     ]
     env = { PATH: process.env.PATH }
   }
-  let result = await rt.run(argv, { env })
-  if (result.code === 11 && args[0] !== 'unlock') {
-    // restic unlock removes stale locks only. Never use --remove-all or disturb a live writer.
-    const unlocked = await restic(rt, target, ['unlock'])
-    if (unlocked.code === 0) result = await rt.run(argv, { env })
-  }
-  return result
+  return pastStaleLock(rt, target)(argv, { env })
 }
 export async function resticJson(
   rt: Runtime,

@@ -14,7 +14,7 @@ import { dirname, join, relative, resolve } from 'node:path'
 import { writeFileDurable } from '@aico/shared/durable-file'
 import ops from '../data/ops.json' with { type: 'json' }
 import { type BackupConfig, type BackupState, driveSpec, homePath, migrated } from './backup-plan'
-import { checked, type Runtime, resticArgs, resticJson } from './backup-runtime'
+import { checked, pastStaleLock, type Runtime, resticArgs, resticJson } from './backup-runtime'
 import type { Point } from './snapshots'
 
 export interface RetentionView extends Point {
@@ -502,7 +502,7 @@ export async function retainDrive(rt: Runtime, state: BackupState): Promise<void
     '-o',
     'rclone.args=serve restic --stdio --drive-use-trash=true',
   )
-  await checked(rt.run, request.argv, { env: request.env })
+  await checked(pastStaleLock(rt, 'drive'), request.argv, { env: request.env })
   // A machine's own repository holds only its tagged copies; the legacy sweep is the workstation's.
   if (!rt.cfg.drive && (state.goodDriveRuns ?? 0) >= rt.cfg.retention.drive.legacyAfterGoodRuns) {
     const snapshots = (await resticJson(rt, 'drive', ['snapshots'])) as {
@@ -523,7 +523,7 @@ export async function retainDrive(rt: Runtime, state: BackupState): Promise<void
         'forget',
         ...ids,
       ])
-      await checked(rt.run, legacy.argv, { env: legacy.env })
+      await checked(pastStaleLock(rt, 'drive'), legacy.argv, { env: legacy.env })
     }
   }
   state.goodDriveRuns = (state.goodDriveRuns ?? 0) + 1
@@ -531,7 +531,7 @@ export async function retainDrive(rt: Runtime, state: BackupState): Promise<void
 export async function verifyDrive(rt: Runtime, scheduled: boolean): Promise<void> {
   if (scheduled && rt.now().getDay() !== rt.cfg.verify.day) return
   const check = resticArgs(rt.cfg, 'drive', ['check', `--read-data-subset=${rt.cfg.verify.sample}`])
-  await checked(rt.run, check.argv, { env: check.env })
+  await checked(pastStaleLock(rt, 'drive'), check.argv, { env: check.env })
   if (scheduled) {
     if (!driveSpec(rt.cfg).pruneQualified)
       throw new Error('Automatic Drive retention is not qualified; backup data is preserved.')
@@ -544,7 +544,7 @@ export async function verifyDrive(rt: Runtime, scheduled: boolean): Promise<void
       '--max-repack-size',
       rt.cfg.verify.maxRepack,
     ])
-    await checked(rt.run, prune.argv, { env: prune.env })
+    await checked(pastStaleLock(rt, 'drive'), prune.argv, { env: prune.env })
   }
 }
 
