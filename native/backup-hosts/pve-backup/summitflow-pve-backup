@@ -267,27 +267,27 @@ def frozen_snapshot(vmid, create, run):
     def command(verb):
         return run(["qm", "guest", "cmd", str(vmid), "fsfreeze-" + verb], capture_output=True, text=True)
 
-    owned = attempted_freeze = False
-    try:
-        # Record successful ownership before any pending stop can unwind this operation.
-        with shield_capture_signals():
+    # Keep the mask continuously installed across every transition into cleanup. A stop arriving
+    # after create() returns must not raise before the finally block can start protecting the thaw.
+    with shield_capture_signals():
+        owned = attempted_freeze = False
+        try:
             vm_operation_lock(vmid, run)
             owned = True
-        before = command("status")
-        if before.returncode or before.stdout.strip() != "thawed":
-            raise Refused(f"qemu {vmid} is not confirmed thawed; no snapshot was taken")
-        # Freeze can partially succeed before qm reports failure. Always thaw after attempting it.
-        attempted_freeze = True
-        frozen = command("freeze")
-        if frozen.returncode:
-            raise Refused(f"qemu {vmid} could not freeze its filesystem")
-        status = command("status")
-        if status.returncode or status.stdout.strip() != "frozen":
-            raise Refused(f"qemu {vmid} did not confirm its frozen filesystem")
-        create()
-    finally:
-        if owned:
-            with shield_capture_signals():
+            before = command("status")
+            if before.returncode or before.stdout.strip() != "thawed":
+                raise Refused(f"qemu {vmid} is not confirmed thawed; no snapshot was taken")
+            # Freeze can partially succeed before qm reports failure. Always thaw after attempting it.
+            attempted_freeze = True
+            frozen = command("freeze")
+            if frozen.returncode:
+                raise Refused(f"qemu {vmid} could not freeze its filesystem")
+            status = command("status")
+            if status.returncode or status.stdout.strip() != "frozen":
+                raise Refused(f"qemu {vmid} did not confirm its frozen filesystem")
+            create()
+        finally:
+            if owned:
                 if attempted_freeze:
                     command("thaw")
                 after = command("status")

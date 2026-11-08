@@ -6,6 +6,7 @@ import concurrent.futures
 import hashlib
 import importlib.machinery
 import importlib.util
+import inspect
 import io
 import json
 import os
@@ -868,4 +869,33 @@ def test_expected_lock_value_prevents_clearing_a_foreign_operation_flag(dispatch
     runs = Runs(answers)
     assert dispatcher.main(f"capture vm {digest}", run=runs, out=io.BytesIO()) == 2
     assert state["lock"] == "migration" and state["freeze"] == "thawed"
+    assert not any(call[0] in ("mount", "tar") for call in runs.calls)
+
+
+@pytest.mark.parametrize("number", [signal.SIGTERM, signal.SIGHUP, signal.SIGINT])
+def test_first_stop_at_the_finally_boundary_is_already_masked_and_cannot_skip_thaw(dispatcher, tmp_path, monkeypatch, number):
+    monkeypatch.setattr(dispatcher, "MOUNT_PARENT", str(tmp_path))
+    digest = _install(dispatcher, {"vm": VM})["vm"]
+    answers, state = _running_snapshot()
+    runs = Runs(answers)
+    lines, first = inspect.getsourcelines(dispatcher.frozen_snapshot)
+    boundary = first + next(i for i, line in enumerate(lines) if line.strip() == "if owned:")
+    observed = []
+
+    def trace(frame, event, arg):
+        if frame.f_code is dispatcher.frozen_snapshot.__code__ and event == "line" and frame.f_lineno == boundary and not observed:
+            observed.append(number in signal.pthread_sigmask(signal.SIG_BLOCK, []))
+            # This is the first stop, before any statement in the finally body can run.
+            signal.raise_signal(number)
+        return trace
+
+    previous = sys.gettrace()
+    with dispatcher.capture_signals():
+        try:
+            sys.settrace(trace)
+            assert dispatcher.main(f"capture vm {digest}", run=runs, out=io.BytesIO()) == 2
+        finally:
+            sys.settrace(previous)
+    assert observed == [True]
+    assert state["freeze"] == "thawed" and state["lock"] is None
     assert not any(call[0] in ("mount", "tar") for call in runs.calls)
