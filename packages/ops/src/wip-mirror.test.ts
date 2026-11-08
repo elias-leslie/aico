@@ -338,11 +338,55 @@ describe('wip mirror', () => {
       git(root, 'add', '-A')
       git(root, 'commit', '-qm', 'second')
       const report = await mirror(d)
-      expect(report.problems.map((p) => [p.state, p.reason])).toEqual([
-        ['warn', `app: gem's checkout at ${checkout('app')} left as it is: it has its own changes`],
+      expect(report.problems.map((p) => [p.key, p.state, p.reason])).toEqual([
+        [
+          'app-standby',
+          'warn',
+          `app: gem: ${checkout('app')} left as it is: it has its own changes`,
+        ],
       ])
       expect(readFileSync(join(checkout('app'), 'a.txt'), 'utf8')).toBe('standby edit\n')
       expect(existsSync(join(checkout('app'), 'b.txt'))).toBe(false)
+    })
+
+    it('follows a branch switch here when the checkout has nothing of its own', async () => {
+      const root = repo('app')
+      const d = standbyDeps([{ id: 'app', root }])
+      await mirror(d)
+      git(root, 'checkout', '-q', '-b', 'next')
+      writeFileSync(join(root, 'b.txt'), 'b\n')
+      git(root, 'add', '-A')
+      git(root, 'commit', '-qm', 'on next')
+      const report = await mirror(d)
+      expect(report.problems).toEqual([])
+      expect(git(checkout('app'), 'branch', '--show-current')).toBe('next')
+      expect(readFileSync(join(checkout('app'), 'b.txt'), 'utf8')).toBe('b\n')
+    })
+
+    it('keeps commits made on the peer', async () => {
+      const root = repo('app')
+      const d = standbyDeps([{ id: 'app', root }])
+      await mirror(d)
+      writeFileSync(join(checkout('app'), 'c.txt'), 'standby\n')
+      git(checkout('app'), 'add', '-A')
+      git(checkout('app'), 'commit', '-qm', 'made on the peer')
+      const mine = git(checkout('app'), 'rev-parse', 'HEAD')
+      writeFileSync(join(root, 'b.txt'), 'b\n')
+      git(root, 'add', '-A')
+      git(root, 'commit', '-qm', 'second')
+      const report = await mirror(d)
+      expect(report.problems[0]?.reason).toMatch(/its main has commits that home's does not/)
+      expect(git(checkout('app'), 'rev-parse', 'HEAD')).toBe(mine)
+    })
+
+    it('does not touch the peer again while the heads stay the same', async () => {
+      const root = repo('app')
+      const d = standbyDeps([{ id: 'app', root }])
+      await mirror(d)
+      writeFileSync(join(peerHome, 'aico.log'), '')
+      writeFileSync(join(root, 'a.txt'), 'uncommitted\n')
+      await mirror(d)
+      expect(readFileSync(join(peerHome, 'aico.log'), 'utf8')).toBe('')
     })
 
     it('leaves a folder that is not a Git checkout alone', async () => {

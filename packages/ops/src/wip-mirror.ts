@@ -92,9 +92,10 @@ export interface WipReport {
 interface RepoState {
   /** Fingerprint last pushed, per peer. */
   pushed: Record<string, string>
-  /** Fingerprint the peer's standby checkout was last brought up to, per peer. */
-  standby?: Record<string, string>
   problem?: Problem
+  /** The branch and heads each peer's standby checkout was last brought to. */
+  standby?: Record<string, string>
+  standbyProblem?: Problem
 }
 interface WipState {
   repos: Record<string, RepoState>
@@ -385,12 +386,10 @@ export async function mirror(deps: WipDeps): Promise<WipReport> {
       .update(`${head}\n${heads.out}\n${dirty.fingerprint}`)
       .digest('hex')
     const todo = targets.filter((peer) => entry.pushed[peer.name] !== fingerprint)
-    const standbyTodo = cfg.standby.from.includes(machine)
-      ? targets.filter((peer) => entry.standby?.[peer.name] !== fingerprint)
-      : []
-    if (!todo.length && !standbyTodo.length) {
+    if (!todo.length) {
       if (entry.problem) report.problems.push(entry.problem)
       if (found.peers.length === targets.length) report.unchanged++
+      await keepStandby(deps, project, entry, fingerprint, heads.out, targets, report)
       continue
     }
     const branchRead = git('git', ['-C', project.root, 'symbolic-ref', '-q', '--short', 'HEAD'], {
@@ -399,7 +398,7 @@ export async function mirror(deps: WipDeps): Promise<WipReport> {
     const branch = branchRead.code ? 'detached' : branchRead.out.trim()
     let wip: { sha: string } | null = null
     let skippedWip: string | null = null
-    if (dirty.paths && todo.length) {
+    if (dirty.paths) {
       if (dirty.kib > cfg.maxDirtyMb * MB)
         skippedWip = `uncommitted work is ${mb(dirty.kib)} (limit ${cfg.maxDirtyMb} MB), only branches copied`
       else {
@@ -483,21 +482,6 @@ export async function mirror(deps: WipDeps): Promise<WipReport> {
       }
       if (todo.some((peer) => entry.pushed[peer.name] === fingerprint))
         report.mirrored.push(project.id)
-      if (branch !== 'detached')
-        for (const peer of standbyTodo) {
-          if (entry.pushed[peer.name] !== fingerprint) continue
-          const root = deps.standbyRoot ? deps.standbyRoot(project.root) : project.root
-          const rel = `${cfg.mirrorDir}/${machine}/${project.id}.git`
-          const done = await peer.exec(standbyScript(cfg, project, root, rel, machine, branch))
-          const last = done.out.trim().split('\n').at(-1) ?? ''
-          if (done.code || !last.startsWith('standby: ')) {
-            note('failed', `${peer.name}: could not update its checkout (${last || 'no answer'})`)
-            continue
-          }
-          const said = last.slice('standby: '.length)
-          if (said.startsWith('left ')) note('warn', `${peer.name}'s checkout at ${root} ${said}`)
-          entry.standby = { ...entry.standby, [peer.name]: fingerprint }
-        }
     }
     if (problems.length) {
       const worst: Problem = {
@@ -512,6 +496,7 @@ export async function mirror(deps: WipDeps): Promise<WipReport> {
       if (!failed) entry.problem = worst
       else delete entry.problem
     } else delete entry.problem
+    await keepStandby(deps, project, entry, fingerprint, heads.out, targets, report)
   }
   if (!deps.only) {
     const kept = new Set(projects.map((p) => p.id))
@@ -519,7 +504,11 @@ export async function mirror(deps: WipDeps): Promise<WipReport> {
     state.rows = report.problems.map((p) => p.key)
   } else
     state.rows = [
-      ...state.rows.filter((key) => !deps.only?.includes(key) && !key.startsWith('peer-')),
+      ...state.rows.filter(
+        (key) =>
+          !deps.only?.some((id) => key === id || key === `${id}-standby`) &&
+          !key.startsWith('peer-'),
+      ),
       ...report.problems.map((p) => p.key),
     ]
   report.rows = state.rows
@@ -557,10 +546,64 @@ function problemRow(problem: Problem, machine: string, at: Date): StatusRow {
 
 /** `GIT_SSH_COMMAND` for git over the fleet link: git runs it as `<this> HOST 'git-receive-pack PATH'`. */
 /**
- * The peer side of a standby checkout: a working copy of BRANCH at ROOT that a session on the
- * peer can start in when this machine is down, listed in the peer's projects. It is only ever
- * fast-forwarded; a checkout on another branch, with its own changes or its own commits, or a
- * folder that is not a Git checkout, is left as it is. The last line says what happened.
+ * A working checkout on each peer, for a session there to start in while this machine is down:
+ * only from the machines in `standby.from`, only once the peer's mirror has this repo's heads.
+ */
+async function keepStandby(
+  deps: WipDeps,
+  project: WipProject,
+  entry: RepoState,
+  fingerprint: string,
+  heads: string,
+  peers: Peer[],
+  report: WipReport,
+): Promise<void> {
+  const { cfg, git, machine } = deps
+  if (!cfg.standby.from.includes(machine)) return
+  const branchRead = git('git', ['-C', project.root, 'symbolic-ref', '-q', '--short', 'HEAD'], {
+    env: quietEnv(),
+  })
+  if (branchRead.code) return
+  const branch = branchRead.out.trim()
+  const print = createHash('sha1').update(`${branch}\n${heads}`).digest('hex')
+  const root = deps.standbyRoot ? deps.standbyRoot(project.root) : project.root
+  const rel = `${cfg.mirrorDir}/${machine}/${project.id}.git`
+  const problems: string[] = []
+  let failed = false
+  let ran = false
+  for (const peer of peers) {
+    if (entry.pushed[peer.name] !== fingerprint || entry.standby?.[peer.name] === print) continue
+    ran = true
+    const done = await peer.exec(standbyScript(cfg, project, root, rel, machine, branch))
+    const last = done.out.trim().split('\n').at(-1) ?? ''
+    if (done.code || !last.startsWith('standby: ')) {
+      failed = true
+      problems.push(`${peer.name}: could not update the checkout (${last || 'no answer'})`)
+      continue
+    }
+    const said = last.slice('standby: '.length)
+    if (said.startsWith('left ')) problems.push(`${peer.name}: ${root} ${said}`)
+    entry.standby = { ...entry.standby, [peer.name]: print }
+  }
+  if (ran) {
+    if (problems.length)
+      entry.standbyProblem = {
+        key: `${project.id}-standby`,
+        what: `Standby checkout: ${project.id}`,
+        project: project.id,
+        state: failed ? 'failed' : 'warn',
+        reason: `${project.id}: ${problems.join('; ')}`,
+      }
+    else delete entry.standbyProblem
+  }
+  if (entry.standbyProblem) report.problems.push(entry.standbyProblem)
+}
+
+/**
+ * The peer side of a standby checkout: BRANCH at ROOT, listed in the peer's projects. It only
+ * moves forward to this machine's heads; a checkout with its own changes or commits, a remote of
+ * the same name pointing elsewhere, or a folder that is not a Git checkout is left as it is.
+ * The last line says what happened.
  */
 function standbyScript(
   cfg: WipConfig,
@@ -570,32 +613,40 @@ function standbyScript(
   machine: string,
   branch: string,
 ): string {
-  const remote = sq(machine)
-  const track = `refs/remotes/${machine}/${branch}`
+  const remote = `wip-${machine}`
   const aico = `"$HOME"/${sq(cfg.standby.aico)}`
   const name = project.name ? ` --name ${sq(project.name)}` : ''
-  return `mirror="$PWD"/${sq(rel)}; root=${sq(root)}
+  return `mirror="$PWD"/${sq(rel)}; root=${sq(root)}; remote=${sq(remote)}; branch=${sq(branch)}
+track="refs/remotes/$remote/$branch"; spec=${sq(`+refs/aico/wip/${machine}/heads/*:refs/remotes/${remote}/*`)}
 say() { echo "standby: $*"; }
 if [ ! -e "$root" ]; then
-  git clone -q --no-checkout -o ${remote} "$mirror" "$root" 2>/dev/null || { say "could not create $root"; exit 1; }
-  git -C "$root" config remote.${remote}.fetch ${sq(`+refs/aico/wip/${machine}/heads/*:refs/remotes/${machine}/*`)}
-  git -C "$root" fetch -q ${remote} && git -C "$root" checkout -q -B ${sq(branch)} ${sq(track)} || { say "could not check out" ${sq(branch)}; exit 1; }
-  git -C "$root" branch -q -u ${sq(`${machine}/${branch}`)}
+  git clone -q --no-checkout -o "$remote" "$mirror" "$root" 2>/dev/null || { say "could not create $root"; exit 1; }
+  git -C "$root" config "remote.$remote.fetch" "$spec"
+  git -C "$root" fetch -q "$remote" && git -C "$root" checkout -q -b "$branch" "$track" || { say "could not check out $branch"; exit 1; }
   state=created
 elif ! git -C "$root" rev-parse --git-dir >/dev/null 2>&1; then
   say "left as it is: the folder is not a Git checkout"; exit 0
 else
-  git -C "$root" remote get-url ${remote} >/dev/null 2>&1 || git -C "$root" remote add ${remote} "$mirror"
-  git -C "$root" config remote.${remote}.fetch ${sq(`+refs/aico/wip/${machine}/heads/*:refs/remotes/${machine}/*`)}
-  git -C "$root" fetch -q ${remote} || { say "could not fetch"; exit 1; }
-  now=$(git -C "$root" symbolic-ref -q --short HEAD)
-  if [ "$now" != ${sq(branch)} ]; then say "left as it is: it is on \${now:-a detached HEAD}, not" ${sq(branch)}; exit 0; fi
+  url=$(git -C "$root" remote get-url "$remote" 2>/dev/null)
+  if [ -z "$url" ]; then
+    git -C "$root" remote add "$remote" "$mirror" && git -C "$root" config "remote.$remote.fetch" "$spec"
+  elif [ "$url" != "$mirror" ]; then
+    say "left as it is: its remote $remote points elsewhere"; exit 0
+  fi
+  git -C "$root" fetch -q "$remote" || { say "could not fetch"; exit 1; }
   if [ -n "$(git -C "$root" status --porcelain --untracked-files=no)" ]; then say "left as it is: it has its own changes"; exit 0; fi
-  git -C "$root" merge -q --ff-only ${sq(track)} 2>/dev/null || { say "left as it is: it has its own commits or files in the way"; exit 0; }
+  if git -C "$root" rev-parse -q --verify "refs/heads/$branch" >/dev/null && ! git -C "$root" merge-base --is-ancestor "refs/heads/$branch" "$track"; then
+    say "left as it is: its $branch has commits that ${machine}'s does not"; exit 0
+  fi
+  now=$(git -C "$root" symbolic-ref -q --short HEAD)
+  if [ "$now" != "$branch" ] && [ -z "$(git -C "$root" branch -r --contains HEAD --list "$remote/*")" ]; then
+    say "left as it is: it is on \${now:-a detached HEAD} with commits of its own"; exit 0
+  fi
+  git -C "$root" checkout -q -B "$branch" "$track" 2>/dev/null || { say "left as it is: files there are in the way"; exit 0; }
   state=current
 fi
 ${aico} projects show ${sq(project.id)} >/dev/null 2>&1 || ${aico} projects register ${sq(project.id)} --root "$root"${name} >/dev/null 2>&1 || { say "$state, but could not list it in projects"; exit 1; }
-say $state`
+say "$state"`
 }
 
 function linkShellCommand(socket: string): string {
