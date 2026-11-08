@@ -209,6 +209,15 @@ describe('a tool whose limits are its hook', () => {
     expect((await withContextDelivery(spec, 'abcd1234', deps)).command).toEqual(['agy'])
   })
 
+  it('works in the project, not the scratch folder the tool picks on its own', async () => {
+    const inProject = {
+      ...deps,
+      catalog: { ...deps.catalog, widget: () => ({ projectRoot: '/srv/a project' }) },
+    } as unknown as typeof deps
+    const { command } = await withContextDelivery(spec, 'abcd1234', inProject)
+    expect(command.slice(-2)).toEqual([...how.workspace, "'/srv/a project'"])
+  })
+
   it('with the hook, keeps it', async () => {
     mkdirSync(dirname(join(home, how.hooks)), { recursive: true })
     writeFileSync(join(home, how.hooks), `{"aico":{"PreToolUse":"${how.marker}"}}`)

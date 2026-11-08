@@ -108,6 +108,9 @@ func agyPayload(event string, in map[string]any) map[string]any {
 	return out
 }
 
+// agyScratch is where agy works when it was given no folder (the hook itself runs in its config folder).
+const agyScratch = "~/.gemini/antigravity-cli/scratch"
+
 // agyCwd is where a shell command starts: the call's own Cwd, else agy's first folder (it works in that one).
 func agyCwd(in map[string]any) string {
 	if call, _ := in["toolCall"].(map[string]any); call != nil {
@@ -117,11 +120,7 @@ func agyCwd(in map[string]any) string {
 			}
 		}
 	}
-	if roots := agyRoots(in); len(roots) > 0 {
-		return roots[0]
-	}
-	cwd, _ := os.Getwd()
-	return cwd
+	return agyRoots(in)[0]
 }
 
 func agyRoots(in map[string]any) []string {
@@ -131,6 +130,9 @@ func agyRoots(in map[string]any) []string {
 		if s := str(v); s != "" {
 			out = append(out, s)
 		}
+	}
+	if len(out) == 0 {
+		out = append(out, expand(agyScratch))
 	}
 	return out
 }

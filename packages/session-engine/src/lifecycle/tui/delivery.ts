@@ -157,16 +157,28 @@ function projectActivity(
 /** The spec to launch with this launch's context delivery, when Aico delivers to
  * the tool; else the spec as it was. Writes the session's delivery folder and
  * keeps the delivery's inventory in context.db. */
-/** The spec with what needs the tool's hook taken off when the hook isn't there. */
-function hookOrAsk<T extends TuiSpec>(spec: T, how: ContextDelivery, env: NodeJS.ProcessEnv): T {
+/** A hook-limited tool's spec: pointed at the session's project, and with what needs the hook taken
+ * off when the hook isn't there. */
+function hookOrAsk<T extends TuiSpec>(
+  spec: T,
+  how: ContextDelivery,
+  root: string | null | undefined,
+  env: NodeJS.ProcessEnv,
+): T {
   if (how.kind !== 'hook') return spec
   const home = env.HOME || homedir()
   let body = ''
   try {
     body = readFileSync(join(home, how.hooks), 'utf8')
   } catch {}
-  if (body.includes(how.marker) && existsSync(join(home, how.binary))) return spec
-  return { ...spec, command: spec.command.filter((word) => !how.needsHook.includes(word)) }
+  const hooked = body.includes(how.marker) && existsSync(join(home, how.binary))
+  return {
+    ...spec,
+    command: [
+      ...(hooked ? spec.command : spec.command.filter((word) => !how.needsHook.includes(word))),
+      ...(root ? [...how.workspace, shellQuote(root)] : []),
+    ],
+  }
 }
 
 export async function withContextDelivery<T extends TuiSpec | undefined>(
@@ -176,7 +188,12 @@ export async function withContextDelivery<T extends TuiSpec | undefined>(
 ): Promise<T> {
   const spec =
     given?.contextDelivery && given.command.length
-      ? hookOrAsk(given as TuiSpec, given.contextDelivery, deps.env)
+      ? hookOrAsk(
+          given as TuiSpec,
+          given.contextDelivery,
+          deps.catalog.widget(widgetId)?.projectRoot,
+          deps.env,
+        )
       : given
   return deliverInto(spec as T, widgetId, deps)
 }

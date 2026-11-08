@@ -368,6 +368,8 @@ export const agy: TuiAdapter = {
       marker: 'aico-hook agy PreToolUse',
       binary: '.local/bin/aico-hook',
       needsHook: ['--dangerously-skip-permissions'],
+      // Started with no folder of its own, agy works in a scratch folder of its own.
+      workspace: ['--add-dir'],
     },
     modelSelection: { model: ['--model'], reasoningEffort: { arguments: ['--effort'] } },
   },

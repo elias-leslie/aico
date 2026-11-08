@@ -283,3 +283,12 @@ func TestAgyInstallKeepsOtherHooks(t *testing.T) {
 		t.Fatalf("got %s", raw)
 	}
 }
+
+// With no folder agy works in its scratch folder, and the hook runs in its closed config folder.
+func TestAgyWithoutAFolderWorksInItsScratch(t *testing.T) {
+	agySetup(t)
+	in := map[string]any{"toolCall": map[string]any{"name": "run_command", "args": map[string]any{"CommandLine": "pwd && echo hi > a.txt"}}}
+	if got := agyPreTool(in); got != agyGoAhead {
+		t.Fatalf("refused: %s", got)
+	}
+}

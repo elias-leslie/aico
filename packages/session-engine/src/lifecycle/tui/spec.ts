@@ -100,6 +100,9 @@ export interface TuiSpec {
         binary: string
         /** Without that hook the session has no limits: these words come off its command. */
         needsHook: string[]
+        /** The words that make the session's project the tool's working folder; a shell-quoted
+         * project root follows them. */
+        workspace: string[]
       }
   /** Set per launch by `withContextDelivery`: the shell words and environment
    * that hand this launch's delivery to the tool. `instructions`: the chosen
