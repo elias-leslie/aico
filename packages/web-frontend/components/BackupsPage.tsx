@@ -16,6 +16,7 @@ import {
 import { backupsApi } from '@/lib/backups-api'
 import { useServerReach } from '@/lib/frame/server-reach'
 import { useBackupRun } from '@/lib/hooks/use-backup-run'
+import { machineLabel } from '@/lib/machine-name'
 import { shortWhen } from '@/lib/short-when'
 import styles from './BackupsPage.module.css'
 
@@ -64,7 +65,7 @@ function Copy({ row, machine }: { row: Entry; machine: boolean }) {
       <div>
         <strong>
           {title(row.target)}
-          {machine ? ` · ${row.machine}` : ''}
+          {machine ? ` · ${machineLabel(row.machine)}` : ''}
         </strong>
         {row.state !== 'ok' && row.state !== 'off' && <p>{row.meaning}</p>}
         <small>
@@ -184,7 +185,7 @@ export function BackupsPage() {
   const rows = data?.entries.filter(
     (row) =>
       !needle ||
-      `${row.name} ${title(row.target)} ${row.machine} ${row.meaning}`
+      `${row.name} ${title(row.target)} ${machineLabel(row.machine)} ${row.machine} ${row.meaning}`
         .toLowerCase()
         .includes(needle),
   )

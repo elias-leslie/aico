@@ -118,6 +118,14 @@ describe('BackupsPage', () => {
     )
   })
 
+  it('names the machines by their Aico names, not the raw ones', async () => {
+    answer([copy({}), copy({ id: 'x', machine: 'aico' })])
+    render(<BackupsPage />)
+    await screen.findByTestId('backups-summary')
+    expect(screen.getAllByText(/· Standby/).length).toBeGreaterThan(0)
+    expect(document.body.textContent).not.toMatch(/· aico\b/)
+  })
+
   it('filters by name and says when nothing matches', async () => {
     answer([copy({})])
     render(<BackupsPage />)

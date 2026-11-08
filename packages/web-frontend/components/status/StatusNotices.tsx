@@ -1,6 +1,7 @@
 'use client'
 
 import { RefreshCw, Server } from 'lucide-react'
+import { machineLabel } from '@/lib/machine-name'
 import { ago, at, plural, type StatusRow, silentMachines } from '@/lib/status'
 
 type Mode = 'loading' | 'failed' | 'empty' | 'live'
@@ -62,9 +63,9 @@ export function StatusNotices({
             role="status"
           >
             <p>
-              <b>{machine.machine} isn’t answering.</b> No word since{' '}
-              {at(machine.since ? Date.parse(machine.since) : null, now)}, so
-              its {plural(machine.rows, 'row')}{' '}
+              <b>{machineLabel(machine.machine)} isn’t answering.</b> No word
+              since {at(machine.since ? Date.parse(machine.since) : null, now)},
+              so its {plural(machine.rows, 'row')}{' '}
               {machine.rows === 1 ? 'shows' : 'show'} unknown. The rest are
               current.
             </p>

@@ -304,7 +304,7 @@ it('copies another login access with one choice and saves only the difference', 
   vi.stubGlobal('fetch', fetcher)
   render(<LoginsPage />)
   await openAccess('canvas-pcsb')
-  expect(screen.getByLabelText('aico')).toBeChecked()
+  expect(screen.getByLabelText('Standby')).toBeChecked()
   expect(screen.getByLabelText('neri')).not.toBeChecked()
   expect(screen.getByLabelText('All roles')).toBeChecked()
   expect(screen.getByLabelText('review')).not.toBeChecked()
@@ -386,7 +386,7 @@ it('sets access in the Add login form and saves it with the login', async () => 
   fireEvent.change(screen.getByLabelText('Value (hidden)'), {
     target: { value: 'fixture-only' },
   })
-  expect(screen.getByLabelText('aico')).toBeChecked()
+  expect(screen.getByLabelText('Standby')).toBeChecked()
   expect(screen.getByLabelText('All roles')).toBeChecked()
   fireEvent.click(screen.getByLabelText('implementation'))
   fireEvent.click(screen.getByRole('button', { name: 'Save login' }))

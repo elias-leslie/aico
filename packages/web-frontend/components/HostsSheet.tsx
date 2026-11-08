@@ -580,8 +580,8 @@ export function HostSignIn({
         title={`Sign out of ${signOutTool ? toolName(signOutTool) : ''}?`}
         message={
           logins.data?.actions[signOutTool ?? '']?.signOut === 'session'
-            ? `A session opens on ${host} to finish signing out of ${signOutTool ? toolName(signOutTool) : ''}.`
-            : `Sessions on ${host} will need to sign in to ${signOutTool ? toolName(signOutTool) : ''} again.`
+            ? `A session opens on ${sessionHostLabel(host)} to finish signing out of ${signOutTool ? toolName(signOutTool) : ''}.`
+            : `Sessions on ${sessionHostLabel(host)} will need to sign in to ${signOutTool ? toolName(signOutTool) : ''} again.`
         }
         confirmText="Sign out"
         pendingText="Signing out…"
@@ -615,7 +615,9 @@ function LoginRows({
   onSignOut: (tool: string) => void
 }) {
   if (data.tools.length === 0) {
-    return <Note flush>No tools to sign in to on {host}.</Note>
+    return (
+      <Note flush>No tools to sign in to on {sessionHostLabel(host)}.</Note>
+    )
   }
   return (
     <ul className="flex flex-col gap-2">
@@ -643,7 +645,7 @@ function LoginRows({
               <button
                 type="button"
                 className="lantern-btn small ml-auto"
-                aria-label={`Sign in to ${name} on ${host}`}
+                aria-label={`Sign in to ${name} on ${sessionHostLabel(host)}`}
                 disabled={busyTool !== null}
                 onClick={() => onSignIn(tool.tool)}
               >
@@ -686,7 +688,7 @@ function LoginRows({
                     <button
                       type="button"
                       className="lantern-btn small ghost"
-                      aria-label={`Sign in to ${name} on ${host} again`}
+                      aria-label={`Sign in to ${name} on ${sessionHostLabel(host)} again`}
                       disabled={busyTool !== null}
                       onClick={() => onSignIn(tool.tool)}
                     >
@@ -701,7 +703,7 @@ function LoginRows({
                     <button
                       type="button"
                       className="lantern-btn small ghost"
-                      aria-label={`Sign out of ${name} on ${host}`}
+                      aria-label={`Sign out of ${name} on ${sessionHostLabel(host)}`}
                       disabled={busyTool !== null}
                       onClick={() => onSignOut(tool.tool)}
                     >

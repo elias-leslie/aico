@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { HostsSheet } from '@/components/HostsSheet'
+import { machineLabel } from '@/lib/machine-name'
 import {
   type ActionContext,
   type ButtonKind,
@@ -50,7 +51,7 @@ function RowSheet({
       <div className="status-sheet-meta">
         <StateChip state={running ? 'running' : row.shown} />
         <span>
-          {row.kind} · {row.machine}
+          {row.kind} · {machineLabel(row.machine)}
           {row.project ? ` · ${row.project}` : ''}
         </span>
       </div>

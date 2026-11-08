@@ -6,6 +6,7 @@ import { clsx } from 'clsx'
 import { Copy, X } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { apiFetch } from '@/lib/api-fetch'
+import { machineLabel } from '@/lib/machine-name'
 import { lookMessage, type StatusRow } from '@/lib/status'
 
 /** A Status sheet: a bottom sheet on the phone, a side panel or a centred dialog on a desktop. */
@@ -116,7 +117,8 @@ export function LogSheet({
       }
     >
       <p className="status-sheet-note">
-        Last lines on {row.machine}, from <span className="mono">{ref}</span>
+        Last lines on {machineLabel(row.machine)}, from{' '}
+        <span className="mono">{ref}</span>
       </p>
       {log.isPending ? (
         <p className="status-sheet-note">Reading the log…</p>

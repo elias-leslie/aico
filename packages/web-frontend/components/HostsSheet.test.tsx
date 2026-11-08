@@ -126,6 +126,23 @@ describe('HostsSheet', () => {
     push.mockReset()
     stubFetch()
   })
+  it('calls the aico link the Standby in the sign-in section, keeping the raw name for the API', async () => {
+    state.hosts = [host({ name: 'aico' })]
+    state.logins.aico = loginsFor({ host: 'aico' })
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <HostSignIn host="aico" connected onOpened={() => {}} />
+      </QueryClientProvider>,
+    )
+    expect(
+      await screen.findByRole('button', {
+        name: 'Sign in to Codex on Standby',
+      }),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Sign-in on Standby')).toBeInTheDocument()
+    expect(document.body.textContent).not.toMatch(/\baico\b/)
+  })
+
   it('says it is loading, then that no other hosts exist', async () => {
     renderSheet()
     expect(screen.getByText('Loading hosts…')).toBeInTheDocument()

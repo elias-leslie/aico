@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { machineLabel } from '@/lib/machine-name'
 import { Quiet } from './settings/kit'
 import kit from './settings/kit.module.css'
 
@@ -332,7 +333,7 @@ export function AccessChecklist({
                   })
                 }}
               />
-              {m}
+              {machineLabel(m)}
             </label>
           ))}
         </div>

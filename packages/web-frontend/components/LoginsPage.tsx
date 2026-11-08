@@ -15,6 +15,7 @@ import {
   title,
   type Who,
 } from '@/lib/logins'
+import { sessionHostLabel } from '@/lib/machines'
 import { AddLogin } from './AddLogin'
 import { HostSignIn } from './HostsSheet'
 import type { AccessChoices } from './LoginAccess'
@@ -298,7 +299,7 @@ export function LoginsPage() {
           {hosts.map((host) => (
             <Row
               key={host.name}
-              name={host.name}
+              name={sessionHostLabel(host.name)}
               chip={host.state === 'connected' ? 'ok' : 'off'}
               chipText={
                 host.state === 'connected' ? 'Connected' : 'Not connected'
