@@ -428,7 +428,12 @@ export function FileBrowser({
           // The X goes with the preview; Escape and Tab need focus still in here.
           list.current?.focus()
         }}
-        className={selected ? 'flex' : 'hidden md:flex'}
+        // On a phone the file takes the whole screen; its X returns to the list.
+        className={
+          selected
+            ? 'flex max-md:fixed max-md:inset-0 max-md:z-50 max-md:m-0 max-md:rounded-none'
+            : 'hidden md:flex'
+        }
         shared={shared}
       />
     </div>
