@@ -762,7 +762,7 @@ export interface WakeOperations {
   deliver(sessionId: string, text: string): Promise<boolean>
   /** The rows went out (`paste`: the gated paste; `native`: a native puller took them). */
   delivered?(sessionId: string, rows: readonly Wake[], via: 'paste' | 'native'): void
-  /** The running session that holds this conversation, if any. */
+  /** The running session that holds this conversation, if any; throws when it can't tell (the relaunch waits). */
   conversationHolder(resumeId: string): Promise<string | null>
   relaunch(
     ended: EndedSession,
@@ -1195,7 +1195,17 @@ export class WakeScheduler {
     if (!first || !ended) return
     if ((this.retryAt.get(ended.id) ?? 0) > this.ops.now()) return
     if (ended.resumeId) {
-      const holder = await this.ops.conversationHolder(ended.resumeId)
+      let holder: string | null
+      try {
+        holder = await this.ops.conversationHolder(ended.resumeId)
+      } catch (error) {
+        // Unknown is not free: starting now could put two agents on one conversation.
+        this.retryAt.set(ended.id, this.ops.now() + WAKE_RELAUNCH_RETRY_MS)
+        this.ops.log(
+          `check-in relaunch of session=${ended.id} waits: can't tell who holds its conversation (${error instanceof Error ? error.message : String(error)})`,
+        )
+        return
+      }
       if (holder) {
         // Resumed by hand meanwhile: that session gets the check-in.
         for (const wake of wakes) this.store.attach(wake.id, holder)

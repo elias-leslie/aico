@@ -151,6 +151,7 @@ import {
 } from '@aico/shared/http'
 import { type AskDelivery, AskStore, sessionAsks, transferAskNotices } from './asks'
 import { ContinuationError, continuation } from './continue-from'
+import { ConversationUnknown, conversationHolder as holderOf } from './conversation-holder'
 import { type LaneReporter, laneView, registerLaneRoutes } from './lane-reports'
 import type { ModelSwitch, ModelWatch } from './model-switch'
 import { paneModeArgs, parsePaneMode } from './pane-mode'
@@ -678,34 +679,17 @@ export function learnProjects(
 const REOPEN_PROMPT =
   'The owner reopened this session after it ended. Processes, servers and watchers you started before are gone. Wait for their next message.'
 
-/**
- * A session running, resuming or about to restore this conversation, if any. Read the slow
- * way first (observing every agent may start a crash's recovery), then the quick claims.
- * Refuses when it can't look: a guess could put two agents on one transcript.
- */
+/** Who holds this conversation (conversation-holder.ts); 503 when nobody can say. */
 export async function conversationHolder(
   context: LifecycleApiContext,
   resumeId: string,
 ): Promise<string | null> {
-  const continuity = context.continuity
-  if (!continuity) throw new HttpError(503, 'reopen_unavailable')
-  await continuity.restorePlanned
-  let observed: Awaited<ReturnType<Continuity['observe']>>
   try {
-    observed = await continuity.observe()
-  } catch {
-    throw new HttpError(503, 'reopen_unavailable')
+    return await holderOf(context, resumeId)
+  } catch (error) {
+    if (error instanceof ConversationUnknown) throw new HttpError(503, 'reopen_unavailable')
+    throw error
   }
-  return (
-    observed.find((entry) => entry.resumeId === resumeId)?.row.id ??
-    listWidgets().find(
-      (row) =>
-        continuity.isAwaitingRestore(row.id) &&
-        continuity.resumeIdOf(row.id, row.tool) === resumeId,
-    )?.id ??
-    context.recovery?.resumeOwner(resumeId) ??
-    launchingResume(resumeId, '')
-  )
 }
 
 function createSession(context: LifecycleApiContext): Handler {

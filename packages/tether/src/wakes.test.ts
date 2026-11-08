@@ -540,6 +540,30 @@ describe('wake scheduler', () => {
     expect(wakes.get(wake.id)).toBeUndefined()
   })
 
+  it('waits, never relaunches, when it cannot tell who holds the conversation', async () => {
+    let unknown = true
+    const { wakes, clock, log, scheduler, add } = harness({
+      conversationHolder: async () => {
+        if (unknown) throw new Error('tmux is not answering')
+        return null
+      },
+    })
+    const wake = add(9_000, 'note')
+    wakes.keep(SESSION, ENDED)
+    removeWidget(SESSION)
+    await scheduler.tick()
+    expect(log.relaunched).toEqual([])
+    expect(wakes.get(wake.id)).toMatchObject({ attempts: 0, sessionId: null })
+    expect(log.lines.at(-1)).toContain("can't tell who holds its conversation")
+    // Not again before the retry window, then a relaunch once it can look.
+    unknown = false
+    await scheduler.tick()
+    expect(log.relaunched).toEqual([])
+    clock.now += WAKE_RELAUNCH_RETRY_MS
+    await scheduler.tick()
+    expect(log.relaunched).toHaveLength(1)
+  })
+
   it('retries a failed relaunch later and stops after the attempts run out', async () => {
     const outcomes: ('retry' | 'failed')[] = ['retry', 'failed', 'failed']
     const { wakes, clock, log, scheduler, add } = harness({

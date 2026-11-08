@@ -41,7 +41,7 @@ import {
   whenReady,
 } from '@aico/session-engine/engine'
 import { nodeProcFs } from '@aico/session-engine/proc-fs'
-import { holdResume, launchingResume, withRootPrompt } from '@aico/session-engine/root-launch'
+import { holdResume, withRootPrompt } from '@aico/session-engine/root-launch'
 import { pasteIntoRunningSession, runTmux } from '@aico/session-engine/running-session'
 import { captureVisibleTargetArgs, clientActivityTargetArgs } from '@aico/session-engine/tmux'
 import { MAIN_TURN_OVER } from '@aico/session-engine/tui/adapters/contract'
@@ -50,9 +50,11 @@ import { isResumeSessionId } from '@aico/session-engine/tui/launch'
 import { getTui, isDeliveryTool } from '@aico/session-engine/tui/registry'
 import { AgentAdmissionDenied } from '@aico/shared/host-pressure'
 import { HttpError, onlyFields, type Router, readJsonObject, sendJson } from '@aico/shared/http'
+import { conversationHolder } from './conversation-holder'
 import { DeliveryLog, registerDeliveryRoutes } from './deliveries'
 import type { LifecycleContext } from './lifecycle-context'
 import type { Continuity } from './reboot'
+import type { Recovery } from './recovery'
 import {
   applyWakePolicyPatch,
   cleanNote,
@@ -130,7 +132,7 @@ export function agentBusyReason(agent: Record<string, unknown>): string | null {
 }
 
 /** The shared context, with the one service the wake runtime reads from it. */
-export type WakeContext = LifecycleContext & { continuity?: Pick<Continuity, 'observe'> }
+export type WakeContext = LifecycleContext & { continuity?: Continuity; recovery?: Recovery }
 
 export class WakeService {
   readonly store: WakeStore
@@ -160,7 +162,7 @@ export class WakeService {
         this.deliveries.delivered(rows, via === 'native' ? 'native' : 'paste', now())
         this.noteReached(id, rows)
       },
-      conversationHolder: (resumeId) => this.conversationHolder(resumeId),
+      conversationHolder: (resumeId) => conversationHolder(this.context, resumeId),
       relaunch: (ended, message) => this.relaunch(ended, message),
       changed: (id) => this.changed(id),
       log: (message) => console.log(`[tether:wakes] ${message}`),
@@ -366,15 +368,6 @@ export class WakeService {
       .map((line) => Number(line.trim()))
       .filter((n) => Number.isSafeInteger(n) && n > 0)
     return times.length ? Math.max(...times) * 1000 : null
-  }
-
-  private async conversationHolder(resumeId: string): Promise<string | null> {
-    const continuity = this.context.continuity
-    if (!continuity) return launchingResume(resumeId, '')
-    const observed = await continuity.observe().catch(() => [])
-    return (
-      observed.find((entry) => entry.resumeId === resumeId)?.row.id ?? launchingResume(resumeId, '')
-    )
   }
 
   /** What a kept wake needs to start this session's conversation again. */
