@@ -15,6 +15,7 @@ import argparse
 import contextlib
 import json
 import os
+import pwd
 import shutil
 import time
 from collections.abc import Collection
@@ -127,6 +128,15 @@ def open_paths(root: Path, proc: Path = Path("/proc")) -> set[str]:
     return out
 
 
+def held_paths(owner: str, cfg: dict[str, Any]) -> set[str]:
+    """What the owner's scratch-holds folder links to: kept for as long as the link is there."""
+    try:
+        folder = Path(pwd.getpwnam(owner).pw_dir) / cfg["scratch_holds"]
+        return {str(entry.resolve()) for entry in folder.iterdir()}
+    except (KeyError, OSError):
+        return set()
+
+
 def sweep_scratch(
     cfg: dict[str, Any], actor: acts.Actor, now: float, notes: list[str], in_use: Collection[str]
 ) -> int:
@@ -137,7 +147,11 @@ def sweep_scratch(
     # The real clock caps it: a clock ahead of the world (a test's, a wrong RTC) must not make everything look old.
     cutoff = min(now, time.time()) - float(cfg["scratch_older_days"]) * 86400
     freed = 0
+    left = int(cfg["scratch_max_per_run"])  # A wrong rule loses a few entries, not the disk.
     for entry in sorted(root.iterdir()):
+        if left <= 0:
+            notes.append("scratch sweep stopped at its limit; the rest waits for the next run")
+            break
         if any(fnmatchcase(entry.name, keep) for keep in cfg["scratch_keep"]):
             continue
         text = str(entry)
@@ -151,6 +165,7 @@ def sweep_scratch(
             if entry.is_dir() and not entry.is_symlink()
             else (lambda path=entry: path.unlink(missing_ok=True))
         )
+        left -= 1
         done, _ = actor.apply(f"remove old scratch {entry.name} ({size / GIB:.1f} GiB)", remove)
         if done:
             freed += size
@@ -255,7 +270,11 @@ def maintain(
         notes.append(f"versioned cache retention failed: {type(error).__name__}")
     failed = False
     try:
-        in_use = {*versioned.in_use_paths(), *open_paths(Path(cfg.get("scratch_root", "/nonexistent")))}
+        in_use = {
+            *versioned.in_use_paths(),
+            *open_paths(Path(cfg.get("scratch_root", "/nonexistent"))),
+            *held_paths(owner, cfg),
+        }
         freed += sweep_scratch(cfg, actor, now, notes, in_use)
     except OSError as error:  # scratch retention must never stop the rest of housekeeping
         notes.append(f"scratch sweep failed: {type(error).__name__}")

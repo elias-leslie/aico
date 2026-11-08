@@ -770,7 +770,12 @@ def test_nvme_test_dry_and_live(tmp_path, monkeypatch):
 
 
 def scratch_cfg(root):
-    return {"scratch_root": str(root), "scratch_older_days": 21, "scratch_keep": ["models", "st-*"]}
+    return {
+        "scratch_root": str(root),
+        "scratch_older_days": 21,
+        "scratch_keep": ["models", "st-*"],
+        "scratch_max_per_run": 40,
+    }
 
 
 def test_scratch_sweep_takes_only_old_untouched_unused_entries(tmp_path):
@@ -811,6 +816,26 @@ def test_scratch_sweep_ignores_a_clock_ahead_of_the_world(tmp_path):
     actor = acts.Actor(True, run=Fake())
     housekeeping.sweep_scratch(scratch_cfg(tmp_path), actor, time.time() + 365 * 86400, [], set())
     assert (tmp_path / "work" / "f").exists()
+
+
+def test_scratch_sweep_stops_at_its_limit_and_holds_are_kept(tmp_path, monkeypatch):
+    now = time.time()
+    root = tmp_path / "scratch"
+    root.mkdir()
+    old = now - 30 * 86400
+    for i in range(5):
+        (root / f"run-{i}").write_text("x")
+        os.utime(root / f"run-{i}", (old, old))
+    notes = []
+    cfg = {**scratch_cfg(root), "scratch_max_per_run": 2}
+    housekeeping.sweep_scratch(cfg, acts.Actor(True, run=Fake()), now, notes, set())
+    assert len(list(root.iterdir())) == 3 and any("limit" in note for note in notes)
+
+    holds = tmp_path / ".scratch-holds"
+    holds.mkdir()
+    (holds / "keep").symlink_to(root / "run-4")
+    monkeypatch.setattr(housekeeping.pwd, "getpwnam", lambda _name: argparse.Namespace(pw_dir=str(tmp_path)))
+    assert housekeeping.held_paths("owner", {"scratch_holds": ".scratch-holds"}) == {str(root / "run-4")}
 
 
 def test_image_prune_stays_on_untagged_layers_and_reports_failure(monkeypatch):
