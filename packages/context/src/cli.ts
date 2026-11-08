@@ -2,7 +2,8 @@
 // Output matches `st memory`, `st prompt` and `st models route` line for line where
 // agents read it.
 
-import { readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { transaction } from '@aico/store'
 import { routeFacts } from '@aico/usage'
 import { startedBy } from './ancestry'
@@ -43,6 +44,7 @@ import {
 } from './memory'
 import { Catalog } from './models'
 import { getPrompt, listPrompts, promptRevisions, putPrompt } from './prompts'
+import { applyReplica, readReplicaState, replicaHash, schemaVersion } from './replica'
 import { route, UnknownLaunchKey } from './route'
 
 export const CONTEXT_COMMANDS = ['memory', 'prompt', 'models', 'context'] as const
@@ -53,6 +55,8 @@ export interface ContextCliIo {
   /** context.db. */
   dbPath: string
   now(): Date
+  /** Everything on stdin (`context replica apply`); default: the process's. */
+  stdin?(): Buffer
   /** Aico's data directory: usage.db there holds the usage facts `models route` shows. */
   dataDir?: string
   /** `context deliver`: the environment it reads (session, role, already-delivered
@@ -87,6 +91,7 @@ const USAGE = `Usage: aico <memory|prompt|models|context> ...
   aico context deliver --tool T [--project P] [--session S] [--role R] [--coordinator]
                        [--event E] [--format text|json|claude|codex|pi] [--force]
   aico context delivery [TOOL on|off]
+  aico context replica hash | apply --from MACHINE   (apply reads a snapshot on stdin; \`aico context-sync\` sends it)
 `
 
 /** The usage lines of one command (`aico memory --help` shows memory's, not prompt's). */
@@ -539,9 +544,39 @@ function deliverySwitch(db: Database, rest: string[], io: ContextCliIo): number 
   return 0
 }
 
+/** The receiving side of `aico context-sync`: this machine's copy of the owner's context (replica.ts). */
+function replica(db: Database, argv: string[], io: ContextCliIo): number {
+  const [sub, ...rest] = argv
+  const parsed = parse(rest, { '--from': 'from' }, [])
+  if (sub === 'hash') {
+    io.out(
+      `${JSON.stringify({ hash: replicaHash(db), schema: schemaVersion(db), copy: readReplicaState(io.dbPath) !== null })}\n`,
+    )
+    return 0
+  }
+  if (sub === 'apply') {
+    const from = str(parsed, 'from')
+    if (!from) throw new UsageError('context replica apply needs --from MACHINE')
+    const dir = mkdtempSync(join(dirname(io.dbPath), '.context-replica-'))
+    try {
+      const file = join(dir, 'incoming')
+      writeFileSync(file, io.stdin ? io.stdin() : readFileSync(0), { mode: 0o600 })
+      io.out(`${applyReplica(db, io.dbPath, file, from, io.now())}\n`)
+      return 0
+    } catch (error) {
+      io.err(`${(error as Error).message}\n`)
+      return 1
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  }
+  throw new UsageError(`unknown context replica command ${sub ?? '(none)'}`)
+}
+
 function context(db: Database, argv: string[], io: ContextCliIo): number {
   const [sub, ...rest] = argv
   if (sub === 'delivery') return deliverySwitch(db, rest, io)
+  if (sub === 'replica') return replica(db, rest, io)
   throw new UsageError(`unknown context command ${sub ?? '(none)'}`)
 }
 

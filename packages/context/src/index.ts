@@ -46,4 +46,12 @@ export {
 } from './memory'
 export { Catalog, MODELS, type Model } from './models'
 export { getPrompt, listPrompts, type Prompt } from './prompts'
+export {
+  applyReplica,
+  exportReplica,
+  readReplicaState,
+  replicaHash,
+  replicaStatePath,
+  schemaVersion,
+} from './replica'
 export { type Facts, modelUsage, type RoutePayload, route, type Usage } from './route'

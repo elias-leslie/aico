@@ -1,0 +1,4 @@
+{
+  "dataDir": "~/.local/state/aico",
+  "peerAico": "$HOME/.local/bin/aico"
+}

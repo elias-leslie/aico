@@ -93,6 +93,10 @@
           "wip",
           "copies of the active repos, uncommitted work too, on the other full machines: run, restore"
         ],
+        [
+          "context-sync",
+          "copy memories, prompts, roles and the launch policy to the standby's read-only copy: run"
+        ],
         ["phones", "paired phones: list, remove"],
         ["app", "the phone app's published version and outage drills"],
         ["declare", "record a host change you made, so Status knows it was you"],

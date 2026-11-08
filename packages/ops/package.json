@@ -8,6 +8,7 @@
     "layer": 4,
     "imports": [
       "@aico/shared",
+      "@aico/context",
       "@aico/status",
       "@aico/store",
       "@aico/fleet"
@@ -26,6 +27,7 @@
   },
   "dependencies": {
     "@aico/shared": "0.1.0",
+    "@aico/context": "0.1.0",
     "@aico/status": "0.1.0",
     "@aico/store": "0.1.0",
     "@aico/fleet": "0.1.0"

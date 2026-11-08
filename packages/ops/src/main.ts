@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { away, awayDeps } from './away'
 import { backups } from './backups'
+import { contextSync } from './context-sync'
 import {
   canonical,
   defaultDeps,
@@ -41,6 +42,7 @@ const USAGE = `Usage:
   aico vm reset ID --name NAME --snapshot SNAPSHOT   roll a stopped guest back; it stays stopped
       Proxmox guests with Aico Logins' scoped API token (Proxmox enforces its pools)
   aico wip run | restore PROJECT --to DIR            copies of the active repos (uncommitted work too) on the other full machines
+  aico context-sync run                              copy memories, prompts, roles and the launch policy to the other full machines (the standby's read-only copy)
   aico plug [status] [--json]                        every power plug: its sockets, machine, on or off, how long on
   aico plug on|off MACHINE|PLUG:SOCKET [--force]     switch one socket (PLUG:SOCKET, e.g. shed:1, also for an empty one)
   aico plug cycle MACHINE|PLUG:SOCKET [--wait S] [--force]  off, wait (default 10 s), on
@@ -83,6 +85,7 @@ export async function main(argv: string[], env = process.env): Promise<number> {
   try {
     if (verb === 'backups') return await backups(rest, env)
     if (verb === 'wip') return await wip(rest, env)
+    if (verb === 'context-sync') return await contextSync(rest, env)
     // Help before anything reads the project, git or a host: `aico deploy --help` works anywhere.
     if (
       ['deploy', 'logs', 'snapshots', 'vm', 'plug', 'away'].includes(verb as string) &&

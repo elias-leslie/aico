@@ -111,6 +111,7 @@ describe('CLI cutover', () => {
     'plug',
     'away',
     'wip',
+    'context-sync',
     'backups',
     'publish',
     'usage',

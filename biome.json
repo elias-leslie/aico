@@ -539,8 +539,6 @@
                       "@aico/checks/**",
                       "@aico/cli",
                       "@aico/cli/**",
-                      "@aico/context",
-                      "@aico/context/**",
                       "@aico/jobs",
                       "@aico/jobs/**",
                       "@aico/notes",
@@ -568,7 +566,7 @@
                       "@aico/webtools",
                       "@aico/webtools/**"
                     ],
-                    "message": "@aico/ops (layer 4): import only @aico/shared, @aico/status, @aico/store, @aico/fleet (package.json aico.imports; depcruise is the gate)"
+                    "message": "@aico/ops (layer 4): import only @aico/shared, @aico/context, @aico/status, @aico/store, @aico/fleet (package.json aico.imports; depcruise is the gate)"
                   }
                 ]
               }

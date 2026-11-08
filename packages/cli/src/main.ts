@@ -70,6 +70,7 @@ const NATIVE = new Set([
   'plug',
   'away',
   'wip',
+  'context-sync',
   'backups',
   'web',
   'video',
