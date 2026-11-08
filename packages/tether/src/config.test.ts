@@ -1,13 +1,13 @@
-import { EXPECTED_TETHER_API_VERSION } from '@aico/tether-client'
-import { describe, expect, it } from 'vitest'
 import {
-  API_VERSION,
   ownsTmuxServerUnit,
   paneExitMarkerPath,
   resolvePaths,
   tmuxServerSocketPath,
   tmuxServerUnit,
-} from './config'
+} from '@aico/session-engine/paths'
+import { EXPECTED_TETHER_API_VERSION } from '@aico/tether-client'
+import { describe, expect, it } from 'vitest'
+import { API_VERSION } from './config'
 
 const env = { HOME: '/home/u', XDG_RUNTIME_DIR: '/run/user/1000' }
 const id = '06e633492f792ad10439f675491801ee'

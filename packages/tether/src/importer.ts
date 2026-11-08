@@ -16,8 +16,7 @@
 // * Dry-run by default; `apply` writes.
 
 import { existsSync } from 'node:fs'
-import { DatabaseSync } from 'node:sqlite'
-import type { Store } from '@aico/session-engine/store'
+import { type Db, openDatabase, type Store } from '@aico/session-engine/store'
 
 type Row = Record<string, unknown>
 
@@ -100,12 +99,12 @@ function differences(a: Row, b: Row, columns: readonly string[]): string[] {
 }
 
 /** Open aico.db strictly read-only (no WAL checkpoint, no writes). */
-function openAicoReadOnly(path: string): DatabaseSync {
+function openAicoReadOnly(path: string): Db {
   if (!existsSync(path)) throw new Error(`Aico database not found: ${path}`)
-  return new DatabaseSync(path, { readOnly: true })
+  return openDatabase(path, { readOnly: true })
 }
 
-function readSource(source: DatabaseSync) {
+function readSource(source: Db) {
   const servers = source
     .prepare('SELECT * FROM tmux_servers ORDER BY created_at, id')
     .all() as Row[]
@@ -128,7 +127,7 @@ function isExternal(widget: Row): boolean {
  * Compare aico.db with the target catalog. `target` may be null when the
  * instance has no database yet (dry-run never creates one).
  */
-function planImport(sourcePath: string, target: DatabaseSync | null): ImportPlan {
+function planImport(sourcePath: string, target: Db | null): ImportPlan {
   const source = openAicoReadOnly(sourcePath)
   let data: ReturnType<typeof readSource>
   try {
@@ -201,7 +200,7 @@ function planImport(sourcePath: string, target: DatabaseSync | null): ImportPlan
   return { source: sourcePath, entries, rows }
 }
 
-function insertAll(db: DatabaseSync, table: string, rows: Row[]): void {
+function insertAll(db: Db, table: string, rows: Row[]): void {
   if (rows.length === 0) return
   const columns = Object.keys(rows[0] as Row)
   const statement = db.prepare(
@@ -225,7 +224,7 @@ export function applyImport(sourcePath: string, store: Store): ImportPlan {
 /** Dry-run against an instance database without creating or migrating it. */
 export function planImportForPath(sourcePath: string, targetDbPath: string): ImportPlan {
   if (!existsSync(targetDbPath)) return planImport(sourcePath, null)
-  const target = new DatabaseSync(targetDbPath, { readOnly: true })
+  const target = openDatabase(targetDbPath, { readOnly: true })
   try {
     return planImport(sourcePath, target)
   } finally {

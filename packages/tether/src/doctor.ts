@@ -2,8 +2,8 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, lstatSync, readdirSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import type { TetherPaths } from '@aico/session-engine/paths'
 import { callSocket } from './client'
-import type { TetherPaths } from './config'
 
 export type CheckStatus = 'ok' | 'warn' | 'fail'
 
@@ -212,7 +212,7 @@ function run(command: string, args: string[]): string | null {
 
 async function hasNodeSqlite(): Promise<boolean> {
   try {
-    await import('node:sqlite')
+    await import('@aico/session-engine/store')
     return true
   } catch {
     return false

@@ -5,8 +5,6 @@ import { mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'no
 import { dirname, isAbsolute, join, normalize } from 'node:path'
 import type { Project } from '@aico/session-engine/project'
 
-export type { Project }
-
 export interface ProjectList {
   source: 'registry' | 'local'
   fetchedAt: number

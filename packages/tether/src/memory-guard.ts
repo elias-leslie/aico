@@ -6,7 +6,6 @@
 
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { hostAdmissionPath } from '@aico/session-engine/agent-admission'
 import { JobGuard, memoryEventsPath } from '@aico/session-engine/job-guard'
 import {
   applyMemoryPolicyPatch,
@@ -19,9 +18,10 @@ import {
   type PaneCapResult,
   systemdPaneCapFiles,
 } from '@aico/session-engine/pane-caps'
+import type { TetherPaths } from '@aico/session-engine/paths'
 import type { Store } from '@aico/session-engine/store'
 import { agentProcessNames } from '@aico/session-engine/tui/registry'
-import type { TetherPaths } from './config'
+import { hostAdmissionPath } from '@aico/shared/host-admission'
 
 const MEMORY_POLICY_KEY = 'memory_policy'
 

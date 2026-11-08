@@ -1,8 +1,8 @@
 // `tether ask` flags and output for asks that want files.
 
+import type { TetherPaths } from '@aico/session-engine/paths'
 import { describe, expect, it } from 'vitest'
 import { ASK_USAGE, askCreateBody, formatAsk, runAsk } from './ask-cli'
-import type { TetherPaths } from './config'
 
 const env = { AICO_WIDGET_ID: 'aico-widget-0123abcd' }
 const create = (...args: string[]) => askCreateBody(['Q?', ...args], env, '/x')

@@ -3,8 +3,8 @@
 
 import { readFileSync } from 'node:fs'
 import { basename, isAbsolute, resolve } from 'node:path'
+import type { TetherPaths } from '@aico/session-engine/paths'
 import { callSocket } from './client'
-import type { TetherPaths } from './config'
 
 export const ASK_USAGE = `Usage:
   tether ask create "<question>" [--option TEXT]... [--recommend N] [--blocking]

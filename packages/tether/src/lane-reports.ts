@@ -64,9 +64,9 @@
 // (wakes, kind `event`): pasted once the agent is idle, nobody is typing and
 // the input line is empty.
 
-import type { DatabaseSync } from 'node:sqlite'
 import { AGENT_STATES, type AgentState } from '@aico/session-engine/agent-state'
-import { HttpError, type Router, readJsonObject, sendJson } from './http'
+import type { Db } from '@aico/session-engine/store'
+import { HttpError, type Router, readJsonObject, sendJson } from '@aico/shared/http'
 import { type ModelSwitch, modelSwitchOf, modelSwitchText } from './model-switch'
 
 const LANE_OUTCOMES = ['finished', 'blocked', 'ended'] as const
@@ -329,7 +329,7 @@ export interface OutboxRow {
 export class LaneReportStore {
   private depth = 0
 
-  constructor(private readonly db: DatabaseSync) {}
+  constructor(private readonly db: Db) {}
 
   transaction<T>(work: () => T): T {
     if (this.depth > 0) return work()

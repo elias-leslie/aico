@@ -5,7 +5,6 @@
 
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { AgentAdmissionDenied } from '@aico/session-engine/agent-admission'
 import { agentStateOf } from '@aico/session-engine/agent-state'
 import {
   allocateWidgetId,
@@ -49,8 +48,9 @@ import { MAIN_TURN_OVER } from '@aico/session-engine/tui/adapters/contract'
 import { ensureBlankSlateWorkspace, isBlankSlateRoot } from '@aico/session-engine/tui/blank-slate'
 import { isResumeSessionId } from '@aico/session-engine/tui/launch'
 import { getTui, isDeliveryTool } from '@aico/session-engine/tui/registry'
+import { AgentAdmissionDenied } from '@aico/shared/host-pressure'
+import { HttpError, type Router, readJsonObject, sendJson } from '@aico/shared/http'
 import { DeliveryLog, registerDeliveryRoutes } from './deliveries'
-import { HttpError, type Router, readJsonObject, sendJson } from './http'
 import type { LifecycleContext } from './lifecycle-context'
 import type { Continuity } from './reboot'
 import {

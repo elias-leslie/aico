@@ -2,9 +2,9 @@ import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { bindCatalog, insertWidget } from '@aico/session-engine/catalog'
 import { Store } from '@aico/session-engine/store'
+import { HttpError, Router, sendError } from '@aico/shared/http'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { DeliveryLog, deliveryLine, deliverySource, registerDeliveryRoutes } from './deliveries'
-import { HttpError, Router, sendError } from './http'
 import {
   DEFAULT_WAKE_POLICY,
   PULLER_GRACE_MS,

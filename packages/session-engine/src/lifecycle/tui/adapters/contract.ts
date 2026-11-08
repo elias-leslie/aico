@@ -9,6 +9,7 @@
 // events, hook facts) is plain JSON-serializable data, so a worker on a VM can
 // run the same adapters and send those over the fleet link.
 
+import type { ToolLogin } from '@aico/shared/tool-login'
 import type { AgentSignal } from '../../../agent-signal'
 import type { ModelEvent, ModelSource } from '../../../model-record'
 import type {
@@ -71,23 +72,6 @@ export interface StateDetection {
   /** The agent's resume handle from its processes (reboot continuity). */
   observe?(fs: ProcFs, home: string, pids: number[]): AgentObservation | null
   observeInEntry?(readers: EntryReaders, entry: EntryProcess): AgentObservation | null
-}
-
-export interface ToolLogin {
-  signIn: string | null
-  signOut:
-    | { kind: 'revoke' }
-    | { kind: 'command'; line: string }
-    | { kind: 'session'; line: string }
-    | null
-  /** A served tool: sign-in grants it to the host first (push needs the grant). */
-  grant?: boolean
-  /** The tool's command and its own login file (home-relative), for a host
-   * without a sign-in service: Aico checks the file is there instead. */
-  local?: { bin: string; authFile: string }
-  /** The sign-in screen prints a URL to open in a browser: its host. Aico then
-   * shows the URL as one clean link (lifecycle/tui/sign-in-link.ts). */
-  signInLink?: { host: string }
 }
 
 /** Per-tool facts that live outside Tether (hook scripts, extensions), kept

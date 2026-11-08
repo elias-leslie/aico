@@ -1,19 +1,23 @@
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import {
+  type HostAdmissionVerdict,
+  hostAdmissionRed,
+  parseHostAdmission,
+} from '@aico/shared/host-admission'
+import {
+  AgentAdmissionDenied,
+  type AgentAdmissionLimits,
+  DEFAULT_AGENT_ADMISSION_LIMITS,
+} from '@aico/shared/host-pressure'
 import { describe, expect, it } from 'vitest'
 import {
   type AdmissionObservation,
   AgentAdmission,
-  AgentAdmissionDenied,
-  type AgentAdmissionLimits,
   admissionOverrideFromEnv,
-  DEFAULT_AGENT_ADMISSION_LIMITS,
-  type HostAdmissionVerdict,
-  hostAdmissionRed,
   LAUNCH_SETTLE_MS,
   observeAgentScopes,
-  parseHostAdmission,
   type ScopeFs,
 } from './agent-admission'
 

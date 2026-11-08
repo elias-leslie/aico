@@ -296,93 +296,6 @@
   },
   {
     "type": "dependency",
-    "from": "packages/tether/src/asks.ts",
-    "to": "node:sqlite",
-    "unresolvedTo": "node:sqlite",
-    "dependencyTypes": [
-      "core",
-      "type-only",
-      "import"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "only-store-imports-sqlite"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "packages/tether/src/deliveries.ts",
-    "to": "node:sqlite",
-    "unresolvedTo": "node:sqlite",
-    "dependencyTypes": [
-      "core",
-      "type-only",
-      "import"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "only-store-imports-sqlite"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "packages/tether/src/doctor.ts",
-    "to": "node:sqlite",
-    "unresolvedTo": "node:sqlite",
-    "dependencyTypes": [
-      "core",
-      "dynamic-import"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "only-store-imports-sqlite"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "packages/tether/src/importer.test.ts",
-    "to": "node:sqlite",
-    "unresolvedTo": "node:sqlite",
-    "dependencyTypes": [
-      "core",
-      "import"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "only-store-imports-sqlite"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "packages/tether/src/importer.ts",
-    "to": "node:sqlite",
-    "unresolvedTo": "node:sqlite",
-    "dependencyTypes": [
-      "core",
-      "import"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "only-store-imports-sqlite"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "packages/tether/src/lane-reports.ts",
-    "to": "node:sqlite",
-    "unresolvedTo": "node:sqlite",
-    "dependencyTypes": [
-      "core",
-      "type-only",
-      "import"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "only-store-imports-sqlite"
-    }
-  },
-  {
-    "type": "dependency",
     "from": "packages/session-engine/src/lifecycle/catalog.ts",
     "to": "node:sqlite",
     "unresolvedTo": "node:sqlite",
@@ -440,56 +353,11 @@
   },
   {
     "type": "dependency",
-    "from": "packages/tether/src/show.ts",
-    "to": "node:sqlite",
-    "unresolvedTo": "node:sqlite",
-    "dependencyTypes": [
-      "core",
-      "type-only",
-      "import"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "only-store-imports-sqlite"
-    }
-  },
-  {
-    "type": "dependency",
     "from": "packages/session-engine/src/store.ts",
     "to": "node:sqlite",
     "unresolvedTo": "node:sqlite",
     "dependencyTypes": [
       "core",
-      "import"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "only-store-imports-sqlite"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "packages/tether/src/waits.ts",
-    "to": "node:sqlite",
-    "unresolvedTo": "node:sqlite",
-    "dependencyTypes": [
-      "core",
-      "type-only",
-      "import"
-    ],
-    "rule": {
-      "severity": "error",
-      "name": "only-store-imports-sqlite"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "packages/tether/src/wakes.ts",
-    "to": "node:sqlite",
-    "unresolvedTo": "node:sqlite",
-    "dependencyTypes": [
-      "core",
-      "type-only",
       "import"
     ],
     "rule": {

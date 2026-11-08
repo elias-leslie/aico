@@ -1,10 +1,11 @@
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { resolvePaths, type TetherPaths } from '@aico/session-engine/paths'
 import { Store } from '@aico/session-engine/store'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { callSocket } from './client'
-import { resolvePaths, resolveShowConfig, type TetherPaths } from './config'
+import { resolveShowConfig } from './config'
 import { type RunningDaemon, startDaemon } from './daemon'
 import { ShareStore } from './shares'
 

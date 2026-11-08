@@ -24,8 +24,8 @@
 // unit under a ref it makes (src/wait-readers.ts), stopped once the wait is over.
 
 import { randomBytes } from 'node:crypto'
-import type { DatabaseSync } from 'node:sqlite'
-import { HttpError, type Router, readJsonObject, sendJson } from './http'
+import type { Db } from '@aico/session-engine/store'
+import { HttpError, type Router, readJsonObject, sendJson } from '@aico/shared/http'
 import { BLOCKING_DETAILS, type LaneView, laneTitle, lineNames } from './lane-reports'
 import {
   isPullKind,
@@ -186,7 +186,7 @@ function waitJson(wait: Wait): Record<string, unknown> {
 /** waits and session_sends (schema v19). One daemon writes them. */
 export class WaitStore {
   constructor(
-    private readonly db: DatabaseSync,
+    private readonly db: Db,
     private readonly random: () => string = () => randomBytes(6).toString('hex'),
   ) {}
 

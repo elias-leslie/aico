@@ -10,11 +10,11 @@ import {
   setWidgetOwnership,
 } from '@aico/session-engine/catalog'
 import * as engine from '@aico/session-engine/engine'
+import { resolvePaths, type TetherPaths } from '@aico/session-engine/paths'
 import { generationOf } from '@aico/session-engine/running-session'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { type AskDelivery, AskStore, handOffAsks, transferAskNotices } from './asks'
 import { callSocket } from './client'
-import { resolvePaths, type TetherPaths } from './config'
 import { type RunningDaemon, startDaemon } from './daemon'
 
 vi.mock('@aico/session-engine/engine', async (original) => ({

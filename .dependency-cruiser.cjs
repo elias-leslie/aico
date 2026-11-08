@@ -27,6 +27,8 @@ const nodeBuiltins = `^(node:)?(${require('node:module').builtinModules.filter((
 const browser = packages.filter((pkg) => pkg.browser)
 const servers = packages.filter((pkg) => pkg.layer === 5)
 // Tests, configs and build scripts run in Node; only shipped source is held to the browser rules.
+// Packages whose import cycles are never baselined, value or type-only.
+const strictCycles = '^packages/(tether|session-engine|fleet|shared)/'
 const notShippedSource = '\\.(test|spec)\\.[cm]?[jt]sx?$|\\.config\\.[cm]?[jt]s$|/(scripts|test-stubs)/|vitest\\.setup'
 
 module.exports = {
@@ -43,16 +45,39 @@ module.exports = {
       name: 'no-cycles',
       severity: 'error',
       comment: 'No circular imports.',
-      from: { pathNot: '^packages/tether/' },
+      from: { pathNot: strictCycles },
       to: { circular: true },
     },
     {
-      name: 'tether-no-cycles',
+      name: 'strict-no-cycles',
       severity: 'error',
       comment:
-        'Tether has no import cycles, value or type-only (tsPreCompilationDeps counts `import type`), and none is baselined (engine-split plan M0). Break one with a small type file both sides import.',
-      from: { path: '^packages/tether/' },
+        'The session engine, fleet, shared and Tether have no import cycles, value or type-only (tsPreCompilationDeps counts `import type`), and none is baselined (engine-split plan M0, M6). Break one with a small type file both sides import.',
+      from: { path: strictCycles },
       to: { circular: true },
+    },
+    {
+      name: 'engine-and-fleet-never-import-tether',
+      severity: 'error',
+      comment:
+        'The session engine and the fleet package sit below Tether: they never import @aico/tether (engine-split plan M6). The allowlist already says so; this names it.',
+      from: { path: '^packages/(session-engine|fleet)/' },
+      to: { path: '^packages/tether/' },
+    },
+    {
+      name: 'fleet-never-imports-session-engine',
+      severity: 'error',
+      comment: 'The fleet transport and hub work for any engine: they never import @aico/session-engine (engine-split plan M6). What they need from it is passed in as ports.',
+      from: { path: '^packages/fleet/' },
+      to: { path: '^packages/session-engine/' },
+    },
+    {
+      name: 'tether-imports-package-exports-only',
+      severity: 'error',
+      comment:
+        'Tether reaches other packages through their package.json exports (@aico/<name>/<export>), never a deep src path: a deep path does not resolve, and a relative one is caught by package-name-imports-only. One import path per module keeps the engine\'s module-level state single (engine-split plan M6).',
+      from: { path: '^packages/tether/' },
+      to: { couldNotResolve: true, path: '^@aico/' },
     },
     {
       name: 'only-store-imports-sqlite',

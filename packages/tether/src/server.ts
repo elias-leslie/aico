@@ -15,6 +15,7 @@ import {
   MEMORY_POLICY_BOUNDS,
   MemoryPolicyError,
 } from '@aico/session-engine/memory-policy'
+import type { TetherPaths } from '@aico/session-engine/paths'
 import { createRootHandlerState, type RootHandlerState } from '@aico/session-engine/root-control'
 import type { Store, ToolPatch } from '@aico/session-engine/store'
 import {
@@ -29,11 +30,11 @@ import {
   isRootCreateTool,
   supportsInstructions,
 } from '@aico/session-engine/tui/registry'
+import { HttpError, Router, readJsonObject, sendError, sendJson } from '@aico/shared/http'
 import { type AskDelivery, type NeedsYouFeed, registerAskRoutes } from './asks'
-import { API_VERSION, resolveShowConfig, type ShowConfig, type TetherPaths } from './config'
+import { API_VERSION, resolveShowConfig, type ShowConfig } from './config'
 import { CoordinationDocs, registerCoordinationRoutes } from './coordination/docs'
 import { registerFileRoutes } from './files/api'
-import { HttpError, Router, readJsonObject, sendError, sendJson } from './http'
 import { registerHostAdminRoutes } from './hub/host-routes'
 import { tetherHubPorts } from './hub/ports'
 import { learnProjects, registerLifecycleRoutes } from './lifecycle-api'

@@ -4,8 +4,8 @@
 
 import type { Placement } from '@aico/fleet/hub/placement'
 import type { EventBus } from '@aico/session-engine/events'
+import type { TetherPaths } from '@aico/session-engine/paths'
 import type { Store } from '@aico/session-engine/store'
-import type { TetherPaths } from './config'
 import type { LaneReporter } from './lane-reports'
 import type { WaitService } from './waits'
 

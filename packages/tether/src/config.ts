@@ -58,7 +58,3 @@ export function resolveShowConfig(env: NodeJS.ProcessEnv = process.env): ShowCon
   }
   return { retentionDays }
 }
-
-// Paths and the entry-scan limits live in the session engine; Tether code keeps importing them from here.
-export * from '@aico/session-engine/entry-scan'
-export * from '@aico/session-engine/paths'

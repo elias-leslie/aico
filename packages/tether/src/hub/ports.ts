@@ -2,12 +2,13 @@
 // daemon, the server and the CLI pass `tetherHubPorts` in.
 
 import type { FleetCliPorts } from '@aico/fleet/hub/fleet-cli'
-import type { HubPorts, ToolLogin } from '@aico/fleet/hub/types'
-import { DB_FILE_NAME } from '@aico/session-engine/paths'
+import type { HubPorts } from '@aico/fleet/hub/types'
+import { DB_FILE_NAME, isInstanceName, type TetherPaths } from '@aico/session-engine/paths'
 import { ADAPTERS, adapterOf } from '@aico/session-engine/tui/registry'
 import { SIGN_IN_TITLE } from '@aico/session-engine/tui/sign-in-link'
+import type { ToolLogin } from '@aico/shared/tool-login'
 import { callSocket } from '../client'
-import { API_VERSION, isInstanceName, type TetherPaths } from '../config'
+import { API_VERSION } from '../config'
 
 /** The tools' own logins, from their adapters. */
 const DEFAULT_LOGINS: Record<string, ToolLogin> = Object.fromEntries(

@@ -18,7 +18,7 @@ One repo, npm workspaces. `packages/` is TypeScript; `native/` is everything els
 | 2 | `status` | Status rows (what, kind, machine/project, state, last/next run, meaning, action): store, rollup, writer, reader | shared, store | library; rows served by `web-server` |
 | 2 | `notify` | notice schema, Needs-you asks, outbox, FCM sender, tray/phone data | shared, store, status | library |
 | 3 | `tether-client` | public client for the Tether socket/API (today `tether/src/client`, `files`, `term` client) | shared | library |
-| 3 | `fleet` | machine link, pinned-key allowlist, row sync, placement, fenced claims, signed update | shared, store, status | library, linked into `tether` and `web-server` |
+| 3 | `fleet` | machine link, pinned-key allowlist, row sync, signed update, and the hub that federates Tethers (`hub/`: hub, peer, wake, update, host-admin, placement, fleet CLI), fenced claims. Never imports `session-engine` or `tether`: Tether-specific inputs arrive as ports (`HubPorts`). Engine-split plan M2-M3. | shared, store, status | library, linked into `tether` and `web-server` |
 | 3 | `context` | memory (FTS5), prompts, roles, models data + `route()`, launch/deny policy, context delivery, per-item inventory and cost view | shared, store, status | library, linked into `tether` |
 | 3 | `usage` | pi totals, files written, per-tool counter, usage/credit plans, spend card (session rows themselves live in `tether`) | shared, store, status | library |
 | 3 | `notes` | notes, lists, capture router, vision-extract, owners (today in web/server) | shared, store, status, fleet | library |
@@ -27,7 +27,8 @@ One repo, npm workspaces. `packages/` is TypeScript; `native/` is everything els
 | 4 | `tasks` | light per-project tasks, projects registry, claims, task-to-session links | shared, store, status, tether-client | library |
 | 4 | `checks` | `check`, `commit`, `done` (tree receipt), nightly `publish` | shared, status, tasks | library |
 | 4 | `ops` | `service` rebuild/logs, shadow-ref + btrfs snapshots, backups engine, `vm`, DR scripts | shared, store, status, fleet | library |
-| 5 | `tether` | session daemon: tmux lifecycle, one adapter per tool, asks, deliveries | layers 0-3 except notes, webtools | service `tether@.service` (+ `tether-link@`) |
+| 4 | `session-engine` | the session engine under Tether (engine-split plan M4-M5): the `tether.db` schema and store, the agent-tool registry and one adapter per tool (`lifecycle/tui/`), the tmux lifecycle and ownership, roots and launch admission, and the foundation they read (paths, events, process facts). It owns `tether.db`. Never imports `tether`. | shared, context, tether-client | library |
+| 5 | `tether` | session daemon on the engine: HTTP/CLI surface, asks, deliveries, wakes and waits, lane reports, recovery and reboot continuity, history, `daemon.ts`; owns `API_VERSION`. Imports the engine and the fleet hub only through their package exports. | layers 0-4 except notes, webtools | service `tether@.service` (+ `tether-link@`) |
 | 5 | `jobs` | scheduler: fenced SQLite lease table, home machine per job kind, one Status row per job | layers 0-4 | service `aico-jobs.service` (new) |
 | 5 | `web-server` | HTTP/WS API, status+notice ingest (OmniNull hub pushes here), terminal, uploads, static | layers 0-4, tether-client | service `aico-web.service` |
 | 5 | `cli` | `aico` (and `st` alias) bundle | layers 0-4, tether-client | file swap `~/.local/bin/aico` |
@@ -81,9 +82,9 @@ Each row is one comment line appended to a source file, `st check --quick --chan
 ### 1.5 Existing aico code mapped (src LOC, tests excluded)
 | today | LOC | goes to |
 |---|---|---|
-| `tether/src/lifecycle/**`, top-level `tether/src/*.ts` (asks, deliveries, store, cli, daemon, agent-state...), `term` viewer, `integrations/pi` | ~36k | `packages/tether` (adapters per tool under `lifecycle/tui/`) |
+| `tether/src/lifecycle/**`, top-level `tether/src/*.ts` (asks, deliveries, store, cli, daemon, agent-state...), `term` viewer, `integrations/pi` | ~36k | `packages/tether` for the daemon and services; the lifecycle, store, schema and agent-tool adapters (`lifecycle/tui/`) went to `packages/session-engine` (engine-split M4-M5) |
 | `tether/src/client`, `files`, `term/index` exports | ~1.9k | `packages/tether-client` |
-| `tether/src/hub` + `web/server/src/sync` + `hosts.ts` | ~5.8k | `packages/fleet` |
+| `tether/src/hub` + `web/server/src/sync` + `hosts.ts` | ~5.8k | `packages/fleet` (the hub moved to `packages/fleet/src/hub/` in engine-split M2-M3; Tether keeps only the route registration and `hub/ports.ts`) |
 | notes, captures, vision-extract, owners, blobs, heic, extract-worker (`web/server/src`) | ~6.1k | `packages/notes` |
 | `web/server/src` rest (api, server, terminal, uploads, static, asks, shows, sessions, pane-files, guard, broker, db) | ~6.3k | `packages/web-server` |
 | `web/server/src/nightshift*.ts` (pull bridge) | ~0.5k | deleted; replaced by `notify` + status ingest |

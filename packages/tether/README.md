@@ -16,6 +16,18 @@ Tether serves a versioned HTTP API on a private Unix socket (`$XDG_RUNTIME_DIR/t
 
 Tether's project list comes from Aico's project registry (`aico projects`) once it has projects. Otherwise Tether reads a local list at `~/.config/tether/projects.json`. The original migration plan is in [docs/history/migration-plan.md](../../docs/history/migration-plan.md).
 
+## Source layout
+
+Tether is three packages, and the dependency-cruiser rules in `.dependency-cruiser.cjs` hold the direction:
+
+| Package | Holds | May import |
+| --- | --- | --- |
+| `@aico/session-engine` (`packages/session-engine`) | the `tether.db` schema and store, the agent-tool registry and one adapter per tool (`lifecycle/tui/`), the tmux lifecycle and ownership, roots and launch admission, paths, events, process facts | shared, context, tether-client |
+| `@aico/fleet` (`packages/fleet`, `src/hub/`) | the hub that federates Tethers: hub, peers, wake, update, host admin, placement, `tether fleet` CLI | shared, store, status |
+| `@aico/tether` (`packages/tether`) | the daemon, HTTP and CLI surface, asks, deliveries, wakes and waits, lane reports, recovery and reboot continuity, history; `API_VERSION` in `src/config.ts` | the packages above |
+
+Neither the engine nor the fleet package imports `@aico/tether`, the fleet package never imports the engine, and Tether imports the others only through package exports (`@aico/session-engine/store`, `@aico/fleet/hub/placement`), never a deep `src` path. None of the four has an import cycle, `import type` included. The engine's compatibility surface (tmux units, hook bytes, ownership labels) is in [docs/compat-contract.md](docs/compat-contract.md).
+
 ## Requirements
 
 - Linux with systemd 254 or later, unified cgroup v2, and user linger enabled

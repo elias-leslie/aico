@@ -3,9 +3,9 @@ import { hostname, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Fleet } from '@aico/fleet/fleet'
 import { machineName } from '@aico/fleet/identity'
+import { resolvePaths } from '@aico/session-engine/paths'
 import { expect, it, vi } from 'vitest'
 import { callSocket } from './client'
-import { resolvePaths } from './config'
 import { startDaemon } from './daemon'
 
 it('keeps serving locally, reports a failed link and retries after fleet start throws', async () => {

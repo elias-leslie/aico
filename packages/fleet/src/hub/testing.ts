@@ -5,8 +5,9 @@ import { unlinkSync } from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { join } from 'node:path'
 import { HttpError, readJsonObject, sendError, sendJson } from '@aico/shared/http'
+import type { ToolLogin } from '@aico/shared/tool-login'
 import { Hub, type HubDeps } from './hub'
-import type { HubPorts, ToolLogin } from './types'
+import type { HubPorts } from './types'
 
 /** How the tests' fake tools sign in; Tether's own test keeps this equal to the adapters'. */
 export const TEST_LOGINS: Record<string, ToolLogin> = {

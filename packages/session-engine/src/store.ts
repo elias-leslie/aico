@@ -118,6 +118,14 @@ export interface ToolImportResult {
   differs: { slug: string; fields: string[] }[]
 }
 
+/** The SQLite handle type and opener for code outside this package: only the store package imports
+ * node:sqlite (the cruiser rule), so Tether names the type and opens foreign databases through here. */
+export type Db = DatabaseSync
+
+export function openDatabase(path: string, options?: { readOnly?: boolean }): Db {
+  return options ? new DatabaseSync(path, options) : new DatabaseSync(path)
+}
+
 export interface SessionSummary {
   id: string
   ownershipId: string

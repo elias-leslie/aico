@@ -26,26 +26,6 @@ import {
 } from '@aico/shared/host-pressure'
 import { isNamedProcess } from './procfs'
 
-// host-steward's verdict reader lives in @aico/shared/host-admission; these paths still export it.
-export {
-  type HostAdmissionVerdict,
-  hostAdmissionPath,
-  hostAdmissionRed,
-  parseHostAdmission,
-  readHostAdmission,
-} from '@aico/shared/host-admission'
-// The memory parsers, limits and the denial error live in @aico/shared/host-pressure (the hub's
-// placement reads the same host); these paths still export them.
-export {
-  AgentAdmissionDenied,
-  type AgentAdmissionLimits,
-  admissionLimitsFromEnv,
-  DEFAULT_AGENT_ADMISSION_LIMITS,
-  type MemoryPressure,
-  parseMemAvailable,
-  parseMemoryPressure,
-} from '@aico/shared/host-pressure'
-
 /** Exact value that enables the operator override. Any other non-empty value is malformed. */
 const ADMISSION_OVERRIDE_VALUE = '1'
 

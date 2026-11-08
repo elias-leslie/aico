@@ -10,9 +10,9 @@
 // Only the Tether that knows where Aico is (TETHER_AICO_URL) sends these: it
 // sees its own sessions and every remote host's, so a remote Tether stays quiet.
 
+import { HttpError, type Router, readJsonObject, sendJson } from '@aico/shared/http'
 import { type WaitingNotice, waitingNotice } from './aico-notice'
 import { AICO_WEB_DEFAULT_URL } from './config'
-import { HttpError, type Router, readJsonObject, sendJson } from './http'
 
 export type { WaitingNotice }
 

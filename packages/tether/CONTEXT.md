@@ -47,6 +47,19 @@ One line Tether queues for a lane's launcher when the lane finishes a turn, is b
 **Legacy session**:
 A session created before the managed lifecycle (lifecycle v0). It is kept read-only.
 
+### Packages
+
+**Session engine** (`@aico/session-engine`):
+The part of Tether that owns what a session is: the `tether.db` schema and store, the agent-tool registry and its adapters, the tmux lifecycle and ownership, roots and launch admission, and the paths, events and process facts they read. It has no HTTP, daemon or messaging code and never imports `@aico/tether`.
+_Avoid_: Core, lifecycle (the lifecycle is one part of it)
+
+**Hub** (`@aico/fleet/hub`):
+The part of the fleet package that federates Tethers: which machines exist, whether they are up, which can take an agent (placement), signing hosts in and updating them. It knows no tool by name; Tether hands it the tool logins and API version as ports (`HubPorts`). It never imports the session engine or `@aico/tether`.
+_Avoid_: Fleet, for the hub alone (the fleet package also holds the link, exec and secrets)
+
+**Tether** (`@aico/tether`):
+The daemon and its services on the engine: the HTTP and CLI surface, asks, deliveries, wakes and waits, lane reports, recovery and reboot continuity, history. It reaches the engine, the hub and shared code only through their package exports; the cruiser enforces that (`tether-imports-package-exports-only`).
+
 ### Roots
 
 **Root**:

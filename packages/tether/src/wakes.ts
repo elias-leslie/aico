@@ -6,7 +6,7 @@
 // Tether is the only scheduler; the wakes table survives restarts and reboots.
 
 import { createHash, randomBytes } from 'node:crypto'
-import type { DatabaseSync } from 'node:sqlite'
+import type { Db } from '@aico/session-engine/store'
 
 // --- policy ----------------------------------------------------------------------
 
@@ -314,7 +314,7 @@ export function wakeJson(wake: Wake): Record<string, unknown> {
 /** The wakes table (schema v10). One daemon writes it. */
 export class WakeStore {
   constructor(
-    private readonly db: DatabaseSync,
+    private readonly db: Db,
     private readonly random: () => string = () => randomBytes(6).toString('hex'),
   ) {}
 

@@ -1,10 +1,10 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { resolvePaths } from '@aico/session-engine/paths'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { attachPlan, main, parseArgs, render, sessionLine, shareBody } from './cli'
 import { callSocket } from './client'
-import { resolvePaths } from './config'
 import { type RunningDaemon, startDaemon } from './daemon'
 import { VERSION } from './version'
 

@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { EventBus } from '@aico/session-engine/events'
 import { Store } from '@aico/session-engine/store'
+import { HttpError, Router, sendError } from '@aico/shared/http'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { askCreateBody, askerOf, askListPath, formatAsk } from './ask-cli'
 import {
@@ -23,7 +24,6 @@ import {
   registerAskRoutes,
   sessionAsks,
 } from './asks'
-import { HttpError, Router, sendError } from './http'
 
 let dir: string
 let store: Store

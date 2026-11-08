@@ -3,7 +3,7 @@
 // `PUT /v1/history/aico-agent/:run`: the Aico agent pushes a run's totals and
 // turns at its start and end (it keeps no transcript Tether reads).
 
-import { HttpError, type Router, readJsonObject, sendJson } from '../http'
+import { HttpError, type Router, readJsonObject, sendJson } from '@aico/shared/http'
 import type { History, PushedRun, RunTurn } from './history'
 import type { Outcome } from './types'
 

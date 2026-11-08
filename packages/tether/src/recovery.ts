@@ -26,11 +26,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { type Needs, parseNeeds } from '@aico/fleet/hub/placement'
-import {
-  admissionOverrideFromEnv,
-  hostAdmissionPath,
-  readHostAdmission,
-} from '@aico/session-engine/agent-admission'
+import { admissionOverrideFromEnv } from '@aico/session-engine/agent-admission'
 import {
   getSessionEntry,
   getWidget,
@@ -65,6 +61,7 @@ import {
 import { probeEntryAgent } from '@aico/session-engine/entry-agent'
 import { entryHomeFiles, findClaudeTranscript } from '@aico/session-engine/entry-files'
 import { memoryEventsPath } from '@aico/session-engine/job-guard'
+import { agentExitMarkerDir } from '@aico/session-engine/paths'
 import { nodeProcFs, processTree, UUID_RE } from '@aico/session-engine/proc-fs'
 import { isNamedProcess, processEnvironment } from '@aico/session-engine/procfs'
 import { launchingResume, withRootPrompt } from '@aico/session-engine/root-launch'
@@ -77,8 +74,8 @@ import {
 } from '@aico/session-engine/tui/launch'
 import { adapterOf, getTui } from '@aico/session-engine/tui/registry'
 import type { TuiSpec } from '@aico/session-engine/tui/spec'
-import { agentExitMarkerDir } from './config'
-import { HttpError, type Router, readJsonObject, sendJson } from './http'
+import { hostAdmissionPath, readHostAdmission } from '@aico/shared/host-admission'
+import { HttpError, type Router, readJsonObject, sendJson } from '@aico/shared/http'
 import type { LifecycleContext } from './lifecycle-context'
 import {
   CRASH_RESULTS,

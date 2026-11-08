@@ -84,6 +84,8 @@ import type { EventBus } from '@aico/session-engine/events'
 import { claimTmuxViewSize, type ResizeClaimResult } from '@aico/session-engine/interactive-tmux'
 import { isNeverAllocatedWidget } from '@aico/session-engine/lifecycle-guard'
 import { ForegroundPaneMemory, systemdPaneMemoryHost } from '@aico/session-engine/pane-memory'
+import type { TetherPaths } from '@aico/session-engine/paths'
+import type { Project } from '@aico/session-engine/project'
 import {
   createRootHandler,
   isProjectRootPath,
@@ -132,14 +134,20 @@ import {
   supportsInstructions,
 } from '@aico/session-engine/tui/registry'
 import { extractSignInLink, signInToolOf } from '@aico/session-engine/tui/sign-in-link'
+import {
+  type Handler,
+  HttpError,
+  type Router,
+  readJsonObject,
+  sendError,
+  sendJson,
+} from '@aico/shared/http'
 import { type AskDelivery, AskStore, sessionAsks, transferAskNotices } from './asks'
-import type { TetherPaths } from './config'
 import { ContinuationError, continuation } from './continue-from'
-import { type Handler, HttpError, type Router, readJsonObject, sendError, sendJson } from './http'
 import { type LaneReporter, laneView, registerLaneRoutes } from './lane-reports'
 import type { ModelSwitch, ModelWatch } from './model-switch'
 import { paneModeArgs, parsePaneMode } from './pane-mode'
-import type { Project, ProjectProvider } from './projects'
+import type { ProjectProvider } from './projects'
 import { type Continuity, registerRebootRoutes } from './reboot'
 import { type Recovery, registerRecoveryRoutes } from './recovery'
 import { RewindRefused, rewindClaude } from './rewind'

@@ -27,7 +27,6 @@ import { readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { availableParallelism, homedir, loadavg } from 'node:os'
 import { isAbsolute, join, normalize } from 'node:path'
-import type { HostEntry } from '@aico/fleet/hosts'
 import {
   type Runner,
   type RunResult,

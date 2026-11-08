@@ -10,11 +10,11 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { accessSync, constants, statSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
-import type { DatabaseSync } from 'node:sqlite'
 import type { Hub } from '@aico/fleet/hub/hub'
 import type { EventBus } from '@aico/session-engine/events'
+import type { Db } from '@aico/session-engine/store'
+import { HttpError, type Router, readJsonObject, sendJson } from '@aico/shared/http'
 import type { ShowConfig } from './config'
-import { HttpError, type Router, readJsonObject, sendJson } from './http'
 import { realPaths, ShareStore } from './shares'
 
 const MAX_ASK_OPTIONS = 5
@@ -476,7 +476,7 @@ function filesPart(files: readonly AnswerFile[]): string | null {
 /** The asks table (schema v17). One daemon writes it. */
 export class AskStore {
   constructor(
-    private readonly db: DatabaseSync,
+    private readonly db: Db,
     private readonly random: () => string = () => randomBytes(6).toString('hex'),
   ) {}
 
@@ -921,7 +921,7 @@ export function handOffAsks(
 export function registerAskRoutes(
   router: Router,
   options: {
-    db: DatabaseSync
+    db: Db
     events: EventBus
     show: ShowConfig
     delivery?: AskDelivery

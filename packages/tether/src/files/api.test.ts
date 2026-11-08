@@ -6,8 +6,8 @@ import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { HttpError, Router, sendError } from '@aico/shared/http'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { HttpError, Router, sendError } from '../http'
 import { registerFileRoutes } from './api'
 
 let server: Server

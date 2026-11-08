@@ -26,6 +26,8 @@ import { readdir, readFile } from 'node:fs/promises'
 import { homedir, uptime } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
+import { hostAdmissionPath, readHostAdmission } from '@aico/shared/host-admission'
+import { AgentAdmissionDenied } from '@aico/shared/host-pressure'
 import type { SessionStatus } from '@aico/tether-client/client/contracts'
 import {
   cleanEnvArgv,
@@ -41,10 +43,7 @@ import {
   type AdmissionRequest,
   type AdmissionTicket,
   AgentAdmission,
-  AgentAdmissionDenied,
-  hostAdmissionPath,
   observeAgentScopes,
-  readHostAdmission,
 } from './agent-admission'
 import {
   activateTmuxServer,

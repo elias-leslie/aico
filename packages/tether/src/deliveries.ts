@@ -34,8 +34,8 @@
 // that has not gone out (it went stale: the inbox has nothing waiting any
 // more); a paste already going out cannot be stopped and says so.
 
-import type { DatabaseSync } from 'node:sqlite'
-import { HttpError, type Router, readJsonObject, sendJson } from './http'
+import type { Db } from '@aico/session-engine/store'
+import { HttpError, type Router, readJsonObject, sendJson } from '@aico/shared/http'
 import { RIDE_TOKEN, type Wake } from './wakes'
 
 const SESSION_ID = /^[0-9a-f]{8}$/
@@ -75,7 +75,7 @@ interface RawDelivery {
 
 /** The deliveries table (schema v21): what became of each queued line. */
 export class DeliveryLog {
-  constructor(private readonly db: DatabaseSync) {}
+  constructor(private readonly db: Db) {}
 
   record(input: { id: string; sessionId: string; source: string; now: number }): void {
     this.db

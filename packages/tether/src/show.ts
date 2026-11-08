@@ -1,9 +1,9 @@
 import { isAbsolute } from 'node:path'
-import type { DatabaseSync } from 'node:sqlite'
 import type { Hub } from '@aico/fleet/hub/hub'
 import type { EventBus } from '@aico/session-engine/events'
+import type { Db } from '@aico/session-engine/store'
+import { HttpError, type Router, readJsonObject, sendJson } from '@aico/shared/http'
 import type { ShowConfig } from './config'
-import { HttpError, type Router, readJsonObject, sendJson } from './http'
 import { realPaths, ShareStore, type ShowRequest } from './shares'
 
 /** The most files and folders one share may name. */
@@ -75,7 +75,7 @@ function parseShow(body: Record<string, unknown>): ShowRequest {
 export function registerShowRoute(
   router: Router,
   events: EventBus,
-  store: { db: DatabaseSync },
+  store: { db: Db },
   config: ShowConfig,
   /** `GET /v1/shares?hosts=all` adds the linked hosts' shares. */
   hub?: Pick<Hub, 'mergeShares'> | null,

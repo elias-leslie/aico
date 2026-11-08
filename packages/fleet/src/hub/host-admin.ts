@@ -6,6 +6,7 @@ import { spawn } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { HttpError } from '@aico/shared/http'
+import type { ToolLogin } from '@aico/shared/tool-login'
 import { execArgv, requestExec } from '../exec'
 import { type HostEntry, hostsFilePath } from '../hosts'
 import { linkPaths } from '../link'
@@ -13,7 +14,7 @@ import { type PeerAnswer, PeerUnavailable, peerRequest } from '../peer-http'
 import { pushToolLogins, setToolGrant } from '../secrets'
 import { readSettings } from '../settings'
 import { downReason } from './peer'
-import type { HubTools, ToolLogin } from './types'
+import type { HubTools } from './types'
 
 /** A command's exit code (null when it could not run or timed out), its
  * stdout, and the last line it printed on stderr (else stdout) for a reason. */
@@ -64,10 +65,6 @@ export const runCommand: Runner = (argv, timeoutMs) =>
       resolve({ code: timedOut ? null : code, stdout, output })
     })
   })
-
-/** How one tool signs in and out on a host (adapters/contract.ts). `signIn` and a
- * `session` sign-out are shell lines typed into a new session there; `command` runs over ssh. */
-export type { ToolLogin }
 
 const STATUS_LINE = '"$HOME/.local/lib/tether/bin/tether" fleet login-status'
 const STATUS_TIMEOUT_MS = 20_000

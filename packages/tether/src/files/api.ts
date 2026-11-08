@@ -4,6 +4,7 @@
 
 import { statSync } from 'node:fs'
 import { realpath } from 'node:fs/promises'
+import { HttpError, type Router, sendJson } from '@aico/shared/http'
 import {
   AccessDenied,
   InvalidPath,
@@ -11,7 +12,6 @@ import {
   NotFound,
   readFile,
 } from '@aico/tether-client/files'
-import { HttpError, type Router, sendJson } from '../http'
 
 /** The session's folder: undefined for no such session, null when it has none. */
 export type SessionFolder = (id: string) => string | null | undefined

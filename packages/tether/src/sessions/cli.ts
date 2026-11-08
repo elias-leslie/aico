@@ -2,9 +2,9 @@
 // history from the running Tether (src/sessions/history.ts). `events --json`
 // is the session-events dump used for debugging a reader.
 
+import type { TetherPaths } from '@aico/session-engine/paths'
 import { localTime } from '@aico/shared/time'
 import { callSocket } from '../client'
-import type { TetherPaths } from '../config'
 import type { EventPage, SearchPage, SessionDetail, SessionSummary, Tokens } from './history'
 import type { SessionEvent } from './types'
 

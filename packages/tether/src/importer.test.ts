@@ -2,10 +2,9 @@ import { createHash } from 'node:crypto'
 import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { DatabaseSync } from 'node:sqlite'
 import { bindCatalog, getWidget } from '@aico/session-engine/catalog'
 import { sessionGeneration } from '@aico/session-engine/owner-retirement'
-import { Store } from '@aico/session-engine/store'
+import { openDatabase, Store } from '@aico/session-engine/store'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { applyImport, formatPlan, planImportForPath, summarize } from './importer'
 
@@ -17,7 +16,7 @@ let target: string
 
 /** A minimal aico.db with Aico's exact table shapes. */
 function seedAico(path: string): void {
-  const db = new DatabaseSync(path)
+  const db = openDatabase(path)
   db.exec(`
     CREATE TABLE widgets (
       id TEXT PRIMARY KEY, seq INTEGER NOT NULL, x INTEGER, y INTEGER, width INTEGER,
@@ -62,7 +61,7 @@ function seedAico(path: string): void {
 
 /** Aico's own generation (electron/main/owner-retirement.ts), computed on aico.db. */
 function aicoGeneration(path: string, id: string): string {
-  const db = new DatabaseSync(path, { readOnly: true })
+  const db = openDatabase(path, { readOnly: true })
   const row = db.prepare('SELECT * FROM widgets WHERE id = ?').get(id) as Record<string, unknown>
   db.close()
   return createHash('sha256')

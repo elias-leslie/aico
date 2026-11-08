@@ -3,9 +3,9 @@ import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { insertWidget, setWidgetProject } from '@aico/session-engine/catalog'
+import { resolvePaths, type TetherPaths } from '@aico/session-engine/paths'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { callSocket } from './client'
-import { resolvePaths, type TetherPaths } from './config'
 import { type RunningDaemon, startDaemon } from './daemon'
 
 // A valid create stops at linger_required: nothing is allocated, no tmux.
