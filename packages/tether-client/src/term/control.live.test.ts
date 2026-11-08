@@ -404,9 +404,15 @@ describe.skipIf(!hasTmux)('ControlTerminal against tmux', () => {
     await sleep(1500)
     await settle(slow, 800)
     await settle(fast)
-    expect(screenOf(slow)).toEqual(tmuxScreen(24))
-    expect(screenOf(fast)).toEqual(tmuxScreen(24))
-  }, 40_000)
+    // Under a full test run a view can still be catching up here.
+    await vi.waitFor(
+      () => {
+        expect(screenOf(slow)).toEqual(tmuxScreen(24))
+        expect(screenOf(fast)).toEqual(tmuxScreen(24))
+      },
+      { timeout: 15_000, interval: 250 },
+    )
+  }, 60_000)
 
   it('reports the window size, whether a claim pinned it, and the attached clients', async () => {
     const v = view(70, 20)
