@@ -166,7 +166,7 @@ function readListed(
     ? { state: 'on', ...(found.uptime === undefined ? {} : { uptime: found.uptime }) }
     : { state: 'off' }
 }
-/** CT 160, where the append copy goes, as a machine a copy can find off; null off the workstation. */
+/** CT 160, where the append copy goes, as a machine a copy can find off; undefined with no Proxmox key. */
 export async function appendMachine(rt: Runtime): Promise<BackupJob['machine']> {
   try {
     const ssh = await pveSsh(rt, rt.cfg.pve.backupKey)
@@ -335,6 +335,17 @@ export async function prepareFolder(
     throw new Error('The source owner returned an incomplete capture.')
   return true
 }
+/**
+ * On the command line, not as a path: the home copy mounts its snapshot over /home, and a release
+ * deployed after that snapshot isn't in it, so restic couldn't open a file from the live release.
+ */
+function excludeArgs(): string[] {
+  return readFileSync(excludesPath(), 'utf8')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith('#'))
+    .flatMap((pattern) => ['--exclude', pattern])
+}
 export async function backupJob(
   rt: Runtime,
   state: BackupState,
@@ -385,8 +396,7 @@ export async function backupJob(
         ]
       : [
           ...base,
-          '--exclude-file',
-          excludesPath(),
+          ...excludeArgs(),
           '--exclude-caches',
           '--exclude-if-present',
           '.nobackup',
