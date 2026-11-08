@@ -200,6 +200,9 @@ export function ListControls({
         <input
           type="search"
           placeholder="Find in this folder"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
           value={match}
           onChange={(event) => onMatch(event.target.value)}
         />
