@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { StatusRow } from '@aico/status'
 import { describe, expect, it, vi } from 'vitest'
-import { answerResult, commandJob, postJob, selfArgv } from './act'
+import { answerResult, commandJob, postJob, selfArgv, startBootClean } from './act'
 import { type JobDef, nextAt, nextRun, parseJobs, readJobs, runTime, schedule } from './jobs'
 import { JobStore, StaleLease } from './leases'
 import { main } from './main'
@@ -608,4 +608,20 @@ it('a printed run time names its zone', () => {
   expect(runTime(at, 'America/New_York')).toBe('2026-11-08 07:30:00 EST')
   expect(runTime(at, 'UTC')).toBe('2026-11-08 12:30:00 UTC')
   expect(runTime(null)).toBe('-')
+})
+
+it('asks for the after-boot cleanup in its own unit, and a start that fails stays a log line', async () => {
+  const started: unknown[] = []
+  await startBootClean({
+    start: async (unit: string, argv: readonly string[]) => void started.push([unit, argv]),
+  } as never)
+  expect(started).toEqual([['aico-boot-clean', ['aico', 'deploy', 'boot-clean']]])
+  const quiet = vi.spyOn(console, 'error').mockImplementation(() => {})
+  await startBootClean({
+    start: async () => {
+      throw new Error('already loaded')
+    },
+  } as never)
+  expect(quiet).toHaveBeenCalledOnce()
+  quiet.mockRestore()
 })

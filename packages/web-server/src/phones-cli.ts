@@ -1,7 +1,7 @@
 // Metadata-only phone management through aico-web. Pairing keys stay in the owning server.
 import { join } from 'node:path'
 import { text } from 'node:stream/consumers'
-import { confirmPhonesMerge, mergePhonesFile, type Phone } from './app-phones'
+import { confirmPhonesMerge, mergePhonesFile, type Phone, PhoneRegistry } from './app-phones'
 import { mergeCursorFile, type PollCursor } from './canary-poll'
 import { loadConfig } from './config'
 
@@ -32,6 +32,17 @@ async function mergeFromPeer(io: PhonesIo): Promise<number> {
 
 const devicesFile = (io: PhonesIo) => io.devicesFile ?? loadConfig().notify.devicesFile
 
+/** The answering side when the sender's own list was broken by a cut: this machine's whole list. */
+function dumpForPeer(io: PhonesIo): number {
+  const phones = new PhoneRegistry(devicesFile(io)).all()
+  if (!phones?.length) {
+    io.err('no readable phone list here\n')
+    return 1
+  }
+  io.out(`${JSON.stringify(phones)}\n`)
+  return 0
+}
+
 /** The canary cursor rides the same exchange: the sender's on stdin, the merged one on stdout. */
 async function mergeCanaryFromPeer(io: PhonesIo): Promise<number> {
   const sent = JSON.parse(await (io.readInput ?? (() => text(process.stdin)))()) as PollCursor
@@ -49,6 +60,7 @@ const mergeCanaryCursor = (io: PhonesIo, sent: PollCursor) =>
 export async function runPhonesCli(argv: string[], io: PhonesIo): Promise<number> {
   const [verb, id, ...extra] = argv
   if (verb === 'merge') return mergeFromPeer(io)
+  if (verb === 'dump') return dumpForPeer(io)
   if (verb === 'merge-done') {
     confirmPhonesMerge(devicesFile(io))
     return 0

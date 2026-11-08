@@ -295,6 +295,19 @@ export const whereOf = (job: JobDef): UnitWhere => ({
 /** How to start this program again: node with its own flags (aico-jobs.service passes
  * --disable-warning=ExperimentalWarning, so a POST job's unit logs its result, not node:sqlite's
  * warning) and the bundle. */
+/**
+ * Clears what a reboot or power cut left behind (`aico deploy boot-clean`; only things older than
+ * this boot, so every start of this service may ask). In its own unit: putting back a half-swapped
+ * deploy can restart this very service. One already going is fine.
+ */
+export async function startBootClean(host: Pick<UnitHost, 'start'>): Promise<void> {
+  try {
+    await host.start('aico-boot-clean', ['aico', 'deploy', 'boot-clean'])
+  } catch (error) {
+    console.error(`[jobs] after-boot cleanup did not start: ${(error as Error).message}`)
+  }
+}
+
 export function selfArgv(
   proc: Pick<NodeJS.Process, 'execPath' | 'execArgv' | 'argv'> = process,
 ): string[] {

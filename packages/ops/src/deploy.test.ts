@@ -812,8 +812,9 @@ describe('deploy', () => {
     mkdirSync(deps.releasesDir, { recursive: true })
     const journal = join(deps.releasesDir, '.swap.json')
     writeFileSync(journal, '{broken')
-    expect(() => recoverSwap(deps)).toThrow(/journal is unreadable/)
-    expect(existsSync(journal)).toBe(true)
+    recoverSwap(deps)
+    expect(existsSync(journal)).toBe(false)
+    expect(readFileSync(`${journal}.unreadable`, 'utf8')).toBe('{broken')
     writeFileSync(
       journal,
       JSON.stringify({ sha: 'a'.repeat(40), previous: { 'demo-web.service': 'old' } }),
@@ -821,14 +822,22 @@ describe('deploy', () => {
     await expect(deploy(request(), root, deps)).rejects.toMatchObject({ code: 2 })
     expect(calls.filter((call) => call.includes('restart'))).toEqual([])
     expect(existsSync(journal)).toBe(true)
+    // A unit file that can't be put back keeps the journal, for the next try.
+    mkdirSync(join(deps.systemdDir, '..'), { recursive: true })
+    writeFileSync(deps.systemdDir, 'not a folder')
+    expect(() => recoverSwap(deps)).toThrow(/Putting the previous units back failed/)
+    expect(existsSync(journal)).toBe(true)
+    rmSync(deps.systemdDir)
+    // A unit that is back but won't start has nothing left to undo, and must not refuse the deploy that fixes it.
+    mkdirSync(deps.systemdDir, { recursive: true })
     const original = deps.run
     deps.run = (cmd, args, opts) =>
       cmd === 'systemctl' && args[1] === 'restart'
         ? { code: 1, out: '', err: 'failed' }
         : original(cmd, args, opts)
-    mkdirSync(deps.systemdDir, { recursive: true })
-    expect(() => recoverSwap(deps)).toThrow(/Putting the previous units back failed/)
-    expect(existsSync(journal)).toBe(true)
+    recoverSwap(deps)
+    expect(readFileSync(join(deps.systemdDir, 'demo-web.service'), 'utf8')).toBe('old')
+    expect(existsSync(journal)).toBe(false)
   })
 
   it('a failed swap recovery is a failed deploy; a hold met before recovery stays a warning', async () => {
@@ -847,13 +856,9 @@ describe('deploy', () => {
 
     const broken = setup()
     mkdirSync(broken.deps.releasesDir, { recursive: true })
-    mkdirSync(broken.deps.systemdDir, { recursive: true })
+    mkdirSync(join(broken.deps.systemdDir, '..'), { recursive: true })
+    writeFileSync(broken.deps.systemdDir, 'not a folder')
     writeFileSync(join(broken.deps.releasesDir, '.swap.json'), previous)
-    const original = broken.deps.run
-    broken.deps.run = (cmd, args, opts) =>
-      cmd === 'systemctl' && args[1] === 'restart'
-        ? { code: 1, out: '', err: 'failed' }
-        : original(cmd, args, opts)
     await expect(deploy(request(), broken.root, broken.deps)).rejects.toThrow(
       /Putting the previous units back failed/,
     )

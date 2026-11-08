@@ -18,6 +18,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { basename, dirname, join, relative, resolve } from 'node:path'
+import { writeFileDurable } from '@aico/shared/durable-file'
 import ops from '../data/ops.json' with { type: 'json' }
 import { Refusal } from './deploy'
 import { expandHome, type Runner, tail } from './sh'
@@ -114,14 +115,28 @@ const scopeDir = (deps: SnapDeps, scope: Scope) =>
   join(deps.catalogue, scope.project, `project-${label(scope.project)}`)
 const manifestPath = (deps: SnapDeps, scope: Scope) => join(scopeDir(deps, scope), 'manifest.json')
 
+/** A list that exists but can't be read is refused, never read as no snapshots: the points themselves are untouched. */
+function readManifest(path: string): Point[] {
+  let raw: unknown
+  try {
+    raw = JSON.parse(readFileSync(path, 'utf8'))
+  } catch {
+    raw = null
+  }
+  if (!Array.isArray(raw))
+    throw new Refusal(
+      `The snapshot list can't be read: ${path}. Nothing was changed; the snapshots themselves are fine. Restore the list from a backup, or move it aside to start a new one.`,
+    )
+  return raw as Point[]
+}
+
 export function loadPoints(deps: SnapDeps, scope: Scope): Point[] {
   const path = manifestPath(deps, scope)
   if (!existsSync(path)) return []
-  const raw = JSON.parse(readFileSync(path, 'utf8'))
-  if (!Array.isArray(raw)) throw new Refusal(`Snapshot manifest has an unexpected format: ${path}`)
+  const raw = readManifest(path)
   // The same list, in the same order, st's preview resolves -N against: every entry, newest first by
   // created_at compared as plain text (a stable sort, as Python's).
-  return (raw as Point[]).filter((entry) => entry && typeof entry === 'object').sort(newestFirst)
+  return raw.filter((entry) => entry && typeof entry === 'object').sort(newestFirst)
 }
 
 const newestFirst = (a: Point, b: Point) =>
@@ -130,11 +145,8 @@ const newestFirst = (a: Point, b: Point) =>
 function savePoints(deps: SnapDeps, scope: Scope, update: (all: Point[]) => Point[]) {
   const path = manifestPath(deps, scope)
   mkdirSync(dirname(path), { recursive: true })
-  const all = existsSync(path) ? (JSON.parse(readFileSync(path, 'utf8')) as Point[]) : []
-  const next = update(all).sort(newestFirst)
-  const temporary = `${path}.${process.pid}.tmp`
-  writeFileSync(temporary, JSON.stringify(next, null, 2))
-  renameSync(temporary, path)
+  const all = existsSync(path) ? readManifest(path) : []
+  writeFileDurable(path, JSON.stringify(update(all).sort(newestFirst), null, 2))
 }
 
 /** The nearest Btrfs subvolume root at or above dir (every subvolume root has inode 256). */

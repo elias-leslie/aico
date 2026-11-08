@@ -19,7 +19,6 @@ import { randomBytes } from 'node:crypto'
 import {
   closeSync,
   existsSync,
-  fsyncSync,
   linkSync,
   lstatSync,
   mkdirSync,
@@ -36,6 +35,7 @@ import {
 } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { writeFileDurable } from '@aico/shared/durable-file'
 import { machineId, postStatusRows } from '@aico/status'
 import ops from '../data/ops.json' with { type: 'json' }
 import { coveredBy, liveTwin, repairAcceptance, tellOwners } from './deploy-follow'
@@ -451,25 +451,9 @@ export function acceptanceFailures(output: string, max = 16): string[] {
   return kept.length > max ? [...kept.slice(0, max), `${kept.length - max} more in the log`] : kept
 }
 
-/** Written whole and on disk before it replaces the old one: a power cut mid-deploy
- * must not leave an empty unit, which systemd takes as masked and won't start. */
-function writeDurable(path: string, text: string): void {
-  const tmp = `${path}.tmp`
-  const fd = openSync(tmp, 'w')
-  try {
-    writeFileSync(fd, text)
-    fsyncSync(fd)
-  } finally {
-    closeSync(fd)
-  }
-  renameSync(tmp, path)
-}
-
-const writeJob = (deps: DeployDeps, job: Job) => {
+export const writeJob = (deps: DeployDeps, job: Job) => {
   mkdirSync(deps.jobsDir, { recursive: true })
-  const path = jobPath(deps, job.id)
-  writeFileSync(`${path}.tmp`, `${JSON.stringify(job, null, 2)}\n`)
-  renameSync(`${path}.tmp`, path)
+  writeFileDurable(jobPath(deps, job.id), `${JSON.stringify(job, null, 2)}\n`)
 }
 
 function pidAlive(pid: number): boolean {
@@ -594,7 +578,7 @@ function hookBin(env: NodeJS.ProcessEnv): string {
 }
 
 /** Another agent's hold refuses the restart (null: none, or none known). */
-function holdRefusal(root: string, ack: string[], deps: DeployDeps): string | null {
+export function holdRefusal(root: string, ack: string[], deps: DeployDeps): string | null {
   const guard = deps.run(hookBin(deps.env), ['lease', '--guard', 'rebuild', ...ack], {
     cwd: root,
     env: deps.env,
@@ -1007,7 +991,7 @@ async function deployLocked(d: LockedDeploy): Promise<number> {
     await installed('host-steward root install', installRootSources(root, sha, cfg, deps))
   if (release) {
     // The newest accepted release: the one a peer is sent (scripts/peer-release.sh).
-    writeFileSync(join(deps.releasesDir, ACCEPTED), `${sha}\n`)
+    writeFileDurable(join(deps.releasesDir, ACCEPTED), `${sha}\n`)
     pruneReleases(deps, release, cfg)
   }
   // Last: the release is live and accepted whether or not this machine can build the hook.
@@ -1282,7 +1266,7 @@ export function prepareRelease(
   }
   const done = (pkg: string) => {
     state.built.push(pkg)
-    writeDurable(marker, `${JSON.stringify(state)}\n`)
+    writeFileDurable(marker, `${JSON.stringify(state)}\n`)
   }
   for (const pkg of builds) {
     if (state.built.includes(pkg)) continue
@@ -1374,20 +1358,24 @@ interface SwapJournal {
   previousFrontends?: Record<string, string | null>
 }
 
-const journalPath = (deps: DeployDeps) => join(deps.releasesDir, '.swap.json')
+export const journalPath = (deps: DeployDeps) => join(deps.releasesDir, '.swap.json')
 
-/** Put back unit files as they were and restart them; null when every step worked, else what failed. */
-function restoreUnits(previous: Record<string, string | null>, deps: DeployDeps): string | null {
+/** Put back unit files as they were and restart them. `files`: what could not be put back. `restarts`: what is back but would not start. */
+function restoreUnits(
+  previous: Record<string, string | null>,
+  deps: DeployDeps,
+): { files: string[]; restarts: string[] } {
   const systemctl = (...args: string[]) =>
     deps.run('systemctl', ['--user', ...args], { env: deps.env })
   const problems: string[] = []
+  const restarts: string[] = []
   for (const [unit, text] of Object.entries(previous))
     try {
       if (text === null) {
         const stopped = systemctl('stop', unit)
         if (stopped.code !== 0) problems.push(`${unit} did not stop: ${tail(stopped, 1)}`)
         rmSync(join(deps.systemdDir, unit), { force: true })
-      } else writeDurable(join(deps.systemdDir, unit), text)
+      } else writeFileDurable(join(deps.systemdDir, unit), text) // a cut must not leave an empty unit, which systemd takes as masked
     } catch (error) {
       problems.push(`${unit} not written back: ${(error as Error).message}`)
     }
@@ -1396,29 +1384,49 @@ function restoreUnits(previous: Record<string, string | null>, deps: DeployDeps)
   for (const [unit, text] of Object.entries(previous)) {
     if (text === null) continue
     const restarted = systemctl('restart', unit)
-    if (restarted.code !== 0) problems.push(`${unit} did not restart: ${tail(restarted, 1)}`)
+    if (restarted.code !== 0) restarts.push(`${unit} did not restart: ${tail(restarted, 1)}`)
   }
-  return problems.length ? problems.join('; ') : null
+  return { files: problems, restarts }
 }
 
-/** A swap a killed deploy left unfinished: its units go back to what they ran before it. */
+/**
+ * A swap a killed deploy or a power cut left unfinished: its units go back to what they ran before
+ * it. The journal stays only while unit files could not be put back. A journal that can't be read,
+ * or a unit that is back but won't start, has nothing more to undo: refusing every deploy over it
+ * would also refuse the fix, and the next deploy replaces and checks those units anyway.
+ */
 export function recoverSwap(deps: DeployDeps) {
   const text = readFileSafe(journalPath(deps))
   if (text === null) return
-  let journal: SwapJournal
+  let journal: SwapJournal | null = null
   try {
     journal = JSON.parse(text)
-  } catch {
-    throw new Refusal('The unfinished deploy journal is unreadable; no units were changed')
+  } catch {}
+  if (!journal?.previous || typeof journal.previous !== 'object') {
+    deps.out(
+      `[deploy] the unfinished deploy journal can't be read; set aside as .swap.json.unreadable, units left as they are`,
+    )
+    renameSync(journalPath(deps), `${journalPath(deps)}.unreadable`)
+    return
   }
   const units = Object.keys(journal.previous)
   deps.out(
     `[deploy] the deploy of ${String(journal.sha).slice(0, 12)} stopped mid-swap; putting back ${units.join(', ')}`,
   )
-  restoreOps(journal.previousOps, deps)
-  restoreFrontends(journal.previousFrontends)
-  const problem = restoreUnits(journal.previous, deps)
-  if (problem) throw new Refusal(`Putting the previous units back failed: ${problem}`)
+  const { previousOps, previousFrontends } = journal
+  const undo: [string, () => void][] = [
+    ['the installed commands', () => restoreOps(previousOps, deps)],
+    ['the page builds', () => restoreFrontends(previousFrontends)],
+  ]
+  for (const [what, step] of undo)
+    try {
+      step()
+    } catch (error) {
+      deps.out(`[deploy] could not put back ${what}: ${(error as Error).message}`)
+    }
+  const { files, restarts } = restoreUnits(journal.previous, deps)
+  if (files.length) throw new Refusal(`Putting the previous units back failed: ${files.join('; ')}`)
+  if (restarts.length) deps.out(`[deploy] previous units are back, but ${restarts.join('; ')}`)
   rmSync(journalPath(deps), { force: true })
 }
 
@@ -1481,23 +1489,24 @@ async function swapUnits(
     previousOps,
     previousFrontends,
   }
-  writeDurable(journalPath(deps), JSON.stringify(journal))
+  writeFileDurable(journalPath(deps), JSON.stringify(journal))
   const fail = (failure: string) => {
     restoreOps(previousOps, deps)
     restoreFrontends(previousFrontends)
-    const problem = restoreUnits(previous, deps)
-    if (!problem) rmSync(journalPath(deps), { force: true })
+    const { files, restarts } = restoreUnits(previous, deps)
+    const problems = [...files, ...restarts]
+    if (!problems.length) rmSync(journalPath(deps), { force: true })
     return {
       failure,
-      outcome: problem
-        ? `putting the previous units back failed too (${problem})`
+      outcome: problems.length
+        ? `putting the previous units back failed too (${problems.join('; ')})`
         : 'the previous unit files were restored and restarted',
     }
   }
   if (installOps) installOpsBundle(deps, release)
   for (const [unit, spec] of frontends)
     pointFrontend(spec, release, deps, runningSha(previous[unit] ?? null, deps.releasesDir))
-  for (const [unit, text] of rendered) writeDurable(join(deps.systemdDir, unit), text)
+  for (const [unit, text] of rendered) writeFileDurable(join(deps.systemdDir, unit), text)
   if (systemctl('daemon-reload').code !== 0) return fail('systemctl daemon-reload failed')
   const boot = units.filter(
     (unit) =>

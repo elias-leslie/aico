@@ -7,8 +7,9 @@
 // SHA-256, DER signature, the timestamp within 5 minutes of this clock.
 
 import { createHash, createPublicKey, verify } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { dirname } from 'node:path'
+import { writeFileDurable } from '@aico/shared/durable-file'
 
 export const CLOCK_SKEW_S = 300
 /** Channels the app's state report may name (the app creates these). */
@@ -172,9 +173,7 @@ export class PhoneRegistry {
       )
       phones.push(phone)
       mkdirSync(dirname(this.path), { recursive: true, mode: 0o700 })
-      const tmp = `${this.path}.${process.pid}.tmp`
-      writeFileSync(tmp, JSON.stringify(phones), { mode: 0o600 })
-      renameSync(tmp, this.path)
+      writeFileDurable(this.path, JSON.stringify(phones), { mode: 0o600 })
     })
     this.tail = run.catch(() => {})
     return run
@@ -186,9 +185,7 @@ export class PhoneRegistry {
       if (!phones) throw new AppError(503, 'the phone file cannot be read')
       const keep = phones.filter((phone) => phone.id !== id)
       if (keep.length === phones.length) return false
-      const tmp = `${this.path}.${process.pid}.tmp`
-      writeFileSync(tmp, JSON.stringify(keep), { mode: 0o600 })
-      renameSync(tmp, this.path)
+      writeFileDurable(this.path, JSON.stringify(keep), { mode: 0o600 })
       return true
     })
     this.tail = run.catch(() => {})
@@ -242,9 +239,7 @@ export class PhoneRegistry {
       const phone = phones.find((p) => p.id === id)
       if (!phone) return
       update(phone)
-      const tmp = `${this.path}.${process.pid}.tmp`
-      writeFileSync(tmp, JSON.stringify(phones), { mode: 0o600 })
-      renameSync(tmp, this.path)
+      writeFileDurable(this.path, JSON.stringify(phones), { mode: 0o600 })
     })
     this.tail = run.catch(() => {})
     return run
@@ -391,10 +386,10 @@ export function mergePhonesFile(path: string, sent: Phone[], now: number): Phone
   const syncFile = `${path}.sync.json`
   const merged = mergePhones(sent, readPhones(path) ?? [], readSync(syncFile).at)
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
-  const tmp = `${path}.${process.pid}.tmp`
-  writeFileSync(tmp, JSON.stringify(merged), { mode: 0o600 })
-  renameSync(tmp, path)
-  writeFileSync(syncFile, JSON.stringify({ ...readSync(syncFile), pending: now }), { mode: 0o600 })
+  writeFileDurable(path, JSON.stringify(merged), { mode: 0o600 })
+  writeFileDurable(syncFile, JSON.stringify({ ...readSync(syncFile), pending: now }), {
+    mode: 0o600,
+  })
   return merged
 }
 
@@ -403,7 +398,7 @@ export function confirmPhonesMerge(path: string): void {
   const syncFile = `${path}.sync.json`
   const { at, pending } = readSync(syncFile)
   if (pending === undefined || pending < at) return
-  writeFileSync(syncFile, JSON.stringify({ at: pending }), { mode: 0o600 })
+  writeFileDurable(syncFile, JSON.stringify({ at: pending }), { mode: 0o600 })
 }
 
 function readSync(file: string): { at: number; pending?: number } {

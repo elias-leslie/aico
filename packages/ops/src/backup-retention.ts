@@ -7,12 +7,11 @@ import {
   readdirSync,
   readFileSync,
   realpathSync,
-  renameSync,
   statfsSync,
   statSync,
-  writeFileSync,
 } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
+import { writeFileDurable } from '@aico/shared/durable-file'
 import ops from '../data/ops.json' with { type: 'json' }
 import { type BackupConfig, type BackupState, driveSpec, homePath, migrated } from './backup-plan'
 import { checked, type Runtime, resticArgs, resticJson } from './backup-runtime'
@@ -108,9 +107,14 @@ function manifests(
         if (scope.isDirectory() && !scope.isSymbolicLink()) {
           const path = join(root, project.name, scope.name, 'manifest.json')
           if (existsSync(path)) {
-            const entries = JSON.parse(readFileSync(path, 'utf8')) as RetentionView[]
+            let entries: RetentionView[] | null = null
+            try {
+              entries = JSON.parse(readFileSync(path, 'utf8')) as RetentionView[]
+            } catch {}
             if (!Array.isArray(entries))
-              throw new Error('A snapshot catalogue cannot be read; retention was left alone.')
+              throw new Error(
+                `A snapshot catalogue cannot be read (${path}); retention was left alone.`,
+              )
             result.push({ path, entries })
           }
         }
@@ -166,9 +170,7 @@ export async function snapshotSweep(
     deleted++
     for (const manifest of all) {
       manifest.entries = manifest.entries.filter((e) => physicalKey(e.snapshot_path) !== path)
-      const temporary = manifest.path + `.${process.pid}.tmp`
-      writeFileSync(temporary, JSON.stringify(manifest.entries, null, 2))
-      renameSync(temporary, manifest.path)
+      writeFileDurable(manifest.path, JSON.stringify(manifest.entries, null, 2))
     }
   }
   return deleted
@@ -342,9 +344,7 @@ export async function captureWorkspace(
   mkdirSync(parent, { recursive: true })
   const publish = (manifest: ReturnType<typeof manifests>[number]) => {
     mkdirSync(dirname(manifest.path), { recursive: true })
-    const tmp = manifest.path + `.${process.pid}.tmp`
-    writeFileSync(tmp, JSON.stringify(manifest.entries, null, 2))
-    renameSync(tmp, manifest.path)
+    writeFileDurable(manifest.path, JSON.stringify(manifest.entries, null, 2))
   }
   for (const item of active) {
     item.manifest.entries.push({

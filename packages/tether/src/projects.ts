@@ -1,9 +1,10 @@
 // Project list. The projects registry (tasks.db, `aico projects`) is the source once it has
 // projects; otherwise a local list (`~/.config/tether/projects.json`).
 
-import { mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, isAbsolute, join, normalize } from 'node:path'
 import type { Project } from '@aico/session-engine/project'
+import { writeFileDurable } from '@aico/shared/durable-file'
 
 export interface ProjectList {
   source: 'registry' | 'local'
@@ -205,9 +206,7 @@ export async function registerLocalProject(
   const name = input.name?.trim() || input.id
   rows.push({ id: input.id, name, root })
   mkdirSync(dirname(localFile), { recursive: true, mode: 0o700 })
-  const temporary = `${localFile}.${process.pid}.tmp`
-  writeFileSync(temporary, `${JSON.stringify(rows, null, 2)}\n`, { mode: 0o600 })
-  renameSync(temporary, localFile)
+  writeFileDurable(localFile, `${JSON.stringify(rows, null, 2)}\n`, { mode: 0o600 })
   await provider.list({ refresh: true })
   return { id: input.id, name, root, lifecycle: null }
 }

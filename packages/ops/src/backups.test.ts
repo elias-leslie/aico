@@ -1277,3 +1277,14 @@ it("keeps root's restic cache off every folder a Drive copy mounts a snapshot ov
   expect(argv[argv.indexOf('--cache-dir') + 1]).toBe(c.rootCacheDir)
   vi.unstubAllEnvs()
 })
+
+it('an empty or broken backup state stops the job in plain words and stays as it was', () => {
+  const c = cfg()
+  saveState(c, emptyState())
+  const path = join(homePath(c.stateDir), 'state.json')
+  for (const broken of ['', '{"points":']) {
+    writeFileSync(path, broken)
+    expect(() => readState(c)).toThrow(/backup state can't be read/)
+    expect(readFileSync(path, 'utf8')).toBe(broken)
+  }
+})

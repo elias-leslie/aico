@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { away, awayDeps } from './away'
 import { backups } from './backups'
+import { bootClean } from './boot-clean'
 import { contextSync } from './context-sync'
 import {
   canonical,
@@ -31,6 +32,7 @@ const USAGE = `Usage:
       only units whose package cone changed restart; Tether (tether@default, a manual worker) restarts too when
       its own code or the running daemon's API is behind the release; otherwise only when named
   aico deploy result|wait JOB [--timeout S]   a detached deploy's result (wait: until it ends)
+  aico deploy boot-clean [--dry-run]   clear what a reboot or power cut left behind (aico-jobs runs it at start)
   aico logs UNIT|PROJECT [-n N] [--since 2h] [-l ERROR|WARN|INFO|DEBUG] [-f]
       a unit's journal, or every unit of any registered project, on the machine it runs on; a job
       named in Status (its id or name) says where its log is
@@ -102,6 +104,8 @@ export async function main(argv: string[], env = process.env): Promise<number> {
     }
     if (verb === 'deploy') {
       const deps = defaultDeps(env)
+      if (rest[0] === 'boot-clean')
+        return await bootClean(deps, { dryRun: rest.includes('--dry-run') })
       if (rest[0] === 'result' || rest[0] === 'status' || rest[0] === 'wait') {
         if (!rest[1]) throw new Refusal(`aico deploy ${rest[0]} needs a job id`, 2)
         const at = rest.indexOf('--timeout')

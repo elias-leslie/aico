@@ -38,6 +38,28 @@ it('takes a phone list far longer than 4 KB and tells the peer only after it is 
   expect(JSON.parse(readFileSync(join(dir, 'phones.json'), 'utf8'))).toHaveLength(12)
 })
 
+it("mends an unreadable phone list from the peer's copy, and sends it nothing", async () => {
+  const { dir, env } = setup()
+  const path = join(dir, 'phones.json')
+  writeFileSync(path, '')
+  const calls: string[] = []
+  const answer = (stdout: string, code = 0): Answer => ({ code, stdout, output: '', ended: true })
+  const exec = async (_: string, argv: string[]) => {
+    calls.push(argv.join(' '))
+    return answer(`${JSON.stringify([{ id: 'a' }, { id: 'b' }])}\n`)
+  }
+  const result = await syncPhones(peers, aico, env, exec as never)
+  expect(calls).toHaveLength(1)
+  expect(calls[0]).toContain('phones dump')
+  expect(result.failed).toBe(false)
+  expect(JSON.parse(readFileSync(path, 'utf8'))).toHaveLength(2)
+
+  writeFileSync(path, '[{"id":')
+  const nothing = await syncPhones(peers, aico, env, (async () => answer('', 1)) as never)
+  expect(nothing.failed).toBe(true)
+  expect(readFileSync(path, 'utf8')).toBe('[{"id":')
+})
+
 it('does not confirm a merge whose reply never came', async () => {
   const { dir, env } = setup()
   writeFileSync(join(dir, 'phones.json'), JSON.stringify([{ id: 'a' }]))

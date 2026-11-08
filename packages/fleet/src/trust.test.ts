@@ -44,3 +44,10 @@ it('serves cached pins, refreshes replacements and fails closed on invalid files
   expect(() => cache.refresh()).toThrow('invalid pins')
   expect(cache.get()).toEqual([])
 })
+
+it('an empty pin file revokes trust, and never reads as no check', () => {
+  const stat = () => ({ ino: 1, ctimeMs: 1, mtimeMs: 1, size: 0, mode: 0o644 }) as never
+  const cache = new PinCache('test', () => parsePins(JSON.parse('')), stat)
+  expect(() => cache.refresh()).toThrow()
+  expect(cache.get()).toEqual([])
+})

@@ -11,9 +11,9 @@
 // host-steward drives a planned reboot through `prepare` (list, ask agents to
 // checkpoint, report readiness) and reads `status` after boot.
 
-import { randomUUID } from 'node:crypto'
-import { closeSync, fsyncSync, openSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
+import { writeFileDurable } from '@aico/shared/durable-file'
 import { entryReaders } from './entry-files'
 import { ADAPTERS, adapterOf } from './lifecycle/tui/registry'
 import {
@@ -160,17 +160,8 @@ export function readJsonFile<T>(path: string): T | null {
 }
 
 export function writeJsonFile(path: string, value: unknown): void {
-  const tmp = `${path}.${randomUUID()}.tmp`
-  // Synced before the rename: a power cut must not leave an empty file where the
-  // record of what to bring back was.
-  const fd = openSync(tmp, 'w', 0o600)
-  try {
-    writeFileSync(fd, `${JSON.stringify(value, null, 2)}\n`)
-    fsyncSync(fd)
-  } finally {
-    closeSync(fd)
-  }
-  renameSync(tmp, path)
+  // A power cut must not leave an empty file where the record of what to bring back was.
+  writeFileDurable(path, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 })
 }
 
 export function currentBootId(fs: ProcFs = nodeProcFs): string {

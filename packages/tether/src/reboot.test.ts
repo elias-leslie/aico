@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Placement } from '@aico/fleet/hub/placement'
@@ -100,6 +100,21 @@ beforeEach(() => {
     sessions: [{ id: ID, tool: 'pi', resumeId: RESUME, observedAt: now }],
   })
   service = continuity()
+})
+
+it('an unreadable session record is kept and said out loud, not read as nothing running', async () => {
+  writeFileSync(join(dir, 'continuity.json'), '')
+  const logged: string[] = []
+  const service = new Continuity({ paths: { stateDir: dir } } as LifecycleApiContext, {
+    headless: true,
+    now: () => now,
+    sleep: async () => {},
+    log: (line: string) => logged.push(line),
+  })
+  await service.restoreAfterStart()
+  expect(existsSync(join(dir, 'continuity.json'))).toBe(false)
+  expect(readFileSync(join(dir, 'continuity.json.unreadable'), 'utf8')).toBe('')
+  expect(logged.join('\n')).toMatch(/can't be read/)
 })
 
 it('rebooks durable needs before resuming when both the booking and runtime are initially unavailable', async () => {

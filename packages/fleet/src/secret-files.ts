@@ -2,6 +2,7 @@ import {
   closeSync,
   constants,
   fstatSync,
+  fsyncSync,
   lstatSync,
   mkdirSync,
   openSync,
@@ -13,6 +14,7 @@ import {
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { aicoDataDir } from '@aico/shared/data-dir'
+import { syncDir } from '@aico/shared/durable-file'
 import staticLoginRows from './static-logins.json' with { type: 'json' }
 
 const staticLogins: { tool: string; name: string; envVar?: string; authFile?: string }[] =
@@ -59,10 +61,12 @@ export function writePrivate(path: string, value: string | Buffer): void {
     )
     try {
       writeFileSync(fd, value)
+      fsyncSync(fd)
     } finally {
       closeSync(fd)
     }
     renameSync(temp, path)
+    syncDir(dirname(path))
   } finally {
     try {
       unlinkSync(temp)

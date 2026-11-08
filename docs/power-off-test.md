@@ -4,6 +4,12 @@ Proves that each host comes back on its own after a power cut, that the other ho
 
 **Owner, Nov 8: the Kasa plugs are not plugged in and won't be; the kids can power things on if asked. The owner skipped this test.** So a real power cut has never been run. The plug steps further down (and `aico plug`, `aico away`, **Shut down all**) describe what was built and stay off.
 
+## What clears itself after a cut
+
+Each time aico-jobs starts, on the workstation and on the standby, it runs `aico deploy boot-clean` in its own short unit. It looks only at things last touched before this boot, so a run during normal work finds nothing: a deploy record still on running or queued is marked failed, a half-finished unit swap (`.swap.json`) goes back to the previous units, a deploy lock is cleared, and a `.git/index.lock`, `HEAD.lock` or `packed-refs.lock` in a registered project is removed unless git is working there. Each thing cleared is one line in `journalctl --user -u aico-boot-clean`, with no notices. `--dry-run` says what it would do.
+
+The small files a cut must not leave empty (phones, snapshot lists, backup state, fleet pins, Logins, the session record) go through `@aico/shared/durable-file`. If one still can't be read, the job or request stops and says which file, and never reads it as empty. An unreadable phone list is mended from the other Aico by the next `aico context-sync`.
+
 ## The short run, if it's ever wanted
 
 1. Gem BIOS: Restore on AC Power Loss = Power On. Pull its power for 30 seconds and put it back without touching the button. It starts by itself; Aico, Ominull, Jobinator and Dadbot are back within about 3 minutes with no help. Portfolio stays off (Autostart off).

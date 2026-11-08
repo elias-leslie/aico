@@ -2,7 +2,7 @@
 // the restore that runs after startup reconciliation, and the routes
 // host-steward uses around a planned reboot (docs/reboot-continuity.md).
 
-import { rmSync } from 'node:fs'
+import { existsSync, renameSync, rmSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { getWidget, listWidgets, type WidgetRow } from '@aico/session-engine/catalog'
@@ -313,6 +313,13 @@ export class Continuity {
    * gone (a reboot, or the server ended), resuming its agent. */
   async restoreAfterStart(): Promise<RestoreReport | null> {
     const snapshot = readJsonFile<ContinuitySnapshot>(this.snapshotPath)
+    if (!snapshot && existsSync(this.snapshotPath)) {
+      // Not "nothing was running": the observer would write over the evidence within a minute.
+      renameSync(this.snapshotPath, `${this.snapshotPath}.unreadable`)
+      this.log(
+        "the record of running sessions can't be read (kept as continuity.json.unreadable); sessions were not brought back, reopen them from Aico",
+      )
+    }
     this.wentDown = snapshot ? this.howItWentDown(snapshot) : null
     const previous = readJsonFile<RestoreReport>(this.reportPath)
     for (const failed of previous?.failed ?? []) this.failedRestore.add(failed.id)

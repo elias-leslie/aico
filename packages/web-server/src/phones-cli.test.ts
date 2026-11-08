@@ -75,3 +75,25 @@ it("answers a sync: merges the sender's phones, keeps its own until confirmed, m
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+it('gives a peer its whole phone list, or says it has none readable', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'aico-phones-cli-'))
+  try {
+    const devicesFile = join(dir, 'phones.json')
+    const out: string[] = []
+    const dump = () =>
+      runPhonesCli(['dump'], {
+        out: (s: string) => out.push(s),
+        err: () => {},
+        devicesFile,
+      } as never)
+    writeFileSync(devicesFile, '')
+    expect(await dump()).toBe(1)
+    expect(out).toEqual([])
+    writeFileSync(devicesFile, JSON.stringify([{ id: 'a', sig_pub: 's' }]))
+    expect(await dump()).toBe(0)
+    expect(JSON.parse(out[0] as string)).toEqual([{ id: 'a', sig_pub: 's' }])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})

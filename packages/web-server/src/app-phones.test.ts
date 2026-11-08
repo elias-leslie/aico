@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, expect, it } from 'vitest'
@@ -123,4 +123,20 @@ it('keeps a phone paired here when the reply to the merge never reached the send
   // Once a reply is confirmed, the sender's list decides.
   confirmPhonesMerge(file)
   expect(mergePhonesFile(file, sender, 400).map((p) => p.id)).toEqual(['old'])
+})
+
+it('an empty or broken phone list refuses pairing and never reads as no phones', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'aico-phones-empty-'))
+  dirs.push(dir)
+  const path = join(dir, 'phones.json')
+  for (const broken of ['', '[{"id":"a"']) {
+    writeFileSync(path, broken)
+    const registry = new PhoneRegistry(path)
+    expect(registry.all()).toBeNull()
+    await expect(
+      registry.register({ id: 'new', sig_pub: 's', enc_pub: 'e', auth: 'a' }),
+    ).rejects.toMatchObject({ status: 503 })
+    expect(() => registry.verify('GET', '/x', {}, Buffer.alloc(0), 1)).toThrow(/cannot be read/)
+    expect(readFileSync(path, 'utf8')).toBe(broken)
+  }
 })

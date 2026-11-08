@@ -4,7 +4,7 @@
 // is kept aside by the receiver (packages/context/src/replica.ts). The paired phones travel with it (merged,
 // not replaced). The interval is the job in packages/jobs.
 
-import { existsSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -20,6 +20,7 @@ import { requestExec } from '@aico/fleet/exec'
 import { fullPeers } from '@aico/fleet/peers'
 import { readSettings } from '@aico/fleet/settings'
 import { readPins } from '@aico/fleet/trust'
+import { writeFileDurable } from '@aico/shared/durable-file'
 import config from '../data/context-sync.json' with { type: 'json' }
 import { Refusal } from './deploy'
 import { expandHome } from './sh'
@@ -180,6 +181,14 @@ function unanswered(result: { ended: boolean }): boolean {
  * Aico answers has to know that key. Each peer merges what it is sent and answers with the result, so
  * a token the phone gave the standby while this machine was off comes back here.
  */
+function phonesReadable(path: string): boolean {
+  try {
+    return Array.isArray(JSON.parse(readFileSync(path, 'utf8')))
+  } catch {
+    return false
+  }
+}
+
 export async function syncPhones(
   peers: { name: string; exec: string }[],
   aico: (args: string) => string[],
@@ -193,6 +202,23 @@ export async function syncPhones(
   const lines: string[] = []
   let failed = false
   for (const peer of peers) {
+    if (!phonesReadable(path)) {
+      // Pairing and pushes refuse an unreadable list (never "no phones"): the peer's copy mends it.
+      const copy = await exec(peer.exec, aico('phones dump'), Buffer.alloc(0))
+      if (unanswered(copy)) continue
+      let phones: unknown = null
+      try {
+        phones = JSON.parse(lastLine(copy.stdout))
+      } catch {}
+      if (copy.code === 0 && Array.isArray(phones) && phones.length) {
+        writeFileDurable(path, JSON.stringify(phones), { mode: 0o600 })
+        lines.push(`${peer.name}: the phone list here could not be read; took its ${phones.length}`)
+      } else {
+        failed = true
+        lines.push(`${peer.name}: the phone list here could not be read, and it has none to give`)
+      }
+      continue
+    }
     const sent = await exec(peer.exec, aico('phones merge'), readFileSync(path))
     if (unanswered(sent)) continue
     let merged: unknown = null
@@ -206,9 +232,7 @@ export async function syncPhones(
       )
       continue
     }
-    const tmp = `${path}.${process.pid}.tmp`
-    writeFileSync(tmp, JSON.stringify(merged), { mode: 0o600 })
-    renameSync(tmp, path)
+    writeFileDurable(path, JSON.stringify(merged), { mode: 0o600 })
     // Only now does the peer count the merge as done: a link that dropped before this keeps its new phones.
     await exec(peer.exec, aico('phones merge-done'), Buffer.alloc(0))
     lines.push(`${peer.name}: ${merged.length} phone${merged.length === 1 ? '' : 's'} in step`)
@@ -253,9 +277,7 @@ export async function syncCanaryCursor(
     } catch {}
     for (const [token, at] of Object.entries(ours))
       if (Number.isFinite(at)) merged[token] = Math.max(merged[token] ?? at, at)
-    const tmp = `${path}.${process.pid}.tmp`
-    writeFileSync(tmp, JSON.stringify(merged), { mode: 0o600 })
-    renameSync(tmp, path)
+    writeFileDurable(path, JSON.stringify(merged), { mode: 0o600 })
     lines.push(`${peer.name}: canary cursor in step`)
   }
   return { lines, failed }

@@ -1,16 +1,8 @@
 import { spawn } from 'node:child_process'
-import {
-  chmodSync,
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  unlinkSync,
-  writeFileSync,
-} from 'node:fs'
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, unlinkSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { writeFileDurable } from '@aico/shared/durable-file'
 import {
   type BackupConfig,
   type BackupState,
@@ -102,9 +94,19 @@ export function failureReason(result: Result, prefix = ''): string {
   )
   return reasons.length ? `${prefix}${reasons.join('; ').slice(0, REASON_LIMIT)}` : ''
 }
+/** A saved file that can't be read stops the job in plain words: it never reads as no backups, and nothing is overwritten. */
+function readSavedJson<T>(path: string, what: string): T {
+  try {
+    const value = JSON.parse(readFileSync(path, 'utf8')) as unknown
+    if (value && typeof value === 'object') return value as T
+  } catch {}
+  throw new Error(
+    `The ${what} can't be read: ${path}. Nothing was changed. Restore it from the last backup, or move it aside and the next run starts it afresh.`,
+  )
+}
 function readRootState(cfg: BackupConfig): BackupState {
   if (existsSync(stateFile(cfg))) {
-    const state = JSON.parse(readFileSync(stateFile(cfg), 'utf8')) as BackupState
+    const state = readSavedJson<BackupState>(stateFile(cfg), 'backup state')
     state.goodDriveRuns ??= legacyGoodRuns(cfg)
     return state
   }
@@ -169,9 +171,7 @@ function legacyGoodRuns(cfg: BackupConfig): number {
 export function saveState(cfg: BackupConfig, state: BackupState) {
   const path = stateFile(cfg)
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
-  const temp = `${path}.${process.pid}.tmp`
-  writeFileSync(temp, JSON.stringify(state, null, 2) + '\n', { mode: 0o600 })
-  renameSync(temp, path)
+  writeFileDurable(path, JSON.stringify(state, null, 2) + '\n', { mode: 0o600 })
 }
 export function saveRun(
   cfg: BackupConfig,
@@ -180,16 +180,13 @@ export function saveRun(
 ): void {
   const root = join(homePath(cfg.stateDir), 'runs')
   mkdirSync(root, { recursive: true, mode: 0o700 })
-  const path = join(root, `${target}.json`),
-    tmp = `${path}.${process.pid}.tmp`
-  writeFileSync(tmp, JSON.stringify(receipt) + '\n', { mode: 0o600 })
-  renameSync(tmp, path)
+  writeFileDurable(join(root, `${target}.json`), JSON.stringify(receipt) + '\n', { mode: 0o600 })
 }
 export function readState(cfg: BackupConfig): BackupState {
   const state = readRootState(cfg)
   for (const target of ['native', 'drive', 'append', 'snapshots', 'guard', 'verify'] as const) {
     const path = join(homePath(cfg.stateDir), 'runs', `${target}.json`)
-    if (existsSync(path)) state.runs[target] = JSON.parse(readFileSync(path, 'utf8'))
+    if (existsSync(path)) state.runs[target] = readSavedJson(path, `${target} backup receipt`)
   }
   return state
 }

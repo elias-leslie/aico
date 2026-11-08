@@ -14,7 +14,7 @@ import {
   type StatusRow,
   statusRowsUrl,
 } from '@aico/status'
-import { act, postJob, selfArgv, systemdUnits, unitInFlight, whereOf } from './act'
+import { act, postJob, selfArgv, startBootClean, systemdUnits, unitInFlight, whereOf } from './act'
 import { remoteAuthority, serveLeases } from './fleet-leases'
 import { clippedMeaning, type JobDef, runTime } from './jobs'
 import { type JobState, JobStore, jobsDbPath } from './leases'
@@ -218,6 +218,7 @@ export async function main(argv: string[], env = process.env): Promise<number> {
     postRows: (rows) => postRows(webUrl, rows),
     removeRow: (id) => removeRow(webUrl, id),
   })
+  void startBootClean(units.host)
   runner.start()
   await serveLeases(socket, store, () => loadJobs(jobsFile, store), machine, units.dir)
   console.log(

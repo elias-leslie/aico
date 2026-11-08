@@ -1,7 +1,7 @@
 // Public pins and consumed owner approvals. Only the enrollment CLI writes them.
 import { createPublicKey } from 'node:crypto'
-import { lstatSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { lstatSync, readFileSync } from 'node:fs'
+import { writeFileDurable } from '@aico/shared/durable-file'
 import { enrollmentCode, publicKeyOf, validName } from './identity'
 
 export interface Pin {
@@ -104,7 +104,5 @@ export function approvePin(path: string, pin: Pin, code: string, askId: string):
   if (enrollmentCode(pin.name, pin.publicKey) !== code)
     throw new Error('Enrollment code does not match')
   const next = addApprovedPin(readAllowlist(path), pin, askId)
-  const temporary = join(dirname(path), `.fleet-pins-${process.pid}.tmp`)
-  writeFileSync(temporary, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o644, flag: 'wx' })
-  renameSync(temporary, path)
+  writeFileDurable(path, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o644 })
 }

@@ -53,6 +53,23 @@ function setup(production = false) {
   return { root, deps, scope: scopeAt(root, stub, 'scratch') }
 }
 
+it('refuses an empty or broken snapshot list in plain words, and leaves it', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'aico-snaps-empty-'))
+  try {
+    const scope = { project: 'p', root: dir }
+    const deps = { catalogue: dir } as SnapDeps
+    const path = join(dir, 'p', 'project-p', 'manifest.json')
+    mkdirSync(join(dir, 'p', 'project-p'), { recursive: true })
+    for (const broken of ['', '{"a":']) {
+      writeFileSync(path, broken)
+      expect(() => loadPoints(deps, scope)).toThrow(/snapshot list can't be read/)
+      expect(readFileSync(path, 'utf8')).toBe(broken)
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 describe('aico snapshots', () => {
   it('takes a point into the st catalogue and restores it on its own subvolume', () => {
     const { root, deps, scope } = setup()
