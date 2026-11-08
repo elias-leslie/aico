@@ -267,3 +267,20 @@ def test_selected_project_is_the_registry_current_one_before_the_inherited_id(mo
     monkeypatch.delenv("AICO_PROJECT_ID")
     with pytest.raises(registry.RegistryError):
         registry.selected_project_id()
+
+
+def test_aico_status_names_the_release_its_unit_runs_and_restart_leaves_it_to_the_deploy(monkeypatch, tmp_path):
+    owner = service_ops.native_owner_project()
+    monkeypatch.setattr(service.Path, "home", classmethod(lambda _cls: tmp_path))
+    monkeypatch.setattr(service_release, "current_release_commit", lambda _project: "stale")
+    aico = SimpleNamespace(project_id=owner, backend_service="aico-web.service")
+    assert service._live_release(aico) is None
+    units = tmp_path / ".config/systemd/user"
+    units.mkdir(parents=True)
+    sha = "a" * 40
+    (units / "aico-web.service").write_text(f"[Service]\nWorkingDirectory=/x/releases/{sha}/packages/web\n")
+    assert service._live_release(aico) == sha
+    assert service._live_release(SimpleNamespace(project_id="other", backend_service="x")) == "stale"
+    # No stale "HEAD is not the live release" line: st's fallback hands the restart to aico deploy.
+    assert service._restart_in_place(owner, service.RebuildScope.full, include_all_workers=False,
+                                     requested_workers=()) is None

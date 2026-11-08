@@ -530,6 +530,18 @@ async function monitorCommand(cli: Cli, rest: string[]): Promise<number> {
   return 0
 }
 
+/** `service restart` as deploy options: a restart means the web server and workers restart even with nothing changed. A plain or full deploy restarts only what changed; --scope worker forces them, Tether still only when behind. */
+function restartArgs(args: string[]): string[] {
+  const named = args.findIndex((arg) => arg === '--scope' || arg.startsWith('--scope='))
+  const inline = args[named]?.startsWith('--scope=')
+  const scope = named < 0 ? 'full' : inline ? args[named].slice('--scope='.length) : args[named + 1]
+  if (scope !== 'full') return args
+  if (named < 0) return args.includes('--worker') ? args : [...args, '--scope', 'worker']
+  const rest = [...args]
+  rest.splice(named, inline ? 1 : 2, '--scope', 'worker')
+  return rest
+}
+
 /** `service`: the service tools, falling back to the deploy script when they ask. */
 async function serviceCommand(cli: Cli, rest: string[]): Promise<number> {
   const { env } = cli
@@ -544,6 +556,8 @@ async function serviceCommand(cli: Cli, rest: string[]): Promise<number> {
   }
   const code = await execute([join(root, 'native/service-tools/st-service'), ...rest], serviceEnv)
   if (code === 3 && rest[0] === 'rebuild') return delegateToAico(cli, ['deploy', ...rest.slice(1)])
+  if (code === 3 && rest[0] === 'restart')
+    return delegateToAico(cli, ['deploy', ...restartArgs(rest.slice(1))])
   if (code === 3 && ['result', 'wait'].includes(rest[0]))
     return delegateToAico(cli, ['deploy', ...rest])
   return code

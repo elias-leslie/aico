@@ -718,6 +718,41 @@ it.each([
     ['deploy', ...args],
   ])
 })
+it.each([
+  [['aico'], ['aico', '--scope', 'worker']],
+  [
+    ['aico', '--scope', 'full'],
+    ['aico', '--scope', 'worker'],
+  ],
+  [
+    ['aico', '--scope=full'],
+    ['aico', '--scope', 'worker'],
+  ],
+  [
+    ['aico', '--scope', 'backend'],
+    ['aico', '--scope', 'backend'],
+  ],
+  [
+    ['aico', '--worker', 'aico-jobs'],
+    ['aico', '--worker', 'aico-jobs'],
+  ],
+])('an Aico restart reaches the deploy and restarts its units %j', async (args, deployed) => {
+  const calls: string[][] = []
+  expect(
+    await main(['service', 'restart', ...args], {
+      root,
+      env: {},
+      execute: async (argv) => {
+        calls.push(argv)
+        return argv[0].endsWith('st-service') ? 3 : 0
+      },
+    }),
+  ).toBe(0)
+  expect(calls.map((argv) => argv.slice(1))).toEqual([
+    ['restart', ...args],
+    ['deploy', ...deployed],
+  ])
+})
 it('deploys from the registered source checkout when commands run from an installed release', async () => {
   const { Registry } = await import('@aico/tasks')
   const dir = temp()

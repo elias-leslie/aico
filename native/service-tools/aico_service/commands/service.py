@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import re
 import time
 from collections.abc import Callable, Mapping
 from contextlib import suppress
@@ -141,11 +142,23 @@ def status(
         if services.manual_workers and not services.deployment:
             parts.append("manual: " + " ".join(f"{svc}:{service_ops.service_state(svc)}"
                                                for svc in services.manual_workers))
-        if not services.deployment and (release := service_release.current_release_commit(project_id)):
+        if not services.deployment and (release := _live_release(services)):
             parts.append(f"release={release[:12]}")
         location = f" [{services.deployment.label}]" if services.deployment else ""
         print(f"{services.project_id:<15}{location} {' '.join(parts) or 'no managed services'}")
     raise typer.Exit(1 if errors else 0)
+
+
+def _live_release(services: service_ops.ProjectServices) -> str | None:
+    """The commit a project runs. Aico deploys itself, so st's release record stops at its last st
+    deploy: its backend's unit file names what is live."""
+    if services.project_id != service_ops.native_owner_project():
+        return service_release.current_release_commit(services.project_id)
+    unit = Path.home() / ".config/systemd/user" / services.backend_service
+    with suppress(OSError):
+        if match := re.search(r"/releases/([0-9a-f]{40})/", unit.read_text()):
+            return match[1]
+    return None
 
 
 def _acceptance_line(source: Mapping[str, Any] | None, *, supplied: bool) -> str:
@@ -600,6 +613,8 @@ def _restart_in_place(
     worker, a remote or delegated runtime, or a backend whose migrations the
     current release did not run), so the caller rebuilds instead.
     """
+    if project == service_ops.native_owner_project():
+        return None  # Aico restarts through aico deploy; st's release record for it is stale.
     services = _load(project)
     if services.runtime_user or services.deployment or any(
             name in services.manual_workers for name in requested_workers):
