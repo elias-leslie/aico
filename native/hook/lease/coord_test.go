@@ -514,12 +514,16 @@ func TestSessionStateAsksWhetherAGoneSessionComesBack(t *testing.T) {
 	sandbox(t)
 	fake.ComesBack = map[string]bool{"aabbccdd": true}
 	fake.ComesBackCoordinator = "11223344"
+	fake.ComesBackParent = "55667788"
 	desc, ended := sessionState("aabbccdd")
 	if ended {
 		t.Error("a kept wake brings it back: not ended")
 	}
 	if str(desc["coordinatorId"]) != "11223344" {
 		t.Errorf("its coordinator can still close its requests: %v", desc)
+	}
+	if str(desc["parentId"]) != "55667788" {
+		t.Errorf("whoever launched it can still close its requests: %v", desc)
 	}
 	if _, ended := sessionState("bbbbbbbb"); !ended {
 		t.Error("nothing kept: ended")

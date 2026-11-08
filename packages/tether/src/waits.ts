@@ -338,7 +338,7 @@ export class WaitStore {
   keptFor(endedId: string): EndedSession | null {
     const row = this.db
       .prepare(
-        "SELECT ended_session FROM waits WHERE kept = 1 AND state = 'armed' AND json_extract(ended_session, '$.id') = ? LIMIT 1",
+        "SELECT ended_session FROM waits WHERE kept = 1 AND state = 'armed' AND json_extract(ended_session, '$.id') = ? AND json_extract(ended_session, '$.entry') IS NULL LIMIT 1",
       )
       .get(endedId) as { ended_session: string } | undefined
     return row ? (JSON.parse(row.ended_session) as EndedSession) : null

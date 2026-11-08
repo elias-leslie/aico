@@ -381,6 +381,12 @@ describe("a session's last message and context fill", () => {
     await h.scan()
     expect(h.closingMessage('abcd1238', 'claude-code')?.text).toBe('Lane.')
     expect(h.closingMessage('abcd1236', 'claude-code')?.text).toBe('New.')
+    // A side run moves it away and back: seen in its pane again, it is marked again.
+    h.bind('abcd1236', 'claude', 'b6')
+    h.bind('abcd1238', 'claude', 'b6')
+    h.seenInPane('abcd1238', 'claude', 'b6')
+    await h.scan()
+    expect(h.closingMessage('abcd1238', 'claude-code')?.text).toBe('Lane.')
     // Pi's probe stays on its launch conversation past a `/new`: it doesn't outrank the new one.
     h.seenInPane('abcd1239', 'pi', 'launch')
     expect(

@@ -135,7 +135,7 @@ describe('control socket', () => {
       status: 'ok',
       instance: 'test',
       apiVersion: 34,
-      schemaVersion: 38,
+      schemaVersion: 39,
       lifecycle: 'disabled',
     })
     const version = await call('GET', '/v1/version')
@@ -221,6 +221,7 @@ describe('lifecycle API (no tmux started)', () => {
     expect((await call('GET', '/v1/sessions/ffffffff/comes-back')).body).toEqual({
       comesBack: false,
       coordinatorId: null,
+      parentId: null,
     })
     // No record of it is no message and unknown context, never zero.
     expect((await call('GET', '/v1/sessions/ffffffff/report')).body).toMatchObject({

@@ -305,7 +305,7 @@ describe('wake scheduler', () => {
     const scheduler = new WakeScheduler(wakes, ops)
     const add = (dueAt: number, note: string) =>
       wakes.add({ sessionId: SESSION, dueAt, note, createdBy: 'agent', now: 0 })
-    return { wakes, clock, log, state, scheduler, add }
+    return { wakes, clock, log, state, scheduler, add, ops }
   }
 
   it('delivers due wakes together, once, and leaves later ones', async () => {
@@ -560,6 +560,58 @@ describe('wake scheduler', () => {
     expect(wakes.list()).toEqual([])
   })
 
+  it('still expects it back across a restart, a second relaunch and a resume by hand', async () => {
+    const started = ['ffff0000', 'ffff0001', 'ffff0002']
+    const { wakes, scheduler, clock, add, ops } = harness({
+      relaunch: async () => ({ status: 'started', id: started.shift() as string }),
+    })
+    const running = new Set<string>()
+    const live = (other: string) => running.has(other)
+    add(9_000, 'first')
+    wakes.keep(SESSION, ENDED)
+    removeWidget(SESSION)
+    await scheduler.tick()
+    running.add('ffff0000')
+    // Tether restarted: the link is still there.
+    const restarted = new WakeScheduler(wakes, ops)
+    expect(restarted.comesBack(SESSION, live)).toEqual(ENDED)
+    // A second batch brings it back again: the first session's link stays.
+    insertWidget(SESSION, 'codex', 1_000, { origin: 'aico' })
+    add(9_000, 'second')
+    wakes.keep(SESSION, ENDED)
+    removeWidget(SESSION)
+    await restarted.tick()
+    running.clear()
+    running.add('ffff0001')
+    expect(restarted.comesBack(SESSION, live)).toEqual(ENDED)
+    running.clear()
+    running.add('ffff0000')
+    expect(restarted.comesBack(SESSION, live)).toEqual(ENDED)
+    // Through the chain: the session it came back as was itself relaunched.
+    running.clear()
+    wakes.linkRelaunch({ ...ENDED, id: 'ffff0000' }, 'ffff0009', clock.now)
+    running.add('ffff0009')
+    expect(restarted.comesBack(SESSION, live)).toMatchObject({ id: 'ffff0000' })
+    running.clear()
+    expect(restarted.comesBack(SESSION, live)).toBeNull()
+    // Old links go.
+    wakes.linkRelaunch(
+      { ...ENDED, id: 'ffff0003' },
+      'ffff0004',
+      clock.now + 3 * 24 * 60 * 60 * 1000,
+    )
+    running.add('ffff0000')
+    expect(restarted.comesBack(SESSION, live)).toBeNull()
+  })
+
+  it('does not expect back a session that ran through an entry: it cannot start again', () => {
+    const { wakes, scheduler, add } = harness()
+    add(9_000, 'note')
+    wakes.keep(SESSION, { ...ENDED, entry: { name: 'run' } as EndedSession['entry'] })
+    removeWidget(SESSION)
+    expect(scheduler.comesBack(SESSION, () => false)).toBeNull()
+  })
+
   it('gives a kept wake to the session that already resumed its conversation', async () => {
     const { wakes, log, scheduler } = harness({ conversationHolder: async () => SESSION })
     insertWidget('0a1b2c3e', 'codex', 1_000, { origin: 'aico' })
@@ -575,6 +627,10 @@ describe('wake scheduler', () => {
     await scheduler.tick()
     expect(log.relaunched).toEqual([])
     expect(wakes.get(wake.id)?.sessionId).toBe(SESSION)
+    // Its old session counts as back while the one that holds the conversation runs.
+    expect(scheduler.comesBack('0a1b2c3e', (other) => other === SESSION)).toMatchObject({
+      id: '0a1b2c3e',
+    })
     // A started scheduler runs the next pass at once; this one is stopped.
     await scheduler.tick()
     expect(log.delivered).toHaveLength(1)

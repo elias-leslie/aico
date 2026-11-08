@@ -25,6 +25,7 @@ import {
   PARENT_SQL,
   REACH_BACKFILL_SQL,
   REACH_COLUMNS,
+  RELAUNCHED_SESSIONS_SQL,
   RETIRED_SESSION_IDS_SQL,
   ROOT_ORIGIN_SQL,
   ROOT_REQUESTS_TABLE_SQL,
@@ -457,6 +458,14 @@ export class Store {
           .get()
         if (!has) this.db.exec(TRANSCRIPT_OWNERS_PANE_SQL)
         this.recordVersion(38, now)
+      }
+      if (current < 39) {
+        this.db.exec(RELAUNCHED_SESSIONS_SQL)
+        // Pi's probe says nothing about its pane; rows stamped before seenInPane knew that.
+        this.db.exec(
+          "UPDATE transcript_owners SET pane_seen_at = NULL WHERE transcript_id LIKE 'pi:%'",
+        )
+        this.recordVersion(39, now)
       }
     })
   }

@@ -1288,7 +1288,11 @@ function registerTerminalReadRoutes(router: Router, context: LifecycleApiContext
         context.wakes?.scheduler.comesBack(id, (other) => Boolean(getWidget(other))) ??
         context.waits?.store.keptFor(id) ??
         null
-      sendJson(res, 200, { comesBack: ended !== null, coordinatorId: ended?.coordinatorId ?? null })
+      sendJson(res, 200, {
+        comesBack: ended !== null,
+        coordinatorId: ended?.coordinatorId ?? null,
+        parentId: ended?.parentId ?? null,
+      })
     })
     // The agent's last message and context fill, for a coordinator reading a lane. An ended
     // session's transcript stays readable, so its report does too.

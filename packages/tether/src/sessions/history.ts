@@ -269,7 +269,12 @@ export class History {
       ended_at = CASE WHEN session_id = excluded.session_id THEN coalesce(ended_at, excluded.ended_at) ELSE excluded.ended_at END
       WHERE session_id != excluded.session_id OR (ended_at IS NULL AND excluded.ended_at IS NOT NULL)`)
       .run(`${tool}:${nativeId}`, session, session)
-    return Number((result as { changes?: number | bigint }).changes ?? 0) > 0
+    const moved = Number((result as { changes?: number | bigint }).changes ?? 0) > 0
+    // Its pane mark went with the old owner: seen in a pane again, it gets a new one.
+    if (moved)
+      for (const [pane, id] of this.inPane)
+        if (id === `${tool}:${nativeId}`) this.inPane.delete(pane)
+    return moved
   }
 
   /** The conversation the agent in the session's own pane is on. Binding alone can't say: a side run

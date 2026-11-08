@@ -3,7 +3,7 @@
 // copies rows byte for byte. The only widening is the tmux_servers unit CHECK,
 // which additionally admits non-default instance unit names.
 
-export const SCHEMA_VERSION = 38
+export const SCHEMA_VERSION = 39
 
 /** Conversations observed in an owned workload survive its retirement and delayed transcript ingestion. */
 export const TRANSCRIPT_OWNERS_SQL = `
@@ -18,6 +18,18 @@ export const TRANSCRIPT_OWNERS_SQL = `
 /** v38: when the agent in the session's own pane was last seen on this conversation; null for a side run. */
 export const TRANSCRIPT_OWNERS_PANE_SQL =
   'ALTER TABLE transcript_owners ADD COLUMN pane_seen_at INTEGER'
+
+/** v39: the session each ended session came back as for a check-in, or was resumed as by hand: an
+ * ended session is still on its way back while one of them runs. */
+export const RELAUNCHED_SESSIONS_SQL = `
+  CREATE TABLE IF NOT EXISTS relaunched_sessions (
+    ended_id      TEXT NOT NULL,
+    session_id    TEXT NOT NULL,
+    ended_session TEXT NOT NULL CHECK(json_valid(ended_session)),
+    at            INTEGER NOT NULL CHECK(at >= 0),
+    PRIMARY KEY (ended_id, session_id)
+  );
+`
 
 /** v34: the latest model call's prompt tokens per conversation (its context fill). */
 export const TRANSCRIPT_CONTEXT_SQL = 'ALTER TABLE transcripts ADD COLUMN context_tokens INTEGER'

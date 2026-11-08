@@ -322,6 +322,9 @@ export function wakeJson(wake: Wake): Record<string, unknown> {
 }
 
 /** The wakes table (schema v10). One daemon writes it. */
+/** How long a relaunch link is kept: past the day a handshake can wait on the ended session. */
+const RELAUNCH_LINK_KEEP_MS = 2 * 24 * 60 * 60 * 1000
+
 export class WakeStore {
   constructor(
     private readonly db: Db,
@@ -548,10 +551,33 @@ export class WakeStore {
   keptFor(endedId: string, relaunchAttempts: number): EndedSession | null {
     const row = this.db
       .prepare(
-        "SELECT ended_session FROM wakes WHERE kept = 1 AND attempts < ? AND json_extract(ended_session, '$.id') = ? LIMIT 1",
+        "SELECT ended_session FROM wakes WHERE kept = 1 AND attempts < ? AND json_extract(ended_session, '$.id') = ? AND json_extract(ended_session, '$.entry') IS NULL LIMIT 1",
       )
       .get(relaunchAttempts, endedId) as { ended_session: string } | undefined
     return row ? (JSON.parse(row.ended_session) as EndedSession) : null
+  }
+
+  /** Remember the session an ended one came back as. Old links go here: a handshake waits a day at most. */
+  linkRelaunch(ended: EndedSession, sessionId: string, now: number): void {
+    this.db.prepare('DELETE FROM relaunched_sessions WHERE at < ?').run(now - RELAUNCH_LINK_KEEP_MS)
+    this.db
+      .prepare(
+        'INSERT OR REPLACE INTO relaunched_sessions (ended_id, session_id, ended_session, at) VALUES (?, ?, ?, ?)',
+      )
+      .run(ended.id, sessionId, JSON.stringify(ended), now)
+  }
+
+  /** The sessions this ended one came back as, newest first. */
+  relaunchesOf(endedId: string): { sessionId: string; ended: EndedSession }[] {
+    const rows = this.db
+      .prepare(
+        'SELECT session_id, ended_session FROM relaunched_sessions WHERE ended_id = ? ORDER BY at DESC',
+      )
+      .all(endedId) as { session_id: string; ended_session: string }[]
+    return rows.map((row) => ({
+      sessionId: row.session_id,
+      ended: JSON.parse(row.ended_session) as EndedSession,
+    }))
   }
 
   /** Undo `keep` after an End that did not happen. */
@@ -830,8 +856,8 @@ export class WakeScheduler {
   private readonly announced = new Set<string>()
   /** Kept wakes waiting out a failed relaunch. */
   private readonly retryAt = new Map<string, number>()
-  /** Ended sessions relaunched for a check-in: the session that came back, null while it starts. */
-  private readonly relaunched = new Map<string, { ended: EndedSession; id: string | null }>()
+  /** Ended sessions whose relaunch for a check-in is starting now. */
+  private readonly starting = new Map<string, EndedSession>()
   /** Why each session's due wakes are not delivered yet. */
   private readonly held = new Map<string, string>()
   /** When each session last took a paste: what did not fit waits for the
@@ -859,13 +885,21 @@ export class WakeScheduler {
 
   /** The ended session as it comes back: a kept check-in can still relaunch it, or a relaunch is
    * starting or running. null when nothing brings it back. */
-  comesBack(endedId: string, running: (id: string) => boolean): EndedSession | null {
-    const back = this.relaunched.get(endedId)
-    if (back && (back.id === null || running(back.id))) return back.ended
-    return (
-      (back?.id ? this.comesBack(back.id, running) : null) ??
-      this.store.keptFor(endedId, this.ops.policy().relaunchAttempts)
-    )
+  comesBack(
+    endedId: string,
+    running: (id: string) => boolean,
+    seen = new Set<string>(),
+  ): EndedSession | null {
+    if (seen.has(endedId)) return null
+    seen.add(endedId)
+    const starting = this.starting.get(endedId)
+    if (starting) return starting
+    for (const link of this.store.relaunchesOf(endedId)) {
+      if (running(link.sessionId)) return link.ended
+      const later = this.comesBack(link.sessionId, running, seen)
+      if (later) return later
+    }
+    return this.store.keptFor(endedId, this.ops.policy().relaunchAttempts)
   }
 
   stop(): void {
@@ -1242,6 +1276,7 @@ export class WakeScheduler {
       if (holder) {
         // Resumed by hand meanwhile: that session gets the check-in.
         for (const wake of wakes) this.store.attach(wake.id, holder)
+        this.store.linkRelaunch(ended, holder, this.ops.now())
         this.ops.changed(null)
         this.ops.changed(holder)
         this.again = true
@@ -1251,7 +1286,7 @@ export class WakeScheduler {
     const message = wakeMessage(wakes, this.ops.now(), this.ops.policy(), {
       resumed: Boolean(ended.resumeId),
     })
-    this.relaunched.set(ended.id, { ended, id: null })
+    this.starting.set(ended.id, ended)
     for (const wake of wakes) this.store.remove(wake.id)
     let outcome: Awaited<ReturnType<WakeOperations['relaunch']>> = {
       status: 'retry',
@@ -1260,15 +1295,15 @@ export class WakeScheduler {
     try {
       outcome = await this.ops.relaunch(ended, message)
     } finally {
+      this.starting.delete(ended.id)
       if (outcome.status !== 'started') {
-        this.relaunched.delete(ended.id)
         for (const wake of wakes) this.store.restore(wake)
         this.retryAt.set(ended.id, this.ops.now() + WAKE_RELAUNCH_RETRY_MS)
         // An admission refusal is the host saying "not now", not a failure.
         if (outcome.status === 'failed')
           for (const wake of wakes) this.store.failed(wake.id, outcome.reason)
       } else {
-        this.relaunched.set(ended.id, { ended, id: outcome.id })
+        this.store.linkRelaunch(ended, outcome.id, this.ops.now())
         this.retryAt.delete(ended.id)
       }
       this.ops.changed(null)

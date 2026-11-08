@@ -223,11 +223,12 @@ var sessionState = func(window string) (desc map[string]any, ended bool) {
 		var kept struct {
 			ComesBack     bool   `json:"comesBack"`
 			CoordinatorID string `json:"coordinatorId"`
+			ParentID      string `json:"parentId"`
 		}
 		if _, err := tetherCall("GET", "/v1/sessions/"+url.PathEscape(window)+"/comes-back", nil, &kept); err != nil {
 			return nil, false
 		}
-		return map[string]any{"coordinatorId": kept.CoordinatorID}, !kept.ComesBack
+		return map[string]any{"coordinatorId": kept.CoordinatorID, "parentId": kept.ParentID}, !kept.ComesBack
 	}
 	if err != nil {
 		return nil, false

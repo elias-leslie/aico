@@ -67,6 +67,7 @@ describe('Store schema', () => {
       'lane_outbox',
       'lane_reports',
       'lane_watches',
+      'relaunched_sessions',
       'retired_session_ids',
       'root_requests',
       'schema_version',
@@ -137,6 +138,31 @@ describe('Store schema', () => {
     expect(
       migrated.db.prepare('SELECT session_id, pane_seen_at FROM transcript_owners').all(),
     ).toEqual([{ session_id: 'abcd1234', pane_seen_at: null }])
+  })
+
+  it('v39 adds relaunch links and clears pane marks Pi should not have had', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tether-relaunch-links-migration-'))
+    const path = join(dir, 'tether.db')
+    const old = open(path)
+    old.db.exec('DROP TABLE relaunched_sessions')
+    old.db.exec(
+      "INSERT INTO transcript_owners (transcript_id, session_id, pane_seen_at) VALUES ('pi:a', 'abcd1234', 5), ('claude-code:b', 'abcd1234', 6)",
+    )
+    old.db.exec('DELETE FROM schema_version WHERE version >= 39')
+    old.close()
+    const migrated = open(path)
+    expect(migrated.schemaVersion()).toBe(SCHEMA_VERSION)
+    expect(migrated.db.prepare('SELECT count(*) AS n FROM relaunched_sessions').get()).toEqual({
+      n: 0,
+    })
+    expect(
+      migrated.db
+        .prepare('SELECT transcript_id, pane_seen_at FROM transcript_owners ORDER BY transcript_id')
+        .all(),
+    ).toEqual([
+      { transcript_id: 'claude-code:b', pane_seen_at: 6 },
+      { transcript_id: 'pi:a', pane_seen_at: null },
+    ])
   })
 
   it('v28 adds the wakes ride column, keeping queued rows as wake class', () => {
