@@ -3127,7 +3127,8 @@ def wait_main(argv: list[str]) -> int:
     if operation == "session":
         parser.add_argument("ref", help="the session id (eight hex characters) or its root request id")
         parser.add_argument("--until", choices=WAIT_UNTILS, default="finished",
-                            help=("finished (default): it ended a turn after you armed this; use it after root "
+                            help=("finished (default): it ended a turn after your last send to it (else its launch, "
+                                  "else this wait) and has no waits or shells of its own left; use it after root "
                                   "send. idle: it is idle now, even before a message you just sent starts"))
     if arming:
         parser.add_argument("--timeout", type=wait_minutes, metavar="SPAN",

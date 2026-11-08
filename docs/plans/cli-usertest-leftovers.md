@@ -14,6 +14,7 @@ Small:
 - `aico logins list` calls `backup-append.ed25519.pub` an API key (packages/fleet/src/logins.ts:437 guesses from the name).
 - `aico logins list` says usable where `show` says Unused (help explains it); `logins edit` output leaves out state and activity.
 - `st browser session create` prints raw JSON; `st browser observe` output runs 23-68 KB.
+- `display_path` in native/st-sdk/st_sdk/details.py prints repo-root-relative `details:` paths for Python tools, which don't open from a subfolder (needs an st_sdk release).
 - First `st browser check` once hit CDP connection refused; not reproduced.
 - `routines list` shows each routine's own zone, named; `jobs list` shows local time with no zone name.
 
