@@ -734,7 +734,7 @@ it('offline freshness proof is carried only from a successful copy, never a fail
     ).offlineSince,
   ).toBeUndefined()
 })
-it('a failed copy keeps restic and the capture words, without paths or secrets', async () => {
+it('a failed copy keeps restic and the capture words, without secrets', async () => {
   // Real restic 0.19 --json stderr for a capture whose command failed.
   const err = [
     'subprocess ssh: summitflow-pve-backup: the stopped VM disk has no readable root filesystem',
@@ -758,11 +758,11 @@ it('a failed copy keeps restic and the capture words, without paths or secrets',
     },
   )
   expect(copy.error).toBe(
-    'The Drive copy failed (restic exit 1); the last good copy is preserved. Restic said: summitflow-pve-backup: the stopped VM disk has no readable root filesystem; Fatal: unable to save snapshot: failed to save <path>: Fatal: command failed: exit status 2',
+    'The Drive copy failed (restic exit 1); the last good copy is preserved. Restic said: summitflow-pve-backup: the stopped VM disk has no readable root filesystem; Fatal: unable to save snapshot: failed to save /files-qemu-180.tar.gz: Fatal: command failed: exit status 2',
   )
   expect(copy.observed).toBe('failed')
 })
-it('a failure reason hides paths from inside backups and anything like a secret', () => {
+it('a failure reason names the path to act on and hides anything like a secret', () => {
   const reason = (err: string) => failureReason({ code: 1, out: '', err })
   expect(
     reason(
@@ -770,13 +770,13 @@ it('a failure reason hides paths from inside backups and anything like a secret'
     ),
   ).toBe('permission denied; Warning: at least one source file could not be read')
   expect(reason('tar: srv/data/a b.db: Cannot open: Permission denied')).toBe(
-    'tar: <path>: Cannot open: Permission denied',
+    'tar: srv/data/a b.db: Cannot open: Permission denied',
   )
   expect(reason('read tcp 1.2.3.4:5->6.7.8.9:443: i/o timeout')).toBe(
     'read tcp 1.2.3.4:5->6.7.8.9:443: i/o timeout',
   )
   expect(reason('rclone: 2026/11/08 08:54:01 ERROR : data/ab/abc: 403 quota exceeded')).toBe(
-    'rclone: 2026/11/08 08:54:01 ERROR : <path>: 403 quota exceeded',
+    'rclone: 2026/11/08 08:54:01 ERROR : data/ab/abc: 403 quota exceeded',
   )
   expect(reason('auth failed password=hunter2 token: ya29.abc')).toBe(
     'auth failed password <hidden> token <hidden>',
@@ -786,7 +786,10 @@ it('a failure reason hides paths from inside backups and anything like a secret'
     reason(
       '{"message_type":"exit_error","code":10,"message":"Fatal: repository does not exist: stat /srv/x/config: no such file\\nIs there a repository at /srv/x"}',
     ),
-  ).toBe('Fatal: repository does not exist: stat <path>: no such file')
+  ).toBe('Fatal: repository does not exist: stat /srv/x/config: no such file')
+  expect(reason('Fatal: Load(rest:https://me:pw@host/repo) failed')).toBe(
+    'Fatal: Load(rest:https://<hidden>@host/repo) failed',
+  )
   expect(reason('')).toBe('')
   expect(reason('x'.repeat(10) + ' y'.repeat(400)).length).toBe(200)
 })

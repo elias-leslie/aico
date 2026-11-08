@@ -52,10 +52,10 @@ export const checked = async (run: Execute, argv: string[], options?: Parameters
     )
   return result.out
 }
-/** One line for the copy's record: no file paths from inside a backup, nothing that looks like a secret. */
+/** One line for the copy's record, with the path to act on and nothing that looks like a secret. */
 function cleanReason(text: string): string {
   return (text.split('\n', 1)[0] as string)
-    .replace(/(^|[\s"'(=:])(?!i\/o\b)(?!\d{4}\/\d{2}\/\d{2}\b)[^\s"'(=:]*\/[^:"')]*/g, '$1<path>')
+    .replace(/\/\/[^\s/@]+@/g, '//<hidden>@')
     .replace(
       /\b(token|password|secret|key|authorization|bearer)(\s*[=:]\s*|\s+)\S+/gi,
       '$1 <hidden>',
