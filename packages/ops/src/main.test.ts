@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { listText } from './backups'
+import type { BackupState } from './backup-plan'
+import { failedSourcesLine, listText } from './backups'
 import { main } from './main'
 
 afterEach(() => vi.restoreAllMocks())
@@ -100,6 +101,42 @@ it('lists backups for a person: problems, one line per target, archived sources 
   )
   expect(text).toContain('Archived (source gone; older copies still hold them): Old.')
   expect(text).not.toContain('{')
+})
+
+it('a running backup gives no next time, and a failed one names its sources', () => {
+  const now = Date.parse('2026-11-07T02:00:00Z')
+  const entry = {
+    id: 'drive/a',
+    source: 'a',
+    name: 'A',
+    target: 'drive' as const,
+    dataAt: '2026-11-07T01:30:00Z',
+    nextRun: '2026-11-07T14:00:00Z',
+    state: 'ok' as const,
+    meaning: 'Restorable data is 30 min old.',
+    snapshot: null,
+    path: null,
+    running: true,
+    machine: 'ws',
+  }
+  const text = listText(
+    {
+      machine: 'ws',
+      entries: [entry],
+      runs: { drive: { started: '2026-11-07T01:55:00Z', ok: false } },
+    },
+    now,
+  )
+  expect(text).toMatch(/last run 5 min ago, running$/m)
+  const copy = (source: string, target: string, error?: string) =>
+    ({ source, target, error }) as BackupState['copies'][string]
+  const state = {
+    copies: { x: copy('vm', 'drive', 'boom'), y: copy('ok', 'drive'), z: copy('n', 'native', 'b') },
+    runs: {},
+    points: [],
+  }
+  expect(failedSourcesLine(state, 'drive')).toBe('Failed: vm.')
+  expect(failedSourcesLine(state, 'append')).toBe('Which sources failed: aico backups list.')
 })
 
 async function backupsCall(argv: string[]) {
