@@ -543,12 +543,13 @@ export async function mirror(deps: WipDeps): Promise<WipReport> {
     } else delete entry.problem
     await keepStandby(deps, project, entry, fingerprint, heads.out, targets, report)
   }
+  const posted = state.rows
   if (!deps.only) {
     const kept = new Set(projects.map((p) => p.id))
     for (const id of Object.keys(state.repos)) if (!kept.has(id)) delete state.repos[id]
-    state.rows = report.problems.map((p) => p.key)
+    report.rows = report.problems.map((p) => p.key)
   } else
-    state.rows = [
+    report.rows = [
       ...state.rows.filter(
         (key) =>
           !deps.only?.some((id) => key === id || key === `${id}-standby`) &&
@@ -556,7 +557,8 @@ export async function mirror(deps: WipDeps): Promise<WipReport> {
       ),
       ...report.problems.map((p) => p.key),
     ]
-  report.rows = state.rows
+  // A row leaves the state only once it is off Status (settleRows); a run that dies first retries it.
+  state.rows = [...new Set([...posted, ...report.rows])]
   writeState(deps.state, state)
   return report
 }
@@ -799,18 +801,28 @@ function realDeps(env = process.env): WipDeps {
   }
 }
 
-async function postRows(rows: StatusRow[], gone: string[], env: NodeJS.ProcessEnv): Promise<void> {
-  const base = env.AICO_WEB_URL || wipConfig.webUrl
-  if (rows.length) {
-    const waiting = await postOrKeep(statusRowsUrl(base), rows, {
-      dir: outboxDir(aicoDataDir(env)),
-      timeoutMs: 10_000,
-    })
-    if (waiting !== null) console.error(`Repo copy Status will go out later: ${waiting}`)
+async function postRows(rows: StatusRow[], env: NodeJS.ProcessEnv): Promise<void> {
+  if (!rows.length) return
+  const waiting = await postOrKeep(statusRowsUrl(env.AICO_WEB_URL || wipConfig.webUrl), rows, {
+    dir: outboxDir(aicoDataDir(env)),
+    timeoutMs: 10_000,
+  })
+  if (waiting !== null) console.error(`Repo copy Status will go out later: ${waiting}`)
+}
+
+/** Take cleared rows off Status; one that couldn't be taken off stays in the state for the next run. */
+export async function settleRows(
+  path: string,
+  current: string[],
+  remove: (key: string) => Promise<boolean>,
+): Promise<void> {
+  const state = readState(path)
+  const kept = [...current]
+  for (const key of state.rows) {
+    if (kept.includes(key)) continue
+    if (!(await remove(key).catch(() => false))) kept.push(key)
   }
-  for (const id of gone) {
-    await deleteStatusRow(base, id, { timeoutMs: 10_000 }).catch(() => {})
-  }
+  writeState(path, { ...state, rows: kept })
 }
 
 const USAGE = `Usage:
@@ -835,17 +847,17 @@ export async function wip(argv: string[], env = process.env): Promise<number> {
   const deps = realDeps(env)
   const only = rest
   if (only.length) deps.only = only
-  const before = readState(deps.state).rows
   const report = await mirror(deps)
   const found = report.off ? null : await deps.peers()
   const rows = report.problems.map((p) => problemRow(p, deps.machine, deps.now()))
-  await postRows(
-    rows,
-    before
-      .filter((key) => !report.rows.includes(key))
-      .map((key) => `${deps.machine}/wip-mirror/${key}`),
-    env,
-  )
+  await postRows(rows, env)
+  await settleRows(deps.state, report.rows, async (key) => {
+    const id = `${deps.machine}/wip-mirror/${key}`
+    const response = await deleteStatusRow(env.AICO_WEB_URL || wipConfig.webUrl, id, {
+      timeoutMs: 10_000,
+    })
+    return response.ok || response.status === 404
+  })
   const line = summary(report, deps.machine, found?.peers.length ?? 0)
   console.log(line)
   return report.problems.some((p) => p.state === 'failed') ? 1 : 0

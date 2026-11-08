@@ -10,6 +10,7 @@ import {
   mirror,
   type Peer,
   restoreWip,
+  settleRows,
   summary,
   type WipConfig,
   type WipDeps,
@@ -489,5 +490,22 @@ describe('wip mirror', () => {
       )
       expect(existsSync(checkout('app'))).toBe(false)
     })
+  })
+})
+
+describe('cleared Status rows', () => {
+  it('keeps a row in the state until it is really off Status', async () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'wip-rows-')), 'state.json')
+    writeFileSync(path, JSON.stringify({ repos: {}, rows: ['stuck', 'gone', 'current'] }))
+    const removed: string[] = []
+    await settleRows(path, ['current'], async (key) => {
+      if (key === 'stuck') throw new Error('Status not answering')
+      removed.push(key)
+      return true
+    })
+    expect(removed).toEqual(['gone'])
+    expect(JSON.parse(readFileSync(path, 'utf8')).rows).toEqual(['current', 'stuck'])
+    await settleRows(path, ['current'], async () => true)
+    expect(JSON.parse(readFileSync(path, 'utf8')).rows).toEqual(['current'])
   })
 })
