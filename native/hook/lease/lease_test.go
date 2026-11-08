@@ -393,3 +393,19 @@ func TestWritersYesHandsOverTheirPaths(t *testing.T) {
 		t.Errorf("only the requester may use the yes: %v", got)
 	}
 }
+
+func TestSendTargetAcceptsTheSessionFormsListingsPrint(t *testing.T) {
+	sandbox(t)
+	a, b := agent(sidA, ""), agent(sidB, "")
+	register(t, a, b)
+	for _, to := range []string{"cc:222222", "claude-code:22222222", "cc:22222222", "22222222-aaaa"} {
+		if got := a.ResolveTarget(to); got != "cc:222222" {
+			t.Errorf("%s resolves to %q, want cc:222222", to, got)
+		}
+	}
+	for _, to := range []string{"claude-code:2222", "claude-code:33333333"} {
+		if got := a.ResolveTarget(to); got != to {
+			t.Errorf("%s (too short or unknown) is kept as given, got %q", to, got)
+		}
+	}
+}

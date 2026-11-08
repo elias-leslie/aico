@@ -399,7 +399,7 @@ func send(h *lease.Hook, pos []string, flags map[string]string) int {
 	if d := flags["--delivery"]; d != "" && d != "handshake" {
 		return fail("aico sends handshakes only; fleet roots and native threads go through st sessions send --delivery %s", d)
 	}
-	to, text := pos[0], pos[1]
+	to, text := h.ResolveTarget(pos[0]), pos[1]
 	fyi := flags["--fyi"] != ""
 	project := ""
 	if p, err := lease.CLIProject(); err == nil {

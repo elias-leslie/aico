@@ -280,6 +280,32 @@ func (h *Hook) KnownTarget(to string) bool {
 	return false
 }
 
+// ResolveTarget maps the session forms listings print (claude-code:9548c97a, cc:9548c97a, a bare session
+// prefix) to the registered agent id, when exactly one identity's session starts with that prefix.
+func (h *Hook) ResolveTarget(to string) string {
+	ids := rows(h.Cfg.loadDoc(), "identities")
+	if _, ok := ids[to]; ok {
+		return to
+	}
+	prefix := to[strings.LastIndex(to, ":")+1:]
+	if len(prefix) < 6 {
+		return to
+	}
+	found := ""
+	for id, r := range ids {
+		if strings.HasPrefix(str(r["session"]), prefix) {
+			if found != "" && found != id {
+				return to
+			}
+			found = id
+		}
+	}
+	if found == "" {
+		return to
+	}
+	return found
+}
+
 // LiveAgents: registered identities whose harness process is alive.
 func (h *Hook) LiveAgents() []string {
 	var out []string
