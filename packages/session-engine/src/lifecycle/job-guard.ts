@@ -15,10 +15,9 @@
  * never kills a pane's root shell or its agent (a registry tool): an agent that
  * is itself the biggest user is only recorded (agent-hog).
  * Each tick it also moves pane tools that inherited the agent's oom_score_adj
- * 100 to 200, and anything in a pane still below the agent's value (the tmux
- * server's -500, in a pane something opened without the gate) back up: root to
- * 200, agent to 100. So the kernel prefers a tool over the agent and panes over
- * the server.
+ * 100 to 200, holds agents at 100, and raises a pane root still below that (the
+ * tmux server's -500, in a pane something opened without the gate) to 200. So the
+ * kernel prefers a tool over the agent and panes over the server.
  *
  * Records go to the shared memory event record host-steward's readers already
  * read (~/.local/state/host-steward/memory-events.jsonl, schema v1, killer
@@ -80,6 +79,8 @@ export interface Pane {
   procs: Map<number, Proc>
   root: number | null
   agents: Set<number>
+  /** The supervisor's subshell an agent runs under: spared, not an agent. */
+  runners: Set<number>
 }
 
 export interface Job {
@@ -89,7 +90,7 @@ export interface Job {
 }
 
 function protectedPids(pane: Pane): Set<number> {
-  const out = new Set(pane.agents)
+  const out = new Set([...pane.agents, ...pane.runners])
   if (pane.root !== null) out.add(pane.root)
   return out
 }
@@ -127,6 +128,9 @@ export function isAgentProcess(comm: string, argv: string[], names: ReadonlySet<
  * (codex-real under codex). Codex tools run in their own process groups, so a
  * `codex exec` tool stays a tool. With no root shell every agent process is
  * protected: sparing a tool beats killing the agent.
+ * The pane supervisor (tui/launch.ts) runs its agent inside an async subshell,
+ * a bash in the root's process group: that subshell is a runner, protected like
+ * the root, and the agent under it is an agent.
  * `agentOf(p, seed)`: seed is true for a direct child of the root (or a
  * process whose parent is outside the pane).
  */
@@ -144,8 +148,21 @@ function makePane(
           b.starttime < a.starttime || (b.starttime === a.starttime && b.pid < a.pid) ? b : a,
         )
       : null
+  const children = (pid: number) => all.filter((p) => p.ppid === pid)
+  const runners = root
+    ? children(root.pid).filter(
+        (p) =>
+          p.comm === 'bash' &&
+          p.pgid === root.pgid &&
+          !agentOf(p, true) &&
+          children(p.pid).some((c) => agentOf(c, true)),
+      )
+    : []
   const seeds = root
-    ? all.filter((p) => p.ppid === root.pid && agentOf(p, true))
+    ? [
+        ...children(root.pid).filter((p) => agentOf(p, true)),
+        ...runners.flatMap((r) => children(r.pid).filter((p) => agentOf(p, true))),
+      ]
     : all.filter((p) => agentOf(p, !procs.has(p.ppid)))
   const agents = new Set(seeds.map((p) => p.pid))
   const frontier = [...seeds]
@@ -163,7 +180,13 @@ function makePane(
       }
     }
   }
-  return { scope, procs, root: root?.pid ?? null, agents }
+  return {
+    scope,
+    procs,
+    root: root?.pid ?? null,
+    agents,
+    runners: new Set(runners.map((p) => p.pid)),
+  }
 }
 
 /** Group every unprotected pane process, and every run-*.scope process whose
@@ -745,8 +768,10 @@ export class JobGuard {
       if (!this.allowed(pane.scope)) continue
       for (const pid of protectedPids(pane)) {
         const p = pane.procs.get(pid)
-        if (p?.adj != null && p.adj < AGENT_ADJ)
-          setAdj(this.procRoot, p, pane.agents.has(pid) ? AGENT_ADJ : TOOL_ADJ)
+        if (p?.adj == null) continue
+        if (pane.agents.has(pid)) {
+          if (p.adj !== AGENT_ADJ) setAdj(this.procRoot, p, AGENT_ADJ)
+        } else if (p.adj < AGENT_ADJ) setAdj(this.procRoot, p, TOOL_ADJ)
       }
     }
   }

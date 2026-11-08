@@ -334,6 +334,25 @@ describe('JobGuard', () => {
     expect(readFileSync(join(proc, '301', 'oom_score_adj'), 'utf8')).toBe('200')
   })
 
+  it('protects an agent under the supervisor subshell, as a live pane has it', () => {
+    paneFiles(A)
+    mkdirSync(join(proc, '1'), { recursive: true })
+    writeFileSync(join(proc, '1', 'comm'), 'tmux: server\n')
+    const shell = { sid: 100, pgid: 100, comm: 'bash', bytes: 4 * MIB }
+    addProc(A, { ...shell, pid: 100, ppid: 1, adj: 100 })
+    addProc(A, { ...shell, pid: 101, ppid: 100 })
+    addProc(A, { pid: 102, ppid: 101, sid: 100, pgid: 100, comm: 'claude', bytes: 3 * GIB })
+    addProc(A, { pid: 103, ppid: 102, sid: 103, comm: 'python3', bytes: 2 * GIB, adj: 100 })
+    const { g, killed } = guard()
+    setState('red', T0)
+    g.tick(T0)
+    setState('red', T0 + 60_000)
+    g.tick(T0 + 60_000)
+    expect(killed).toEqual([103])
+    expect(readFileSync(join(proc, '102', 'oom_score_adj'), 'utf8')).toBe('100')
+    expect(readFileSync(join(proc, '103', 'oom_score_adj'), 'utf8')).toBe('200')
+  })
+
   it('moves a pane root and agent that kept the tmux server oom_score_adj back up', () => {
     twoPanes()
     const ids = ['100', '101']
