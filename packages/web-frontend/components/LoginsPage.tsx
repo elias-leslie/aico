@@ -1,6 +1,6 @@
 'use client'
 
-import { type ReactNode, useCallback, useEffect, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { useHosts } from '@/lib/hooks/use-hosts'
 import { shortWhen } from '@/lib/short-when'
 import { HostSignIn } from './HostsSheet'
@@ -25,6 +25,16 @@ const kinds = [
   'lab login',
 ] as const
 type Kind = (typeof kinds)[number]
+/** What the Add form offers: the kinds plus account logins (a username, password and login page). */
+const ACCOUNT = 'account login'
+type Choice = Kind | typeof ACCOUNT
+const groups = [
+  ACCOUNT,
+  ...kinds.filter((k) => k !== 'lab login'),
+  'lab login',
+] as const
+const groupOf = (e: Entry): Choice =>
+  e.lab?.kind === 'account' ? ACCOUNT : e.kind
 interface Entry {
   name: string
   kind: Kind
@@ -43,6 +53,8 @@ interface Entry {
     kind: string
     fields: string[]
     expires_at: string | null
+    username?: string
+    login_url?: string
   }
 }
 interface Data {
@@ -73,8 +85,9 @@ async function api<T = { warning?: string }>(
     throw new Error(result.detail || 'Logins could not complete the operation.')
   return result as T
 }
-const title = (kind: Kind) =>
+const title = (kind: Choice) =>
   ({
+    [ACCOUNT]: 'Account logins',
     'tool login': 'Tool logins',
     'API key': 'API keys',
     password: 'Passwords',
@@ -82,6 +95,53 @@ const title = (kind: Kind) =>
     'lab login': 'Lab logins',
   })[kind]
 const when = (time: string | null) => shortWhen(time)
+const characters = (n: number) => `${n} ${n === 1 ? 'character' : 'characters'}`
+/** The confirmation after a value is stored: its length only, never the value. */
+const savedChars = (value: string) => `Saved, ${characters([...value].length)}`
+const MAX_DOTS = 32
+
+/** A hidden value field that shows masked dots and a character count as soon as something is pasted or typed. */
+function SecretField({
+  label,
+  name = 'value',
+}: {
+  label: string
+  name?: string
+}) {
+  const [length, setLength] = useState(0),
+    input = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    const form = input.current?.form
+    if (!form) return
+    const clear = () => setLength(0)
+    form.addEventListener('reset', clear)
+    return () => form.removeEventListener('reset', clear)
+  }, [])
+  return (
+    <>
+      <label>
+        {label}
+        <input
+          ref={input}
+          name={name}
+          type="password"
+          required
+          autoComplete="new-password"
+          onChange={(e) => setLength([...e.target.value].length)}
+        />
+      </label>
+      {length > 0 && (
+        <small role="status">
+          <span aria-hidden="true">
+            {'•'.repeat(Math.min(length, MAX_DOTS))}
+            {length > MAX_DOTS ? '…' : ''}
+          </span>{' '}
+          {characters(length)}
+        </small>
+      )}
+    </>
+  )
+}
 /** The long list gets a find box from here. */
 const FIND_FROM = 8
 const CHIP: Record<string, Chip> = {
@@ -94,7 +154,7 @@ const CHIP: Record<string, Chip> = {
 const chipOf = (state: string): Chip => CHIP[state] ?? 'off'
 const meta = (entry: Entry) =>
   entry.lab
-    ? `${entry.lab.target} · ${entry.lab.actor} · ${entry.lab.kind}${
+    ? `${entry.lab.actor} · ${entry.lab.kind}${
         entry.lab.expires_at ? ` · Expires ${when(entry.lab.expires_at)}` : ''
       }`
     : `Last used: ${when(entry.lastUsed)}`
@@ -201,9 +261,9 @@ export function LoginsPage() {
       {message && <Notice>{message}</Notice>}
       {adding && (
         <AddLogin
-          onSaved={(warning) => {
+          onSaved={(saved, warning) => {
             setAdding(false)
-            void changed(warning || 'Login saved.')
+            void changed(warning ? `${saved}. ${warning}` : saved)
           }}
         />
       )}
@@ -223,8 +283,8 @@ export function LoginsPage() {
           {search && shown.length === 0 && (
             <Quiet>No logins match your search.</Quiet>
           )}
-          {kinds.map((kind) => {
-            const entries = shown.filter((e) => e.kind === kind)
+          {groups.map((kind) => {
+            const entries = shown.filter((e) => groupOf(e) === kind)
             return (
               entries.length > 0 && (
                 <Group
@@ -323,8 +383,12 @@ export function LoginsPage() {
     </section>
   )
 }
-function AddLogin({ onSaved }: { onSaved(warning?: string): void }) {
-  const [kind, setKind] = useState<Kind>('API key'),
+function AddLogin({
+  onSaved,
+}: {
+  onSaved(saved: string, warning?: string): void
+}) {
+  const [kind, setKind] = useState<Choice>('API key'),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false)
   return (
@@ -338,7 +402,20 @@ function AddLogin({ onSaved }: { onSaved(warning?: string): void }) {
           setError('')
           try {
             let result: { warning?: string }
-            if (kind === 'lab login')
+            const secret = String(f.get('value') ?? '')
+            if (kind === ACCOUNT)
+              result = await api('/api/logins/lab', {
+                target: f.get('target'),
+                actor: 'default',
+                kind: 'account',
+                values: {
+                  username: f.get('username'),
+                  password: secret,
+                  login_url: f.get('loginUrl'),
+                },
+                notes: f.get('notes'),
+              })
+            else if (kind === 'lab login')
               result = await api('/api/logins/lab', {
                 target: f.get('target'),
                 actor: f.get('actor'),
@@ -355,7 +432,7 @@ function AddLogin({ onSaved }: { onSaved(warning?: string): void }) {
                 notes: f.get('notes'),
               })
             form.reset()
-            onSaved(result.warning)
+            onSaved(savedChars(secret), result.warning)
           } catch (error) {
             setError(
               error instanceof SyntaxError
@@ -372,14 +449,40 @@ function AddLogin({ onSaved }: { onSaved(warning?: string): void }) {
           Kind
           <select
             value={kind}
-            onChange={(e) => setKind(e.target.value as Kind)}
+            onChange={(e) => setKind(e.target.value as Choice)}
           >
-            {kinds.map((k) => (
+            {[ACCOUNT, ...kinds].map((k) => (
               <option key={k}>{k}</option>
             ))}
           </select>
         </label>
-        {kind === 'lab login' ? (
+        {kind === ACCOUNT ? (
+          <>
+            <label>
+              Site name
+              <input
+                name="target"
+                required
+                autoComplete="off"
+                pattern="[a-z0-9][a-z0-9._\-]*"
+              />
+            </label>
+            <label>
+              Username or email
+              <input name="username" required autoComplete="off" />
+            </label>
+            <label>
+              Login page
+              <input
+                name="loginUrl"
+                type="url"
+                required
+                autoComplete="off"
+                placeholder="https://example.com/login"
+              />
+            </label>
+          </>
+        ) : kind === 'lab login' ? (
           <>
             <label>
               Target
@@ -418,15 +521,15 @@ function AddLogin({ onSaved }: { onSaved(warning?: string): void }) {
             />
           </label>
         )}
-        <label>
-          {kind === 'lab login' ? 'Fields (JSON, hidden)' : 'Value (hidden)'}
-          <input
-            name="value"
-            type="password"
-            required
-            autoComplete="new-password"
-          />
-        </label>
+        <SecretField
+          label={
+            kind === ACCOUNT
+              ? 'Password (hidden)'
+              : kind === 'lab login'
+                ? 'Fields (JSON, hidden)'
+                : 'Value (hidden)'
+          }
+        />
         <label>
           Notes
           <input name="notes" autoComplete="off" />
@@ -500,11 +603,13 @@ function LoginRow({
   }
   return (
     <Row
-      name={entry.name}
+      name={entry.lab ? entry.lab.target : entry.name}
       meta={meta(entry)}
       chip={chipOf(entry.state)}
       chipText={entry.state}
     >
+      {entry.lab?.username && <small>Username: {entry.lab.username}</small>}
+      {entry.lab?.login_url && <small>Login page: {entry.lab.login_url}</small>}
       {entry.notes && <p>{entry.notes}</p>}
       {entry.lab && <small>Last used: {when(entry.lastUsed)}</small>}
       <Actions>
@@ -582,21 +687,21 @@ function LoginRow({
               const result = await api(`${path}/replace`, { value })
               form.reset()
               setPanel(null)
-              await onChanged(result.warning || 'Login replaced.')
+              await onChanged(
+                result.warning
+                  ? `${savedChars(value)}. ${result.warning}`
+                  : `Login replaced. ${savedChars(value)}`,
+              )
             })
           }}
         >
-          <label>
-            {entry.lab
-              ? 'Complete bundle (JSON, hidden)'
-              : 'New value (hidden)'}
-            <input
-              type="password"
-              name="value"
-              required
-              autoComplete="new-password"
-            />
-          </label>
+          <SecretField
+            label={
+              entry.lab
+                ? 'Complete bundle (JSON, hidden)'
+                : 'New value (hidden)'
+            }
+          />
           <button type="submit" className="lantern-btn small" disabled={busy}>
             Replace login
           </button>

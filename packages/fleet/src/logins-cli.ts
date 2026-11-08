@@ -18,6 +18,9 @@ export const LOGINS_USAGE = `Usage: aico logins <command> (also st logins)
 Logins live in Aico's private secrets folder. Values enter through hidden input or stdin.
   list | show NAME                    metadata only
   set NAME [--kind KIND] [--notes TEXT] hidden prompt or piped stdin
+  set NAME --account --username USER --login-url URL [--notes TEXT]
+                                      account login (username, password, login page); the
+                                      password comes from hidden input; saved as lab target NAME
   rotate NAME                         replace through hidden input or stdin
   get NAME                            only to an owner-only file; never a session log
   run --with NAME[=ENV] ... -- CMD      inject into one command's environment
@@ -135,6 +138,44 @@ export async function commandEnvironment(
   }
   return next
 }
+/** An account login is the lab "account" shape: username, password and login page under target NAME. */
+export async function saveAccount(
+  store: Pick<LoginClient, 'set'>,
+  target: string,
+  fields: { username: string; login_url: string },
+  password: string,
+  caller: LoginCaller,
+  notes?: string,
+) {
+  const identity = labIdentity(target, 'default')
+  const bundle = labPayload(
+    JSON.stringify({
+      schema_version: 1,
+      reference: identity.reference,
+      kind: 'account',
+      expires_at: null,
+      values: { ...fields, password },
+    }),
+    target,
+    'default',
+  )
+  return store.set(
+    identity.name,
+    JSON.stringify(bundle),
+    {
+      kind: 'lab login',
+      ...(notes ? { notes } : {}),
+      lab: {
+        target,
+        actor: 'default',
+        kind: 'account',
+        expires_at: null,
+        fields: Object.keys(bundle.values),
+      },
+    },
+    caller,
+  )
+}
 export async function runLogins(
   args: string[],
   env = process.env,
@@ -208,16 +249,42 @@ export async function runLogins(
     }
     if (command === 'set' || command === 'rotate') {
       const [name, ...options] = rest
-      const f = flags(options, ['--kind', '--notes'])
-      output(
-        await store.set(
-          name,
-          await io.input(),
-          { kind: one(f, '--kind') as LoginKind | undefined, notes: one(f, '--notes') },
-          io.caller,
-          command === 'rotate',
-        ),
+      const account = options.includes('--account')
+      const f = flags(
+        options.filter((o) => o !== '--account'),
+        account ? ['--notes', '--username', '--login-url'] : ['--kind', '--notes'],
       )
+      const secret = await io.input()
+      if (account) {
+        const username = one(f, '--username'),
+          loginUrl = one(f, '--login-url')
+        if (command !== 'set' || !username || !loginUrl)
+          throw new LoginError(
+            'An account login needs set NAME --account --username USER --login-url URL',
+          )
+        output(
+          await saveAccount(
+            store,
+            name,
+            { username, login_url: loginUrl },
+            secret,
+            io.caller,
+            one(f, '--notes'),
+          ),
+        )
+      } else
+        output(
+          await store.set(
+            name,
+            secret,
+            { kind: one(f, '--kind') as LoginKind | undefined, notes: one(f, '--notes') },
+            io.caller,
+            command === 'rotate',
+          ),
+        )
+      // Length only, so a paste can be checked without echoing the value.
+      const length = [...secret].length
+      io.err(`Saved, ${length} ${length === 1 ? 'character' : 'characters'}\n`)
       return 0
     }
     if (command === 'get') {

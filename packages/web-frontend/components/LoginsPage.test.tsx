@@ -112,7 +112,7 @@ it.each(['add', 'replace'])(
         name: mode === 'add' ? 'Save login' : 'Replace login',
       }),
     )
-    await screen.findByText(warning)
+    await screen.findByText(new RegExp(`Saved, 12 characters.*${warning}`))
     expect(
       screen.queryByLabelText(
         mode === 'add' ? 'Value (hidden)' : 'New value (hidden)',
@@ -164,4 +164,91 @@ it('keeps every action a button with a border, not bare text', async () => {
   expect(screen.getByRole('button', { name: 'Copy' })).toHaveClass(
     'lantern-btn',
   )
+})
+const lists = (entries: unknown[]) =>
+  vi.fn(async (path: string, options?: RequestInit) =>
+    Response.json(
+      options?.method
+        ? {}
+        : path.endsWith('/sessions')
+          ? { sessions: [] }
+          : path.endsWith('/audit')
+            ? { events: [] }
+            : { entries, assignments: {}, revealSeconds: 30 },
+    ),
+  )
+it('shows masked dots and a count as a value is pasted, then Saved, N characters', async () => {
+  const fetcher = lists([entry])
+  vi.stubGlobal('fetch', fetcher)
+  render(<LoginsPage />)
+  await screen.findByText('scratch')
+  fireEvent.click(screen.getByRole('button', { name: 'Add login' }))
+  fireEvent.change(screen.getByLabelText('Name'), {
+    target: { value: 'site' },
+  })
+  fireEvent.change(screen.getByLabelText('Value (hidden)'), {
+    target: { value: 'fixture-only' },
+  })
+  expect(screen.getByText(/12 characters/)).toBeInTheDocument()
+  expect(screen.getByText('••••••••••••')).toBeInTheDocument()
+  expect(screen.queryByText('fixture-only')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Save login' }))
+  expect(await screen.findByText('Saved, 12 characters')).toBeInTheDocument()
+  const post = fetcher.mock.calls.find(([, o]) => o?.method === 'POST')
+  expect(JSON.parse(String(post?.[1]?.body))).toMatchObject({ name: 'site' })
+})
+it('adds an account login with a username and login page, and lists it under Account logins', async () => {
+  const account = {
+    ...entry,
+    name: '_lab_focus-pcsb--default',
+    kind: 'lab login',
+    notes: '',
+    lab: {
+      target: 'focus-pcsb',
+      actor: 'default',
+      kind: 'account',
+      fields: ['username', 'password', 'login_url'],
+      expires_at: null,
+      username: 'me@example.test',
+      login_url: 'https://focus.example.test/login',
+    },
+  }
+  const fetcher = lists([account])
+  vi.stubGlobal('fetch', fetcher)
+  render(<LoginsPage />)
+  await screen.findByRole('list', { name: 'Account logins' })
+  fireEvent.click(screen.getByRole('button', { name: /focus-pcsb/ }))
+  expect(screen.getByText('Username: me@example.test')).toBeInTheDocument()
+  expect(
+    screen.getByText('Login page: https://focus.example.test/login'),
+  ).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Add login' }))
+  fireEvent.change(screen.getByLabelText('Kind'), {
+    target: { value: 'account login' },
+  })
+  fireEvent.change(screen.getByLabelText('Site name'), {
+    target: { value: 'school' },
+  })
+  fireEvent.change(screen.getByLabelText('Username or email'), {
+    target: { value: 'me@example.test' },
+  })
+  fireEvent.change(screen.getByLabelText('Login page'), {
+    target: { value: 'https://school.example.test/' },
+  })
+  fireEvent.change(screen.getByLabelText('Password (hidden)'), {
+    target: { value: 'fixture-only' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Save login' }))
+  expect(await screen.findByText('Saved, 12 characters')).toBeInTheDocument()
+  const post = fetcher.mock.calls.find(([, o]) => o?.method === 'POST')
+  expect(post?.[0]).toBe('/api/logins/lab')
+  expect(JSON.parse(String(post?.[1]?.body))).toMatchObject({
+    target: 'school',
+    kind: 'account',
+    values: {
+      username: 'me@example.test',
+      password: 'fixture-only',
+      login_url: 'https://school.example.test/',
+    },
+  })
 })

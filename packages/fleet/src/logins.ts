@@ -40,7 +40,16 @@ export interface Login {
   lastUsed: string | null
   tool?: ToolSecret
   provider?: string
-  lab?: { target: string; actor: string; kind: string; expires_at: string | null; fields: string[] }
+  lab?: {
+    target: string
+    actor: string
+    kind: string
+    expires_at: string | null
+    fields: string[]
+    /** Account logins only: the two non-secret fields, kept here so the page and lists can show them. */
+    username?: string
+    login_url?: string
+  }
   verifierOnly?: boolean
   source?: string
 }
@@ -277,9 +286,12 @@ export class LoginStore {
       policy.restrictedRoles.includes(caller.role)
     )
       return false
+    // A lab login is reached through a session's target assignment, or by a role the owner named on it
+    // (a job has no session). The default all-roles grant never opens it on its own.
     if (
       entry.lab &&
-      (!caller.session || !index.assignments[caller.session]?.includes(entry.lab.target))
+      !(caller.session && index.assignments[caller.session]?.includes(entry.lab.target)) &&
+      !entry.roles.includes(caller.role)
     )
       return false
     return (
@@ -438,11 +450,18 @@ export class LoginStore {
     if (!old && replace) throw new LoginError('Login unavailable; add it before rotating it')
     if (
       !caller.owner &&
+      !old &&
+      metadata.lab &&
+      !(caller.session && index.assignments[caller.session]?.includes(metadata.lab.target))
+    )
+      throw new LoginError(
+        `This session is not assigned lab target ${metadata.lab.target}. The owner or a coordinator runs: aico logins assign ${caller.session || 'SESSION'} --target ${metadata.lab.target}`,
+      )
+    if (
+      !caller.owner &&
       (old
         ? !this.allowed(old, caller, index)
-        : metadata.lab
-          ? !caller.session || !index.assignments[caller.session]?.includes(metadata.lab.target)
-          : policy.restrictedRoles.includes(caller.role))
+        : !metadata.lab && policy.restrictedRoles.includes(caller.role))
     )
       throw new LoginError('Login unavailable for this role, machine or target')
     if (metadata.tool) {
@@ -518,6 +537,8 @@ export class LoginStore {
         kind: p.kind,
         expires_at: p.expires_at,
         fields: Object.keys(p.values),
+        ...(p.kind === 'account' && p.values.username ? { username: p.values.username } : {}),
+        ...(p.kind === 'account' && p.values.login_url ? { login_url: p.values.login_url } : {}),
       }
     }
     writePrivate(join(this.folder, entry.file), value)

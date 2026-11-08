@@ -68,11 +68,14 @@ it('supports lab partial edits and assignments without returning field values', 
   ).toBe(200)
   const patched = await post(
     '/api/logins/lab/example-local/viewer',
-    { set: { username: 'fixture-updated' } },
+    { set: { username: 'fixture-updated', password: 'fixture-new-private-value' } },
     'PATCH',
   )
   expect(patched.status).toBe(200)
-  expect(await patched.text()).not.toContain('fixture-updated')
+  const patchedText = await patched.text()
+  // The username is shown on the page; the password never comes back.
+  expect(patchedText).toContain('"username":"fixture-updated"')
+  expect(patchedText).not.toContain('fixture-new-private-value')
   expect(
     (await post('/api/logins/assign', { session: 'hunt-one', targets: ['example-local'] })).status,
   ).toBe(200)

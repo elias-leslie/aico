@@ -326,6 +326,70 @@ it('CLI values enter through input, stay out of metadata and argv; get refuses s
   expect(execute.mock.calls[0]?.[1]).toMatchObject({ LOGIN: 'fixture-private-value' })
   expect(JSON.stringify(out.mock.calls)).not.toContain('fixture-private-value')
 })
+it('CLI set --account saves an account login, shows only length, and the summary has no password', async () => {
+  const out = vi.fn(),
+    err = vi.fn()
+  const io = {
+    caller: owner,
+    out,
+    err,
+    execute: vi.fn<LoginsIo['execute']>(async () => 0),
+    input: async () => 'fixture-private-value',
+    outputSafe: () => false,
+  }
+  expect(
+    await runLogins(
+      [
+        'set',
+        'school',
+        '--account',
+        '--username',
+        'me@example.test',
+        '--login-url',
+        'https://school.example.test/',
+      ],
+      env,
+      io,
+    ),
+  ).toBe(0)
+  expect(err.mock.calls.map((c) => c[0])).toContain('Saved, 21 characters\n')
+  expect(JSON.stringify([...out.mock.calls, ...err.mock.calls])).not.toContain(
+    'fixture-private-value',
+  )
+  expect(store.list().find((e) => e.lab?.target === 'school')?.lab).toMatchObject({
+    kind: 'account',
+    username: 'me@example.test',
+    login_url: 'https://school.example.test/',
+    fields: ['username', 'login_url', 'password'],
+  })
+  expect(JSON.stringify(store.list())).not.toContain('fixture-private-value')
+  expect(await runLogins(['set', 'again', '--account', '--username', 'u'], env, io)).toBe(1)
+})
+it('a lab login opens for an explicitly named role without a session, never for the default all-roles grant', () => {
+  const one = lab('school', 'default', {
+    username: 'me@example.test',
+    password: 'fixture-password',
+  })
+  store.set(one.identity.name, one.value, one.metadata, owner)
+  const job = { role: 'agent', machine: loginMachine() }
+  expect(() => store.show(one.identity.name, job)).toThrow('unavailable')
+  store.grant(one.identity.name, 'role', 'agent', true, owner)
+  expect(store.show(one.identity.name, job).lab?.target).toBe('school')
+  const request = [{ reference: one.identity.reference, fields: ['username'] }]
+  expect(store.resolveLab('school', request, job).credentials[0].values).toEqual({
+    username: 'me@example.test',
+  })
+  // A different role stays out, and so does a session with no assignment.
+  expect(() => store.show(one.identity.name, { ...job, role: 'review' })).toThrow('unavailable')
+})
+it('says which target to assign when a session enrolls a lab login it was not given', () => {
+  const one = lab('school')
+  expect(() => store.set(one.identity.name, one.value, one.metadata, hunter)).toThrow(
+    'aico logins assign hunt-one --target school',
+  )
+  store.assign('hunt-one', ['school'], owner)
+  store.set(one.identity.name, one.value, one.metadata, hunter)
+})
 it('lab CLI preserves descriptor wire format and silences the trusted child', async () => {
   const one = lab(),
     out = vi.fn(),
