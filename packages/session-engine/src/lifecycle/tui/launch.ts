@@ -116,8 +116,10 @@ export function paneCommand(line: string | null, agentExitDir: string | null = n
   // `runInPaneArgs` types this line into the already-contained no-RC gate. Clear
   // the typed launcher from both the visible grid and scrollback before the TUI
   // (or the shell's first prompt) paints, preserving the clean first frame without
-  // racing tmux's cgroup move.
-  const clearTypedLauncher = "printf '\\033[3J\\033[H\\033[2J'"
+  // racing tmux's cgroup move. History is cleared last: with tmux's
+  // scroll-on-clear (on by default) the screen clear moves the typed line into
+  // history, so clearing history first left it there.
+  const clearTypedLauncher = "printf '\\033[H\\033[2J\\033[3J'"
   if (line === null) return `${clearTypedLauncher}; ${interactiveShell}`
   // Replace the no-RC gate itself with a small supervisor shell. Leaving the
   // gate as the pane root while the TUI ran as its child made every healthy

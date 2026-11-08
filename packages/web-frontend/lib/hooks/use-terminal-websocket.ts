@@ -127,8 +127,10 @@ export function useTerminalWebSocket({
     getDimensions,
   ])
 
+  const statusRef = useRef(status)
   // Notify parent of status changes
   useEffect(() => {
+    statusRef.current = status
     onStatusChangeRef.current?.(status)
   }, [status])
 
@@ -245,6 +247,27 @@ export function useTerminalWebSocket({
     return () =>
       document.removeEventListener('visibilitychange', handleVisibilityChange)
   }, [reconnect])
+
+  // The device lost its network: the socket can look open for minutes, so
+  // stop showing Live and wait; when the network is back, open a fresh
+  // socket at once rather than trusting the old one.
+  useEffect(() => {
+    const handleOffline = () => {
+      if (!mountedRef.current || statusRef.current === 'session_dead') return
+      disconnect()
+      setStatus('connecting')
+    }
+    const handleOnline = () => {
+      if (!mountedRef.current || statusRef.current === 'session_dead') return
+      reconnect()
+    }
+    window.addEventListener('offline', handleOffline)
+    window.addEventListener('online', handleOnline)
+    return () => {
+      window.removeEventListener('offline', handleOffline)
+      window.removeEventListener('online', handleOnline)
+    }
+  }, [disconnect, reconnect])
 
   // Cleanup on unmount
   useEffect(() => {

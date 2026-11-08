@@ -52,7 +52,7 @@ describe('pane supervisor', () => {
       )
       // Past the screen-clear the supervisor prints first.
       const lines = out
-        .slice(out.lastIndexOf('[2J') + 3)
+        .slice(out.lastIndexOf('[3J') + 3)
         .trim()
         .split('\n')
       expect(lines).toEqual(['100', `exit=137 adj=${before}`])
@@ -73,7 +73,7 @@ describe('pane supervisor', () => {
       ],
       { encoding: 'utf8', env: { PATH: '/usr/bin:/bin', SHELL: '/bin/true' } },
     )
-    expect(out.slice(out.lastIndexOf('[2J') + 3).trim()).toBe('started')
+    expect(out.slice(out.lastIndexOf('[3J') + 3).trim()).toBe('started')
   })
 
   describe('exit marker', () => {
@@ -93,7 +93,7 @@ describe('pane supervisor', () => {
         })
         const path = join(dir, scope)
         return {
-          out: result.stdout.slice(result.stdout.lastIndexOf('[2J') + 3).trim(),
+          out: result.stdout.slice(result.stdout.lastIndexOf('[3J') + 3).trim(),
           signal: result.signal,
           marker: existsSync(path) ? readFileSync(path, 'utf8') : null,
         }

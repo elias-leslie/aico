@@ -267,12 +267,12 @@ describe('launchLine', () => {
 
 describe('paneCommand', () => {
   it('replaces the verified gate with the real interactive shell for a shell widget, after clearing the typed line', () => {
-    expect(paneCommand(null)).toBe(`printf '\\033[3J\\033[H\\033[2J'; exec "\${SHELL:-/bin/bash}"`)
+    expect(paneCommand(null)).toBe(`printf '\\033[H\\033[2J\\033[3J'; exec "\${SHELL:-/bin/bash}"`)
   })
 
   it('runs the TUI then execs an interactive shell so the pane survives its exit', () => {
     expect(paneCommand('env -u NO_COLOR claude')).toBe(
-      `exec /bin/bash --noprofile --norc -c 'printf '\\''\\033[3J\\033[H\\033[2J'\\''; { read -r tether_adj </proc/self/oom_score_adj && echo 100 >/proc/self/oom_score_adj; } 2>/dev/null; env -u NO_COLOR claude; export TETHER_AGENT_EXIT=$?; { [ -n "$tether_adj" ] && echo "$tether_adj" >/proc/self/oom_score_adj; } 2>/dev/null; exec "\${SHELL:-/bin/bash}"'`,
+      `exec /bin/bash --noprofile --norc -c 'printf '\\''\\033[H\\033[2J\\033[3J'\\''; { read -r tether_adj </proc/self/oom_score_adj && echo 100 >/proc/self/oom_score_adj; } 2>/dev/null; env -u NO_COLOR claude; export TETHER_AGENT_EXIT=$?; { [ -n "$tether_adj" ] && echo "$tether_adj" >/proc/self/oom_score_adj; } 2>/dev/null; exec "\${SHELL:-/bin/bash}"'`,
     )
   })
 })
