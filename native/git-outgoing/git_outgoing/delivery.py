@@ -21,6 +21,7 @@ import re
 import shutil
 import subprocess
 import sys
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from ipaddress import ip_address
 from pathlib import Path
@@ -54,8 +55,21 @@ class _AuthenticationUnavailable(_TransportUnavailable):
     """The remote refused or never got credentials: the host's GitHub login needs repair."""
 
 
-# A refused history can hold thousands; the result is one bounded JSON line.
+# A refused history can hold thousands; the result is one bounded JSON line. The reader keeps
+# 64 KB and a long non-ASCII path escapes to about 6 bytes a character, so the bytes need a cap too.
 _FINDINGS_REPORTED = 50
+_FINDINGS_BYTES = 32_000
+
+
+def _reported_findings(findings: Sequence[Any]) -> list[Any]:
+    reported: list[Any] = []
+    size = 0
+    for finding in findings[:_FINDINGS_REPORTED]:
+        size += len(json.dumps(finding))
+        if size > _FINDINGS_BYTES:
+            break
+        reported.append(finding)
+    return reported
 
 
 class _OutgoingFailed(RuntimeError):
@@ -354,7 +368,7 @@ def publish_source(source: dict[str, Any], source_commit: str, *, authorized_wor
             result["security"]["reason"] = str(exc.__cause__)
             findings = exc.__cause__.findings
             if findings:
-                result["security"].update(findings=list(findings[:_FINDINGS_REPORTED]), findings_total=len(findings))
+                result["security"].update(findings=_reported_findings(findings), findings_total=len(findings))
         result["action"] = "Repair the outgoing scanner, policy, history or secret findings before retry"
         return outcome("failed", "outgoing_verification_failed")
     except _AuthenticationUnavailable:

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import argparse
 import base64
-import binascii
 import fnmatch
 import json
 import os
@@ -101,7 +100,7 @@ def _public_manifest_key(root: Path, finding: Any) -> bool:
         from cryptography.hazmat.primitives.serialization import load_der_public_key
 
         load_der_public_key(base64.b64decode(value, validate=True))
-    except (OutgoingVerificationError, ValueError, binascii.Error, TypeError):
+    except Exception:  # noqa: BLE001 - whatever stops the proof (an unsupported key type too) leaves the finding standing
         return False
     return True
 

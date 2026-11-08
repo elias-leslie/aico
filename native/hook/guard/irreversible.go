@@ -154,7 +154,8 @@ func (r *Rules) scriptDecision(args, stdinBodies []string) (decision, bool) {
 		}
 		for _, m := range r.scriptLiteral.FindAllStringSubmatch(text, -1) {
 			for _, literal := range m[1:] {
-				if literal == "" || strings.Contains(literal, "$") {
+				// A bare "/" is a separator (path.split("/")), and it names no state.
+				if literal == "" || literal == "/" || strings.Contains(literal, "$") {
 					continue
 				}
 				// A literal may also be joined or appended to the home directory

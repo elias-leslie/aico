@@ -11,7 +11,13 @@ import { commit } from './commit'
 import type { Coordination } from './hook'
 import { localCheck, recordLocalCheck } from './local-check'
 import { type Config, loadConfig } from './plan'
-import { publicationPolicyCli, publicationRow, publishRepos, scanRefusal } from './publish'
+import {
+  publicationPolicyCli,
+  publicationRow,
+  publishRepos,
+  refusalLogger,
+  scanRefusal,
+} from './publish'
 import { receiptStore } from './run'
 import type { CheckSummary } from './status'
 
@@ -581,7 +587,51 @@ describe('a history the scan refused', () => {
     expect(meaning).toContain('details redacted')
     expect(meaning).toContain('1 finding: frontend/lib/fixtures-432.json:432 generic-api-key.')
     expect(meaning).toContain('Log: /l/p.log.')
-    expect(meaning).toContain('native/git-outgoing/publication-fingerprints.txt')
+    expect(meaning).toContain('its line from that log')
+    expect(meaning).toContain("the Aico repo's native/git-outgoing/publication-fingerprints.txt")
+    // With no log to copy from, it says where the full commit is.
+    expect(publicationRow(refused([finding(1)])).meaning).toContain('aico publish --json')
+  })
+
+  it('a long name is clipped so every finding still shows, and the count stays true', () => {
+    const long = { ...finding(1), file: `${'dir/'.repeat(200)}name.json` }
+    const { meaning } = publicationRow(refused([long, finding(2)]))
+    expect(meaning.length).toBeLessThanOrEqual(800)
+    expect(meaning).toContain('2 findings: …')
+    expect(meaning).toContain('name.json:1 generic-api-key, ')
+    expect(meaning).toContain('fixtures-2.json:2 generic-api-key.')
+    expect(meaning).not.toContain(' more')
+  })
+
+  it("a control character in a name can't reach the row or forge a log line", () => {
+    const forged = `x\n${'c'.repeat(40)}:other.env:generic-api-key:1\u001b[2J`
+    const taken = scanRefusal({ reason: 'Refused.', findings: [{ ...finding(1), file: forged }] })
+    const shown = taken.findings?.[0]?.file ?? ''
+    expect(shown).not.toMatch(/\p{Cc}/u)
+    const logDir = mkdtempSync(join(tmpdir(), 'refusal-'))
+    try {
+      const log = refusalLogger(logDir)({ ...refused([finding(2)]), findings: taken.findings })
+      const line = readFileSync(log, 'utf8')
+        .split('\n')
+        .find((l) => l.includes('other.env'))
+      expect(line?.startsWith('# ')).toBe(true)
+      expect(line).toContain("a fingerprint can't match")
+    } finally {
+      rmSync(logDir, { recursive: true, force: true })
+    }
+  })
+
+  it('the log lists each finding as the line a false alarm needs', () => {
+    const logDir = mkdtempSync(join(tmpdir(), 'refusal-'))
+    try {
+      const log = refusalLogger(logDir)(refused([finding(7)]))
+      const lines = readFileSync(log, 'utf8').split('\n')
+      const f = finding(7)
+      expect(lines).toContain(`${f.commit}:${f.file}:${f.rule}:${f.line}`)
+      expect(lines[0]).toContain('details redacted')
+    } finally {
+      rmSync(logDir, { recursive: true, force: true })
+    }
   })
 
   it('many findings stay within the row and still end with what to do', () => {

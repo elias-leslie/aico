@@ -10,7 +10,7 @@ import pytest
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
 
-from host_steward import grants, webauthn
+from host_steward import grants, grants_cli, webauthn
 
 
 @pytest.fixture
@@ -156,3 +156,23 @@ def test_a_request_that_is_no_longer_pending_ends_its_notice_once(service, resol
     svc.refresh()
     svc.refresh()
     assert sorted(resolved) == sorted([(answered, "denied"), (lapsed, "expired")])
+
+
+def test_status_names_only_what_is_open_or_waiting_and_json_keeps_the_rest(monkeypatch, capsys):
+    base = {"id": "a1", "grant": "owner-chrome", "created": 100.0, "expires": 200.0, "reason": "why"}
+    listed = {"requests": [{**base, "state": "expired"}], "grants": [], "uses": [{"at": 1}] * 200}
+    monkeypatch.setattr(grants_cli, "call", lambda _msg: listed)
+    assert grants_cli.main(["status"]) == 0
+    idle = capsys.readouterr().out
+    assert idle.startswith("No access open and no tap waiting.\nLast: owner-chrome expired")
+
+    listed["requests"] += [{**base, "id": "b2", "state": "approved"},
+                           {**base, "id": "c3", "state": "pending", "reason": "x" * 500}]
+    assert grants_cli.main(["list"]) == 0
+    busy = capsys.readouterr().out
+    assert "owner-chrome open until" in busy and "(id b2)" in busy
+    assert "waiting on the owner's tap" in busy and "(id c3)" in busy and "x" * 101 not in busy
+    assert "a1" not in busy
+
+    assert grants_cli.main(["status", "--json"]) == 0
+    assert len(json.loads(capsys.readouterr().out)["uses"]) == 200

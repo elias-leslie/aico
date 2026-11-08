@@ -103,7 +103,15 @@ export function publishDecision(
 }
 
 const REFUSED = 'outgoing_verification_failed'
-const FINGERPRINTS = 'native/git-outgoing/publication-fingerprints.txt'
+const FINGERPRINTS = "the Aico repo's native/git-outgoing/publication-fingerprints.txt"
+/** A long name's end says the most; the log keeps it whole. */
+const FINDING_NAME_MAX = 120
+/** Stands in for a control character in a scanned name. Such a name can't be listed as a fingerprint. */
+const UNPRINTABLE = '\uFFFD'
+
+const printable = (text: string) => text.replace(/\p{Cc}/gu, UNPRINTABLE)
+const clipped = (name: string) =>
+  name.length > FINDING_NAME_MAX ? `…${name.slice(1 - FINDING_NAME_MAX)}` : name
 
 /** The row for a refused history: the reason, then where, as much as Status holds. Never the value. */
 function refusalMeaning(result: Publication, source: string): string {
@@ -111,12 +119,15 @@ function refusalMeaning(result: Publication, source: string): string {
   const log = result.security_log ? ` Log: ${result.security_log}.` : ''
   const found = result.findings ?? []
   if (!found.length) return `${head}.${log} Owning agent: repair it and publish again.`
-  const tail = `${log} Owning agent: remove it, or for a checked false alarm add its commit:file:rule:line to ${FINGERPRINTS}.`
+  const fingerprint = result.security_log
+    ? 'its line from that log'
+    : 'its commit:file:rule:line from aico publish --json'
+  const tail = `${log} Owning agent: remove it, or for a checked false alarm add ${fingerprint} to ${FINGERPRINTS}.`
   const total = result.findings_total ?? found.length
   let list = ''
   let shown = 0
   for (const finding of found) {
-    const next = `${shown ? ', ' : ''}${finding.file}:${finding.line} ${finding.rule}`
+    const next = `${shown ? ', ' : ''}${clipped(finding.file)}:${finding.line} ${clipped(finding.rule)}`
     const more = ` and ${total - shown - 1} more`
     if (
       head.length + list.length + next.length + more.length + tail.length + 20 >
@@ -177,7 +188,14 @@ export function scanRefusal(security: unknown): Partial<Delivery> {
         typeof finding.rule === 'string' &&
         Number.isInteger(finding.line),
     )
-    .map(({ commit, file, rule, line }): ScanFinding => ({ commit, file, rule, line }))
+    .map(
+      ({ commit, file, rule, line }): ScanFinding => ({
+        commit,
+        file: printable(file),
+        rule: printable(rule),
+        line,
+      }),
+    )
   return {
     ...(typeof reason === 'string' ? { security_reason: reason.replace(/\.$/, '') } : {}),
     ...(found.length
@@ -338,7 +356,7 @@ export async function publishRepos(
                   try {
                     result.security_log = options.refusalLog(result)
                   } catch {
-                    // Status and the command's output still carry the findings.
+                    // Status and the command's output still carry the reason and where.
                   }
                 if (
                   ['no_existing_upstream', 'unsafe_remote_route', 'no_github_remote'].includes(
@@ -404,7 +422,7 @@ function acceptanceRunner(logDir: string): NonNullable<PublishOptions['acceptanc
 const publishLogDir = (env: NodeJS.ProcessEnv) => join(aicoDataDir(env), 'publish-logs')
 
 /** Adds a refusal to the project's publish log, after any acceptance this pass ran. */
-function refusalLogger(logDir: string): NonNullable<PublishOptions['refusalLog']> {
+export function refusalLogger(logDir: string): NonNullable<PublishOptions['refusalLog']> {
   return (result) => {
     mkdirSync(logDir, { recursive: true })
     const log = join(logDir, `${result.project}.log`)
@@ -415,7 +433,11 @@ function refusalLogger(logDir: string): NonNullable<PublishOptions['refusalLog']
         ? [
             `${result.findings_total ?? found.length} finding(s), first ${found.length} below as commit:file:rule:line. Never the value.`,
             `Remove it, or for a checked false alarm add its line, with a comment saying why, to ${FINGERPRINTS}.`,
-            ...found.map((f) => `${f.commit}:${f.file}:${f.rule}:${f.line}`),
+            ...found.map((f) =>
+              `${f.commit}:${f.file}:${f.rule}:${f.line}`.includes(UNPRINTABLE)
+                ? `# ${f.commit}:${f.file}:${f.rule}:${f.line} (control characters in the name: a fingerprint can't match, rename it)`
+                : `${f.commit}:${f.file}:${f.rule}:${f.line}`,
+            ),
           ]
         : []),
     ]

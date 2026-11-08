@@ -160,6 +160,11 @@
       "expect": "BLOCKED:delete /home/guard-fixture/.local/state/aico/notes.db:This is Aico durable state (backups, secrets, blobs, archive, or a database or key file) and has no undo; agents never delete it by hand. Scratch under the same roots (logs, captures, deliveries) stays deletable by its own path."
     },
     {
+      "note": "A bare slash in a script is a separator, not a path; the delete call is on something else",
+      "command": "python3 - <<'EOF'\nimport os\nname = path.split('/')[-1]\nos.remove('/tmp/scratch.log')\nEOF",
+      "expect": "allow"
+    },
+    {
       "command": "truncate -s 0 /tmp/scratch.log",
       "expect": "allow"
     }

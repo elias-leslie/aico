@@ -11,6 +11,26 @@ import time
 
 from host_steward.grants import call, config
 
+REASON_CHARS = 100
+
+
+def summary(listed: dict) -> str:
+    """What an agent checks before saying a tap awaits the owner; `--json` has the rest."""
+    def clock(at: float) -> str:
+        return time.strftime("%H:%M", time.localtime(at))
+
+    requests = listed["requests"]
+    lines = [f"{r['grant']} open until {clock(r['expires'])} (id {r['id']})"
+             for r in requests if r["state"] == "approved"]
+    lines += [f"{r['grant']} waiting on the owner's tap: {r.get('reason', '')[:REASON_CHARS]} (id {r['id']})"
+              for r in requests if r["state"] == "pending"]
+    if not lines:
+        lines = ["No access open and no tap waiting."]
+        if requests:
+            last = requests[-1]
+            lines.append(f"Last: {last['grant']} {last['state']}, asked {clock(last['created'])}")
+    return "\n".join(lines)
+
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="aico grants")
@@ -21,7 +41,8 @@ def main(argv=None) -> int:
     request.add_argument("--minutes", type=int, default=config()["default_minutes"])
     request.add_argument("--requester", default=os.environ.get("AICO_SESSION_ID", "agent"))
     request.add_argument("--wait", action="store_true")
-    sub.add_parser("list", aliases=["status"], help="requests, open grants and uses")
+    status = sub.add_parser("status", aliases=["list"], help="open access and taps waiting")
+    status.add_argument("--json", action="store_true", help="every request and logged use")
     revoke = sub.add_parser("revoke", help="end a request or a kind of access now")
     revoke.add_argument("kind")
     active = sub.add_parser("active", help="check and log a use of permission-only access")
@@ -34,6 +55,9 @@ def main(argv=None) -> int:
     try:
         if args.op in ("list", "status"):
             out = call({"op": "list"})
+            if not args.json:
+                print(summary(out))
+                return 0
         elif args.op == "request":
             out = call({"op": "request", "kind": args.kind, "reason": args.reason,
                         "minutes": args.minutes, "requester": args.requester})

@@ -314,3 +314,10 @@ def test_cli_prints_one_json_object_and_exits_by_completion(source, capsys):
     assert json.loads(capsys.readouterr().out)["reason"] == "source_published"
     assert delivery.main(["--root", str(project), "--sha", "0" * 40]) == 1
     assert json.loads(capsys.readouterr().out)["reason"] == "local_check_required"
+
+
+def test_reported_findings_fit_the_line_the_reader_keeps():
+    long = {"commit": "a" * 40, "file": "\u5b57" * 1400, "rule": "generic-api-key", "line": 1}
+    reported = delivery._reported_findings([long] * delivery._FINDINGS_REPORTED)
+    assert 0 < len(reported) < delivery._FINDINGS_REPORTED
+    assert len(json.dumps(reported)) <= delivery._FINDINGS_BYTES + len(reported) * 2 + 2

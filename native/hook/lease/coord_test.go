@@ -287,6 +287,10 @@ func TestBareYesClosesWithoutConfirm(t *testing.T) {
 	if settled["state"] != "closed" || settled["auto_closed"] != true {
 		t.Fatalf("a bare yes closes for the sender: %v", settled)
 	}
+	tg := &Target{Widget: "abcd1234", AgentID: "cc:111111", Family: map[string]bool{"cc:111111": true}}
+	if line, _, ok := a.Compose(tg, nil); !ok || !strings.Contains(line, "(yes, no reply needed)") {
+		t.Errorf("the closed ack reads as received, not dropped: %q ok=%v", line, ok)
+	}
 	items := a.Pending()
 	if len(items) != 1 || !strings.Contains(items[0].Line, "it has this; no reply needed") {
 		t.Errorf("the sender is told once: %+v", items)

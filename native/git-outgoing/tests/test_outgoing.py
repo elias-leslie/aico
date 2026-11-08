@@ -7,6 +7,7 @@ import os
 import subprocess
 from contextlib import contextmanager
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 from git_outgoing.outgoing import (
@@ -427,6 +428,25 @@ def test_trusted_publication_fingerprint_allows_only_that_finding(history, monke
         check(history, oid)
     # Where it is, enough to review and clear it; never the value.
     assert refused.value.findings == ({"commit": oid, "file": "fixture.py", "rule": "generic-api-key", "line": 21},)
+
+
+def test_only_unreviewed_findings_are_named_and_an_unprovable_key_keeps_its_finding(history, monkeypatch) -> None:
+    from git_outgoing import outgoing
+
+    oid = history[4](path="fixture.py")
+    reviewed = {"Commit": oid, "File": "fixture.py", "RuleID": "generic-api-key", "StartLine": 20}
+    other = {**reviewed, "StartLine": 21}
+    report = history[1] / "report.json"
+    report.write_text(json.dumps([reviewed, other]))
+    history[1].joinpath("publication-fingerprints.txt").write_text(f"{oid}:fixture.py:generic-api-key:20\n")
+    assert outgoing._unreviewed_findings(history[0], report, history[1]) == [other]
+
+    # A key type the library can't load raises its own exception, not a ValueError.
+    class Unsupported(Exception):
+        pass
+
+    monkeypatch.setattr(outgoing, "_git", Mock(side_effect=Unsupported()))
+    assert outgoing._public_manifest_key(history[0], {**reviewed, "File": "manifest.json"}) is False
 
 
 def test_publication_fingerprint_policy_has_no_path_or_pattern_allows(history, monkeypatch) -> None:
