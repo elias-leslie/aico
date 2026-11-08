@@ -33,7 +33,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { homedir, hostname, tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { signDetached } from '@aico/fleet/releases'
 import { secretsDir } from '@aico/fleet/secrets'
 import { machineId, type StatusRow } from '@aico/status'
@@ -895,7 +895,8 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
               )
             })()))
       const installRoot = rootInstallWanted(root, sha, cfg, req.rollback, deps)
-      if (!restart.length && !swaps.length && !installOps && !installRoot) {
+      const hookTree = hookInstallWanted(root, sha, cfg, deps)
+      if (!restart.length && !swaps.length && !installOps && !installRoot && !hookTree) {
         const message = `Nothing to restart at ${sha.slice(0, 10)}: no unit's sources changed`
         deps.out(`[deploy] ${message.toLowerCase()}`)
         await finish('succeeded', message)
@@ -981,6 +982,18 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
           throw new Refusal(`The host-steward root install failed: ${problem}`)
         }
       }
+      if (hookTree) {
+        const problem = installHook(root, sha, hookTree, cfg, deps)
+        if (problem) {
+          const done = restart.length ? `${restart.join(', ')} deployed; ` : ''
+          await finish(
+            'failed',
+            `Deploy of ${sha.slice(0, 10)}: ${done}the aico-hook install failed (${problem})`,
+            restart,
+          )
+          throw new Refusal(`The aico-hook install failed: ${problem}`)
+        }
+      }
       const seconds = Math.round((Date.now() - started) / 1000)
       if (release) {
         // The newest accepted release: the one a peer is sent (scripts/peer-release.sh).
@@ -991,6 +1004,7 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
         ...restart.map((unit) => unit.replace(/\.service$/, '')),
         ...swaps.map((unit) => `the ${unit.replace(/\.service$/, '')} page (no restart)`),
         ...(installRoot ? ['the host-steward root install'] : []),
+        ...(hookTree ? ['aico-hook'] : []),
       ]
       const what = parts.length ? parts.join(', ') : 'the deploy code only'
       const message = `Deployed ${sha.slice(0, 10)}: ${what} (${seconds} s)`
@@ -1727,6 +1741,64 @@ export function installRootSources(
         ? `[deploy] host-steward root sources installed from ${sha.slice(0, 12)}`
         : `[deploy] host-steward root sources installed; the installer recorded no commit (an older installer), so the next deploy installs again`,
     )
+    return null
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+/**
+ * The commit's aico-hook tree id when the installed hook (the `current` link install.sh keeps) is
+ * another build; null when the commit has no hook sources or the hook already matches.
+ */
+export function hookInstallWanted(
+  root: string,
+  sha: string,
+  cfg: DeployConfig,
+  deps: DeployDeps,
+): string | null {
+  const spec = cfg.hookInstall
+  if (!spec?.source) return null
+  const tree = deps.run('git', ['-C', root, 'rev-parse', '--short=12', `${sha}:${spec.source}`])
+  if (tree.code !== 0 || !tree.out.trim()) return null
+  let current = ''
+  try {
+    current = basename(readlinkSync(join(expandHome(spec.dir), 'current')))
+  } catch {}
+  return current === tree.out.trim() ? null : tree.out.trim()
+}
+
+/** Build and install the commit's aico-hook with its own install.sh. Null on success, else the problem. */
+export function installHook(
+  root: string,
+  sha: string,
+  tree: string,
+  cfg: DeployConfig,
+  deps: DeployDeps,
+): string | null {
+  const spec = cfg.hookInstall
+  deps.out(`[deploy] installing aico-hook ${tree} from ${sha.slice(0, 12)}`)
+  const dir = mkdtempSync(join(tmpdir(), 'aico-hook-install-'))
+  try {
+    const archive = join(dir, 'hook.tar')
+    const made = deps.run('git', [
+      '-C',
+      root,
+      'archive',
+      '--format=tar',
+      '-o',
+      archive,
+      sha,
+      '--',
+      spec.source,
+    ])
+    if (made.code !== 0) return `git archive failed: ${tail(made, 1)}`
+    const unpacked = deps.run('tar', ['-xf', archive, '-C', dir])
+    if (unpacked.code !== 0) return `tar failed: ${tail(unpacked, 1)}`
+    const result = deps.run('bash', [join(dir, spec.source, 'install.sh')], {
+      env: { ...deps.env, AICO_HOOK_REL: tree, AICO_HOOK_BASE: expandHome(spec.dir) },
+    })
+    if (result.code !== 0) return tail(result, 2) || `install.sh exited ${result.code}`
     return null
   } finally {
     rmSync(dir, { recursive: true, force: true })

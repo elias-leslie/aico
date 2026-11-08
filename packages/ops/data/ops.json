@@ -48,6 +48,10 @@
       "receipt": "/usr/local/lib/host-steward/installed.json",
       "signingKey": "update-signing-key",
       "declareWhat": "any"
+    },
+    "hookInstall": {
+      "source": "native/hook",
+      "dir": "~/.local/lib/aico/hook"
     }
   },
   "vm": {

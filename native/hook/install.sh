@@ -5,10 +5,13 @@
 # binary with `ln -sfn "$(readlink ~/.local/lib/aico/hook/previous)" ~/.local/lib/aico/hook/current`.
 set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-repo=$(git -C "$here" rev-parse --show-toplevel)
-base=$HOME/.local/lib/aico/hook
-# The committed tree id; uncommitted changes get a content hash instead.
-if rel=$(git -C "$repo" rev-parse --short=12 "HEAD:native/hook" 2>/dev/null) &&
+base=${AICO_HOOK_BASE:-$HOME/.local/lib/aico/hook}
+# The committed tree id; uncommitted changes get a content hash instead. The deploy runs this from
+# a git archive of the commit and names the tree id (AICO_HOOK_REL).
+if [ -n "${AICO_HOOK_REL:-}" ]; then
+  rel=$AICO_HOOK_REL
+elif repo=$(git -C "$here" rev-parse --show-toplevel 2>/dev/null) &&
+  rel=$(git -C "$repo" rev-parse --short=12 "HEAD:native/hook" 2>/dev/null) &&
   [ -z "$(git -C "$repo" status --porcelain -- native/hook)" ]; then :; else
   rel=$(cd "$here" && git ls-files -co --exclude-standard | sort | xargs sha256sum | sha256sum | cut -c1-12)-dirty
 fi

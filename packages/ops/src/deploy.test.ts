@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
   realpathSync,
   rmSync,
   statSync,
@@ -979,6 +980,41 @@ describe('deploy', () => {
       meaning: expect.stringContaining('demo-web.service deployed'),
     })
     expect(existsSync(steward.receipt)).toBe(false)
+  })
+
+  it('installs aico-hook when the commit’s hook sources differ from the installed build', async () => {
+    const { root, git, deps, lines, rows } = setup()
+    const hookDir = join(deps.releasesDir, '..', 'hook')
+    const commit = (file: string, text: string) => {
+      mkdirSync(join(root, file, '..'), { recursive: true })
+      writeFileSync(join(root, file), text)
+      git('add', '-A')
+      git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', file)
+      return git('rev-parse', 'HEAD').out.trim()
+    }
+    const script = (exit: number) =>
+      `mkdir -p "$AICO_HOOK_BASE" && ln -sfn "releases/$AICO_HOOK_REL" "$AICO_HOOK_BASE/current"\nexit ${exit}\n`
+    commit(
+      'packages/ops/data/ops.json',
+      JSON.stringify({ deploy: { hookInstall: { source: 'native/hook', dir: hookDir } } }),
+    )
+    commit('native/hook/install.sh', script(0))
+    const original = deps.run
+    deps.run = (cmd, args, opts) =>
+      cmd === 'bash' ? run(cmd, args, opts) : original(cmd, args, opts)
+    const tree = () => git('rev-parse', '--short=12', 'HEAD:native/hook').out.trim()
+    const installed = () => readlinkSync(join(hookDir, 'current'))
+    expect(await deploy(request(), root, deps)).toBe(0)
+    expect(installed()).toBe(`releases/${tree()}`)
+    expect(rows.at(-1)?.meaning).toContain('aico-hook')
+    // The same hook tree: nothing to install.
+    lines.length = 0
+    expect(await deploy(request(), root, deps)).toBe(0)
+    expect(lines.join('\n')).not.toContain('installing aico-hook')
+    // A hook change installs again; a failed install fails the deploy.
+    commit('native/hook/install.sh', script(3))
+    await expect(deploy(request(), root, deps)).rejects.toThrow(/aico-hook install failed/)
+    expect(rows.at(-1)?.state).toBe('failed')
   })
 
   it('skips the root install on a machine without the signed installer', async () => {
