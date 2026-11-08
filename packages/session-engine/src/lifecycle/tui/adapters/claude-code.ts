@@ -511,6 +511,11 @@ export class ClaudeMainTurn {
   }
 }
 
+/** The `waitingFor` reasons Claude Code names when it asks the owner something
+ * (checked live: a Write permission prompt reads `permission prompt`). Any other
+ * `waiting` (`dialog open`, none) is just a dialog, so the transcript decides. */
+const ASKS = new Set(['permission prompt', 'input needed', 'sandbox request', 'worker request'])
+
 /** One Claude Code process, read through the files of the home it runs in. */
 class ClaudeProbe implements AgentProbe {
   /** The transcript reader for the conversation the status file names. */
@@ -532,10 +537,10 @@ class ClaudeProbe implements AgentProbe {
       return null
     }
     if (!signal?.agentSessionId) return signal
-    if (signal.state === 'blocked') {
-      // `waiting` is any open dialog. Blocked on the owner only when a tool call
-      // is waiting for its result (a permission prompt, a question); a transcript
-      // that cannot say keeps the status file's word.
+    if (signal.state === 'blocked' && !ASKS.has(signal.detail ?? '')) {
+      // `waiting` with no named reason is any open dialog. Blocked on the owner only
+      // when a tool call is waiting for its result (a permission prompt, a question);
+      // a transcript that cannot say keeps the status file's word.
       const reader = this.reader(signal.agentSessionId)
       if (reader?.hasPendingTool() === false)
         return {

@@ -51,9 +51,20 @@ const subagent = [
   row({ type: 'user', isSidechain: true, message: { content: [] } }),
 ]
 
-function setup(status: string, lines: string[], extra: Record<string, string> = {}) {
+function setup(
+  status: string,
+  lines: string[],
+  extra: Record<string, string> = {},
+  waitingFor?: string,
+) {
   const files: Record<string, string> = {
-    [STATUS]: JSON.stringify({ pid: 20, sessionId: SESSION, status, statusUpdatedAt: 5 }),
+    [STATUS]: JSON.stringify({
+      pid: 20,
+      sessionId: SESSION,
+      status,
+      statusUpdatedAt: 5,
+      waitingFor,
+    }),
     [TRANSCRIPT]: `${lines.join('\n')}\n`,
     ...extra,
   }
@@ -235,6 +246,14 @@ describe('Claude Code waiting needs a tool call without its result', () => {
     expect(found?.poll()?.state).toBe('working')
     files[TRANSCRIPT] += `${call('b')}\n`
     expect(found?.poll()?.state).toBe('blocked')
+  })
+
+  it('takes the reasons Claude Code names for a question at its word', () => {
+    // A Write permission prompt reads `permission prompt` while its row is still being written.
+    const named = (waitingFor: string) => setup('waiting', [prompt], {}, waitingFor).probe()?.poll()
+    for (const reason of ['permission prompt', 'input needed', 'sandbox request'])
+      expect(named(reason)).toMatchObject({ state: 'blocked', detail: reason })
+    expect(named('dialog open')).toMatchObject({ state: 'working' })
   })
 
   it('keeps the status file waiting when the transcript cannot say', () => {
