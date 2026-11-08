@@ -201,19 +201,20 @@ export async function withWorktree<T>(
   config: Config,
   sha: string,
   fn: (work: string, worked: Config, parent: string) => Promise<T>,
+  /** Changes the tree before its config loads and fn runs. */
+  prepare?: (work: string) => void,
 ): Promise<T> {
   const main = config.root
   requireEnvironment(config)
   const parent = mkdtempSync(join(tmpdir(), 'aico-accept-'))
   const work = join(parent, 'tree')
-  git(main, ['worktree', 'add', '--detach', '-q', work, sha])
   try {
-    const loaded = loadConfig(work)
-    if ('unsupported' in loaded) throw new ConfigError(`acceptance: ${loaded.unsupported}`)
-    const worked: Config = { ...loaded, environmentInputs: config.environmentInputs }
-    linkEnvironment(config, work)
-    return await fn(work, worked, parent)
-  } finally {
+    git(main, ['worktree', 'add', '--detach', '-q', work, sha])
+  } catch (error) {
+    rmSync(parent, { recursive: true, force: true })
+    throw error
+  }
+  const remove = () => {
     // The links go first so removing the worktree never walks into the main checkout's modules.
     for (const dir of moduleDirs(work, ['node_modules', '.venv', 'venv']))
       if (lstatSync(join(work, dir)).isSymbolicLink() || dir.endsWith('node_modules'))
@@ -225,5 +226,27 @@ export async function withWorktree<T>(
       git(main, ['worktree', 'prune'])
     }
     rmSync(parent, { recursive: true, force: true })
+  }
+  // A timed-out or stopped caller leaves no copy behind.
+  const stopped = (signal: NodeJS.Signals) => {
+    try {
+      remove()
+    } finally {
+      process.exit(signal === 'SIGINT' ? 130 : 143)
+    }
+  }
+  process.once('SIGTERM', stopped)
+  process.once('SIGINT', stopped)
+  try {
+    prepare?.(work)
+    const loaded = loadConfig(work)
+    if ('unsupported' in loaded) throw new ConfigError(`acceptance: ${loaded.unsupported}`)
+    const worked: Config = { ...loaded, environmentInputs: config.environmentInputs }
+    linkEnvironment(config, work)
+    return await fn(work, worked, parent)
+  } finally {
+    process.off('SIGTERM', stopped)
+    process.off('SIGINT', stopped)
+    remove()
   }
 }

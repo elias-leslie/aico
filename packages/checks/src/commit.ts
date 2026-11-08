@@ -7,11 +7,12 @@
 import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { type CheckReport, runCheck } from './check'
+import { type CleanRun, cleanRerun } from './clean-check'
 import { blobIds, changedFiles, commonDir, git, gitOk } from './git'
 import type { Coordination } from './hook'
 import { noteLocalCheck } from './local-check'
 import type { Config } from './plan'
-import { sourceKey } from './run'
+import { receiptStore, type StepResult, sourceKey } from './run'
 
 export class CommitError extends Error {}
 
@@ -112,6 +113,29 @@ async function withRepoLock<T>(root: string, fn: () => T): Promise<T> {
   }
 }
 
+/** The session a commit came from, the id `sessions send` takes (the hook's own order). */
+const SESSION_ENV = [
+  'ST_SESSION_ID',
+  'CLAUDE_SESSION_ID',
+  'CLAUDE_CODE_SESSION_ID',
+  'CODEX_SESSION_ID',
+  'CODEX_THREAD_ID',
+  'PI_SESSION_ID',
+  'ANTIGRAVITY_CONVERSATION_ID',
+]
+
+/** Who to tell when this commit later stops a deploy. Losing it only loses that message. */
+function recordSession(root: string, sha: string, env: NodeJS.ProcessEnv): void {
+  const session = SESSION_ENV.map((name) => env[name]).find(Boolean)
+  if (!session) return
+  try {
+    receiptStore(root).put(`commit-session-${sha}`, { session })
+  } catch {}
+}
+
+const named = (files: string[]) =>
+  `${files.slice(0, 5).join(', ')}${files.length > 5 ? `, +${files.length - 5} more` : ''}`
+
 export async function commit(config: Config, options: CommitOptions): Promise<CommitResult> {
   const { root } = config
   const out = options.out ?? (() => {})
@@ -131,21 +155,69 @@ export async function commit(config: Config, options: CommitOptions): Promise<Co
   const head = () =>
     gitOk(root, ['rev-parse', '--verify', 'HEAD']) ? git(root, ['rev-parse', 'HEAD']).trim() : null
   const checkedBase = head()
-  let checkedCandidate = changedFiles(root).every((file) => files.includes(file))
+  const notMine = (changed: string[]) => changed.filter((file) => !files.includes(file))
+  const dirtyAtStart = notMine(changedFiles(root))
+  let checkedCandidate = !dirtyAtStart.length
   let report: CheckReport | null = null
+  let clean: CleanRun | null = null
   if (!options.noCheck) {
+    // A commit shows what failed and the verdict, not every passing or skipped stage.
+    const shown = (line: string) => {
+      if (!/^CHECK:(OK|SKIP):/.test(line)) out(line)
+    }
+    // Beside other agents' files a failure may be theirs: hold it until that's known.
+    const held: string[] = []
+    const env = { ...(options.env ?? process.env), ST_CHECK_CHANGED_FILES: '' }
     report = await runCheck(config, {
       lane: 'quick',
       paths: files,
       jobs: options.jobs,
-      // A commit shows what failed and the verdict, not every passing or skipped stage.
-      out: (line) => {
-        if (!/^CHECK:(OK|SKIP):/.test(line)) out(line)
-      },
-      env: { ...(options.env ?? process.env), ST_CHECK_CHANGED_FILES: '' },
+      out: dirtyAtStart.length ? (line) => held.push(line) : shown,
+      env,
     })
-    if (!report.passed)
-      throw new CommitError('commit refused: the quick check failed (details above)')
+    const flush = () => {
+      for (const line of held) shown(line)
+    }
+    if (report.passed) flush()
+    else {
+      const others = [...new Set([...dirtyAtStart, ...notMine(changedFiles(root))])]
+      const failed = report.results.filter(
+        (result) => result.required && !['pass', 'skip'].includes(result.state),
+      )
+      if (others.length) {
+        try {
+          clean = await cleanRerun(config, failed, files, { jobs: options.jobs, out: shown, env })
+        } catch (error) {
+          flush()
+          throw new CommitError(
+            `commit refused: the quick check failed (details above), and a clean copy of HEAD plus your files could not be set up (${(error as Error).message}). Check your own files (st check <tool> -- FILE), then rerun with --skip-checks.`,
+          )
+        }
+      }
+      if (!clean) {
+        flush()
+        throw new CommitError('commit refused: the quick check failed (details above)')
+      }
+      if (clean.results.some((r) => r.required && !['pass', 'skip'].includes(r.state)))
+        throw new CommitError(
+          `commit refused: the quick check failed on HEAD plus your files alone (details above); other agents' work is not the cause`,
+        )
+      out(
+        `CHECK:CLEAN:${failed.map((r) => r.id).join(', ')} failed only on other agents' unfinished work (${named(others)}); passed on HEAD plus your files`,
+      )
+      const rerun = new Map(clean.results.map((result) => [result.id, result]))
+      report = {
+        ...report,
+        passed: true,
+        // The clean tree is gone: its stages are held to HEAD below, not to the working tree.
+        results: report.results.map((result) =>
+          rerun.has(result.id)
+            ? { ...(rerun.get(result.id) as StepResult), inputs: undefined }
+            : result,
+        ),
+      }
+      checkedCandidate = false
+    }
   }
   const after = blobIds(root, files)
   const moved = files.filter((file) => before.get(file) !== after.get(file))
@@ -155,6 +227,17 @@ export async function commit(config: Config, options: CommitOptions): Promise<Co
   const verifyInputs = () => {
     for (const result of report?.results ?? []) {
       if (result.inputs && sourceKey(root, result.inputs.paths) !== result.inputs.key)
+        throw new CommitError(
+          `source changed during the check: stage ${result.id} inputs; rerun the commit`,
+        )
+    }
+    // A clean stage saw HEAD plus the named files, which are watched above: only HEAD can move.
+    for (const result of clean?.results ?? []) {
+      if (
+        clean &&
+        result.inputs &&
+        git(root, ['diff', '--name-only', clean.base, 'HEAD', '--', ...result.inputs.paths]).trim()
+      )
         throw new CommitError(
           `source changed during the check: stage ${result.id} inputs; rerun the commit`,
         )
@@ -235,6 +318,7 @@ export async function commit(config: Config, options: CommitOptions): Promise<Co
     }
     return git(root, ['rev-parse', 'HEAD']).trim()
   })
+  recordSession(root, sha, options.env ?? process.env)
   const tree = git(root, ['rev-parse', `${sha}^{tree}`]).trim()
   if (report && checkedCandidate && !changedFiles(root).length)
     noteLocalCheck(root, sha, report, out)

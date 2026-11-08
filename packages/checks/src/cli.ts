@@ -11,6 +11,7 @@ import { CommitError, commit } from './commit'
 import { GitError, repoPaths, repoRoot } from './git'
 import { type Coordination, CoordinationError } from './hook'
 import { ConfigError, LEGACY, loadConfig, type Planned, plan, toolDir } from './plan'
+import { repairStages } from './repair'
 import { passed, runSteps } from './run'
 import type { CheckSummary } from './status'
 
@@ -34,6 +35,7 @@ what is in the repo; a check with nothing to do here prints SKIP). Details go to
   aico check TOOL -- [ARGS...]           one configured tool (vitest, pytest, ruff, types, biome, tsc)
   aico check --native --stage ID          one declared native stage (--no-reuse, --json)
   aico check --acceptance [--sha REV]     the full gate on a commit, in a clean worktree
+  aico check --repair STAGE,...           a deploy's own fix: safe Biome/ruff fixes in clean files, committed
   options: --paths P...  scope to the changed files under P; --no-reuse  rerun a pass on identical
   content; --jobs N  stages at once (default 3); --with-ack ID  a holder's yes for acceptance
 Your own changed files: the dirty files no other session wrote or holds a lease on (aico lease --help).`
@@ -168,7 +170,7 @@ async function checkCli(argv: string[], io: CliIo): Promise<number> {
     )
     return ok ? 0 : 1
   }
-  const args = parse(argv, ['--sha', '--jobs', '--with-ack', '--scope'])
+  const args = parse(argv, ['--sha', '--jobs', '--with-ack', '--scope', '--repair'])
   if (args.flags.has('--help') || args.flags.has('-h')) {
     io.out(usage(CHECK_USAGE, io))
     return 0
@@ -184,6 +186,17 @@ async function checkCli(argv: string[], io: CliIo): Promise<number> {
   if ('unsupported' in config) {
     io.err(usage(`aico check: ${config.unsupported}`, io))
     return 3
+  }
+  const repair = args.values.get('--repair')
+  if (repair) {
+    const sha = await repairStages(config, repair.split(','), {
+      coordination: io.coordination,
+      withAck: args.values.get('--with-ack'),
+      out: io.out,
+      env: io.env,
+    })
+    io.out(sha ? `REPAIR:committed ${sha}` : 'REPAIR:nothing fixed')
+    return sha ? 0 : 1
   }
   const jobs = args.values.has('--jobs') ? Number(args.values.get('--jobs')) : undefined
   const reuse = !args.flags.has('--no-reuse')
