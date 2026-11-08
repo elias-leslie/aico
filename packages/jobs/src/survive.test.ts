@@ -81,9 +81,13 @@ const runnerFor = (
     log: (line) => logs.push(line),
   })
 
-it.each([false, true])(
-  'reconciles a committed remote completion after its reply is lost (restart=%s)',
-  async (restart) => {
+it.each([
+  [false, false],
+  [true, false],
+  [false, true],
+])(
+  'reconciles a committed remote completion after its reply is lost (restart=%s, active-read-lost=%s)',
+  async (restart, failActiveRead) => {
     const local = new JobStore(':memory:')
     const remote = new JobStore(':memory:')
     const slot = Date.parse('2026-11-08T23:00:00Z')
@@ -129,6 +133,8 @@ it.each([false, true])(
           release: (...args) => remote.release(...args),
           get: (kind) => {
             reads++
+            if (failActiveRead && remote.get(kind)?.leaseId)
+              throw new Unreachable('active-state reply lost')
             return remote.get(kind)
           },
           complete: (...args) => {
@@ -146,7 +152,11 @@ it.each([false, true])(
       })
     try {
       let runner = make()
+      now = slot - 1
       runner.start()
+      await runner.tick()
+      await runner.idle()
+      now = slot
       await runner.tick()
       await runner.idle()
       expect(remote.get(definition.kind)?.lastState).toBe('ok')

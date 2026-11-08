@@ -150,13 +150,12 @@ export class Runner {
       if (!(job.workers ?? [job.home]).includes(machine) || this.running.has(job.kind)) continue
       const remote = this.options.authority?.(job) ?? store
       const standsIn = remote !== store && (job.fallback ?? []).includes(machine)
-      let followed: JobState | null | undefined
       let authority: LeaseAuthority = remote
       let lease: Lease | null = await this.adopt(job, standsIn)
       if (lease) authority = store
       else
         try {
-          if (standsIn) followed = await this.follow(job, remote)
+          if (standsIn) await this.follow(job, remote)
           else if (remote === store && (await this.coveredElsewhere(job))) continue
           lease = await remote.claim(
             job.kind,
@@ -192,7 +191,7 @@ export class Runner {
         // row after that run or startup; settled future jobs need no extra reads.
         if (remote !== store && (!announced || announced.leased))
           try {
-            const state = followed === undefined ? await remote.get(job.kind) : followed
+            const state = await remote.get(job.kind)
             if (state && announced?.signature !== rowSignature(state, this.now()))
               this.queueRow(job, state)
           } catch (error) {
@@ -200,6 +199,8 @@ export class Runner {
           }
         continue
       }
+      // The claim itself makes the old row unresolved, even if reading its new lease fails.
+      this.announced.delete(job.kind)
       try {
         const state = await authority.get(job.kind)
         if (state) this.queueRow(job, state)
@@ -234,10 +235,10 @@ export class Runner {
    * the lease host was down (once that host answers again), then keeps the host's due time and
    * pause here. Throws Unreachable when the lease host does not answer.
    */
-  private async follow(job: JobDef, remote: LeaseAuthority): Promise<JobState | null> {
+  private async follow(job: JobDef, remote: LeaseAuthority): Promise<void> {
     const { store, machine } = this.options
     let there = await remote.get(job.kind)
-    if (!there) return null
+    if (!there) return
     const here = store.get(job.kind)
     if (
       here?.lastMachine === machine &&
@@ -266,7 +267,6 @@ export class Runner {
       this.heldThere.set(job.kind, there.leaseExpires ?? 0)
     else this.heldThere.delete(job.kind)
     store.follow(job.kind, there.nextRun, there.paused, this.now())
-    return there
   }
 
   /**
