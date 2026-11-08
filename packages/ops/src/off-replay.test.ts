@@ -72,6 +72,7 @@ const cfg = () => {
   const c = config({})
   c.stateDir = temp()
   c.cacheDir = temp()
+  c.rootCacheDir = temp()
   c.workstation = HOST
   return c
 }

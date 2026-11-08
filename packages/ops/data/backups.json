@@ -3,6 +3,7 @@
   "workstation": "davion-sidarli",
   "stateDir": "~/.local/state/aico/backups",
   "cacheDir": "~/.cache/aico/backups",
+  "rootCacheDir": "/var/tmp/aico-backups/cache-root",
   "sharedLock": "~/.local/state/summitflow/host-recovery/run.lock",
   "legacyHostState": "~/.local/state/summitflow/host-recovery",
   "legacyDriveState": "~/.local/state/summitflow/offsite",

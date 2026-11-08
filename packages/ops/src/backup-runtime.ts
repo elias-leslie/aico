@@ -205,7 +205,8 @@ export function resticArgs(
   root = false,
 ): { argv: string[]; env: NodeJS.ProcessEnv } {
   const spec = target === 'drive' ? driveSpec(cfg) : cfg.append
-  const cache = join(homePath(cfg.cacheDir), root ? 'cache-root' : 'cache')
+  // Root's copy runs with the home snapshot mounted over /home, so its cache can't live there.
+  const cache = root ? homePath(cfg.rootCacheDir) : join(homePath(cfg.cacheDir), 'cache')
   const temp = join(
     process.env.XDG_RUNTIME_DIR || `/run/user/${process.getuid?.() ?? 0}`,
     'aico-backups',

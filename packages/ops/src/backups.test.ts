@@ -89,6 +89,7 @@ const cfg = () => {
   const c = config({})
   c.stateDir = temp()
   c.cacheDir = temp()
+  c.rootCacheDir = temp()
   return c
 }
 const ok = (_argv: string[]) => Promise.resolve({ code: 0, out: '', err: '' })
@@ -519,6 +520,7 @@ it('gem backs itself up to its own Drive repository with its own login, reported
   const c = config({ AICO_BACKUP_MACHINE: 'aico' })
   c.stateDir = temp()
   c.cacheDir = temp()
+  c.rootCacheDir = temp()
   expect(c.drive?.repository).toBe('rclone:aico-notes-drive:SummitFlow-Aico-gem-backup')
   const drive = entries(emptyState(), c, 'aico', now).filter((e) => e.target === 'drive')
   expect(drive[0]).toMatchObject({ id: 'drive/aico-aico', name: 'Aico databases and photos' })
@@ -1231,5 +1233,21 @@ it('keeps the restic cache in its own cache folder, never on the scratch disk', 
   const { argv } = resticArgs(c, 'drive', ['snapshots'])
   expect(argv[argv.indexOf('--cache-dir') + 1]).toBe(join(c.cacheDir, 'cache'))
   expect(JSON.stringify(c)).not.toContain('/srv/scratch/aico-backups')
+  vi.unstubAllEnvs()
+})
+
+it("keeps root's restic cache off every folder a Drive copy mounts a snapshot over", () => {
+  const raw = JSON.parse(
+    readFileSync(new URL('../data/backups.json', import.meta.url), 'utf8'),
+  ) as {
+    rootCacheDir: string
+    subvolumes: Record<string, { paths: string[] }>
+  }
+  const bound = Object.values(raw.subvolumes).flatMap((spec) => spec.paths)
+  expect(bound.filter((path) => raw.rootCacheDir.startsWith(`${path}/`))).toEqual([])
+  const c = cfg()
+  vi.stubEnv('XDG_RUNTIME_DIR', temp())
+  const { argv } = resticArgs(c, 'drive', ['snapshots'], true)
+  expect(argv[argv.indexOf('--cache-dir') + 1]).toBe(c.rootCacheDir)
   vi.unstubAllEnvs()
 })
