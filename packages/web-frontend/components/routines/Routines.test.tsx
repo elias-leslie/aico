@@ -87,18 +87,22 @@ describe('Routines', () => {
       'routine-old',
     ])
     expect(rows[0]?.textContent).toContain('Failed')
-    expect(rows[0]?.textContent).toContain('Every 5 minutes · next')
+    expect(rows[0]?.textContent).toContain('next')
+    // A failed row opens by itself: the schedule sentence and the failure are in its detail.
+    expect(rows[0]?.textContent).toContain('Every 5 minutes')
     expect(rows[0]?.textContent).toContain('Exited 1: T7 is writable')
     expect(rows[2]?.textContent).toContain('Paused')
-    expect(rows[2]?.textContent).toContain('Daily at 19:00 · paused')
+    expect(rows[2]?.textContent).toContain('paused')
     expect(rows[1]?.textContent).toContain('OK')
     // A healthy row is closed until opened.
     expect(rows[1]?.textContent).not.toContain('Nothing new.')
+    expect(rows[1]?.textContent).not.toContain('Daily at 19:00')
     fireEvent.click(rows[1]?.querySelector('button') as HTMLElement)
     expect(rows[1]?.textContent).toContain('Nothing new.')
     expect(rows[1]?.textContent).toContain(
       'runs on either davion-sidarli or aico',
     )
+    expect(rows[1]?.textContent).toContain('Daily at 19:00')
     expect(rows[1]?.textContent).toContain('Last run')
     expect(rows[1]?.textContent).toContain(
       '/srv/workspaces/projects/school-check/run.sh',
@@ -171,7 +175,9 @@ describe('Routines', () => {
     ]
     view()
     const weekly = await screen.findByTestId('routine-proveout')
-    expect(weekly.textContent).toContain('Every Monday at 06:30 · next')
+    expect(weekly.textContent).toContain('next')
+    fireEvent.click(weekly.querySelector('button') as HTMLElement)
+    expect(weekly.textContent).toContain('Every Monday at 06:30')
     const timer = screen.getByTestId('routine-host-steward-heartbeat@aico')
     // A failed row opens by itself and wears the failed chip, like any routine.
     expect(timer.textContent).toContain('Failed')
@@ -184,7 +190,7 @@ describe('Routines', () => {
     )
     expect(names).toContain('Run now')
     expect(names).toContain('Pause')
-    expect(names).not.toContain('Show log')
+    expect(names).toContain('Show log')
     fireEvent.click(
       Array.from(timer.querySelectorAll('button')).find(
         (b) => b.textContent === 'Run now',
@@ -196,6 +202,103 @@ describe('Routines', () => {
         body: { kind: 'host-steward-heartbeat@aico' },
       }),
     )
+    // Its log is the service's journal, asked of the routines route.
+    logLines = ['Nov 07 20:21:11 aico systemd[1]: Finished.']
+    fireEvent.click(
+      Array.from(timer.querySelectorAll('button')).find(
+        (b) => b.textContent === 'Show log',
+      ) as HTMLElement,
+    )
+    expect(await screen.findByText(/20:21:11 aico/)).toBeTruthy()
+    expect(posts.at(-1)).toEqual({
+      url: '/api/routines/log',
+      body: { kind: 'host-steward-heartbeat@aico' },
+    })
+  })
+
+  it('groups by machine, groups with a problem first (by name), with the failed count in the head', async () => {
+    list = [
+      routine({ kind: 'a1', what: 'Alpha', home: 'aico', hosts: ['aico'] }),
+      routine({ kind: 'w1', what: 'Wolf', home: 'davion-sidarli' }),
+      routine({
+        kind: 'w2',
+        what: 'Wasp',
+        home: 'davion-sidarli',
+        lastState: 'failed',
+        lastMeaning: 'Exited 1',
+      }),
+      routine({
+        kind: 'g1',
+        what: 'Gem job',
+        home: 'davion-gem',
+        hosts: ['davion-gem'],
+        unreadable: 'ssh timed out',
+        lastState: null,
+      }),
+    ]
+    view()
+    await screen.findByTestId('routine-w1')
+    const heads = screen
+      .getAllByRole('button', { expanded: true })
+      .filter((b) => b.className.includes('groupHead'))
+    expect(heads.map((b) => b.textContent)).toEqual([
+      'davion-gem1 routine1 not known',
+      'davion-sidarli2 routines1 failed',
+      'aico1 routine',
+    ])
+    const rows = screen.getAllByRole('listitem')
+    // Failed first inside its machine.
+    expect(rows.map((r) => r.getAttribute('data-testid'))).toEqual([
+      'routine-g1',
+      'routine-w2',
+      'routine-w1',
+      'routine-a1',
+    ])
+  })
+
+  it('folds a big machine with nothing to look at, and opens it on a click', async () => {
+    list = Array.from({ length: 10 }, (_, i) =>
+      routine({ kind: `r${i}`, what: `Routine ${i}` }),
+    )
+    view()
+    const head = await screen.findByRole('button', { name: /davion-sidarli/ })
+    expect(head.getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryAllByRole('listitem')).toHaveLength(0)
+    fireEvent.click(head)
+    expect(screen.getAllByRole('listitem')).toHaveLength(10)
+  })
+
+  it('names the zone on the schedule and the next run when it is not the viewer’s, and on neither when it is', async () => {
+    const next = Date.UTC(2026, 10, 8, 3, 30)
+    list = [
+      routine({
+        kind: 'gem',
+        what: 'Notes export (gem)',
+        schedule: 'daily at 03:30',
+        at: '03:30',
+        tz: 'Pacific/Kiritimati',
+        nextRun: next,
+      }),
+      routine({
+        kind: 'here',
+        what: 'Local export',
+        schedule: 'daily at 03:30',
+        at: '03:30',
+        tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        nextRun: next,
+      }),
+    ]
+    view()
+    const gem = await screen.findByTestId('routine-gem')
+    // 03:30 UTC is 17:30 on the 8th in Kiritimati (UTC+14): the next run is told in that zone.
+    expect(gem.textContent).toContain('Nov 8, 5:30 PM GMT+14')
+    fireEvent.click(gem.querySelector('button') as HTMLElement)
+    expect(gem.textContent).toContain('Daily at 03:30 GMT+14')
+    const here = screen.getByTestId('routine-here')
+    fireEvent.click(here.querySelector('button') as HTMLElement)
+    expect(here.textContent).toContain('Daily at 03:30')
+    expect(here.textContent).not.toMatch(/Daily at 03:30 \S/)
+    expect(here.textContent).not.toContain('GMT')
   })
 
   it('says so when the last run printed nothing', async () => {

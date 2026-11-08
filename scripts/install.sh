@@ -57,7 +57,7 @@ LIB_DIR="${TETHER_LIB_DIR:-$HOME/.local/lib/tether}"
 BIN_DIR="${TETHER_BIN_DIR:-$HOME/.local/bin}"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 # Started by --start.
-START_UNITS=(tether@default.service aico-web.service aico-jobs.service aico-state-snapshot.timer)
+START_UNITS=(tether@default.service aico-web.service aico-jobs.service)
 
 fail() {
   echo "install: $*" >&2
@@ -168,6 +168,13 @@ install_units() {
   # which now exits 2, so an enabled instance crash-looped.
   if [ -e "$UNIT_DIR/tether-link@.service" ]; then
     run rm -f "$UNIT_DIR/tether-link@.service"
+    changed=1
+  fi
+  # Retired: the hourly snapshot is the aico-state-snapshot job (packages/jobs/data/jobs.json); only the
+  # service stays, because the backup starts it on demand (packages/ops/data/backups.json).
+  if [ -e "$UNIT_DIR/aico-state-snapshot.timer" ]; then
+    run systemctl --user disable --now aico-state-snapshot.timer || true
+    run rm -f "$UNIT_DIR/aico-state-snapshot.timer"
     changed=1
   fi
   if [ "$changed" = 1 ]; then

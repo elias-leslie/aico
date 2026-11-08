@@ -4,6 +4,12 @@ Taken 2026-11-07 about 19:10 EST on davion-sidarli. Nothing was started, stopped
 
 The registry (packages/jobs) only does `at HH:MM daily` or `every_min` (1 to 1440), a command argv (with `cwd`) or an HTTP POST, on a machine where `aico-jobs` runs (today the workstation and CT 190 `aico`). No weekly, monthly or weekday schedules, no sandboxing, no run-as-another-user, no boot trigger. "Move into registry?" uses that yardstick. `leases.ts` stores `next_run` in jobs.db, so an overdue daily job looks like it runs after a restart (read from code, not tested), which is what systemd `Persistent=true` gave these timers.
 
+## Done 2026-11-07 (follow-up)
+
+- The five "move first" timers are routines now: `ominull-fleet-coverage`, `bugout-lab-guest-reaper`, `agent-browser-idle-reaper` and `blackbox-archive` registered by their projects on the workstation, `aico-state-snapshot` a jobs.json job homed on `aico`. Their user timers are gone; each project's installer or README no longer brings them back. The legacy agent-skills copy of the idle reaper is deleted.
+- Summary 7 (snapshot oddity): `scripts/snapshot-state.mjs` and its timer belong to CT 190 only. The Drive backup of the gem container starts `aico-state-snapshot.service` on demand (`remoteSqlite` in packages/ops/data/backups.json) and reads the copies. The workstation's `~/.local/state/aico-snapshot` is written by `aico backups` itself (`stageSqlite`), which is why it stays fresh with no timer; the workstation never had the timer because `st service rebuild` does not run install.sh. install.sh no longer starts the timer; the hourly run is the job.
+- Summary 6 (trim): `pct-fstrim` is removed from davion-gem; `aico-pve-trim` stays (Aico's repo installs it, it keeps a state file and a Status row that goes stale, takes a lock, runs at idle priority).
+
 ## Summary
 
 1. Counts of project-owned scheduled things (distro housekeeping excluded): workstation 5 live user timers + 5 disabled user timers + 11 host-steward system timers + 21 Aico jobs.json jobs (already in the registry); CT 190 2 (1 timer + 1 heartbeat) + the 5 jobs.json jobs homed there; Proxmox host 4 timers (+ 1 disabled) and 0 vzdump jobs; CT 160 1; VM 180 2 systemd timers + 49 app-internal cron jobs; CT 191 1 timer + 7 app-internal jobs. No crontabs or `at` jobs anywhere with real content.

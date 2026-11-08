@@ -27,12 +27,10 @@
   border-top: 0;
 }
 .head {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+  display: block;
   width: 100%;
-  min-height: 44px;
-  padding: 8px 4px;
+  min-height: 40px;
+  padding: 6px 4px;
   border-radius: 8px;
   color: var(--bone);
   font: inherit;
@@ -46,26 +44,79 @@
   outline: 2px solid var(--lantern);
   outline-offset: -2px;
 }
+/* One line per routine: chip, name (cut short with an ellipsis), when, chevron. */
 .top {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 4px 8px;
+  gap: 8px;
+  min-width: 0;
 }
 .top :global(.status-chip) {
   flex: none;
   min-height: 0;
 }
 .name {
+  flex: 1 1 0;
   min-width: 0;
+  overflow: hidden;
   font-size: 13.5px;
   font-weight: 600;
-  overflow-wrap: anywhere;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.when {
+  flex: 0 1 auto;
+  max-width: 55%;
+  overflow: hidden;
+  color: var(--mist);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .chevron {
   flex: none;
-  margin-left: auto;
   color: var(--mist);
+}
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.group {
+  min-width: 0;
+}
+.groupHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  padding: 4px;
+  border-bottom: 1px solid var(--line-2);
+  color: var(--mist);
+  font: inherit;
+  text-align: left;
+  transition: background 0.18s var(--ease-arrival);
+}
+.groupHead:hover {
+  background: var(--wash);
+}
+.groupHead:focus-visible {
+  outline: 2px solid var(--lantern);
+  outline-offset: -2px;
+}
+.host {
+  color: var(--bone);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.count {
+  min-width: 0;
+  font-size: 12px;
+}
+.groupHead :global(.status-chip) {
+  flex: none;
+  min-height: 0;
 }
 .tag {
   display: inline-flex;

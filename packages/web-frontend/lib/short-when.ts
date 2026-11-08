@@ -1,7 +1,10 @@
 // One short date form across the app's pages.
 
-/** "Nov 6, 8:30 PM", the same short form across the app's pages. */
-export function shortWhen(time: string | number | null | undefined): string {
+/** "Nov 6, 8:30 PM", the same short form across the app's pages; in `timeZone` when one is given. */
+export function shortWhen(
+  time: string | number | null | undefined,
+  timeZone?: string,
+): string {
   if (time === null || time === undefined || time === '' || time === 0)
     return 'Not recorded'
   const at = new Date(time)
@@ -11,5 +14,6 @@ export function shortWhen(time: string | number | null | undefined): string {
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
+    ...(timeZone ? { timeZone } : {}),
   })
 }

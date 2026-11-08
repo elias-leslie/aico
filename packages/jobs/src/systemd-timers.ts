@@ -10,6 +10,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { execArgv } from '@aico/fleet/exec'
 import { peerDir } from '@aico/fleet/hosts'
+import { validZone } from './jobs'
 
 export interface TimerDef {
   /** The timer unit, e.g. host-steward-heartbeat.timer; its service is the same name. */
@@ -30,6 +31,8 @@ export interface TimerHost {
   fleet?: boolean
   /** The `exec` route already runs as root, so system units need no sudo. */
   root?: boolean
+  /** The zone the host's clock and its timers' times of day are in (IANA name). */
+  tz?: string
 }
 
 export interface TimersFile {
@@ -60,6 +63,7 @@ export function parseTimers(value: unknown): TimersFile {
     )
       fail(`hosts.${name}.exec`, 'a list of command words')
     if (exec !== undefined && host.fleet) fail(`hosts.${name}`, 'exec or fleet, not both')
+    if (host.tz !== undefined && !validZone(host.tz)) fail(`hosts.${name}.tz`, 'an IANA zone')
   }
   const listed = file?.timers
   if (!Array.isArray(listed)) return fail('timers', 'a list')

@@ -5,7 +5,7 @@ import { parseTimers, type RunCommand, readTimers, timerKind } from './systemd-t
 
 const FILE = parseTimers({
   hosts: {
-    pve: { exec: ['ssh', 'pve'], root: true },
+    pve: { exec: ['ssh', 'pve'], root: true, tz: 'UTC' },
     box: { exec: ['ssh', 'box'] },
     far: { fleet: true },
   },
@@ -140,6 +140,9 @@ describe('systemd timers in Routines', () => {
       lastMachine: 'ws',
       command: ['beat.timer'],
     })
+    // Its times of day are in its host's zone, named in the file; a host with none says nothing.
+    expect(views[0]?.tz).toBeUndefined()
+    expect(views[1]).toMatchObject({ schedule: 'Mondays at 00:00', tz: 'UTC' })
     // A timer that is not active is paused: no next run.
     expect(views[2]).toMatchObject({ paused: true, nextRun: null, scope: 'user' })
     // One that is not installed is not known, never OK.
@@ -257,6 +260,9 @@ describe('systemd timers in Routines', () => {
     expect(() => parseTimers({ hosts: {}, timers: [one, one] })).toThrow('listed twice')
     expect(() => parseTimers({ hosts: {}, timers: [{ ...one, schedule: '' }] })).toThrow(
       'timers[0].schedule',
+    )
+    expect(() => parseTimers({ hosts: { pve: { tz: 'Mars/Olympus' } }, timers: [one] })).toThrow(
+      'hosts.pve.tz',
     )
     expect(() =>
       parseTimers({

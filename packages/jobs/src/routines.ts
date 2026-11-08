@@ -4,7 +4,7 @@
 
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
-import { type JobDef, KIND, localZone, parseJobs, readJobs } from './jobs'
+import { type JobDef, KIND, localZone, parseJobs, readJobs, validZone } from './jobs'
 import type { JobStore, Routine } from './leases'
 
 const DEFAULT_LEASE_S = 300
@@ -55,15 +55,6 @@ export interface EitherHosts {
   workers: string[]
   /** IANA zone `--at` is read in for these routines (home's); default the registering machine's. */
   tz?: string
-}
-
-function validZone(tz: unknown): boolean {
-  try {
-    new Intl.DateTimeFormat('en-US', { timeZone: tz as string })
-    return typeof tz === 'string'
-  } catch {
-    return false
-  }
 }
 
 export function readEither(jobsFile: string): EitherHosts | null {

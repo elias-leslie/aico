@@ -6,6 +6,8 @@
 //   POST /api/routines/run    {kind}    make it due now; its worker starts it within seconds
 //   POST /api/routines/pause  {kind}    stop its scheduled runs
 //   POST /api/routines/resume {kind}    schedule it again
+//   POST /api/routines/log    {kind}    the last output: {ok, truncated, lines} (aico routines log;
+//                                       a systemd timer's is its service's journal)
 //
 // Registering and removing stay on the CLI (a project adds its own routine).
 
@@ -18,6 +20,8 @@ export type RoutinesCommand = (args: string[]) => Promise<string>
 // A routine's kind; a systemd timer's is unit@host (e.g. host-steward-heartbeat@aico).
 const KIND = /^[a-z0-9][a-z0-9.-]{0,95}(?:@[a-z0-9-]{1,63})?$/
 const VERBS = ['run', 'pause', 'resume'] as const
+/** The last output shown for a routine (aico routines log prints up to 200 lines). */
+const LOG_LINES = 200
 
 const routinesCommand: RoutinesCommand = (args) =>
   new Promise((resolve, reject) => {
@@ -70,6 +74,12 @@ export function registerRoutineRoutes(
   router.on('GET', '/api/routines', async () => {
     const routines = cached && now() - cached.at <= ROUTINES_FRESH_MS ? cached.value : await read()
     return { routines }
+  })
+  router.on('POST', '/api/routines/log', async (ctx) => {
+    const kind = requiredString(objectBody(await ctx.body()), 'kind', { pattern: KIND })
+    const lines = (await run(['log', kind])).split('\n')
+    const truncated = lines.length > LOG_LINES
+    return { ok: true, truncated, lines: truncated ? lines.slice(-LOG_LINES) : lines }
   })
   for (const verb of VERBS)
     router.on('POST', `/api/routines/${verb}`, async (ctx) => {

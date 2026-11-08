@@ -245,6 +245,107 @@ describe('aico routines', () => {
   })
 })
 
+describe('a routine reads its time of day in one named zone', () => {
+  const zonedFile = (dir: string) => {
+    const file = join(dir, 'jobs.json')
+    const job = (kind: string, home: string, extra: object = {}) => ({
+      kind,
+      what: kind,
+      project: 'aico',
+      home,
+      at: '03:30',
+      run: { post: '/api/export/notes' },
+      lease_s: 60,
+      ...extra,
+    })
+    writeFileSync(
+      file,
+      JSON.stringify({
+        zones: { ws: 'America/New_York', gem: 'UTC' },
+        jobs: [
+          job('on-ws', 'ws'),
+          job('on-gem', 'gem'),
+          job('own-zone', 'gem', { tz: 'Asia/Tokyo' }),
+          job('elsewhere', 'other'),
+          { ...job('interval', 'gem'), at: undefined, every_min: 10 },
+        ],
+      }),
+    )
+    return file
+  }
+
+  it("gives a job the zone of its home machine, so its next run is that zone's 03:30", async () => {
+    const dir = scratch()
+    const store = new JobStore(':memory:')
+    const jobs = loadJobs(zonedFile(dir), store)
+    expect(jobs.map((job) => [job.kind, job.tz])).toEqual([
+      ['on-ws', 'America/New_York'],
+      ['on-gem', 'UTC'],
+      ['own-zone', 'Asia/Tokyo'],
+      ['elsewhere', undefined],
+      ['interval', undefined],
+    ])
+    // 2026-11-08 08:30 UTC: the next 03:30 in each zone.
+    const after = Date.UTC(2026, 10, 8, 8, 30)
+    const next = (kind: string) => nextRun(jobs.find((job) => job.kind === kind) as JobDef, after)
+    expect(next('on-ws')).toBe(Date.UTC(2026, 10, 9, 8, 30))
+    expect(next('on-gem')).toBe(Date.UTC(2026, 10, 9, 3, 30))
+    expect(next('own-zone')).toBe(Date.UTC(2026, 10, 8, 18, 30))
+  })
+
+  it('lists the zone with the schedule, so the schedule text and the next run agree', async () => {
+    const dir = scratch()
+    const store = new JobStore(':memory:')
+    const jobs = loadJobs(zonedFile(dir), store)
+    const lines: string[] = []
+    await routinesCommand(
+      ['list', '--json'],
+      {
+        jobs,
+        store,
+        machine: 'ws',
+        env: {},
+        dataDir: dir,
+        postRows: async () => {},
+        removeRow: async () => {},
+        now: () => Date.UTC(2026, 10, 8, 8, 30),
+      },
+      (line) => lines.push(line),
+    )
+    const views = JSON.parse(lines[0] as string) as RoutineView[]
+    expect(views.map((view) => [view.kind, view.tz])).toEqual([
+      ['on-ws', 'America/New_York'],
+      ['on-gem', 'UTC'],
+      ['own-zone', 'Asia/Tokyo'],
+      ['elsewhere', undefined],
+      ['interval', undefined],
+    ])
+  })
+
+  it('refuses a zone that does not exist', () => {
+    const dir = scratch()
+    const file = join(dir, 'jobs.json')
+    writeFileSync(
+      file,
+      JSON.stringify({
+        zones: { ws: 'Mars/Olympus' },
+        jobs: [
+          {
+            kind: 'x',
+            what: 'x',
+            project: 'aico',
+            home: 'ws',
+            at: '03:30',
+            run: { post: '/p' },
+            lease_s: 60,
+          },
+        ],
+      }),
+    )
+    expect(() => loadJobs(file, new JobStore(':memory:'))).toThrow('zones.ws')
+  })
+})
+
 describe('scheduling a registered routine', () => {
   it('picks it up at the next tick, runs it in its folder and scope, and writes its Status row', async () => {
     const h = harness()

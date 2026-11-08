@@ -152,6 +152,8 @@ export function parseJobs(value: unknown): JobDef[] {
     const scope = job.scope
     if (scope !== undefined && scope !== 'user' && scope !== 'system')
       fail(`${where}.scope`, 'user or system')
+    if (job.tz !== undefined && (job.at === undefined || !validZone(job.tz)))
+      fail(`${where}.tz`, 'an IANA zone, and only with at')
     return {
       kind,
       what: text(job, 'what', where, 120),
@@ -162,13 +164,38 @@ export function parseJobs(value: unknown): JobDef[] {
       ...(leaseHost !== undefined ? { lease_host: leaseHost as string } : {}),
       ...(workers !== undefined ? { workers: workers as string[] } : {}),
       ...(scope !== undefined ? { scope } : {}),
+      ...(job.tz !== undefined ? { tz: job.tz as string } : {}),
       lease_s: seconds(job, 'lease_s', where),
     }
   })
 }
 
+/** Whether `tz` names a zone this runtime knows. */
+export function validZone(tz: unknown): tz is string {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz as string })
+    return typeof tz === 'string'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Jobs with a time of day and no `tz` of their own read it in the zone jobs.json's `zones` gives
+ * for their home machine, so the zone is data the list can show, not whatever the machine's clock
+ * says.
+ */
+function inZone(job: JobDef, zones: Record<string, unknown>): JobDef {
+  const zone = zones[job.home]
+  if (job.at === undefined || job.tz !== undefined || zone === undefined) return job
+  if (!validZone(zone)) fail(`zones.${job.home}`, 'an IANA zone')
+  return { ...job, tz: zone }
+}
+
 export function readJobs(path: string): JobDef[] {
-  return parseJobs(JSON.parse(readFileSync(path, 'utf8'))).map((job) => {
+  const data = JSON.parse(readFileSync(path, 'utf8')) as { zones?: Record<string, unknown> }
+  return parseJobs(data).map((parsed) => {
+    const job = inZone(parsed, data.zones ?? {})
     if (!('command' in job.run)) return job
     const [file, ...args] = job.run.command
     return file?.startsWith('.')

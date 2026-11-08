@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import { peerDir } from '@aico/fleet/hosts'
 import type { StatusRow } from '@aico/status'
 import { remoteAuthority } from './fleet-leases'
-import { type JobDef, resumeAt, schedule } from './jobs'
+import { type JobDef, localZone, resumeAt, schedule } from './jobs'
 import type { JobState, JobStore } from './leases'
 import { type EitherHosts, newRoutine, type RoutineInput } from './routines'
 import { jobRow, type LeaseAuthority } from './runner'
@@ -166,7 +166,8 @@ async function viewOf(job: JobDef, ctx: RoutinesContext): Promise<RoutineView> {
 }
 
 /** A systemd timer as a routine row: its last result is the service's. */
-function timerView(status: TimerStatus): RoutineView {
+function timerView(status: TimerStatus, file: TimersFile | null | undefined): RoutineView {
+  const tz = file?.hosts[status.def.host]?.tz
   const { def } = status
   const failed = status.result !== 'success'
   const unread =
@@ -181,6 +182,7 @@ function timerView(status: TimerStatus): RoutineView {
     hosts: [def.host],
     leaseHost: def.host,
     schedule: def.schedule,
+    ...(tz ? { tz } : {}),
     scope: def.scope,
     command: [def.unit],
     started: true,
@@ -213,8 +215,11 @@ function timerView(status: TimerStatus): RoutineView {
   }
 }
 
+/** A time in the routine's zone, with the zone's name when it is not this machine's. */
 const time = (ms: number | null, tz?: string) =>
-  ms === null ? '-' : new Date(ms).toLocaleString('sv-SE', tz ? { timeZone: tz } : {})
+  ms === null
+    ? '-'
+    : `${new Date(ms).toLocaleString('sv-SE', tz ? { timeZone: tz } : {})}${tz && tz !== localZone() ? ` ${tz}` : ''}`
 
 /** Flags of `add`, parsed; `--command` takes the rest of the line. */
 export function parseAdd(args: readonly string[]): RoutineInput {
@@ -333,7 +338,7 @@ export async function routinesCommand(
       Promise.all(ctx.jobs.map((job) => viewOf(job, ctx))),
       ctx.timers ? readTimerStatus(ctx.timers, timerCtx(ctx)) : [],
     ])
-    const views = [...jobViews, ...timerStatuses.map(timerView)]
+    const views = [...jobViews, ...timerStatuses.map((status) => timerView(status, ctx.timers))]
     if (args.includes('--json')) out(JSON.stringify(views))
     else
       for (const view of views) {

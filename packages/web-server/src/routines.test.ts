@@ -11,6 +11,7 @@ function setup() {
     router,
     async (args) => {
       calls.push(args)
+      if (args[0] === 'log') return Array.from({ length: 250 }, (_, i) => `line ${i}`).join('\n')
       return args[0] === 'list'
         ? JSON.stringify([{ kind: 'k', n: calls.length }])
         : `${args[0]} ${args[1]}`
@@ -78,5 +79,17 @@ describe('routines routes', () => {
     // A change drops the young listing so the page reads the new state.
     await t.call('GET', '/api/routines')
     expect(t.calls.filter((c) => c[0] === 'list')).toHaveLength(2)
+  })
+
+  it('gives a systemd timer its last output as lines, cut to the last 200', async () => {
+    const t = setup()
+    const answer = await t.call('POST', '/api/routines/log', {
+      kind: 'aico-pve-trim@davion-gem',
+    })
+    expect(t.calls).toEqual([['log', 'aico-pve-trim@davion-gem']])
+    expect(answer.body).toMatchObject({ ok: true, truncated: true })
+    expect(answer.body.lines).toHaveLength(200)
+    expect(answer.body.lines.at(-1)).toBe('line 249')
+    expect((await t.call('POST', '/api/routines/log', { kind: '--machine x' })).status).toBe(422)
   })
 })

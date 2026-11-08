@@ -1,8 +1,9 @@
 {
-  "description": "Timers that stay in systemd on purpose and show read-only in Routines (aico routines list). The definition lives in the unit file; this lists which timers appear, their plain schedule and how to reach each host. A host not named here is read where the command runs. exec puts command words in front of every systemctl call (root true: the hop is already root, else system units use sudo -n); fleet reaches the machine over the fleet link as its Aico user. Pause disables the timer, Resume enables it, Run now starts its service.",
+  "description": "Timers that stay in systemd on purpose and show read-only in Routines (aico routines list). The definition lives in the unit file; this lists which timers appear, their plain schedule and how to reach each host. A host not named here is read where the command runs. tz is the zone of the host's clock, which the times in the plain schedule are read in. exec puts command words in front of every systemctl call (root true: the hop is already root, else system units use sudo -n); fleet reaches the machine over the fleet link as its Aico user. Pause disables the timer, Resume enables it, Run now starts its service.",
   "hosts": {
     "davion-sidarli": {
-      "fleet": true
+      "fleet": true,
+      "tz": "America/New_York"
     },
     "aico": {
       "exec": [
@@ -17,11 +18,13 @@
         "190",
         "--"
       ],
-      "root": true
+      "root": true,
+      "tz": "UTC"
     },
     "davion-gem": {
       "exec": ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "davion-gem"],
-      "root": true
+      "root": true,
+      "tz": "America/New_York"
     },
     "restic-append": {
       "exec": [
@@ -36,7 +39,8 @@
         "160",
         "--"
       ],
-      "root": true
+      "root": true,
+      "tz": "UTC"
     }
   },
   "timers": [
@@ -135,15 +139,8 @@
       "unit": "aico-pve-trim.timer",
       "host": "davion-gem",
       "project": "aico",
-      "what": "Weekly container trim (pve-sender)",
+      "what": "Weekly container trim",
       "schedule": "Mondays at 00:00"
-    },
-    {
-      "unit": "pct-fstrim.timer",
-      "host": "davion-gem",
-      "project": "aico",
-      "what": "Weekly container trim (pct fstrim)",
-      "schedule": "weekly"
     },
     {
       "unit": "blackbox-snapshot.timer",
@@ -157,7 +154,7 @@
       "host": "restic-append",
       "project": "aico",
       "what": "Backup repository maintenance",
-      "schedule": "Sundays at 05:15 UTC"
+      "schedule": "Sundays at 05:15"
     }
   ]
 }

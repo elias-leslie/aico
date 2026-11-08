@@ -1,7 +1,8 @@
 # Routines
 
 A routine is anything Aico runs on a schedule: its own jobs (packages/jobs/data/jobs.json) and the
-ones other projects register. The web app lists them all in Routines (System): schedule, next run,
+ones other projects register. The web app lists them all in Routines (System), grouped by the machine each runs on (failed ones
+first in each group; a big group with nothing to look at starts folded): schedule, next run,
 last result, Run now, Pause or Resume, and the last output. Each routine takes the scheduler's
 lease, runs as its own systemd unit and writes one Status row (`jobs/KIND`), so it has the same
 Status, tray and digest behavior as a built-in job. A failed routine is a tray and digest item;
@@ -61,4 +62,22 @@ there, add an entry; the definition itself stays in its unit file.
 - Nothing here posts a Status row or a notice, so none of it reaches the phone (the one phone rule in
   packages/notify/src/phone.ts: only a sender's own interrupt reason does). It appears in Routines
   and its failure count in the collapsed Routines row.
-- Show log is not offered for these rows; `aico routines log UNIT@HOST` prints the service's journal.
+- Show log (and `aico routines log UNIT@HOST`) is the service's journal, the last 100 lines.
+- Times of day in the plain schedule are in the host's zone: `tz` on the host entry in the file.
+
+## Which zone a time is in
+
+A time of day (`--at`, `at`) is read in one named zone, and the schedule text and the next run use it.
+Registered routines store the zone of the machine they were added on (the pair's for `--hosts either`).
+A job in jobs.json gets the zone `zones` gives for its `home` machine (or its own `tz`), so a job homed
+on `aico` (UTC) reads 03:30 as 03:30 UTC. The list shows the zone's short name on the schedule and the
+next run when it is not the viewer's, so "Daily at 03:30 UTC · next Nov 8, 3:30 AM UTC" never mixes zones.
+
+## Timers that moved into the registry
+
+The old per-project user timers `ominull-fleet-coverage`, `bugout-lab-guest-reaper`,
+`agent-browser-idle-reaper` and `blackbox-archive` are registered routines owned by their projects
+(each project's installer or README registers it). `aico-state-snapshot` is a jobs.json job homed on
+`aico`: it starts `aico-state-snapshot.service` hourly, which stays installed because the backup
+(packages/ops/data/backups.json, `remoteSqlite`) starts it on demand. Machines other than the gem
+container have no such unit; `aico backups` stages their database copies itself.
