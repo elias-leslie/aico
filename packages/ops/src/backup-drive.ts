@@ -468,6 +468,10 @@ export function stageSqlite(cfg: BackupConfig, now: Date): { paths: string[]; da
     dataAt: now.toISOString(),
   }
 }
+/** The standby's own work that exists, or nothing on the workstation (its Btrfs and T7 copies cover it). */
+export function standbyWork(cfg: BackupConfig, machine: string): string[] {
+  return machine === cfg.workstation ? [] : cfg.sqlite.standbyWork.map(homePath).filter(existsSync)
+}
 export async function driveBackup(
   rt: Runtime,
   state: BackupState,
@@ -515,6 +519,9 @@ export async function driveBackup(
     }
   }
   const sqlite = stageSqlite(rt.cfg, rt.now())
+  // The standby's own work (checkouts edited there, phones, pending asks) has no other copy while the
+  // workstation is off, and CT 160 is too small for it: Drive only.
+  sqlite.paths.push(...standbyWork(rt.cfg, machine))
   jobs.push({ id: `aico-${machine}`, ...sqlite, binds: [] })
   let ok = true
   for (const job of jobs) {

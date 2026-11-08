@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { parseRow } from '@aico/status'
 import { openDatabase } from '@aico/store'
 import { afterEach, expect, it, vi } from 'vitest'
-import { stageSqlite } from './backup-drive'
+import { stageSqlite, standbyWork } from './backup-drive'
 import { config } from './backup-plan'
 import { drillRow, recovery, recoveryArgs } from './recovery'
 
@@ -104,6 +104,19 @@ it('includes private Logins files in encrypted append payloads on either machine
     expect(paths).toContain(join(root, 'data/secrets'))
     expect(paths).toContain(join(root, 'config'))
     expect(readFileSync(secret, 'utf8')).toBe('fixture-only')
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+it('adds the standby own work to its Drive copy, and nothing on the workstation', () => {
+  const root = mkdtempSync(join(tmpdir(), 'aico-standby-work-'))
+  const cfg = config({})
+  const phones = join(root, 'phones.json')
+  writeFileSync(phones, '{}')
+  cfg.sqlite.standbyWork = [phones, join(root, 'missing')]
+  try {
+    expect(standbyWork(cfg, 'aico')).toEqual([phones])
+    expect(standbyWork(cfg, cfg.workstation)).toEqual([])
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
