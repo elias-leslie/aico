@@ -58,11 +58,12 @@ const MERMAID_SCRIPT = '/vendor/mermaid-11.17.2.min.js'
 const MARKED_SCRIPT = '/vendor/marked-18.0.11.umd.js'
 
 /** A design's own HTML: no origin privileges, external resources, forms, or nested frames. Inline
- * scripts can demonstrate a design's interactions inside the sandbox. */
+ * scripts can demonstrate a design's interactions inside the sandbox; Aico's own token stylesheets
+ * (/ui-kit/tokens.css, fonts.css) may be linked so a design can wear Lantern. */
 export const MOCKUP_CSP = [
   "default-src 'none'",
   "script-src 'unsafe-inline'",
-  "style-src 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline'",
   'img-src data: blob:',
   'font-src data:',
   "base-uri 'none'",

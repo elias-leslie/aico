@@ -179,6 +179,39 @@ describe('Designs tab', () => {
     }
   })
 
+  it('shows one design at a time, whichever is picked', async () => {
+    nav.params = new URLSearchParams('tab=designs&project=aico')
+    serve([
+      json({
+        items: [
+          design({
+            id: '000000000002',
+            title: 'Older layout',
+            updatedAt: '2026-11-07T09:00:00Z',
+          }),
+          design({
+            id: '000000000003',
+            title: 'Newer layout',
+            updatedAt: '2026-11-07T11:00:00Z',
+          }),
+        ],
+        unreadable: 0,
+      }),
+    ])
+    const view = mount()
+    await screen.findByTitle('Design: Newer layout')
+    nav.params = new URLSearchParams(
+      'tab=designs&project=aico&design=000000000002',
+    )
+    view.rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <DesignsView />
+      </QueryClientProvider>,
+    )
+    expect(await screen.findByTitle('Design: Older layout')).toBeVisible()
+    expect(document.querySelectorAll('iframe')).toHaveLength(1)
+  })
+
   it('shows an image as an image', async () => {
     serve([json({ items: [design({ kind: 'image' })], unreadable: 0 })])
     mount()

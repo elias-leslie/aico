@@ -315,14 +315,14 @@ export function DesignsView() {
                     </p>
                   </div>
                   <RenderedView
-                    key={selected.id}
+                    key={`frame-${selected.id}`}
                     kind={selected.kind}
                     src={designFrameUrl(selected)}
                     title={`Design: ${selected.title}`}
                     className={styles.frame}
                   />
                   <Review
-                    key={selected.id}
+                    key={`review-${selected.id}`}
                     design={selected}
                     changed={state.replace}
                   />
