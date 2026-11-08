@@ -1,4 +1,4 @@
-OPTIONS[testing] policy=v5 facts as of Nov 3, 8:04 PM EST; you choose, then st aico create --work-role testing --tool T [--model M]
+OPTIONS[testing] policy=v5 facts as of Nov 3, 8:04 PM EST; you choose, then st aico create --work-role verification --tool T [--model M]
 claude-code  claude-haiku-5-5 high  has room  | also: claude-sonnet-5-5 high (when the task truly needs it after the help, prompts or system were fixed (a smaller model failing is a usability finding first)); claude-opus-5-5 high (when truly necessary; say why)
     5h not reported; weekly 15% left, resets Nov 6, 5:00 AM EST (2.4d), read 16m ago
 codex  gpt-6.1-sol xhigh  running on credits

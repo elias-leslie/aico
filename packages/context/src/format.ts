@@ -209,8 +209,12 @@ function optionLines(row: LaunchRow): string[] {
 /** `st models route --role R`: each tool's option for the job, with its facts. */
 export function formatOptions(payload: RoutePayload, role: string, project?: string): string {
   const where = project ? ` project=${project}` : ''
+  // --role also takes a job (testing, lookup); create takes the work role that runs it.
+  const workRole = payload.work_roles?.includes(role)
+    ? role
+    : payload.rows[0]?.work_roles?.join(' or ') || role
   const lines = [
-    `OPTIONS[${role}${where}] policy=v${payload.version} facts as of ${when(payload.facts_as_of)}; you choose, then ${cliName() === 'aico' ? 'aico' : 'st aico'} create --work-role ${role}${project ? ` --project ${project}` : ''} --tool T [--model M]`,
+    `OPTIONS[${role}${where}] policy=v${payload.version} facts as of ${when(payload.facts_as_of)}; you choose, then ${cliName() === 'aico' ? 'aico' : 'st aico'} create --work-role ${workRole}${project ? ` --project ${project}` : ''} --tool T [--model M]`,
   ]
   if (payload.facts_error || !payload.facts_as_of)
     lines.push(
