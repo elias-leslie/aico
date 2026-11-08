@@ -92,7 +92,7 @@
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  color: var(--paper);
+  color: var(--bone);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -118,7 +118,7 @@
 }
 
 .copyDetail b {
-  color: var(--paper);
+  color: var(--bone);
   font-weight: 600;
 }
 
