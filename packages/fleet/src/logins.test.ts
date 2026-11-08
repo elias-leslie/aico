@@ -934,3 +934,46 @@ it('CLI allow and edit print what changed; list shows unusable logins to agents'
   expect(err.mock.calls.at(-1)?.[0]).toBe('No password field at https://canvas.example.test/.\n')
   expect(JSON.stringify([...out.mock.calls, ...err.mock.calls])).not.toContain('fixture-password')
 })
+
+it('guesses a public key as a backup key, and list and show agree a login with no value is not usable', async () => {
+  writeFileSync(join(store.folder, 'backup-append.ed25519.pub'), 'public', { mode: 0o600 })
+  store.discover()
+  expect(store.list(owner).find((entry) => entry.name === 'backup-append.ed25519.pub')?.kind).toBe(
+    'backup key',
+  )
+  rmSync(join(store.folder, 'backup-append.ed25519.pub'))
+  const out = vi.fn()
+  const io = {
+    caller: owner,
+    out,
+    err: vi.fn(),
+    execute: vi.fn<LoginsIo['execute']>(async () => 0),
+    input: async () => '',
+    outputSafe: () => false,
+  }
+  expect(await runLogins(['list'], env, io)).toBe(0)
+  expect(out.mock.calls.flat().join('')).toContain(
+    'backup-append.ed25519.pub  backup key  Unavailable',
+  )
+  out.mockClear()
+  expect(await runLogins(['show', 'backup-append.ed25519.pub'], env, io)).toBe(0)
+  expect(JSON.parse(out.mock.calls.flat().join(''))).toMatchObject({
+    state: 'Unavailable',
+    usable: false,
+  })
+})
+
+it('edit by a caller the login is not open to still prints the fix', async () => {
+  store.set('shut', 'value', { roles: ['someone-else'] }, owner)
+  const out = vi.fn()
+  const code = await runLogins(['edit', 'shut', '--notes', 'fixed'], env, {
+    caller: { role: 'job', machine: loginMachine(), session: 'a1b2c3d4' },
+    out,
+    err: vi.fn(),
+    execute: vi.fn<LoginsIo['execute']>(async () => 0),
+    input: async () => '',
+    outputSafe: () => false,
+  })
+  expect(code).toBe(0)
+  expect(JSON.parse(out.mock.calls.flat().join(''))).toMatchObject({ name: 'shut', notes: 'fixed' })
+})

@@ -1,4 +1,6 @@
-import { resolve } from 'node:path'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { loadProject } from './deploy'
 import { journalArgs, otherProjectLogs, parseLogsArgs, statusPointer } from './logs'
@@ -40,8 +42,43 @@ describe('aico logs', () => {
     expect(there.args.slice(-3)).toEqual(['-n', '5', '--no-pager'])
     expect(otherProjectLogs(request('nope'), answers('', 1))).toBeNull()
     expect(
+      otherProjectLogs(request('other'), answers(JSON.stringify({ id: 'other', root_path: null }))),
+    ).toMatch(/no folder/)
+    expect(
       otherProjectLogs(request('other'), answers(JSON.stringify({ id: 'other', root_path: '/x' }))),
     ).toMatch(/no project.identity.json/)
+  })
+
+  it('quotes for the remote shell and reads a placed project under the manager it declares', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'logs-placed-'))
+    const identity = (deployment: object) =>
+      writeFileSync(
+        join(dir, 'project.identity.json'),
+        JSON.stringify({
+          project: { id: 'placed' },
+          services: { backend: 'hub' },
+          runtime: { deployment },
+        }),
+      )
+    const registered = (runtime: object[] = []) =>
+      answers(JSON.stringify({ id: 'placed', root_path: dir, runtime }))
+    const req = {
+      ...(parseLogsArgs(['placed', '--since', "it's 6 AM"]) as object),
+    } as Exclude<ReturnType<typeof parseLogsArgs>, string>
+    try {
+      identity({ ssh_host: 'pve', vmid: 150, guest_type: 'lxc', manager: 'system' })
+      const inGuest = otherProjectLogs(req, registered()) as { cmd: string; args: string[] }
+      expect(inGuest.cmd).toBe('ssh')
+      expect(inGuest.args.slice(0, 6)).toEqual(['pve', 'pct', 'exec', '150', '--', 'journalctl'])
+      expect(inGuest.args).not.toContain('--user')
+      expect(inGuest.args).toContain(`'it'\\''s 6 AM'`)
+      identity({ ssh_host: 'pve', vmid: 180, user: 'me', uid: 1000 })
+      expect(otherProjectLogs(req, registered())).toMatch(/runs on VM 180/)
+      const direct = otherProjectLogs(req, registered([{ ssh: 'vm.lan' }])) as { args: string[] }
+      expect(direct.args.slice(0, 3)).toEqual(['vm.lan', 'journalctl', '--user'])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 
   it('points at a Status row: its log action, else its project', () => {

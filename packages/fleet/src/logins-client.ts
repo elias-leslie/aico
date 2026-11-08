@@ -71,11 +71,15 @@ function perform(store: LoginStore, request: LoginRequest): unknown {
   const { operation, args, caller } = request
   switch (operation) {
     case 'list':
-      return store.list(caller).map((entry) => ({ ...entry, state: store.state(entry) }))
+      return store.list(caller).map((entry) => ({ ...entry, ...store.stateOf(entry) }))
     case 'catalog':
       return store
         .catalog(caller)
-        .map((entry) => ('available' in entry ? entry : { ...entry, state: store.state(entry) }))
+        .map((entry) =>
+          'available' in entry
+            ? { ...entry, usable: false }
+            : { ...entry, ...store.stateOf(entry) },
+        )
     case 'allow':
       return store.allow(args[0] as string, args[1] as Parameters<LoginStore['allow']>[1], caller)
     case 'edit':

@@ -446,6 +446,22 @@ func TestOthersCloseOnlyForAnEndedOrLaunchedSender(t *testing.T) {
 		t.Fatalf("ended sender: %v %v", r, err)
 	}
 
+	// The session that launched the sender may, whoever else is running.
+	launched := acked("aabbccdd")
+	sessionState = func(string) (map[string]any, bool) {
+		return map[string]any{"id": "aabbccdd", "parentId": "bbbbbbbb"}, false
+	}
+	savedOwn := ownWindow
+	t.Cleanup(func() { ownWindow = savedOwn })
+	ownWindow = func(*Hook) string { return "cccccccc" }
+	if _, err := b.Confirm(launched, false); err == nil {
+		t.Error("another session, not its launcher: only the sender closes")
+	}
+	ownWindow = func(*Hook) string { return "bbbbbbbb" }
+	if r, err := b.Confirm(launched, false); err != nil || r["state"] != "closed" {
+		t.Fatalf("launcher: %v %v", r, err)
+	}
+
 	// A row with no window (sent outside Aico) stays its sender's, ended or not.
 	if _, err := b.Confirm(acked(""), false); err == nil {
 		t.Error("no window: only the sender closes")

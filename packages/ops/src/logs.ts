@@ -99,9 +99,13 @@ function tailArgs(req: LogsRequest, units: string[], user: boolean): string[] {
   return args
 }
 
-/** The command that reads another registered project's journal: its units are user units, where it
- * runs (over ssh when its runtime names `ssh`). Null when the target is no such project; a string
- * says why there is nothing to read. */
+/** One word for a remote shell, which ssh hands its arguments to joined. */
+const shellWord = (word: string) =>
+  /^[\w@%+=:,./-]+$/.test(word) ? word : `'${word.replaceAll("'", `'\\''`)}'`
+
+/** The command that reads another registered project's journal, where it runs: over its runtime's
+ * `ssh`, or into its container from the Proxmox host, under the manager it declares. Null when the
+ * target is no such project; a string says why there is nothing to read. */
 export function otherProjectLogs(
   req: LogsRequest,
   run: Runner,
@@ -113,17 +117,28 @@ export function otherProjectLogs(
     root_path?: string | null
     runtime?: { ssh?: string }[]
   }
+  if (!registered.root_path) return `${registered.id} has no folder, so its units are unknown`
   let project: Project
   try {
-    project = loadProject(registered.root_path ?? '')
+    project = loadProject(registered.root_path)
   } catch {
     return `${registered.id} is registered but has no project.identity.json, so its units are unknown`
   }
   const units = projectUnits(project)
   if (!units.length) return `${registered.id} has no services to read logs from`
-  const args = tailArgs(req, units, true)
+  const placed = project.deployment
+  const args = tailArgs(req, units, placed?.manager !== 'system')
   const host = registered.runtime?.find((place) => place.ssh)?.ssh
-  return host ? { cmd: 'ssh', args: [host, 'journalctl', ...args] } : { cmd: 'journalctl', args }
+  if (host) return { cmd: 'ssh', args: [host, 'journalctl', ...args].map(shellWord) }
+  if (!placed) return { cmd: 'journalctl', args }
+  if (placed.guest_type !== 'lxc')
+    return `${registered.id} runs on VM ${placed.vmid}, which has no ssh address here: aico projects runtime ${registered.id} can name one`
+  const asUser =
+    placed.manager === 'system'
+      ? []
+      : ['runuser', '-u', placed.user ?? '', '--', 'env', `XDG_RUNTIME_DIR=/run/user/${placed.uid}`]
+  const inGuest = ['pct', 'exec', String(placed.vmid), '--', ...asUser, 'journalctl', ...args]
+  return { cmd: 'ssh', args: [placed.ssh_host, ...inGuest.map(shellWord)] }
 }
 
 /** Where Status says a job's log is, for a target that is a Status row and no unit. */

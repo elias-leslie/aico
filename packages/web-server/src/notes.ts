@@ -17,6 +17,7 @@ import {
   type NoteKind,
   type NotePatch,
   type NoteRow,
+  type NoteStore,
   type NoteSummary,
   PROJECT_ID,
   REVISED_FIELDS,
@@ -330,9 +331,10 @@ function madeBySource(madeBy: unknown): string | undefined {
   return `session:${madeBy}:${randomBytes(4).toString('hex')}`
 }
 
-/** A session deletes only a note it made, and not once the owner has reworded it: no agent command
- * changes a title or body. The route is a guard against mistakes; the owner's own delete sends no `madeBy`. */
-function refuseUnlessMadeBy(row: NoteRow, session: string): void {
+/** A session deletes only a note it made, and only while nothing shows anyone has built on it: an
+ * item carries no author, and no agent command changes a title or body. The route is a guard against
+ * mistakes; the owner's own delete sends no `madeBy`. */
+function refuseUnlessMadeBy(notes: NoteStore, row: NoteRow, session: string): void {
   if (!SESSION_ID.test(session) || !row.source?.startsWith(`session:${session}:`))
     throw new HttpError(
       403,
@@ -342,6 +344,19 @@ function refuseUnlessMadeBy(row: NoteRow, session: string): void {
     throw new HttpError(
       403,
       'The owner has edited that note since this session made it, so it stays; they can delete it on the Notes page',
+    )
+  const kept = [
+    notes.items(row.id).length ? 'items' : '',
+    notes.labelsOf(row.id).length ? 'labels' : '',
+    notes.attachments(row.id).length ? 'files' : '',
+    row.pinned ? 'a pin' : '',
+    row.archived ? 'an archive flag' : '',
+    row.remind_at !== null ? 'a reminder' : '',
+  ].filter(Boolean)
+  if (kept.length)
+    throw new HttpError(
+      403,
+      `That note has ${kept.join(', ')} now, so it stays; the owner can delete it on the Notes page`,
     )
 }
 
@@ -463,7 +478,7 @@ export function registerNoteRoutes(router: Router, deps: NoteDeps): void {
   router.on('DELETE', '/api/notes/:id', (ctx) => {
     const row = need(ctx.params.id)
     const session = ctx.query.get('madeBy')
-    if (session !== null) refuseUnlessMadeBy(row, session)
+    if (session !== null) refuseUnlessMadeBy(notes, row, session)
     notes.remove(row.id)
     return { deleted: true, id: row.id }
   })

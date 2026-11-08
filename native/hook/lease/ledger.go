@@ -211,6 +211,9 @@ func (h *Hook) CloseBareAck(id string) (map[string]any, error) {
 	return out, err
 }
 
+// ownWindow is the caller's own Aico session.
+var ownWindow = func(h *Hook) string { return h.WindowOf(h.ID.AgentID) }
+
 // sessionState reads one Aico session: its descriptor, or ended true when Tether says it is gone. Both empty when
 // Tether did not answer, which proves nothing. A var so tests need no Tether.
 var sessionState = func(window string) (desc map[string]any, ended bool) {
@@ -236,7 +239,7 @@ func (h *Hook) mayCloseFor(r map[string]any) bool {
 	if ended {
 		return true
 	}
-	own := h.WindowOf(h.ID.AgentID)
+	own := ownWindow(h)
 	return own != "" && (str(desc["parentId"]) == own || str(desc["coordinatorId"]) == own)
 }
 

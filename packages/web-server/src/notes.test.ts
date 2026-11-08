@@ -244,7 +244,16 @@ describe('notes', () => {
       expect((await asSession(owners.body.id, '12345678')).status).toBe(403)
       expect((await asSession(mine.body.id, '12345678')).body.deleted).toBe(true)
       expect((await call('GET', `/api/notes/${mine.body.id}`)).status).toBe(404)
-      await call('POST', `/api/notes/${second.body.id}/items`, { text: 'an item is no rewording' })
+      const built = await call('POST', '/api/notes', { title: 'Built on', madeBy: '12345678' })
+      for (const [change, word] of [
+        [() => call('POST', `/api/notes/${built.body.id}/items`, { text: 'added' }), /items/],
+        [() => call('PATCH', `/api/notes/${built.body.id}`, { pinned: true }), /a pin/],
+      ] as const) {
+        await change()
+        const refused = await asSession(built.body.id, '12345678')
+        expect(refused.status).toBe(403)
+        expect(refused.body.detail).toMatch(word)
+      }
       wall += MINUTE
       await call('PATCH', `/api/notes/${second.body.id}`, { body: 'the owner wrote this' })
       const reworded = await asSession(second.body.id, '12345678')

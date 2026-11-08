@@ -551,18 +551,16 @@ export class LoginStore {
               action: event.action,
               // A link's query, fragment or user part can hold a code; the rest says what changed.
               ...(event.detail
-                ? { detail: event.detail.replace(/[?#]\S*/g, '').replace(/\/\/[^/\s@]*@/g, '//') }
+                ? { detail: event.detail.replace(/[?#]\S*/g, '').replace(/\/\/[^/\s]*@/g, '//') }
                 : {}),
             },
       )
+    return { ...structuredClone(entry), ...this.stateOf(entry), activity }
+  }
+  /** The state and the word `list` uses: Unused says no session has yet, not that one can't. */
+  stateOf(entry: Login) {
     const state = this.state(entry)
-    // The word `list` uses: Unused says no session has yet, not that one can't.
-    return {
-      ...structuredClone(entry),
-      state,
-      usable: state === 'In use' || state === 'Unused',
-      activity,
-    }
+    return { state, usable: state === 'In use' || state === 'Unused' }
   }
   state(entry: Login) {
     if (entry.lab?.expires_at && Date.parse(entry.lab.expires_at) <= Date.now()) return 'Expired'

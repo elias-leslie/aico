@@ -155,6 +155,11 @@ describe('tether note', () => {
     expect(requests.filter((r) => r.startsWith('POST /api/notes ')).at(-1)).toContain(
       '"madeBy":"12345678"',
     )
+    await runNote(capture().io, false, ['add', 'Odd'], {
+      ...env(),
+      AICO_WIDGET_ID: 'not-a-session',
+    })
+    expect(requests.filter((r) => r.startsWith('POST /api/notes ')).at(-1)).not.toContain('madeBy')
     const mine = capture()
     expect(await runNote(mine.io, false, ['delete', 'aaaaaaaaaaaa'], session)).toBe(0)
     expect(requests.at(-1)).toBe('DELETE /api/notes/aaaaaaaaaaaa?madeBy=12345678')

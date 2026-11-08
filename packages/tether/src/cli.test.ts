@@ -250,6 +250,14 @@ describe('main', () => {
     expect(asJson.out.join('\n')).toContain('https://example.com/signin')
     expect(asJson.out.join('\n')).not.toContain('code=abc')
     expect(asJson.out.join('\n')).not.toContain('u:p')
+    const twoAts = await link('https://me@corp.com:hunter2@example.com/x')
+    const atsListed = capture()
+    expect(await main(['-i', 'clitest', 'share', 'list', '--all'], atsListed.io)).toBe(0)
+    expect(atsListed.out.join('\n')).not.toContain('hunter2')
+    await main(
+      ['-i', 'clitest', 'share', 'remove', (twoAts.body as { id: string }).id],
+      capture().io,
+    )
     await main(
       ['-i', 'clitest', 'share', 'remove', (coded.body as { id: string }).id],
       capture().io,

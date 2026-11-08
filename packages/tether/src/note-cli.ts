@@ -16,8 +16,9 @@ export const NOTE_USAGE = `Usage:
       Make a note; --list makes it a checklist. It belongs to project P, else to
       this session's project ($AICO_PROJECT_ID); --global makes it a note of no project.
   tether note delete <id> [--json]
-      Delete a note this session made, unless the owner has edited it since.
-      Every other note is the owner's to delete, on Aico's Notes page.
+      Delete a note this session made, while it is untouched: no edits, items,
+      labels, files, pin, archive or reminder. Every other note is the owner's
+      to delete, on Aico's Notes page.
   tether note move <id> <project|none> [--json]
       Move a note to another project, or to none (a global note).
   tether note item add <id> "text" [--json]
@@ -112,6 +113,7 @@ export async function runNote(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<number> {
   const base = (env.AICO_WEB_URL?.trim() || DEFAULT_URL).replace(/\/+$/, '')
+  const madeBy = /^(?:aico-widget-)?([0-9a-f]{8})$/.exec(env.AICO_WIDGET_ID ?? '')?.[1]
   const fail = (message: string) => {
     io.err(`tether note: ${message}`)
     return 2
@@ -175,7 +177,7 @@ export async function runNote(
     body = {
       title,
       ...(project ? { project } : {}),
-      ...(env.AICO_WIDGET_ID ? { madeBy: env.AICO_WIDGET_ID } : {}),
+      ...(madeBy ? { madeBy } : {}),
       ...(flags.values.body !== undefined ? { body: flags.values.body } : {}),
       kind: isList ? 'list' : 'note',
     }
@@ -185,12 +187,12 @@ export async function runNote(
     }
   } else if (sub === 'delete') {
     if (positional.length !== 1) return fail('delete takes one note id')
-    if (!env.AICO_WIDGET_ID)
+    if (!madeBy)
       return fail(
         "delete works only inside the Aico session that made the note; other notes are the owner's, on the Notes page",
       )
     method = 'DELETE'
-    path = `/api/notes/${enc(positional[0] as string)}?madeBy=${enc(env.AICO_WIDGET_ID)}`
+    path = `/api/notes/${enc(positional[0] as string)}?madeBy=${madeBy}`
     print = () => `Deleted ${positional[0]}`
   } else if (sub === 'move') {
     if (positional.length !== 2) return fail('move takes a note id and a project (or none)')

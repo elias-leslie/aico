@@ -287,7 +287,7 @@ const SHARE_TITLE_CHARS = 60
 
 /** A shared link as the CLI prints it, plain or --json: its query can hold a sign-in code, its
  * host a username and password. Only the owner's own view (Files > Shared) has the whole link. */
-const shareLink = (url: string) => (url.split(/[?#]/)[0] ?? '').replace(/\/\/[^/@]*@/, '//')
+const shareLink = (url: string) => (url.split(/[?#]/)[0] ?? '').replace(/\/\/[^/]*@/, '//')
 
 /** `tether share remove ID...`: each entry goes; exit 1 if any ID was unknown. */
 async function runShareList(io: Io, json: boolean, socket: string, all = false): Promise<number> {

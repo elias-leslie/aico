@@ -18,13 +18,20 @@ import {
 import { LoginClient } from './logins-client'
 import { privateFile } from './secret-files'
 
-type LoginLine = { name: string; kind?: string; available?: boolean; fix?: string }
+type LoginLine = {
+  name: string
+  kind?: string
+  available?: boolean
+  fix?: string
+  state?: string
+  usable?: boolean
+}
 
 /** The list an agent scans for a name; the rest is one `aico logins list NAME` away. */
 function loginLines(logins: LoginLine[]): string {
   const lines = logins.map(
-    ({ name, kind, available, fix }) =>
-      `${name}  ${kind ?? 'login'}  ${available === false ? (fix ?? 'not usable') : 'usable'}`,
+    ({ name, kind, available, fix, state, usable }) =>
+      `${name}  ${kind ?? 'login'}  ${available === false ? (fix ?? 'not usable') : usable === false ? state : 'usable'}`,
   )
   return `${lines.join('\n')}\n`
 }
@@ -378,7 +385,14 @@ export async function runLogins(
         },
         io.caller,
       )
-      output(await store.details(edited.name, io.caller))
+      // A login not yet open to this caller still took the fix; its state isn't theirs to read.
+      let shown: unknown = edited
+      try {
+        shown = await store.details(edited.name, io.caller)
+      } catch (error) {
+        if (!(error instanceof LoginError)) throw error
+      }
+      output(shown)
       if (loginUrl) await probe(loginUrl)
       return 0
     }

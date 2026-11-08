@@ -66,6 +66,17 @@ export interface Project {
   optionalWorkers: string[]
   manualWorkers: string[]
   manualSources: Record<string, string[]>
+  /** Where it runs when not on this machine, from runtime.deployment. */
+  deployment?: ProjectDeployment
+}
+
+export interface ProjectDeployment {
+  ssh_host: string
+  vmid: number
+  guest_type?: 'qemu' | 'lxc'
+  manager?: 'user' | 'system'
+  user?: string
+  uid?: number
 }
 
 export const canonical = (unit: string) =>
@@ -90,6 +101,7 @@ export function loadProject(root: string): Project {
     optionalWorkers: list(services.optional_workers),
     manualWorkers: list(services.manual_workers),
     manualSources,
+    ...(runtime.deployment ? { deployment: runtime.deployment } : {}),
   }
 }
 
