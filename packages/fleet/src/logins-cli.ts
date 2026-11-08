@@ -237,12 +237,8 @@ export async function saveAccount(
     caller,
   )
 }
-export async function runLogins(
-  args: string[],
-  env = process.env,
-  supplied?: Partial<LoginsIo>,
-): Promise<number> {
-  const io: LoginsIo = {
+function defaultIo(env: NodeJS.ProcessEnv): LoginsIo {
+  return {
     out: (value) => process.stdout.write(value),
     err: (value) => process.stderr.write(value),
     caller: loginCaller(env),
@@ -269,8 +265,386 @@ export async function runLogins(
         child.once('error', () => resolve(1))
         child.once('close', (code) => resolve(code ?? 1))
       }),
-    ...supplied,
   }
+}
+
+function flags(input: string[], allowed: string[]) {
+  const result: Record<string, string[]> = {}
+  for (let i = 0; i < input.length; i += 2) {
+    const flag = input[i],
+      val = input[i + 1]
+    if (!allowed.includes(flag) || val === undefined || val.startsWith('--'))
+      throw new LoginError('Invalid login arguments; see aico logins --help')
+    result[flag] ||= []
+    result[flag].push(val)
+  }
+  return result
+}
+
+function one(f: Record<string, string[]>, key: string) {
+  if ((f[key]?.length || 0) > 1) throw new LoginError('Duplicate login option')
+  return f[key]?.[0]
+}
+
+/** One run of a login command: its name and arguments, and what every command writes through. */
+type LoginRun = {
+  command: string
+  rest: string[]
+  env: NodeJS.ProcessEnv
+  io: LoginsIo
+  // Caller checks and authority routing are shared with the owner page.
+  store: LoginClient
+  output: (value: unknown) => void
+  probe: (url: string) => Promise<void>
+}
+
+async function listLogins({ rest, io, store, output }: LoginRun): Promise<number> {
+  const words = rest.filter((word) => word !== '--json')
+  if (words.length > 1 || words[0]?.startsWith('-'))
+    throw new LoginError('list takes at most one text to look for, and --json')
+  const logins = (await (io.caller.owner
+    ? store.list(io.caller)
+    : store.catalog(io.caller))) as LoginLine[]
+  const text = words[0]?.toLowerCase()
+  const found = text ? logins.filter((l) => l.name.toLowerCase().includes(text)) : logins
+  // Stdout stays JSON for scripts; the plain words go beside it.
+  if (text && !found.length)
+    io.err(`No login has "${words[0]}" in its name. aico logins list shows every saved login.\n`)
+  if (text || rest.includes('--json')) output(found)
+  else {
+    io.out(loginLines(found))
+    if (store.warning) io.err(`${store.warning}\n`)
+  }
+  return 0
+}
+
+async function allowLogin({ rest, io, store, output }: LoginRun): Promise<number> {
+  const [name, ...options] = rest,
+    f = flags(options, ['--role', '--session', '--machine'])
+  const role = one(f, '--role'),
+    session = one(f, '--session')
+  if (!name) throw new LoginError('allow needs a login name; aico logins list shows them')
+  if (role && session) throw new LoginError('Choose --role or --session, not both')
+  const result = await store.allow(
+    name,
+    {
+      ...(role ? { role } : {}),
+      ...(session ? { session } : {}),
+      ...(one(f, '--machine') ? { machine: one(f, '--machine') } : {}),
+    },
+    io.caller,
+  )
+  output(result)
+  io.err(
+    result.changed.length
+      ? `Allowed ${result.changed.join(', ')} for ${result.name}; logged in its activity. Say so in your report.\n`
+      : `${result.name} is already usable; nothing changed.\n`,
+  )
+  return 0
+}
+
+async function editLogin({ rest, io, store, output, probe }: LoginRun): Promise<number> {
+  const [name, ...options] = rest,
+    f = flags(options, ['--notes', '--kind', '--login-url', '--site', '--program', '--no-program'])
+  const notes = one(f, '--notes'),
+    kind = one(f, '--kind'),
+    loginUrl = one(f, '--login-url'),
+    site = one(f, '--site'),
+    program = one(f, '--program'),
+    dropProgram = one(f, '--no-program')
+  if (!name || (notes === undefined && !kind && !loginUrl && !site && !program && !dropProgram))
+    throw new LoginError(
+      'edit needs a login and --notes, --kind, --login-url, --site, --program or --no-program',
+    )
+  const edited = await store.edit(
+    name,
+    {
+      ...(notes !== undefined ? { notes } : {}),
+      ...(kind ? { kind: kind as LoginKind } : {}),
+      ...(loginUrl ? { login_url: loginUrl } : {}),
+      ...(site ? { target: site } : {}),
+      ...(program ? { program } : {}),
+      ...(dropProgram ? { dropProgram } : {}),
+    },
+    io.caller,
+  )
+  // A login not yet open to this caller still took the fix; its state isn't theirs to read.
+  let shown: unknown = edited
+  try {
+    shown = await store.details(edited.name, io.caller)
+  } catch (error) {
+    if (!(error instanceof LoginError)) throw error
+  }
+  output(shown)
+  if (loginUrl) await probe(loginUrl)
+  return 0
+}
+
+async function showLogin({ rest, io, store, output }: LoginRun): Promise<number> {
+  if (rest.length !== 1) throw new LoginError('show needs a name')
+  output(await store.details(rest[0], io.caller))
+  return 0
+}
+
+async function saveLogin({ command, rest, io, store, output, probe }: LoginRun): Promise<number> {
+  const [name, ...options] = rest
+  const account = options.includes('--account')
+  const f = flags(
+    options.filter((o) => o !== '--account'),
+    account ? ['--notes', '--username', '--login-url'] : ['--kind', '--notes'],
+  )
+  const secret = await io.input()
+  if (account) {
+    const username = one(f, '--username'),
+      loginUrl = one(f, '--login-url')
+    if (command !== 'set' || !username || !loginUrl)
+      throw new LoginError(
+        'An account login needs set NAME --account --username USER --login-url URL',
+      )
+    loginPage(loginUrl)
+    output(
+      await saveAccount(
+        store,
+        name,
+        { username, login_url: loginUrl },
+        secret,
+        io.caller,
+        one(f, '--notes'),
+      ),
+    )
+    await probe(loginUrl)
+  } else
+    output(
+      await store.set(
+        name,
+        secret,
+        { kind: one(f, '--kind') as LoginKind | undefined, notes: one(f, '--notes') },
+        io.caller,
+        command === 'rotate',
+      ),
+    )
+  // Length only, so a paste can be checked without echoing the value.
+  const length = [...secret].length
+  io.err(`Saved, ${length} ${length === 1 ? 'character' : 'characters'}\n`)
+  return 0
+}
+
+async function getLogin({ rest, io, store }: LoginRun): Promise<number> {
+  if (rest.length !== 1 || !io.outputSafe())
+    throw new LoginError('get needs an owner-only file, never a session log')
+  io.out((await store.value(rest[0], io.caller)).toString())
+  return 0
+}
+
+async function runWithLogin({ rest, env, io, store }: LoginRun): Promise<number> {
+  const split = rest.indexOf('--')
+  if (split < 0 || !rest[split + 1]) throw new LoginError('run needs --with NAME -- COMMAND')
+  const f = flags(rest.slice(0, split), ['--with'])
+  if (!f['--with']?.length) throw new LoginError('run needs a login')
+  return await io.execute(
+    rest.slice(split + 1),
+    await commandEnvironment(store, f['--with'], io.caller, env),
+  )
+}
+
+async function grantLogin({ command, rest, io, store, output }: LoginRun): Promise<number> {
+  const [name, ...options] = rest,
+    f = flags(options, ['--machine', '--role'])
+  const machine = one(f, '--machine'),
+    role = one(f, '--role')
+  if (!!machine === !!role) throw new LoginError('Choose one machine or role')
+  output(
+    await store.grant(
+      name,
+      machine ? 'machine' : 'role',
+      machine || role || '',
+      command === 'grant',
+      io.caller,
+    ),
+  )
+  return 0
+}
+
+async function listAssignments({ io, store, output }: LoginRun): Promise<number> {
+  output(await store.assignments(io.caller))
+  return 0
+}
+
+async function assignTargets({ command, rest, io, store, output }: LoginRun): Promise<number> {
+  const [session, ...options] = rest,
+    f = flags(options, ['--target'])
+  if (!session || (command === 'assign' && !f['--target']?.length))
+    throw new LoginError('assign needs a session and at least one target')
+  await store.assign(session, command === 'unassign' ? [] : f['--target'], io.caller)
+  output({ session, targets: command === 'unassign' ? [] : f['--target'] })
+  return 0
+}
+
+async function removeLogin({ rest, io, store, output }: LoginRun): Promise<number> {
+  if (rest.length !== 1 || !io.caller.owner)
+    throw new LoginError('Only the owner can remove logins')
+  io.err('Type the login name to remove it.\n')
+  await store.remove(rest[0], io.caller, (await io.input()) === rest[0])
+  output({ removed: rest[0] })
+  return 0
+}
+
+/** A lab action's JSON input, from its --input file or stdin. */
+async function labInput(f: Record<string, string[]>, io: LoginsIo) {
+  const input = one(f, '--input')
+  return input && input !== '-' ? privateFile(input).toString() : await io.input()
+}
+
+async function labRun(
+  { io, store }: LoginRun,
+  target: string,
+  command: string[],
+  f: Record<string, string[]>,
+): Promise<number> {
+  const request = one(f, '--request')
+  if (!command[0] || !isAbsolute(command[0]) || !request)
+    throw new LoginError('Lab run needs a request file and absolute child')
+  const program = labChildProgram(command)
+  let selection: unknown
+  try {
+    selection = JSON.parse(readFileSync(request, 'utf8'))
+  } catch {
+    throw new LoginError('Invalid lab request file')
+  }
+  const bundle = JSON.stringify(await store.resolveLab(target, selection, io.caller, program))
+  if (Buffer.byteLength(bundle) > loginPolicy.maxValueBytes)
+    throw new LoginError('Lab handoff is too large')
+  return await io.execute(
+    command,
+    { PATH: '/usr/bin:/bin', AGENT_HUB_LAB_CREDENTIAL_FD: '3' },
+    bundle,
+  )
+}
+
+async function labPatch(
+  { io, store, output }: LoginRun,
+  target: string,
+  actor: string,
+  f: Record<string, string[]>,
+): Promise<number> {
+  const raw = await labInput(f, io)
+  let patch: unknown
+  try {
+    patch = JSON.parse(raw)
+  } catch {
+    throw new LoginError('Invalid lab patch JSON')
+  }
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch))
+    throw new LoginError('Invalid lab patch JSON')
+  await store.patchLab(target, actor, patch as Parameters<LoginStore['patchLab']>[2], io.caller)
+  output({ reference: labIdentity(target, actor).reference })
+  return 0
+}
+
+async function labSave(
+  { io, store, output }: LoginRun,
+  action: 'enroll' | 'refresh',
+  target: string,
+  actor: string,
+  f: Record<string, string[]>,
+): Promise<number> {
+  const identity = labIdentity(target, actor)
+  const raw = await labInput(f, io)
+  let values: unknown
+  try {
+    values = JSON.parse(raw)
+  } catch {
+    throw new LoginError('Invalid lab fields JSON')
+  }
+  const old = action === 'refresh' ? await store.show(identity.name, io.caller) : undefined
+  const bundle = labPayload(
+    JSON.stringify({
+      schema_version: 1,
+      reference: identity.reference,
+      kind: old?.lab?.kind || one(f, '--kind') || 'synthetic',
+      expires_at: one(f, '--expires-at') || null,
+      values,
+    }),
+    target,
+    actor,
+  )
+  if (old?.lab?.kind === 'temporary')
+    throw new LoginError('Temporary lab logins cannot be refreshed')
+  await store.set(
+    identity.name,
+    JSON.stringify(bundle),
+    {
+      kind: 'lab login',
+      lab: {
+        target,
+        actor,
+        kind: bundle.kind,
+        expires_at: bundle.expires_at,
+        fields: Object.keys(bundle.values),
+      },
+    },
+    io.caller,
+    action === 'refresh',
+  )
+  output({ reference: identity.reference })
+  return 0
+}
+
+async function runLab(run: LoginRun): Promise<number> {
+  const { rest, io, store, output } = run
+  const [action, ...options] = rest,
+    split = options.indexOf('--')
+  const f = flags(split < 0 ? options : options.slice(0, split), [
+    '--target',
+    '--actor',
+    '--kind',
+    '--expires-at',
+    '--input',
+    '--request',
+  ])
+  const target = one(f, '--target'),
+    actor = one(f, '--actor') || 'default'
+  if (action === 'refs') {
+    output({
+      references: (await store.list(io.caller))
+        .filter((e) => e.lab && (!target || e.lab.target === target))
+        .flatMap((e) => (e.lab ? [labIdentity(e.lab.target, e.lab.actor).reference] : [])),
+    })
+    return 0
+  }
+  if (!target) throw new LoginError('A lab target is required')
+  if (action === 'run') return labRun(run, target, split < 0 ? [] : options.slice(split + 1), f)
+  if (action === 'patch') return labPatch(run, target, actor, f)
+  if (action === 'enroll' || action === 'refresh') return labSave(run, action, target, actor, f)
+  throw new LoginError(UNKNOWN_COMMAND)
+}
+
+const UNKNOWN_COMMAND = 'Unknown login command; see aico logins --help'
+
+const COMMANDS = new Map<string, (run: LoginRun) => Promise<number>>([
+  ['list', listLogins],
+  ['allow', allowLogin],
+  ['edit', editLogin],
+  ['show', showLogin],
+  ['set', saveLogin],
+  ['rotate', saveLogin],
+  ['get', getLogin],
+  ['run', runWithLogin],
+  ['grant', grantLogin],
+  ['revoke', grantLogin],
+  ['assignments', listAssignments],
+  ['assign', assignTargets],
+  ['unassign', assignTargets],
+  ['remove', removeLogin],
+  ['lab', runLab],
+])
+
+export async function runLogins(
+  args: string[],
+  env = process.env,
+  supplied?: Partial<LoginsIo>,
+): Promise<number> {
+  const io: LoginsIo = { ...defaultIo(env), ...supplied }
   try {
     const [command, ...rest] = args
     if (!command || command === '--help' || command === '-h') {
@@ -284,328 +658,23 @@ export async function runLogins(
       return 0
     }
     const store = new LoginClient(env)
-    // Caller checks and authority routing are shared with the owner page.
-    const output = (value: unknown) => {
-      io.out(`${JSON.stringify(value, null, 2)}\n`)
-      if (store.warning) io.err(`${store.warning}\n`)
-    }
-    const flags = (input: string[], allowed: string[]) => {
-      const result: Record<string, string[]> = {}
-      for (let i = 0; i < input.length; i += 2) {
-        const flag = input[i],
-          val = input[i + 1]
-        if (!allowed.includes(flag) || val === undefined || val.startsWith('--'))
-          throw new LoginError('Invalid login arguments; see aico logins --help')
-        result[flag] ||= []
-        result[flag].push(val)
-      }
-      return result
-    }
-    const one = (f: Record<string, string[]>, key: string) => {
-      if ((f[key]?.length || 0) > 1) throw new LoginError('Duplicate login option')
-      return f[key]?.[0]
-    }
-    const probe = async (url: string) => {
-      const checked = await io.probe(url)
-      if (checked.warning) io.err(`${checked.warning}\n`)
-    }
-    if (command === 'list') {
-      const words = rest.filter((word) => word !== '--json')
-      if (words.length > 1 || words[0]?.startsWith('-'))
-        throw new LoginError('list takes at most one text to look for, and --json')
-      const logins = (await (io.caller.owner
-        ? store.list(io.caller)
-        : store.catalog(io.caller))) as LoginLine[]
-      const text = words[0]?.toLowerCase()
-      const found = text ? logins.filter((l) => l.name.toLowerCase().includes(text)) : logins
-      // Stdout stays JSON for scripts; the plain words go beside it.
-      if (text && !found.length)
-        io.err(
-          `No login has "${words[0]}" in its name. aico logins list shows every saved login.\n`,
-        )
-      if (text || rest.includes('--json')) output(found)
-      else {
-        io.out(loginLines(found))
+    const handler = COMMANDS.get(command)
+    if (!handler) throw new LoginError(UNKNOWN_COMMAND)
+    return await handler({
+      command,
+      rest,
+      env,
+      io,
+      store,
+      output: (value) => {
+        io.out(`${JSON.stringify(value, null, 2)}\n`)
         if (store.warning) io.err(`${store.warning}\n`)
-      }
-      return 0
-    }
-    if (command === 'allow') {
-      const [name, ...options] = rest,
-        f = flags(options, ['--role', '--session', '--machine'])
-      const role = one(f, '--role'),
-        session = one(f, '--session')
-      if (!name) throw new LoginError('allow needs a login name; aico logins list shows them')
-      if (role && session) throw new LoginError('Choose --role or --session, not both')
-      const result = await store.allow(
-        name,
-        {
-          ...(role ? { role } : {}),
-          ...(session ? { session } : {}),
-          ...(one(f, '--machine') ? { machine: one(f, '--machine') } : {}),
-        },
-        io.caller,
-      )
-      output(result)
-      io.err(
-        result.changed.length
-          ? `Allowed ${result.changed.join(', ')} for ${result.name}; logged in its activity. Say so in your report.\n`
-          : `${result.name} is already usable; nothing changed.\n`,
-      )
-      return 0
-    }
-    if (command === 'edit') {
-      const [name, ...options] = rest,
-        f = flags(options, [
-          '--notes',
-          '--kind',
-          '--login-url',
-          '--site',
-          '--program',
-          '--no-program',
-        ])
-      const notes = one(f, '--notes'),
-        kind = one(f, '--kind'),
-        loginUrl = one(f, '--login-url'),
-        site = one(f, '--site'),
-        program = one(f, '--program'),
-        dropProgram = one(f, '--no-program')
-      if (!name || (notes === undefined && !kind && !loginUrl && !site && !program && !dropProgram))
-        throw new LoginError(
-          'edit needs a login and --notes, --kind, --login-url, --site, --program or --no-program',
-        )
-      const edited = await store.edit(
-        name,
-        {
-          ...(notes !== undefined ? { notes } : {}),
-          ...(kind ? { kind: kind as LoginKind } : {}),
-          ...(loginUrl ? { login_url: loginUrl } : {}),
-          ...(site ? { target: site } : {}),
-          ...(program ? { program } : {}),
-          ...(dropProgram ? { dropProgram } : {}),
-        },
-        io.caller,
-      )
-      // A login not yet open to this caller still took the fix; its state isn't theirs to read.
-      let shown: unknown = edited
-      try {
-        shown = await store.details(edited.name, io.caller)
-      } catch (error) {
-        if (!(error instanceof LoginError)) throw error
-      }
-      output(shown)
-      if (loginUrl) await probe(loginUrl)
-      return 0
-    }
-    if (command === 'show') {
-      if (rest.length !== 1) throw new LoginError('show needs a name')
-      output(await store.details(rest[0], io.caller))
-      return 0
-    }
-    if (command === 'set' || command === 'rotate') {
-      const [name, ...options] = rest
-      const account = options.includes('--account')
-      const f = flags(
-        options.filter((o) => o !== '--account'),
-        account ? ['--notes', '--username', '--login-url'] : ['--kind', '--notes'],
-      )
-      const secret = await io.input()
-      if (account) {
-        const username = one(f, '--username'),
-          loginUrl = one(f, '--login-url')
-        if (command !== 'set' || !username || !loginUrl)
-          throw new LoginError(
-            'An account login needs set NAME --account --username USER --login-url URL',
-          )
-        loginPage(loginUrl)
-        output(
-          await saveAccount(
-            store,
-            name,
-            { username, login_url: loginUrl },
-            secret,
-            io.caller,
-            one(f, '--notes'),
-          ),
-        )
-        await probe(loginUrl)
-      } else
-        output(
-          await store.set(
-            name,
-            secret,
-            { kind: one(f, '--kind') as LoginKind | undefined, notes: one(f, '--notes') },
-            io.caller,
-            command === 'rotate',
-          ),
-        )
-      // Length only, so a paste can be checked without echoing the value.
-      const length = [...secret].length
-      io.err(`Saved, ${length} ${length === 1 ? 'character' : 'characters'}\n`)
-      return 0
-    }
-    if (command === 'get') {
-      if (rest.length !== 1 || !io.outputSafe())
-        throw new LoginError('get needs an owner-only file, never a session log')
-      io.out((await store.value(rest[0], io.caller)).toString())
-      return 0
-    }
-    if (command === 'run') {
-      const split = rest.indexOf('--')
-      if (split < 0 || !rest[split + 1]) throw new LoginError('run needs --with NAME -- COMMAND')
-      const f = flags(rest.slice(0, split), ['--with'])
-      if (!f['--with']?.length) throw new LoginError('run needs a login')
-      return await io.execute(
-        rest.slice(split + 1),
-        await commandEnvironment(store, f['--with'], io.caller, env),
-      )
-    }
-    if (command === 'grant' || command === 'revoke') {
-      const [name, ...options] = rest,
-        f = flags(options, ['--machine', '--role'])
-      const machine = one(f, '--machine'),
-        role = one(f, '--role')
-      if (!!machine === !!role) throw new LoginError('Choose one machine or role')
-      output(
-        await store.grant(
-          name,
-          machine ? 'machine' : 'role',
-          machine || role || '',
-          command === 'grant',
-          io.caller,
-        ),
-      )
-      return 0
-    }
-    if (command === 'assignments') {
-      output(await store.assignments(io.caller))
-      return 0
-    }
-    if (command === 'assign' || command === 'unassign') {
-      const [session, ...options] = rest,
-        f = flags(options, ['--target'])
-      if (!session || (command === 'assign' && !f['--target']?.length))
-        throw new LoginError('assign needs a session and at least one target')
-      await store.assign(session, command === 'unassign' ? [] : f['--target'], io.caller)
-      output({ session, targets: command === 'unassign' ? [] : f['--target'] })
-      return 0
-    }
-    if (command === 'remove') {
-      if (rest.length !== 1 || !io.caller.owner)
-        throw new LoginError('Only the owner can remove logins')
-      io.err('Type the login name to remove it.\n')
-      await store.remove(rest[0], io.caller, (await io.input()) === rest[0])
-      output({ removed: rest[0] })
-      return 0
-    }
-    if (command === 'lab') {
-      const [action, ...options] = rest,
-        split = options.indexOf('--')
-      const f = flags(split < 0 ? options : options.slice(0, split), [
-        '--target',
-        '--actor',
-        '--kind',
-        '--expires-at',
-        '--input',
-        '--request',
-      ])
-      const target = one(f, '--target'),
-        actor = one(f, '--actor') || 'default'
-      if (action === 'refs') {
-        output({
-          references: (await store.list(io.caller))
-            .filter((e) => e.lab && (!target || e.lab.target === target))
-            .flatMap((e) => (e.lab ? [labIdentity(e.lab.target, e.lab.actor).reference] : [])),
-        })
-        return 0
-      }
-      if (!target) throw new LoginError('A lab target is required')
-      if (action === 'run') {
-        const command = split < 0 ? [] : options.slice(split + 1),
-          request = one(f, '--request')
-        if (!command[0] || !isAbsolute(command[0]) || !request)
-          throw new LoginError('Lab run needs a request file and absolute child')
-        const program = labChildProgram(command)
-        let selection: unknown
-        try {
-          selection = JSON.parse(readFileSync(request, 'utf8'))
-        } catch {
-          throw new LoginError('Invalid lab request file')
-        }
-        const bundle = JSON.stringify(await store.resolveLab(target, selection, io.caller, program))
-        if (Buffer.byteLength(bundle) > loginPolicy.maxValueBytes)
-          throw new LoginError('Lab handoff is too large')
-        return await io.execute(
-          command,
-          { PATH: '/usr/bin:/bin', AGENT_HUB_LAB_CREDENTIAL_FD: '3' },
-          bundle,
-        )
-      }
-      if (action === 'patch') {
-        const input = one(f, '--input')
-        const raw = input && input !== '-' ? privateFile(input).toString() : await io.input()
-        let patch: unknown
-        try {
-          patch = JSON.parse(raw)
-        } catch {
-          throw new LoginError('Invalid lab patch JSON')
-        }
-        if (!patch || typeof patch !== 'object' || Array.isArray(patch))
-          throw new LoginError('Invalid lab patch JSON')
-        await store.patchLab(
-          target,
-          actor,
-          patch as Parameters<LoginStore['patchLab']>[2],
-          io.caller,
-        )
-        output({ reference: labIdentity(target, actor).reference })
-        return 0
-      }
-      if (action === 'enroll' || action === 'refresh') {
-        const identity = labIdentity(target, actor),
-          input = one(f, '--input')
-        const raw = input && input !== '-' ? privateFile(input).toString() : await io.input()
-        let values: unknown
-        try {
-          values = JSON.parse(raw)
-        } catch {
-          throw new LoginError('Invalid lab fields JSON')
-        }
-        const old = action === 'refresh' ? await store.show(identity.name, io.caller) : undefined
-        const bundle = labPayload(
-          JSON.stringify({
-            schema_version: 1,
-            reference: identity.reference,
-            kind: old?.lab?.kind || one(f, '--kind') || 'synthetic',
-            expires_at: one(f, '--expires-at') || null,
-            values,
-          }),
-          target,
-          actor,
-        )
-        if (old?.lab?.kind === 'temporary')
-          throw new LoginError('Temporary lab logins cannot be refreshed')
-        await store.set(
-          identity.name,
-          JSON.stringify(bundle),
-          {
-            kind: 'lab login',
-            lab: {
-              target,
-              actor,
-              kind: bundle.kind,
-              expires_at: bundle.expires_at,
-              fields: Object.keys(bundle.values),
-            },
-          },
-          io.caller,
-          action === 'refresh',
-        )
-        output({ reference: identity.reference })
-        return 0
-      }
-    }
-    throw new LoginError('Unknown login command; see aico logins --help')
+      },
+      probe: async (url) => {
+        const checked = await io.probe(url)
+        if (checked.warning) io.err(`${checked.warning}\n`)
+      },
+    })
   } catch (error) {
     io.err(
       `${error instanceof LoginError ? error.message : 'Logins could not complete the operation'}\n`,
