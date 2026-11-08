@@ -160,6 +160,15 @@ describe('listDirectory', () => {
     expect(listDirectory(root, 'zdir').entries.map((entry) => entry.path)).toEqual(['zdir/one.ts'])
     expect(() => listDirectory(root, 'b.txt')).toThrow(NotFound)
   })
+
+  it('keeps only names holding the words looked for, in any case', () => {
+    write('Report.md')
+    write('notes.txt')
+    write('reports/old.md')
+    const listing = listDirectory(root, '', { anywhere: true, match: 'REPORT' })
+    expect(listing.entries.map((entry) => entry.name)).toEqual(['reports', 'Report.md'])
+    expect(listing.total).toBe(2)
+  })
 })
 
 describe('readFile', () => {

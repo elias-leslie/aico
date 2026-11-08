@@ -1,5 +1,5 @@
 import { afterEach, expect, it } from 'vitest'
-import { ago, agoOrDate, localClock, localTime, shortAgo } from './time'
+import { ago, agoOrDate, localClock, localTime, shortAgo, spanText } from './time'
 
 const zone = process.env.TZ
 afterEach(() => {
@@ -42,4 +42,12 @@ it('rounds at the edges: half a minute is a minute, two days switch to days or t
   expect(ago(now - 48 * 60 * min, now)).toBe('2 days ago')
   expect(agoOrDate(now - (48 * 60 - 1) * min, now)).toBe('48 h ago')
   expect(agoOrDate(now - 48 * 60 * min, now)).toBe('Nov 6')
+})
+
+it('says an age or a limit in the fewest words, and an age rounds like the rest', () => {
+  expect(spanText(30_000)).toBe('1 min')
+  expect(spanText(55 * 60_000)).toBe('55 min')
+  expect(spanText(2.5 * 3_600_000)).toBe('3 h')
+  expect(spanText(38 * 3_600_000)).toBe('38 h')
+  expect(spanText(72 * 3_600_000)).toBe('3 days')
 })

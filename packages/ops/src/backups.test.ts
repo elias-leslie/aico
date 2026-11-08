@@ -131,7 +131,7 @@ it('freshness uses saved payload age, even after a successful upload today', () 
     now,
   )
   expect(row.state).toBe('warn')
-  expect(row.meaning).toContain('120 h')
+  expect(row.meaning).toContain('5 days')
   writeFileSync(
     join(p, 'manifest.json'),
     JSON.stringify({ completed_at: new Date(now - 2 * 86400000).toISOString() }),

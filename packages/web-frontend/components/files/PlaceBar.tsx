@@ -183,14 +183,27 @@ export function ListControls({
   onSort,
   showHidden,
   onShowHidden,
+  match,
+  onMatch,
 }: {
   sort: SortBy
   onSort: (sort: SortBy) => void
   showHidden: boolean
   onShowHidden: (show: boolean) => void
+  match: string
+  onMatch: (match: string) => void
 }) {
   return (
     <div className="files-tools">
+      <label className="lantern-field files-find">
+        <span className="sr-only">Find in this folder</span>
+        <input
+          type="search"
+          placeholder="Find in this folder"
+          value={match}
+          onChange={(event) => onMatch(event.target.value)}
+        />
+      </label>
       <fieldset aria-label="Sort by" className="lantern-seg compact">
         <button
           type="button"

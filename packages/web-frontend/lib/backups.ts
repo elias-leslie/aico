@@ -3,6 +3,8 @@
 
 import { BACKUP_TARGET_NAMES } from '@aico/shared/backup-targets'
 
+export { spanText } from '@aico/shared/time'
+
 export type BackupTarget = 'native' | 'drive' | 'append' | 'external'
 export type BackupState = 'ok' | 'warn' | 'failed' | 'off'
 
@@ -95,14 +97,6 @@ export function backupSummary(entries: readonly BackupEntry[]): string {
   if (!live && (archived || away))
     return `Nothing is backed up now; ${parts.join(', ')}.`
   return `${parts.join(', ')}.`
-}
-
-/** "36 h", "55 min", "3 days": an age or a limit in the fewest words. */
-export function spanText(ms: number): string {
-  const minutes = Math.max(1, Math.round(ms / 60_000))
-  if (minutes < 90) return `${minutes} min`
-  const hours = Math.round(minutes / 60)
-  return hours < 48 ? `${hours} h` : `${Math.round(hours / 24)} days`
 }
 
 /** Sources with their copies: problems first, then by name; archived sources last. */

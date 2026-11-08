@@ -4,7 +4,6 @@ import {
   type BackupEntry,
   backupSummary,
   groupBySource,
-  spanText,
 } from './backups'
 
 const entry = (over: Partial<BackupEntry>): BackupEntry => ({
@@ -114,14 +113,5 @@ describe('ageByTarget', () => {
       entry({ source: 'new', dataAt: null, limitHours: 6 }),
     ]
     expect(ageByTarget(list, now)).toEqual([])
-  })
-})
-
-describe('spanText', () => {
-  it('says an age in the fewest words', () => {
-    expect(spanText(30_000)).toBe('1 min')
-    expect(spanText(55 * 60_000)).toBe('55 min')
-    expect(spanText(38 * 3_600_000)).toBe('38 h')
-    expect(spanText(72 * 3_600_000)).toBe('3 days')
   })
 })

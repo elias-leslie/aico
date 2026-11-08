@@ -13,7 +13,7 @@
   "jobs": [
     {
       "kind": "backups-drill",
-      "what": "Monthly Aico restore drill",
+      "what": "Aico restore drill: checks daily, runs monthly",
       "project": "aico",
       "home": "davion-sidarli",
       "at": "06:00",

@@ -84,9 +84,14 @@ const timeOfDay = (at: number) =>
     minute: '2-digit',
   })
 
-/** The same for a row's one line: a run due within a day is just its time of day. */
+/** The same for a row's one line: a run due later today is just its time of day, one due tomorrow
+ * names the day ("Mon 3:05 AM"), so it can't read as a time already gone by. */
 export function soonIn(routine: Routine, at: number, now = Date.now()): string {
-  return at - now >= DAY_MS || at < now ? whenIn(routine, at) : timeOfDay(at)
+  if (at - now >= DAY_MS || at < now) return whenIn(routine, at)
+  const day = new Date(at)
+  return day.toDateString() === new Date(now).toDateString()
+    ? timeOfDay(at)
+    : `${day.toLocaleDateString('en-US', { weekday: 'short' })} ${timeOfDay(at)}`
 }
 
 /** "daily at 03:30" as a sentence start. A time of day in another zone than the viewer's names its

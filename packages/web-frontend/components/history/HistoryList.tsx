@@ -19,7 +19,7 @@ import {
   toolName,
 } from '@/lib/history'
 import { useClock } from '@/lib/hooks/use-clock'
-import { useHistory } from '@/lib/hooks/use-history'
+import { HISTORY_PAGE, useHistory } from '@/lib/hooks/use-history'
 import { useSessionLabels } from '@/lib/hooks/use-session-labels'
 import { SkeletonRows } from '../status/SkeletonRows'
 import styles from './HistoryList.module.css'
@@ -81,7 +81,7 @@ export function HistoryList({
         : stale
           ? `As of ${clock(readAt)} · couldn’t refresh`
           : shown?.length
-            ? `${countOf(shown.length, 'session')} · updated ${agoAt(readAt, now)}`
+            ? `${(items?.length ?? 0) >= HISTORY_PAGE ? 'Newest ' : ''}${countOf(shown.length, 'session')} · updated ${agoAt(readAt, now)}`
             : 'None yet'
 
   return (
@@ -107,7 +107,7 @@ export function HistoryList({
           </span>
         )}
       </div>
-      <div className="status-filters">
+      <div className="status-filters keep">
         <select
           className={`status-select${tool ? ' set' : ''}`}
           aria-label="Tool"

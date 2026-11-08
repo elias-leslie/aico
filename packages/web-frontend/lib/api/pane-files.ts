@@ -40,6 +40,8 @@ export interface PaneFileContentResponse {
 export interface ListingView {
   sort: 'name' | 'modified'
   showHidden: boolean
+  /** Only names with this in them; a listing of any folder only. */
+  match?: string
 }
 
 /** Where the browser reads: a tab's or a session's working folder, or any folder by its path (a share or a clicked path). */
@@ -83,6 +85,7 @@ function filesUrl(
     offset: offset ? String(offset) : undefined,
     sort: view?.sort === 'modified' ? 'modified' : undefined,
     hidden: view && !view.showHidden ? '0' : undefined,
+    match: view?.match?.trim() || undefined,
   })}`
 }
 

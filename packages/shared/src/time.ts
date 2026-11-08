@@ -50,6 +50,14 @@ export function shortAgo(at: number, now: number): string {
   return `${Math.floor(minutes / DAY_MINUTES)} d`
 }
 
+/** An age or a limit in the fewest words: "55 min", "36 h", "3 days"; never under a minute. */
+export function spanText(ms: number): string {
+  const minutes = Math.max(1, Math.round(ms / MINUTE))
+  if (minutes < 90) return `${minutes} min`
+  const hours = Math.round(minutes / 60)
+  return hours < 48 ? `${hours} h` : `${Math.round(hours / 24)} days`
+}
+
 /** `ago` for the past two days, then the day ("Nov 5"; "Feb 3, 2025" in another year). */
 export function agoOrDate(at: number, now: number): string {
   if (minutesAgo(at, now) < 2 * DAY_MINUTES) return ago(at, now)

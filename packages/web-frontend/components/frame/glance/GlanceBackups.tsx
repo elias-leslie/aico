@@ -29,7 +29,7 @@ const FIND_FROM = 8
 
 const late = (age: TargetAge) => age.ageMs > age.limitMs
 const ageText = (age: TargetAge) =>
-  `${spanText(age.ageMs)} old, late after ${spanText(age.limitMs)}`
+  `oldest ${spanText(age.ageMs)}, late after ${spanText(age.limitMs)}`
 
 /** Backups for the heading: "All current", or how many sources are late or failed; why, when it is not known. */
 export function useBackupsGlance(): GlanceHead {

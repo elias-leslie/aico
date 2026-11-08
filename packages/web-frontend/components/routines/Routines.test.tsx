@@ -223,7 +223,9 @@ describe('Routines', () => {
     })
   })
 
-  it('shows a run due within a day as its time of day alone, in the viewer’s time with no zone', async () => {
+  it('shows a run due later today as its time of day alone, in the viewer’s time with no zone', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 10, 8, 9, 0))
     list = [
       routine({
         kind: 'soon',
@@ -239,6 +241,23 @@ describe('Routines', () => {
     const when = row.querySelector('button')?.textContent ?? ''
     expect(when).toMatch(/\d:\d\d (AM|PM)/)
     expect(when).not.toMatch(/GMT|UTC|[A-Z][a-z]{2} \d/)
+    vi.useRealTimers()
+  })
+
+  it('names the day of a run due tomorrow, so it can’t read as a time already gone by', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 10, 8, 9, 0))
+    list = [
+      routine({
+        kind: 'soon',
+        what: 'Soon one',
+        nextRun: new Date(2026, 10, 9, 3, 5).getTime(),
+      }),
+    ]
+    view()
+    const row = await screen.findByTestId('routine-soon')
+    expect(row.querySelector('button')?.textContent).toContain('Mon 3:05 AM')
+    vi.useRealTimers()
   })
 
   it('always shows the next run in the row, marked with the clock; next and last in full on hover', async () => {

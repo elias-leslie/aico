@@ -586,9 +586,9 @@ describe('Needs you page', () => {
       'Answer goes to session fedcba98 (asker ended)',
     )
     expect(routeOf({ answerTo: null })).toEqual({
-      text: 'No session will get the answer',
+      text: 'The agent reads this when it checks',
       title:
-        'No session will get the answer. The agent reads it when it checks.',
+        'The agent reads this when it checks. No session is waiting on this answer; it stays here for the agent.',
     })
     expect(routeOf({ session: 'fedc1234', answerTo: null })).toEqual({
       text: 'Answer goes to this chat',
@@ -623,7 +623,7 @@ describe('Needs you page', () => {
     expect(screen.queryByTestId('answer-route')).toBeNull()
     expect(within(card).queryByRole('textbox')).toBeNull()
     expect(card).not.toHaveTextContent('Not now')
-    expect(card).not.toHaveTextContent('No session will get the answer')
+    expect(card).not.toHaveTextContent('The agent reads this when it checks')
     fireEvent.click(within(card).getByRole('radio', { name: /Done/ }))
     fireEvent.click(within(card).getByRole('button', { name: 'Send' }))
     expect(await screen.findByRole('status')).toHaveTextContent('Done')
@@ -854,7 +854,7 @@ describe('a card that asks for files', () => {
     return render(<NeedsYouPage />)
   }
   const send = () =>
-    within(card()).getByRole('button', { name: /^(Send|Waiting|Add \d+ more)/ })
+    within(card()).getByRole('button', { name: /^(Send|Waiting|Add )/ })
   const land = async (index: number, name: string, id: string) =>
     act(async () => state.uploads[index]?.resolve(saved(name, id)))
 
@@ -864,22 +864,34 @@ describe('a card that asks for files', () => {
       '0 of 2-5 files · any 2-3 photos',
     )
     expect(send()).toBeDisabled()
-    expect(send()).toHaveTextContent('Add 2 more photos')
+    expect(send()).toHaveTextContent('Add 2 photos')
     expect(
       within(card()).queryByRole('button', { name: 'Answer without files' }),
     ).toBeNull()
     // Done is not an answer to a question that asked for files.
     expect(within(card()).queryByRole('button', { name: /Done/ })).toBeNull()
-    // Typing a note does not open it.
+    // Typing a note does not open it, but Not now takes the words along.
     fireEvent.change(within(card()).getByLabelText('Reply to the agent'), {
       target: { value: 'no camera here' },
     })
     expect(send()).toBeDisabled()
+    fireEvent.click(within(card()).getByRole('button', { name: 'Not now' }))
+    expect(state.sent).toEqual([
+      {
+        id: 'abcdefabcdef',
+        reply: {
+          kind: 'answer',
+          text: 'Not now',
+          skippedFiles: true,
+          note: 'no camera here',
+        },
+      },
+    ])
   })
 
   it('Send counts down as files are saved, and names files when the ask gave no hint', async () => {
     open(wants(2, 3))
-    expect(send()).toHaveTextContent('Add 2 more files')
+    expect(send()).toHaveTextContent('Add 2 files')
     choose(file('a.jpg'))
     await land(0, 'a.jpg', '111111111111')
     expect(send()).toHaveTextContent('Add 1 more file')

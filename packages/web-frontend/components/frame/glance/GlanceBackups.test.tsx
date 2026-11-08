@@ -95,7 +95,7 @@ describe('GlanceBackups', () => {
       'false',
     )
     expect(screen.getByText('Its data is 38 h old.')).toBeVisible()
-    expect(screen.getByText('38 h old, late after 8 h')).toBeVisible()
+    expect(screen.getByText('oldest 38 h, late after 8 h')).toBeVisible()
   })
 
   it('opens a source to its copies with last good data, next copy and Restore', () => {

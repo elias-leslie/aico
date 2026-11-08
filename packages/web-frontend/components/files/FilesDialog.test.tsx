@@ -400,6 +400,27 @@ describe('FilesDialog', () => {
     )
   })
 
+  it('finds by name in this folder, and a new folder starts unfiltered', async () => {
+    renderDialog(null, null)
+    await screen.findByText('tmp-file.txt')
+    fireEvent.change(
+      screen.getByRole('searchbox', { name: 'Find in this folder' }),
+      {
+        target: { value: 'tmp' },
+      },
+    )
+    await waitFor(() => expect(lastTree().get('match')).toBe('tmp'))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Go to a path' }), {
+      target: { value: '/tmp/agent/out.txt' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Go' }))
+    await waitFor(() => expect(lastTree().get('root')).toBe('/tmp/agent'))
+    expect(lastTree().get('match')).toBeNull()
+    expect(
+      screen.getByRole('searchbox', { name: 'Find in this folder' }),
+    ).toHaveValue('')
+  })
+
   it('works when storage is out of reach', async () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('blocked')

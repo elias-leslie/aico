@@ -71,7 +71,7 @@ export function AskCard({
         // Sent: the files are the agent's now, not a draft.
         dropAskCaptureQueue(ask.id)
         onSent?.(
-          `${saved.delivery === 'wake' ? 'Sent to' : 'Saved for'} “${(saved.answerTo && nameOf(saved.answerTo)) || asker.name}”: ${said}.`,
+          `${saved.delivery === 'wake' ? 'Sent to' : 'Saved for'} “${(saved.answerTo && nameOf(saved.answerTo)) || asker.name}”: ${said}${/[.!?]”?$/.test(said) ? '' : '.'}`,
         )
       })
       .catch(() => {
@@ -164,6 +164,7 @@ export function AskCard({
         app={app}
         hasOptions={hasOptions}
         wantsFiles={wantsFiles}
+        note={noteText}
         inSession={inSession}
         link={link}
         workbench={workbenchPath(ask)}

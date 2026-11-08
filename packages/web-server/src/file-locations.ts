@@ -213,6 +213,7 @@ function pageOf(ctx: RequestContext): BrowseOptions {
     sort: ctx.query.get('sort') === 'modified' ? 'modified' : 'name',
     // Dotfiles show unless the page asks to hide them.
     hidden: ctx.query.get('hidden') !== '0',
+    match: ctx.query.get('match') ?? undefined,
   }
 }
 

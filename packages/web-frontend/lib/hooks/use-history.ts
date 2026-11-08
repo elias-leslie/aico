@@ -14,6 +14,8 @@ const HISTORY_POLL_MS = 30_000
 const retryOnce = (count: number, error: unknown) =>
   count < 1 && !isPermanentRefusal(error)
 const EVENTS_PAGE = 100
+/** How many of the newest sessions the list reads; a full page isn't the whole history. */
+export const HISTORY_PAGE = 100
 
 /** GET /api/history: recent sessions, newest first. `stale` keeps the last list while a read fails. */
 export function useHistory(tool: string) {
@@ -21,7 +23,7 @@ export function useHistory(tool: string) {
     queryKey: ['history', tool],
     queryFn: () =>
       apiFetch<{ items: HistorySession[] }>(
-        `/api/history?limit=100${tool ? `&tool=${encodeURIComponent(tool)}` : ''}`,
+        `/api/history?limit=${HISTORY_PAGE}${tool ? `&tool=${encodeURIComponent(tool)}` : ''}`,
         undefined,
         'Couldn’t load recent sessions',
       ),

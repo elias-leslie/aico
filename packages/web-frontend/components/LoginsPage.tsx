@@ -291,7 +291,13 @@ export function LoginsPage() {
   const choices: AccessChoices = {
     sources: (data?.entries ?? []).map((e) => ({
       name: e.name,
-      label: e.lab ? e.lab.target : e.name,
+      // Several logins of one site read apart by their account.
+      label: !e.lab
+        ? e.name
+        : (data?.entries ?? []).filter((o) => o.lab?.target === e.lab?.target)
+              .length > 1
+          ? `${e.lab.target} · ${e.lab.username || e.name.slice(e.name.lastIndexOf('--') + 2)}`
+          : e.lab.target,
       machines: e.machines,
       roles: e.roles,
       deniedRoles: e.deniedRoles,
@@ -1236,11 +1242,18 @@ function Assignment({
 /** One activity line: when, what, which login, who, and what changed when it says. */
 /** Sessions by id, so activity names the session rather than its id. */
 type Who = { id: string; label: string }[]
+/** A lab login's site, as its row names it (`_lab_example.com--default` is example.com). */
+const shownEventName = (name: string) =>
+  name.match(/^_lab_(.*)--[^-]*(?:-[^-]+)*$/)?.[1] ?? name
+const ACTION_WORDS: Record<string, string> = {
+  set: 'added',
+  rotate: 'password changed',
+}
 const eventLine = (e: Event, named = true, who: Who = []) =>
   [
     when(e.at),
-    e.action,
-    named ? e.name : null,
+    ACTION_WORDS[e.action] ?? e.action,
+    named ? shownEventName(e.name) : null,
     who.find((s) => s.id === e.actor)?.label ?? e.actor,
     e.detail,
   ]

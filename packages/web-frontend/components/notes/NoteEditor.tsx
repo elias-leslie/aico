@@ -499,7 +499,7 @@ function Editor({
       <ConfirmationDialog
         isOpen={confirming}
         title="Delete this note?"
-        message={`${note.title || 'This note'} will be removed, with its items. Its photos stay in Captures.`}
+        message={`${note.title || 'This note'} will be removed, with its items, and can’t be brought back. Its photos stay in Captures.`}
         confirmText="Delete"
         pendingText="Deleting…"
         isPending={remove.isPending}

@@ -169,6 +169,23 @@ describe('recent sessions list', () => {
     expect(link?.getAttribute('href')).toBe('/history?session=codex%3Aabc')
   })
 
+  it('says Newest when the list stops at a full page, and keeps the filters on the phone', async () => {
+    const page = (count: number) => ({
+      items: Array.from({ length: count }, (_, index) =>
+        session({ id: `codex:${index}` }),
+      ),
+    })
+    api.list = page(100)
+    const { unmount, container } = renderPage()
+    await screen.findByText(/^Newest 100 /)
+    expect(container.querySelector('.status-filters')).toHaveClass('keep')
+    unmount()
+    api.list = page(2)
+    renderPage()
+    await screen.findAllByText(/demo/)
+    expect(screen.queryByText(/^Newest /)).toBeNull()
+  })
+
   it('says plainly when there are none, and when the load failed', async () => {
     api.list = { items: [] }
     const { unmount } = renderPage()
@@ -627,7 +644,7 @@ describe('search', () => {
         /read the newest 120 sessions back to Oct 31, then hit the search’s read limit/,
       ),
     ).toBeTruthy()
-    expect(screen.queryByText(/newest first, older ones not read/)).toBeNull()
+    expect(screen.queryByText(/older ones not searched/)).toBeNull()
   })
 
   it('drops the earlier search when the text changes', async () => {

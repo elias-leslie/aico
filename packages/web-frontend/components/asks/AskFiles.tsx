@@ -74,13 +74,14 @@ function countText(held: number, wants: WantsFiles): string {
   return `${held} of ${range} ${wants.max === 1 ? 'file' : 'files'}`
 }
 
-/** What Send says while the ask's minimum is not met: "Add 2 more photos". */
+/** What Send says while the ask's minimum is not met: "Add a photo", "Add 2 more photos". */
 export function addMoreText(wants: WantsFiles, saved: number): string {
   const noun = /photo|picture|image|screenshot/i.test(wants.hint ?? '')
     ? 'photo'
     : 'file'
   const missing = Math.max(1, wants.min - saved)
-  return `Add ${missing} more ${noun}${missing === 1 ? '' : 's'}`
+  if (saved === 0 && missing === 1) return `Add a ${noun}`
+  return `Add ${missing} ${saved > 0 ? 'more ' : ''}${noun}${missing === 1 ? '' : 's'}`
 }
 
 function Row({

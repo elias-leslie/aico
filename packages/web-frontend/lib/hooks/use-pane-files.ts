@@ -23,6 +23,7 @@ const fileQueryKeys = {
       sourceKey(source),
       path,
       view?.sort ?? '',
+      view?.match?.trim() ?? '',
       view?.showHidden ?? '',
     ] as const,
   content: (source: FilesSource, path: string) =>

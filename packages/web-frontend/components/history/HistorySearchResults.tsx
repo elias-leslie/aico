@@ -85,13 +85,13 @@ export function HistorySearchResults({
       )}
       {page && (
         <p className="status-muted history-scope">
-          {countOf(shown.length, 'session')} with “{page.query}”
-          {page.more && ' so far'} · searched {covers}
+          {countOf(shown.length, 'session')} with “{page.query}”{' · searched '}
+          {covers}
           {' (Antigravity and Aico agent chats are not searchable yet)'}
           {page.more &&
             (budget
               ? ` · read the newest ${countOf(page.searched.sessions, 'session')}${reach}, then hit the search’s read limit; older ones not read`
-              : ' · newest first, older ones not read')}
+              : ' · newest first; older ones not searched')}
         </p>
       )}
       {page && shown.length === 0 && (

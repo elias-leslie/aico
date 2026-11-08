@@ -1352,6 +1352,11 @@ div.xterm .xterm-viewport {
   padding: 0 18px 8px;
 }
 
+.files-find {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
 .files-tools .lantern-btn[aria-pressed="true"] {
   border-color: var(--lantern);
   background: var(--paper-veil);
@@ -2535,7 +2540,8 @@ a.lantern-ask-attached {
     padding-left: 8px;
   }
 
-  .status-filters {
+  /* The Status page moves these into its filter sheet; a page without a sheet keeps them. */
+  .status-filters:not(.keep) {
     display: none;
   }
 

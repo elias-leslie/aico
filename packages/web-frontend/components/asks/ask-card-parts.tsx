@@ -28,8 +28,9 @@ export function answerRoute(
   if (ask.answerTo === undefined) return null
   if (ask.answerTo === null)
     return {
-      text: 'No session will get the answer',
-      detail: 'The agent reads it when it checks.',
+      text: 'The agent reads this when it checks',
+      detail:
+        'No session is waiting on this answer; it stays here for the agent.',
     }
   const name = nameOf(ask.answerTo)
   const label = name ? `“${name}”` : `session ${ask.answerTo}`
@@ -138,6 +139,11 @@ export function AskHead({
             className="lantern-chip"
             data-tone={ask.blocking ? 'wait' : undefined}
             data-testid="ask-urgency"
+            title={
+              ask.blocking
+                ? 'The agent has stopped until you answer'
+                : 'The agent keeps working; answer when you can'
+            }
           >
             {ask.blocking && <span className="lantern-mark" data-tone="need" />}
             {ask.blocking ? 'Waiting on this' : 'No rush'}
@@ -284,6 +290,7 @@ export function AskActions({
   app,
   hasOptions,
   wantsFiles,
+  note,
   inSession,
   link,
   workbench,
@@ -296,6 +303,8 @@ export function AskActions({
   app: boolean
   hasOptions: boolean
   wantsFiles: boolean
+  /** What is typed in the reply box; Not now takes it along on a files ask, where Send can't. */
+  note: string
   inSession: boolean
   /** The https link the ask opens, if any. */
   link: string | null
@@ -374,13 +383,16 @@ export function AskActions({
                 text: 'Not now',
                 // A decline is the one answer a files ask takes without its files.
                 ...(wantsFiles ? { skippedFiles: true } : {}),
+                ...(wantsFiles && note ? { note } : {}),
               },
-              'Not now',
+              wantsFiles && note ? `Not now, “${note}”` : 'Not now',
             )
           }
           title={
             waitTitle ??
-            'Sends the agent “Not now”; the question counts as answered, and it moves on'
+            (wantsFiles && note
+              ? 'Sends the agent “Not now” and what you typed; the question counts as answered'
+              : 'Sends the agent “Not now”; the question counts as answered, and it moves on')
           }
         >
           Not now

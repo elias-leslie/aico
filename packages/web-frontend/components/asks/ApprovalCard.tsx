@@ -11,7 +11,11 @@ export function ApprovalCard({ tap }: { tap: Approval }) {
         <span className="lantern-chip" data-tone="wait">
           Grant request
         </span>
-        <span className="min-w-0 truncate" style={{ color: 'var(--mist)' }}>
+        <span
+          className="min-w-0 truncate"
+          style={{ color: 'var(--mist)' }}
+          title="Approving takes a tap of your security key, on its own page"
+        >
           security key · expires in{' '}
           {minutes >= 60
             ? `${Math.floor(minutes / 60)}h ${minutes % 60}m`

@@ -244,6 +244,8 @@ export interface BrowseOptions {
   sort?: 'name' | 'modified'
   /** Anywhere listings: false leaves out names that start with a dot. */
   hidden?: boolean
+  /** Anywhere listings: only names with this in them, in any case. */
+  match?: string
 }
 
 export const DEFAULT_PAGE = 500
@@ -420,9 +422,11 @@ function listAnywhere(rootPath: string, relativePath: string, options: BrowseOpt
     if (isPermissionError(error)) throw new Unreadable('Can’t read this folder: permission denied')
     throw error
   }
+  const needle = options.match?.trim().toLowerCase()
   const listed = dirents
     .filter((dirent) => !isDenied(dirent.name))
     .filter((dirent) => options.hidden !== false || !dirent.name.startsWith('.'))
+    .filter((dirent) => !needle || dirent.name.toLowerCase().includes(needle))
     .map((dirent) => ({
       dirent,
       name: dirent.name,

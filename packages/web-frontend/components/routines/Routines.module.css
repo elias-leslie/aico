@@ -44,7 +44,7 @@
   outline: 2px solid var(--lantern);
   outline-offset: -2px;
 }
-/* One line per routine: chip, name (cut short with an ellipsis), when, chevron. */
+/* One row per routine: chip, name (up to two lines: the end of a name often tells two apart), when, chevron. */
 .top {
   display: flex;
   align-items: center;
@@ -58,11 +58,14 @@
 .name {
   flex: 1 1 0;
   min-width: 0;
+  display: -webkit-box;
   overflow: hidden;
   font-size: 13.5px;
   font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 .when {
   display: inline-flex;

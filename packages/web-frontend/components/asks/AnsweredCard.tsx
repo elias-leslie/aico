@@ -2,13 +2,14 @@
 
 import { shortAgo } from '@aico/shared/time'
 import { type OwnerAsk, useAskReply } from '@/lib/hooks/use-asks'
+import { shortWhen } from '@/lib/short-when'
 import { plural } from '@/lib/status'
 import { AnsweredFiles } from './AskFiles'
 import { askTitle, Meta, OpenSession, useAsker } from './ask-shared'
 
 /** How the answer travels, in the owner's words. */
 function deliveryText(ask: OwnerAsk): string {
-  if (ask.state === 'done') return 'Done: the agent acted on it.'
+  if (ask.state === 'done') return 'Closed.'
   if (ask.state === 'withdrawn') return 'The agent withdrew it.'
   if (ask.delivery === 'wake')
     return 'Sent to the session. The agent gets it once it is idle.'
@@ -25,7 +26,10 @@ export function AnsweredCard({ ask, now }: { ask: OwnerAsk; now: number }) {
           {asker.name}
         </span>
         <span aria-hidden="true">·</span>
-        <span className="whitespace-nowrap">
+        <span
+          className="whitespace-nowrap"
+          title={shortWhen(ask.answeredAt ?? ask.updatedAt)}
+        >
           {shortAgo(ask.answeredAt ?? ask.updatedAt, now)}
         </span>
       </Meta>

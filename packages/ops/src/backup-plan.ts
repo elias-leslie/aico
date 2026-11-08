@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { homedir, hostname } from 'node:os'
 import { join } from 'node:path'
 import { backupTargetName } from '@aico/shared/backup-targets'
+import { spanText } from '@aico/shared/time'
 import type { StatusRow } from '@aico/status'
 import defaults from '../data/backups.json' with { type: 'json' }
 import imported from '../data/backups-import.json' with { type: 'json' }
@@ -152,7 +153,7 @@ export function entry(
       ? 'No verified copy yet.'
       : offline
         ? 'Machine is off; its last copy covers the unchanged data.'
-        : `${fresh ? 'Restorable data is' : 'Restorable data is late:'} ${age < 3600000 ? Math.floor(age / 60000) + ' min' : Math.floor(age / 3600000) + ' h'} old.`
+        : `${fresh ? 'Restorable data is' : 'Restorable data is late:'} ${spanText(age)} old.`
   const period = runPeriodMinutes(target, cfg)
   const attempted = copy?.attemptedAt && Date.parse(copy.attemptedAt)
   const nextRun = new Date((attempted || now) + period * 60000).toISOString()

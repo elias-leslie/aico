@@ -1,7 +1,7 @@
 'use client'
 
 import { ChevronLeft } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useDeferredValue, useEffect, useRef, useState } from 'react'
 import {
   type FilePlace,
   fetchPathInfo,
@@ -81,6 +81,11 @@ export function FilesPanel({
   // The owner's pick of order holds across folders; until then each folder has its own default.
   const [sortPick, setSortPick] = useState<SortBy | null>(null)
   const [showHidden, setShowHiddenState] = useState(readShowHidden)
+  // What is being found belongs to the folder it was typed in; a new folder starts unfiltered.
+  const [found, setFound] = useState({
+    folder: null as string | null,
+    text: '',
+  })
   const setShowHidden = (show: boolean) => {
     setShowHiddenState(show)
     saveShowHidden(show)
@@ -162,6 +167,9 @@ export function FilesPanel({
     : undefined
 
   const shownFolder = view.kind === 'place' ? view.root : null
+  const match = found.folder === shownFolder ? found.text : ''
+  // A typed name narrows without a request per key.
+  const shownMatch = useDeferredValue(match)
   // biome-ignore lint/correctness/useExhaustiveDependencies: only a new folder is reported
   useEffect(() => {
     if (view.kind === 'place' || view.kind === 'shared') onLocate?.(shownFolder)
@@ -279,6 +287,8 @@ export function FilesPanel({
                 onSort={setSortPick}
                 showHidden={showHidden}
                 onShowHidden={setShowHidden}
+                match={match}
+                onMatch={(text) => setFound({ folder: shownFolder, text })}
               />
               <FileBrowser
                 key={`at:${view.root}:${view.select?.path ?? ''}`}
@@ -286,7 +296,7 @@ export function FilesPanel({
                 initialSelected={view.select}
                 onInsertPath={insert}
                 shared={view.fromShared}
-                view={{ sort, showHidden }}
+                view={{ sort, showHidden, match: shownMatch }}
               />
             </>
           ) : null}

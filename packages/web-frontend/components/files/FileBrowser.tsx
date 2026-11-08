@@ -6,6 +6,7 @@ import {
   Check,
   ChevronRight,
   Copy,
+  Download,
   ExternalLink,
   File,
   FileCode,
@@ -107,7 +108,8 @@ function TreeNode({
     source,
     entry.path,
     expanded && entry.is_directory,
-    view,
+    // Finding narrows the folder being looked at, not what's inside the folders it finds.
+    view && { ...view, match: undefined },
   )
   const FileIcon = getFileIcon(entry)
 
@@ -333,7 +335,11 @@ export function FileBrowser({
             <MoreRow tree={tree} indent={10} />
           </ul>
         ) : (
-          <p className="files-state">This folder is empty.</p>
+          <p className="files-state">
+            {view?.match?.trim()
+              ? `No name here has “${view.match.trim()}” in it.`
+              : 'This folder is empty.'}
+          </p>
         )}
       </div>
 
@@ -525,6 +531,16 @@ export function FilePreview({
                     : content.data.is_binary && !image
                       ? 'Download'
                       : 'Open'}
+                </a>
+              )}
+              {rawUrl && !(content.data.is_binary && !image) && (
+                <a
+                  href={rawUrl}
+                  download={selected.name}
+                  className="lantern-btn small"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Download
                 </a>
               )}
               {onInsertPath && (

@@ -142,7 +142,7 @@ describe('BackupsPage', () => {
     expect(screen.getByRole('button', { name: 'Try again' })).toBeVisible()
   })
 
-  it('leaves Retry to the top bar while the whole server is down', async () => {
+  it('leaves Retry to the Status glance while the whole server is down', async () => {
     answer('down')
     markFailed()
     try {

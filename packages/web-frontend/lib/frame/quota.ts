@@ -1,4 +1,4 @@
-// The quota glance (top bar, Rail and Panel): what each subscription has left
+// The quota glance (Rail and Panel): what each subscription has left
 // in its tightest window, from the same usage report the Quota page reads
 // (GET /api/usage). One meaning everywhere: a bar is how much is LEFT, and the
 // tick on it is how far into the window we are. Each provider leads with the

@@ -517,6 +517,12 @@ it('lists roles and sessions together under Used by, with All roles for an accou
     'fetch',
     schoolApi({}, [
       {
+        at: '2026-11-07T11:00:00Z',
+        action: 'rotate',
+        name: '_lab_school--default',
+        actor: 'a1b2c3d4',
+      },
+      {
         at: '2026-11-07T12:00:00Z',
         action: 'allow',
         name: '_lab_school--default',
@@ -539,6 +545,9 @@ it('lists roles and sessions together under Used by, with All roles for an accou
       screen.getByRole('list', { name: "This login's activity" }),
     ).toHaveTextContent('allow · Dadbot · session a1b2c3d4'),
   )
+  expect(
+    screen.getByRole('list', { name: "This login's activity" }),
+  ).toHaveTextContent('password changed · Dadbot')
 })
 it('a lab login that is not an account shows no All roles and ticks only named roles', async () => {
   const lab = {
