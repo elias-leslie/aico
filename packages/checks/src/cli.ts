@@ -1,6 +1,7 @@
 // `aico check` and `aico commit`.
-// Exit codes: 0 passed or committed, 1 failed or refused, 2 usage, 3 nothing to check here
-// (not in a git repository).
+// Exit codes: 0 passed or committed, 1 failed or refused, 2 usage (a focused run that can't load the
+// gate too), 3 this repo's gate can't run here: not in a git repository, or it names a tool st check
+// doesn't run.
 
 import { existsSync } from 'node:fs'
 import { relative, resolve } from 'node:path'
@@ -68,7 +69,7 @@ function parse(argv: string[], valued: string[]): Parsed {
   return parsed
 }
 
-/** The repo and its gate; outside a git repo the gate is unsupported too (exit 3). */
+/** The repo and its gate; outside a git repo, or with a gate that names a tool we don't run, it is unsupported (exit 3). */
 function load(io: CliIo): { root: string; config: ReturnType<typeof loadConfig> } {
   let root: string
   try {

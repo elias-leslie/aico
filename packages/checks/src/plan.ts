@@ -161,7 +161,10 @@ export function loadConfig(root: string): Config | { unsupported: string } {
     'native.legacy_tools',
   )
   const unknown = legacy.filter((tool) => !(LEGACY as readonly string[]).includes(tool))
-  if (unknown.length) return { unsupported: `legacy tools ${unknown.join(', ')}` }
+  if (unknown.length)
+    return {
+      unsupported: `this repo's gate names a tool st check doesn't run: ${unknown.join(', ')}`,
+    }
   const seen = new Set<string>()
   const stages: StageDecl[] = []
   for (const raw of (native.stages as TomlTable[] | undefined) ?? []) {

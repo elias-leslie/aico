@@ -46,6 +46,20 @@ it('retains the service acceptance artifact independently of the reuse cache', a
   expect((await accept(config, { coordination })).passed).toBe(true)
   expect(JSON.parse(readFileSync(path, 'utf8')).tree).toBe(first.tree)
 })
+it('says a gate naming an unknown tool is the repo’s, and exits 3', async () => {
+  const root = fixture()
+  writeFileSync(join(root, '.st-check.toml'), '[native]\nlegacy_tools=["foo"]\n')
+  const errors: string[] = []
+  const io = {
+    cwd: root,
+    env: {},
+    coordination,
+    out: () => {},
+    err: (line: string) => errors.push(line),
+  }
+  expect(await runCli('check', [], io)).toBe(3)
+  expect(errors.join('\n')).toContain("this repo's gate names a tool st check doesn't run: foo")
+})
 it('runs a selected declared native stage through Aico', async () => {
   const root = fixture()
   writeFileSync(
