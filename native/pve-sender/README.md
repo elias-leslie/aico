@@ -60,7 +60,12 @@ each sample. `delivery_machine` in policy selects the Aico instance that deliver
 typed guard episodes; it currently names CT 190's `aico` instance.
 
 The public runtime heartbeat is readable through a read-only bind mount in the
-agent container at the same path. ST's existing heavy-work admission reads this
+agent container at `/mnt/aico-backup-guard`. Install
+`container/aico-backup-guard.conf` as `/etc/tmpfiles.d/aico-backup-guard.conf`
+inside the container: its standard boot-time alias exposes the same
+`/run/aico-backup-guard` path to ST. Mounting directly below the container's
+`/run` loses visibility when systemd creates its temporary runtime mount.
+ST's existing heavy-work admission reads this
 local snapshot before admitting a new heavy job: hot, missing or stale installed
 guard evidence closes admission without calling Aico, SSH or a sensor command.
 Normal heat evidence does not bypass memory admission. Hosts without this guard
