@@ -71,7 +71,7 @@ export class Runner {
   private readonly running = new Map<string, Promise<void>>()
   private readonly unsent = new Map<string, StatusRow>()
   /** What each queued row last said (see rowSignature), so a state another machine changed is sent again. */
-  private readonly announced = new Map<string, string>()
+  private readonly announced = new Map<string, { signature: string; leased: boolean }>()
   /** Every kind this process has known (its row may be from before a restart), to take the row down when the routine is removed. */
   private readonly rowKinds = new Set<string>()
   /** Jobs held elsewhere whose lease host held a lease when last asked: not stood in for until
@@ -116,7 +116,7 @@ export class Runner {
       const now = this.now()
       store.ensure(job.kind, job.every_min === undefined ? nextRun(job, now) : now)
       const state = store.get(job.kind)
-      if (state && this.announced.get(job.kind) !== rowSignature(state, now))
+      if (state && this.announced.get(job.kind)?.signature !== rowSignature(state, now))
         this.queueRow(job, state, now)
     }
   }
@@ -150,12 +150,13 @@ export class Runner {
       if (!(job.workers ?? [job.home]).includes(machine) || this.running.has(job.kind)) continue
       const remote = this.options.authority?.(job) ?? store
       const standsIn = remote !== store && (job.fallback ?? []).includes(machine)
+      let followed: JobState | null | undefined
       let authority: LeaseAuthority = remote
       let lease: Lease | null = await this.adopt(job, standsIn)
       if (lease) authority = store
       else
         try {
-          if (standsIn) await this.follow(job, remote)
+          if (standsIn) followed = await this.follow(job, remote)
           else if (remote === store && (await this.coveredElsewhere(job))) continue
           lease = await remote.claim(
             job.kind,
@@ -185,7 +186,20 @@ export class Runner {
             `${job.kind}: ${job.lease_host} does not answer (${error.message}); running it here on this machine's own lease`,
           )
         }
-      if (!lease) continue
+      if (!lease) {
+        const announced = this.announced.get(job.kind)
+        // A completion can commit remotely while its reply is lost. Refresh the
+        // row after that run or startup; settled future jobs need no extra reads.
+        if (remote !== store && (!announced || announced.leased))
+          try {
+            const state = followed === undefined ? await remote.get(job.kind) : followed
+            if (state && announced?.signature !== rowSignature(state, this.now()))
+              this.queueRow(job, state)
+          } catch (error) {
+            this.log(`${job.kind}: could not read its result: ${(error as Error).message}`)
+          }
+        continue
+      }
       try {
         const state = await authority.get(job.kind)
         if (state) this.queueRow(job, state)
@@ -220,10 +234,10 @@ export class Runner {
    * the lease host was down (once that host answers again), then keeps the host's due time and
    * pause here. Throws Unreachable when the lease host does not answer.
    */
-  private async follow(job: JobDef, remote: LeaseAuthority): Promise<void> {
+  private async follow(job: JobDef, remote: LeaseAuthority): Promise<JobState | null> {
     const { store, machine } = this.options
     let there = await remote.get(job.kind)
-    if (!there) return
+    if (!there) return null
     const here = store.get(job.kind)
     if (
       here?.lastMachine === machine &&
@@ -252,6 +266,7 @@ export class Runner {
       this.heldThere.set(job.kind, there.leaseExpires ?? 0)
     else this.heldThere.delete(job.kind)
     store.follow(job.kind, there.nextRun, there.paused, this.now())
+    return there
   }
 
   /**
@@ -404,7 +419,7 @@ export class Runner {
     const row = jobRow(job, state, now)
     this.unsent.set(row.id, row)
     this.rowKinds.add(job.kind)
-    this.announced.set(job.kind, rowSignature(state, now))
+    this.announced.set(job.kind, { signature: rowSignature(state, now), leased: !!state.leaseId })
   }
 
   private async flush(): Promise<void> {

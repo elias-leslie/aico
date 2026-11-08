@@ -17,7 +17,7 @@ import {
   unitName,
 } from './act'
 import { type JobDef, withSchedule } from './jobs'
-import { JobStore } from './leases'
+import { JobStore, Unreachable } from './leases'
 import { type Act, jobRow, Runner } from './runner'
 
 const scratch = () => mkdtempSync(join(tmpdir(), 'jobs-'))
@@ -80,6 +80,102 @@ const runnerFor = (
     now: () => Date.now(),
     log: (line) => logs.push(line),
   })
+
+it.each([false, true])(
+  'reconciles a committed remote completion after its reply is lost (restart=%s)',
+  async (restart) => {
+    const local = new JobStore(':memory:')
+    const remote = new JobStore(':memory:')
+    const slot = Date.parse('2026-11-08T23:00:00Z')
+    let now = slot
+    let runs = 0
+    let reads = 0
+    const definition: JobDef = {
+      ...job,
+      kind: 'weekly-proof',
+      home: 'a',
+      lease_host: 'b',
+      workers: ['a', 'b'],
+      every_min: undefined,
+      at: '18:00',
+      on: 'sun',
+      tz: 'America/New_York',
+      lease_s: 300,
+    }
+    remote.ensure(definition.kind, slot)
+    const status = new StatusStore(':memory:', () => now)
+    status.upsert([
+      parseRow({
+        id: 'a/machine',
+        what: 'a',
+        kind: 'machine',
+        machine: 'a',
+        state: 'ok',
+        meaning: 'Running.',
+        next_run: new Date(slot + 8 * 86400000).toISOString(),
+      }),
+    ])
+    const make = () =>
+      new Runner({
+        store: local,
+        jobs: [definition],
+        machine: 'a',
+        holder: 'a:1',
+        now: () => now,
+        log: () => {},
+        authority: () => ({
+          claim: (...args) => remote.claim(...args),
+          renew: (...args) => remote.renew(...args),
+          release: (...args) => remote.release(...args),
+          get: (kind) => {
+            reads++
+            return remote.get(kind)
+          },
+          complete: (...args) => {
+            remote.complete(...args)
+            throw new Unreachable('completion reply lost')
+          },
+        }),
+        act: async (_definition, runId) => {
+          runs++
+          return { state: 'ok', meaning: 'Finished.', runId }
+        },
+        postRows: async (rows) => {
+          status.upsert(rows)
+        },
+      })
+    try {
+      let runner = make()
+      runner.start()
+      await runner.tick()
+      await runner.idle()
+      expect(remote.get(definition.kind)?.lastState).toBe('ok')
+      now += 10 * 60000
+      expect(status.read().rows.find((row) => row.id === 'jobs/weekly-proof')?.shown).toBe('late')
+      if (restart) {
+        runner = make()
+        runner.start()
+      }
+      await runner.tick()
+      await runner.idle()
+      expect(runs).toBe(1)
+      expect(status.read().rows.find((row) => row.id === 'jobs/weekly-proof')).toMatchObject({
+        shown: 'ok',
+        last_run: new Date(slot).toISOString(),
+        run_id: remote.get(definition.kind)?.lastRunId,
+        next_run: '2026-11-15T23:05:00.000Z',
+      })
+      const settledReads = reads
+      await runner.tick()
+      await runner.idle()
+      expect(reads).toBe(settledReads)
+    } finally {
+      local.close()
+      remote.close()
+      status.close()
+    }
+  },
+)
 
 it.each(['writer first', 'scheduler first', 'after next completion'])(
   'correlates real Runner/Act reports across a crossed slot and an omitted later report (%s)',
