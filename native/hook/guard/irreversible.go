@@ -160,6 +160,43 @@ func (r *Rules) selfKillDecision(args []string, command string) (decision, bool)
 	return blocked(r.message("pkill_self"))
 }
 
+// tmuxServerDecision blocks the exact commands that end the one tmux server every session lives in:
+// pkill or killall of tmux, and systemctl stop of its unit or of what contains it. tmux kill-server is
+// refused by the server itself (session-engine tmux.ts); killing one's own -S server by pid stays open.
+func (r *Rules) tmuxServerDecision(name string, args []string) (decision, bool) {
+	action := name != "systemctl"
+	for _, arg := range args {
+		switch {
+		case strings.HasPrefix(arg, "-"):
+		case !action:
+			action = r.tmuxUnitActions.has(arg)
+		case name == "systemctl" && r.tmuxUnit.MatchString(arg),
+			name != "systemctl" && (r.tmuxProcess.MatchString(arg) || (name == "pkill" && r.pkillReachesTmux(arg, args))):
+			return blocked(r.message("tmux_server"))
+		}
+	}
+	return decision{}, false
+}
+
+// pkillReachesTmux tries a pkill pattern on what pkill would match it against: the server's process name,
+// or with -f its command line. Other operands (a -u value) are tried too; none looks like the server's.
+func (r *Rules) pkillReachesTmux(pattern string, args []string) bool {
+	compiled, err := regexp.Compile(pattern)
+	if err != nil {
+		return strings.Contains(pattern, "tmux")
+	}
+	if compiled.MatchString(r.tmuxProcessName) {
+		return true
+	}
+	for _, arg := range args {
+		short := strings.HasPrefix(arg, "-") && !strings.HasPrefix(arg, "--")
+		if arg == "--full" || (short && strings.Contains(arg, "f")) {
+			return compiled.MatchString(r.tmuxProcessArgv)
+		}
+	}
+	return false
+}
+
 // scriptDecision blocks an interpreter one-liner (python -c, node -e, or a script on stdin from a heredoc)
 // that both calls a delete function and names Aico durable state in a string literal.
 func (r *Rules) scriptDecision(args, stdinBodies []string) (decision, bool) {
@@ -817,6 +854,8 @@ func (r *Rules) systemDecision(tokens []string, cwd string) (decision, bool) {
 	}
 	name := pathName(tokens[0])
 	switch name {
+	case "pkill", "killall", "systemctl":
+		return r.tmuxServerDecision(name, tokens[1:])
 	case "rm":
 		return r.rmDecision(tokens, cwd)
 	case "unlink", "shred", "truncate":

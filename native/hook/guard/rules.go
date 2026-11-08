@@ -80,6 +80,11 @@ type Rules struct {
 	durableDirs      []string
 	durableSuffixes  []string
 
+	tmuxProcess        *regexp.Regexp
+	tmuxProcessName    string
+	tmuxProcessArgv    string
+	tmuxUnit           *regexp.Regexp
+	tmuxUnitActions    set
 	scriptInterpreters *regexp.Regexp
 	scriptCodeOptions  set
 	scriptDeletes      *regexp.Regexp
@@ -217,6 +222,13 @@ type file struct {
 		DurableDirs      []string `json:"durable_dirs"`
 		DurableSuffixes  []string `json:"durable_file_suffixes"`
 	} `json:"paths"`
+	TmuxServer struct {
+		ProcessPattern   string   `json:"process_pattern"`
+		ProcessName      string   `json:"process_name"`
+		ProcessArgv      string   `json:"process_argv"`
+		SystemctlActions []string `json:"systemctl_actions"`
+		UnitPattern      string   `json:"unit_pattern"`
+	} `json:"tmux_server"`
 	Scripts struct {
 		InterpreterPattern string   `json:"interpreter_pattern"`
 		CodeOptions        []string `json:"code_options"`
@@ -381,6 +393,11 @@ func build(f *file) (*Rules, error) {
 		r.scriptLiteral = compile("literal_pattern", sc.LiteralPattern)
 	}
 	r.scriptCodeOptions = toSet(sc.CodeOptions)
+	r.tmuxProcess = compile("tmux_server.process_pattern", f.TmuxServer.ProcessPattern)
+	r.tmuxProcessName = f.TmuxServer.ProcessName
+	r.tmuxProcessArgv = f.TmuxServer.ProcessArgv
+	r.tmuxUnit = compile("tmux_server.unit_pattern", f.TmuxServer.UnitPattern)
+	r.tmuxUnitActions = toSet(f.TmuxServer.SystemctlActions)
 
 	d := &f.Disk
 	r.harmlessDevices = toSet(d.HarmlessDevices)
@@ -462,7 +479,7 @@ var requiredMessages = []string{
 	"git_stash_drop", "git_stash", "rm_protected_root", "format_device", "wipefs", "dd_device",
 	"parted", "sgdisk", "partitioner", "cryptsetup", "btrfs_subvolume_delete", "restic",
 	"rclone_mirror", "rclone_delete", "btrbk", "dmsetup", "find_delete", "proxmox_guest",
-	"proxmox_volume", "pvesm_free", "pvesh_delete", "durable_state", "pkill_self",
+	"proxmox_volume", "pvesm_free", "pvesh_delete", "durable_state", "pkill_self", "tmux_server",
 }
 
 // message renders messages[key], filling {name}, {action} and {target}.

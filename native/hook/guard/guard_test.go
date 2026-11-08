@@ -47,6 +47,39 @@ func TestPanicInIrreversibleCheckDenies(t *testing.T) {
 	}
 }
 
+// The commands that end the one tmux server every session lives in are denied; their near neighbours are not.
+func TestTmuxServerKillsAreDenied(t *testing.T) {
+	r := loadRules(t)
+	for _, command := range []string{
+		"pkill tmux", "pkill -9 tmux", "pkill -x tmux", "pkill -u kasadis tmux", "pkill --signal 9 tmux",
+		"pkill -f tmux", "pkill -f 'tmux: server'", "pkill -f '[t]mux'", "sudo pkill tmux", "/usr/bin/pkill tmux",
+		"pkill -f '[t]mux -S'", "pkill -f '[s]erver.sock'", "pkill 'tmux:'", "pkill --full '[t]mux -S'", "pkill -9f '[t]mux'",
+		"pkill '*tmux*'", "pkill server",
+		"killall tmux", "killall -9 tmux", "sudo killall -r tmux", "killall /usr/bin/tmux", "true && killall tmux",
+		"systemctl --user stop aico-tmux-server-46aafdb9c5e62d4651484a18eb6e5a52.service",
+		"systemctl --user kill aico-tmux-server-46aafdb9c5e62d4651484a18eb6e5a52.service",
+		"systemctl --user restart tether-dev-tmux-server-abc.service",
+		"systemctl --user stop 'aico-tmux-server-*'", "systemctl --user stop app.slice",
+		"sudo systemctl restart user@1000.service", "systemctl restart user@1000", "sudo systemctl stop user-1000.slice",
+		"systemctl --user stop '*tmux*'", "systemctl --user stop '*tmux-*'",
+	} {
+		if res := r.Evaluate(bash(command)); !res.Deny || !strings.Contains(res.Reason, "tmux server") && !strings.Contains(res.Reason, "pkill -f") {
+			t.Errorf("%q: want the tmux server deny, got %+v", command, res)
+		}
+	}
+	for _, command := range []string{
+		"pkill node", "pkill -f '[t]mux -S /tmp/zz/s'", "pkill -x tmuxinator", "pkill -f '[d]adbot.web'", "pkill -f -u kasadis '[v]ite'",
+		"killall chrome",
+		"systemctl --user status aico-tmux-server-abc.service", "systemctl --user list-units '*tmux-server*'",
+		"systemctl --user show aico-tmux-server-abc.service", "systemctl --user stop tether@dev.service",
+		"systemctl --user stop zzv-proof.service", "tmux -S /tmp/zz/s kill-server",
+	} {
+		if res := r.Evaluate(bash(command)); res.Deny {
+			t.Errorf("%q: want allowed, got %+v", command, res)
+		}
+	}
+}
+
 func bash(command string) map[string]any {
 	return map[string]any{"tool_name": "Bash", "tool_input": map[string]any{"command": command}, "cwd": "/tmp"}
 }

@@ -431,6 +431,9 @@ export async function runSteps(
     const binary = toolBinary(config, tool, tool === 'types' ? 'ty' : tool, toolDir(root, tool))
     const toolPath = binary.includes('/') ? dirname(binary) : undefined
     const user = options.cleanEnvironment ? { ...options.env } : { ...process.env, ...options.env }
+    // A plain `tmux` in a test, in any language, would reach this session's server through $TMUX.
+    delete user.TMUX
+    delete user.TMUX_PANE
     const env =
       step.env === 'stage'
         ? stageEnv(config, aliases, scratch)

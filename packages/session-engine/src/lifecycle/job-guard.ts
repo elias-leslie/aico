@@ -15,7 +15,10 @@
  * never kills a pane's root shell or its agent (a registry tool): an agent that
  * is itself the biggest user is only recorded (agent-hog).
  * Each tick it also moves pane tools that inherited the agent's oom_score_adj
- * 100 back to 200, so the kernel prefers a tool over the agent.
+ * 100 to 200, and anything in a pane still below the agent's value (the tmux
+ * server's -500, in a pane something opened without the gate) back up: root to
+ * 200, agent to 100. So the kernel prefers a tool over the agent and panes over
+ * the server.
  *
  * Records go to the shared memory event record host-steward's readers already
  * read (~/.local/state/host-steward/memory-events.jsonl, schema v1, killer
@@ -717,7 +720,7 @@ export class JobGuard {
       this.history.set(name, xs.slice(-GROWTH_WINDOW))
     }
     for (const name of [...this.history.keys()]) if (!panes.has(name)) this.history.delete(name)
-    this.restoreAdj(jobs)
+    this.restoreAdj(panes, jobs)
     if (this.state === 'amber' || this.state === 'red') this.warn(now, panes, jobs)
     let candidate: Job | null = null
     if (this.state === 'red') candidate = this.actRed(now, policy, panes, jobs)
@@ -732,10 +735,19 @@ export class JobGuard {
     return doc
   }
 
-  private restoreAdj(jobs: Job[]): void {
+  private restoreAdj(panes: Map<string, Pane>, jobs: Job[]): void {
     for (const job of jobs) {
       if (!this.allowed(job.scope)) continue
-      for (const p of job.members) if (p.adj === AGENT_ADJ) setAdj(this.procRoot, p, TOOL_ADJ)
+      for (const p of job.members)
+        if (p.adj !== null && p.adj <= AGENT_ADJ) setAdj(this.procRoot, p, TOOL_ADJ)
+    }
+    for (const pane of panes.values()) {
+      if (!this.allowed(pane.scope)) continue
+      for (const pid of protectedPids(pane)) {
+        const p = pane.procs.get(pid)
+        if (p?.adj != null && p.adj < AGENT_ADJ)
+          setAdj(this.procRoot, p, pane.agents.has(pid) ? AGENT_ADJ : TOOL_ADJ)
+      }
     }
   }
 

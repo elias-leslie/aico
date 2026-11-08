@@ -118,6 +118,22 @@ describe('stage selection', () => {
     ])
   })
 
+  it('runs a check without the tmux variables of the session it was started in', async () => {
+    const root = repo(
+      `[[native.stages]]\nid = "ok"\nkind = "check"\ncoverage = "full"\nquick = true\nargv = ["node", "-e", "require('fs').writeFileSync('seen', [process.env.TMUX, process.env.TMUX_PANE, process.env.KEEP].join())"]\n`,
+    )
+    const cfg = config(root)
+    await runSteps(
+      cfg,
+      'quick',
+      plan(cfg, 'quick', ['a.ts'], () => []).map((item) =>
+        item.step ? { ...item, step: { ...item.step, env: 'user' as const } } : item,
+      ),
+      { out: () => {}, env: { TMUX: '/real/server.sock,1,0', TMUX_PANE: '%1', KEEP: 'yes' } },
+    )
+    expect(readFileSync(join(root, 'seen'), 'utf8')).toBe(',,yes')
+  })
+
   it('names a details file that opens from the folder the check runs in', async () => {
     const root = repo(
       `[[native.stages]]\nid = "ok"\nkind = "check"\ncoverage = "full"\nquick = true\nargv = ["node", "-e", "0"]\n`,

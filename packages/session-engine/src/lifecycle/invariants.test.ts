@@ -222,7 +222,9 @@ describe('INV-04 every pane starts as a bare no-RC gate; the TUI is sent only af
     const target = { socket: '/tmp/x/s.sock', session: '%1' }
     const created = newDetachedTargetArgs(target, 80, 24, '/tmp/conf', '/tmp', { A: 'b' })
     const respawned = respawnTargetArgs(target, '/tmp', { A: 'b' })
-    expect(PANE_GATE_COMMAND).toBe('exec /bin/bash --noprofile --norc')
+    expect(PANE_GATE_COMMAND).toBe(
+      'echo 200 2>/dev/null >/proc/self/oom_score_adj; exec /bin/bash --noprofile --norc',
+    )
     expect(created.at(-1)).toBe(PANE_GATE_COMMAND)
     expect(respawned.at(-1)).toBe(PANE_GATE_COMMAND)
     expect(respawned).toContain('-k')

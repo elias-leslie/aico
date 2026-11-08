@@ -25,7 +25,7 @@ Every other instance:
 | Pane memory policy | Owned by host-steward, not Tether: `DefaultOOMPolicy=continue` and the per-pane cap drop-in in `~/.config/systemd/user/tmux-spawn-.scope.d/`, both installed by host-steward's installer. A kernel OOM kill then takes one process and the pane keeps running. Tether installs no pane drop-in; `tether doctor` warns when a live pane is not on `OOMPolicy=continue` or has no finite `MemoryMax`. The pane supervisor sets its own OOM score adjust to 100 before starting the agent and restores the inherited value for the fallback shell (`launch.ts` `paneCommand`), so under the cap the kernel kills a large tool at the inherited 200 before the agent. If the write fails the agent still starts, at the inherited value. The focused pane gets `MemoryLow=2G` at runtime (`pane-memory.ts`). | same | host-steward host drop-in |
 | Daemon unit | `tether@default.service` (replaces `aico-owner.service` in Phase 5) | `tether@<i>.service` | n/a |
 
-The `systemd-run` flags are part of the containment model and must be kept: `--user --quiet --collect --slice=app.slice --service-type=exec --expand-environment=no -p ExitType=cgroup`, null stdin, and journal stdout/stderr (`packages/session-engine/src/lifecycle/ownership.ts` `durableTmuxServerArgs`).
+The `systemd-run` flags are part of the containment model and must be kept: `--user --quiet --collect --slice=app.slice --service-type=exec --expand-environment=no -p ExitType=cgroup -p OOMScoreAdjust=<-500 where the machine allows it, else 0>`, null stdin, and journal stdout/stderr (`packages/session-engine/src/lifecycle/ownership.ts` `durableTmuxServerArgs`).
 
 ## Filesystem and sockets
 
@@ -51,7 +51,7 @@ Removed 2026-10-24, once `st aico` and SummitFlow had moved to the Tether socket
 | Session name | `aico-<widgetId>`. `widgetIdFromSession` and web app discovery parse it. | `packages/session-engine/src/lifecycle/tmux.ts` `sessionName` |
 | Stable targets | `$<n>` session id and `%<n>` pane id; one pane per session, and extra panes fail closed | `packages/session-engine/src/store.ts` |
 | Server global environment | exactly `AICO_OWNER=aico`, `AICO_WORKLOAD_CLASS=durable-tmux-server`, `AICO_TMUX_SERVER_ID=<id>`. These authenticate a zero-session server. | `packages/session-engine/src/lifecycle/tmux.ts` `matchesServerIdentityEnvironment` |
-| Profile | `history-limit 200000`, `mouse off`, `focus-events on`, `status off` (the resize claim requires it), `default-terminal tmux-256color`, `terminal-overrides ,xterm-256color:Tc`, `terminal-features xterm*:sync`, `NO_COLOR` unset, `COLORTERM truecolor`, `CLICOLOR 1` | `packages/session-engine/src/lifecycle/tmux.ts` `tmuxConf` |
+| Profile | `history-limit 200000`, `mouse off`, `focus-events on`, `status off` (the resize claim requires it), `default-terminal tmux-256color`, `terminal-overrides ,xterm-256color:Tc`, `terminal-features xterm*:sync`, `NO_COLOR` unset, `COLORTERM truecolor`, `CLICOLOR 1`, `command-alias[90-93]` turning `kill-server` into a refusal | `packages/session-engine/src/lifecycle/tmux.ts` `tmuxConf` |
 
 ## Pane environment markers
 

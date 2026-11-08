@@ -186,6 +186,28 @@ export function tmuxConf(): string {
   return `${tmuxProfileLines().join('\n')}\n`
 }
 
+/**
+ * `tmux kill-server` ends every session on the machine at once, and a plain
+ * `tmux` run anywhere inside a pane reaches this server through $TMUX. Tether
+ * never runs it (a server exits by itself when its last session ends), so here
+ * it only says no. The alias replaces the command in tmux's own parser, for a
+ * client, a config file or control mode alike. tmux also takes a unique prefix
+ * of a command name, so each such spelling needs its own alias. The indexes are
+ * fixed and far past tmux's defaults (0-5): re-applying replaces them and they
+ * never land on a default.
+ */
+const KILL_SERVER_ALIAS_START = 90
+const KILL_SERVER_SPELLINGS = ['kill-server', 'kill-serve', 'kill-serv', 'kill-ser'] as const
+const KILL_SERVER_REFUSAL =
+  'display-message -p "kill-server is off: this server holds every session"'
+
+function killServerAliases(): Array<[option: string, value: string]> {
+  return KILL_SERVER_SPELLINGS.map((name, i) => [
+    `command-alias[${KILL_SERVER_ALIAS_START + i}]`,
+    `${name}=${KILL_SERVER_REFUSAL}`,
+  ])
+}
+
 function tmuxProfileLines(): string[] {
   return [
     `set -g history-limit ${HISTORY_LIMIT}`,
@@ -204,6 +226,7 @@ function tmuxProfileLines(): string[] {
     'set-environment -gu NO_COLOR',
     'set-environment -g COLORTERM truecolor',
     'set-environment -g CLICOLOR 1',
+    ...killServerAliases().map(([option, value]) => `set -s ${option} '${value}'`),
   ]
 }
 
@@ -217,6 +240,8 @@ export function tmuxProfileArgs(): string[] {
 
 export function tmuxProfileTargetArgs(socket: string): string[] {
   const commands = [
+    // First: a later command failing must not leave a running server unprotected.
+    ...killServerAliases().map(([option, value]) => ['set-option', '-s', option, value]),
     ['set-option', '-g', 'history-limit', String(HISTORY_LIMIT)],
     ['set-option', '-g', 'mouse', 'off'],
     ['set-option', '-g', 'focus-events', 'on'],
@@ -232,6 +257,11 @@ export function tmuxProfileTargetArgs(socket: string): string[] {
     ...socketArgs(socket),
     ...commands.flatMap((args, i) => (i === 0 ? args : [';', ...args])),
   ]
+}
+
+/** Print the server's own pid. */
+export function tmuxServerPidTargetArgs(socket: string): string[] {
+  return [...socketArgs(socket), 'display-message', '-p', '#{pid}']
 }
 
 export function paneExitedEventPath(serverId: string, uid: number = effectiveUid()): string {
@@ -488,8 +518,15 @@ export function hasTargetArgs(target: TmuxTarget): string[] {
  * no-profile/no-RC gate shell; only after tmux finishes its per-pane cgroup
  * placement does Aico send the real interactive-shell or TUI command with
  * `runInPaneArgs`.
+ *
+ * The gate first raises itself to PANE_OOM_SCORE_ADJ: the server runs at -500
+ * (ownership.ts) and a pane inherits that on fork, but a pane is what the
+ * kernel should kill, never the server holding the others. Raising needs no
+ * privilege; the agent then goes to 100 (tui/launch.ts) and Tether's memory
+ * guard moves any tool that still has a lower value to 200 (job-guard.ts).
  */
-export const PANE_GATE_COMMAND = 'exec /bin/bash --noprofile --norc'
+export const PANE_OOM_SCORE_ADJ = 200
+export const PANE_GATE_COMMAND = `echo ${PANE_OOM_SCORE_ADJ} 2>/dev/null >/proc/self/oom_score_adj; exec /bin/bash --noprofile --norc`
 
 export function newDetachedArgs(
   widgetId: string,

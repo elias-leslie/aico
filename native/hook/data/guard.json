@@ -191,6 +191,13 @@
   "ssh": {
     "value_option_letters": "BDEFIJLOPQRSWbceilmopw"
   },
+  "tmux_server": {
+    "process_pattern": "^\\^?(?:.*/)?(?:tmux|\\[t\\]mux)(?:: server.*)?\\$?$",
+    "process_name": "tmux: server",
+    "process_argv": "/usr/bin/tmux -S /home/u/.local/state/tether/default/tmux/abcdef/server.sock -f /home/u/.local/state/tether/default/tmux.conf new-session -d -s aico-abcdef",
+    "systemctl_actions": ["stop", "kill", "restart", "try-restart", "reload-or-restart", "try-reload-or-restart"],
+    "unit_pattern": "tmux-server|^app\\.slice$|^user@[0-9]+(?:\\.service)?$|^user-[0-9]+\\.slice$|^user\\.slice$|^\\*?tmux\\*?$|^\\*tmux[*-]"
+  },
   "messages": {
     "git_force_push_main": "BLOCKED:git push --force main:Force push to main/master destroys shared history; publish with 'st vcs publish'.",
     "git_reset_hard": "BLOCKED:git reset --hard:Discards every agent's uncommitted work in this shared checkout; restore only your files with 'git restore -- <path>' or checkpoint with 'st commit --paths <path>'.",
@@ -220,6 +227,7 @@
     "proxmox_volume": "BLOCKED:{name}:This {proxmox_advice}",
     "pvesm_free": "BLOCKED:pvesm free:This {proxmox_advice}",
     "pvesh_delete": "BLOCKED:pvesh delete:This API call {proxmox_advice}",
+    "tmux_server": "BLOCKED:tmux server:Every session on an Aico machine lives in one tmux server, so this ends them all. End one session with st aico root end; test on your own tmux -S socket in a temp folder.",
     "pkill_self": "BLOCKED:pkill -f:The pattern matches this command's own shell, so it would kill the shell and skip every later step. Use fuser -k PORT/tcp, or bracket a letter and keep the plain text out of the command: pkill -f '[d]adbot.web'.",
     "durable_state": "BLOCKED:delete {target}:This is Aico durable state (backups, secrets, blobs, archive, or a database or key file) and has no undo; agents never delete it by hand. Scratch under the same roots (logs, captures, deliveries) stays deletable by its own path."
   }

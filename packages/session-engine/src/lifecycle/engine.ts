@@ -113,6 +113,7 @@ import {
   isOwnedPaneScope,
   isOwnedTmuxServerControlGroup,
   isSystemdInvocationId,
+  lowerTmuxServerOomScore,
   MANAGED_LIFECYCLE_VERSION,
   ownershipEnvironment,
   paneScopeFromCgroup,
@@ -160,6 +161,7 @@ import {
   type TmuxTarget,
   tmuxConf,
   tmuxProfileTargetArgs,
+  tmuxServerPidTargetArgs,
   widgetIdFromSession,
 } from './tmux'
 import {
@@ -373,12 +375,22 @@ function ensureTmuxConf(): void {
 
 function syncManagedTmuxProfile(server: TmuxServerRow): boolean {
   try {
-    if (!ensurePaneExitFsWatcher()) return false
+    // The protection comes first: it does not depend on the pane-exit watcher.
     execFileSync(TMUX_BIN, tmuxProfileTargetArgs(server.socketPath), {
       env: terminalClientEnv(),
       timeout: TMUX_QUERY_TIMEOUT_MS,
       stdio: 'ignore',
     })
+    lowerTmuxServerOomScore(
+      Number(
+        execFileSync(TMUX_BIN, tmuxServerPidTargetArgs(server.socketPath), {
+          env: terminalClientEnv(),
+          timeout: TMUX_QUERY_TIMEOUT_MS,
+          encoding: 'utf8',
+        }),
+      ),
+    )
+    if (!ensurePaneExitFsWatcher()) return false
     execFileSync(TMUX_BIN, paneExitedHookTargetArgs(server.socketPath, server.id), {
       env: terminalClientEnv(),
       timeout: TMUX_QUERY_TIMEOUT_MS,

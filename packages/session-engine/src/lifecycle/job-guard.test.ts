@@ -325,6 +325,27 @@ describe('JobGuard', () => {
     expect(killed).not.toContain(102)
   })
 
+  it('moves a tool that inherited the tmux server oom_score_adj up to the tool value', () => {
+    twoPanes()
+    addProc(A, { pid: 301, ppid: 101, sid: 301, comm: 'cargo', bytes: 100 * MIB, adj: -500 })
+    const { g } = guard()
+    setState('green', T0)
+    g.tick(T0)
+    expect(readFileSync(join(proc, '301', 'oom_score_adj'), 'utf8')).toBe('200')
+  })
+
+  it('moves a pane root and agent that kept the tmux server oom_score_adj back up', () => {
+    twoPanes()
+    const ids = ['100', '101']
+    for (const id of ids) writeFileSync(join(proc, id, 'oom_score_adj'), '-500')
+    const stat = (id: string) => join(proc, id, 'oom_score_adj')
+    const { g } = guard()
+    setState('green', T0)
+    g.tick(T0)
+    expect(readFileSync(stat('100'), 'utf8')).toBe('200')
+    expect(readFileSync(stat('101'), 'utf8')).toBe('100')
+  })
+
   it('moves tools off the agent oom_score_adj and says in its heartbeat whether a job may be stopped', () => {
     twoPanes()
     const { g } = guard()

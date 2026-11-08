@@ -1,3 +1,5 @@
+import { spawnSync } from 'node:child_process'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { assertInstanceName, DEFAULT_INSTANCE, ownsTmuxServerUnit, tmuxServerUnit } from '../paths'
 
 export const MANAGED_LIFECYCLE_VERSION = 1
@@ -52,6 +54,54 @@ export function durableTmuxServerUnit(serverId: string): string {
   return tmuxServerUnit(lifecycleInstance, serverId)
 }
 
+/** The kernel's last choice among user units, level with the desktop session
+ * (host-config: user@.service runs at -500, so its units may go down to there
+ * unprivileged; elsewhere systemd ignores the refusal and the unit still
+ * starts). Its RSS is a few MiB and it holds every session, while at the default
+ * 200 it outranked every agent (100). Panes raise themselves back on start
+ * (PANE_GATE_COMMAND). */
+export const TMUX_SERVER_OOM_SCORE_ADJ = -500
+
+/** What a pane does not lower the server below: where the unprivileged user
+ * manager cannot go to -500 (an unprivileged container such as the standby,
+ * CT 190: root there lacks the host's CAP_SYS_RESOURCE, systemd's request is
+ * refused and the server stays at the manager's 100-200), 0 still keeps it
+ * behind every agent (100) and pane (200). */
+export const TMUX_SERVER_OOM_SCORE_ADJ_FLOOR = 0
+
+let serverOomScoreAdjust: number | undefined
+
+/** The value this machine's user manager can really give the server: -500 when
+ * a child of ours may write it, else the floor. Asked once, by trying it in a
+ * throwaway shell (the kernel decides; no capability or container detection). */
+export function tmuxServerOomScoreAdjust(): number {
+  if (serverOomScoreAdjust !== undefined) return serverOomScoreAdjust
+  const probe = spawnSync(
+    '/bin/sh',
+    ['-c', `echo ${TMUX_SERVER_OOM_SCORE_ADJ} 2>/dev/null >/proc/self/oom_score_adj`],
+    { stdio: 'ignore', timeout: 2000 },
+  )
+  serverOomScoreAdjust =
+    probe.status === 0 ? TMUX_SERVER_OOM_SCORE_ADJ : TMUX_SERVER_OOM_SCORE_ADJ_FLOOR
+  return serverOomScoreAdjust
+}
+
+/** A server started before OOMScoreAdjust was on its unit, or one that has drifted:
+ * bring it down to the value this machine allows. Only ever lowers. A refused write
+ * leaves it where it was; the next sync tries again. */
+export function lowerTmuxServerOomScore(
+  pid: number,
+  target: number = tmuxServerOomScoreAdjust(),
+  procRoot = '/proc',
+): void {
+  const path = `${procRoot}/${pid}/oom_score_adj`
+  try {
+    if (Number(readFileSync(path, 'utf8')) > target) writeFileSync(path, String(target))
+  } catch {
+    /* gone, or the kernel said no */
+  }
+}
+
 /** Start the shared tmux server outside Electron's application cgroup. Only the
  * first session creation uses this wrapper; later clients connect to the live
  * durable server. A transient service (rather than a caller-owned scope) makes
@@ -65,6 +115,7 @@ export function durableTmuxServerArgs(
    * otherwise inherits the whole user-manager environment, which becomes the
    * tmux global environment and reaches every pane. */
   envPrefix: readonly string[] = [],
+  oomScoreAdjust: number = tmuxServerOomScoreAdjust(),
 ): string[] {
   const unit = durableTmuxServerUnit(serverId)
   const label = lifecycleInstance === DEFAULT_INSTANCE ? 'Aico' : `Tether ${lifecycleInstance}`
@@ -83,6 +134,7 @@ export function durableTmuxServerArgs(
     // the exact argv Aico validated, including user-controlled project paths.
     '--expand-environment=no',
     '--property=ExitType=cgroup',
+    `--property=OOMScoreAdjust=${oomScoreAdjust}`,
     // Never pass Electron's stdin/stdout/stderr into the durable generation.
     // In particular, do not add systemd-run --pipe/--pty here.
     '--property=StandardInput=null',

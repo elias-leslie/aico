@@ -407,7 +407,18 @@ describe('tmux model', () => {
     expect(args.join(' ')).toContain('set-option -g terminal-overrides ,xterm-256color:Tc')
     expect(args.join(' ')).toContain('set-option -g focus-events on')
     // tmux's `;` separator chains the per-option commands into a single spawn.
-    expect(args.filter((a) => a === ';')).toHaveLength(9)
+    expect(args.filter((a) => a === ';')).toHaveLength(13)
+  })
+
+  it('refuses kill-server in the start config and on a running server, in every spelling', () => {
+    for (const name of ['kill-server', 'kill-serve', 'kill-serv', 'kill-ser']) {
+      expect(tmuxConf()).toMatch(
+        new RegExp(`set -s command-alias\\[9\\d\\] '${name}=display-message`),
+      )
+      expect(tmuxProfileArgs().join('\0')).toMatch(
+        new RegExp(`set-option\\0-s\\0command-alias\\[9\\d\\]\\0${name}=display-message`),
+      )
+    }
   })
 
   it('builds a generation-specific durable pane-exited event hook on one exact socket', () => {

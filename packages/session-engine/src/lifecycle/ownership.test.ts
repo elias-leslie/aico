@@ -11,6 +11,7 @@ import {
   paneScopeFromCgroup,
   parseScopeResources,
   setLifecycleInstance,
+  tmuxServerOomScoreAdjust,
 } from './ownership'
 
 describe('session ownership', () => {
@@ -87,7 +88,7 @@ describe('session ownership', () => {
 
   it('builds a manager-spawned durable tmux-server service for first creation', () => {
     expect(durableTmuxServerUnit('abc12345')).toBe('aico-tmux-server-abc12345.service')
-    expect(durableTmuxServerArgs('abc12345', ['-L', 'aico', 'new-session'])).toEqual([
+    expect(durableTmuxServerArgs('abc12345', ['-L', 'aico', 'new-session'], [], -500)).toEqual([
       '--user',
       '--quiet',
       '--collect',
@@ -97,6 +98,7 @@ describe('session ownership', () => {
       '--service-type=exec',
       '--expand-environment=no',
       '--property=ExitType=cgroup',
+      '--property=OOMScoreAdjust=-500',
       '--property=StandardInput=null',
       '--property=StandardOutput=journal',
       '--property=StandardError=journal',
@@ -112,6 +114,8 @@ describe('session ownership', () => {
       'aico',
       'new-session',
     ])
+    expect(durableTmuxServerArgs('abc12345', [], [], 0)).toContain('--property=OOMScoreAdjust=0')
+    expect([-500, 0]).toContain(tmuxServerOomScoreAdjust())
     expect(() => durableTmuxServerArgs('../../user', [])).toThrow(
       /unsafe tmux server generation id/,
     )
