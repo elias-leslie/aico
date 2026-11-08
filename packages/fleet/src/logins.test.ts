@@ -963,8 +963,38 @@ it('guesses a public key as a backup key, and list and show agree a login with n
   })
 })
 
+it('leaves backup keys, API keys, passwords and tool logins to the owner', () => {
+  store.set('key', 'value', { kind: 'backup key', machines: ['elsewhere'], roles: ['job'] }, owner)
+  const agent = { role: 'job', machine: loginMachine(), session: 'a1b2c3d4' }
+  for (const change of [
+    () => store.allow('key', {}, agent),
+    () => store.allow('key', { machine: 'other' }, agent),
+    () => store.grant('key', 'machine', 'other', true, agent),
+    () => store.grant('key', 'machine', 'elsewhere', false, agent),
+    () => store.grant('key', 'role', 'job', false, agent),
+    () => store.edit('key', { notes: 'x' }, agent),
+    () => store.edit('key', { kind: 'password' }, agent),
+  ])
+    expect(change).toThrow(/Only the owner changes this login, on the Logins page/)
+  expect(store.list().find((entry) => entry.name === 'key')).toMatchObject({
+    machines: ['elsewhere'],
+    roles: ['job'],
+    kind: 'backup key',
+  })
+  // The list says who fixes it, and so does a refusal to use it.
+  expect(store.catalog(agent).find((entry) => entry.name === 'key')).toMatchObject({
+    available: false,
+    fix: expect.stringContaining('Only the owner'),
+  })
+  expect(() => store.value('key', agent)).toThrow(/Only the owner changes this login/)
+  // The owner still can.
+  expect(store.grant('key', 'machine', 'other', true, owner).machines).toContain('other')
+  expect(store.edit('key', { notes: 'y' }, owner).notes).toBe('y')
+})
+
 it('edit by a caller the login is not open to still prints the fix', async () => {
-  store.set('shut', 'value', { roles: ['someone-else'] }, owner)
+  const { identity, value, metadata } = lab('shut', 'default')
+  store.set(identity.name, value, { ...metadata, roles: ['someone-else'] }, owner)
   const out = vi.fn()
   const code = await runLogins(['edit', 'shut', '--notes', 'fixed'], env, {
     caller: { role: 'job', machine: loginMachine(), session: 'a1b2c3d4' },
@@ -975,5 +1005,8 @@ it('edit by a caller the login is not open to still prints the fix', async () =>
     outputSafe: () => false,
   })
   expect(code).toBe(0)
-  expect(JSON.parse(out.mock.calls.flat().join(''))).toMatchObject({ name: 'shut', notes: 'fixed' })
+  expect(JSON.parse(out.mock.calls.flat().join(''))).toMatchObject({
+    name: identity.name,
+    notes: 'fixed',
+  })
 })

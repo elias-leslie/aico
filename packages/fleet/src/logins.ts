@@ -138,10 +138,14 @@ const gapText = (gap: LoginGap, entry: Login) =>
       : gap.kind === 'role'
         ? `role ${gap.value} is not allowed`
         : `role ${gap.value} never uses this kind of login (policy)`
+/** Backup keys, API keys, passwords and tool logins stay the owner's (owner decision 2026-11-08). */
+const OWNER_CHANGES =
+  'Only the owner changes this login, on the Logins page; ask with one tether ask create.'
 /** The one command that gives CALLER what is missing, or the policy reason when no grant does. */
 export function loginFix(entry: Login, gaps: LoginGap[], caller?: LoginCaller) {
   if (gaps.some((gap) => gap.kind === 'policy'))
     return 'No grant opens it for this role; use a lab login assigned to your session.'
+  if (!entry.lab) return OWNER_CHANGES
   // Restricted roles never change access themselves: a coordinator assigns their lab targets.
   if (caller && policy.restrictedRoles.includes(caller.role))
     return `A coordinator runs: aico logins assign ${caller.session || 'SESSION'} --target ${entry.lab?.target || loginLabel(entry)}`
@@ -751,7 +755,7 @@ export class LoginStore {
     if (type === 'role' && granted) this.subjects(caller, value)
     if (!/^[A-Za-z0-9_.*-]{1,128}$/.test(value)) throw new LoginError('Invalid grant')
     return this.change((index) => {
-      const entry = this.existing(index, name, caller)
+      const entry = this.siteLogin(this.existing(index, name, caller), caller)
       entry.revision = this.revision(index)
       const key = type === 'machine' ? 'machines' : 'roles'
       entry[key] = [
@@ -772,9 +776,15 @@ export class LoginStore {
       return entry
     })
   }
-  /** Owner decision 2026-11-07: once the owner saved the username and password, any agent fixes the rest
-   * itself (machines, roles, sessions, login page, notes, site name), logged and shown in the login's
-   * activity. Restricted roles (policy) keep coordinator-given access only. */
+  /** Owner decisions 2026-11-07 and 11-08: once the owner saved a site login's username and password, any
+   * agent fixes the rest itself (machines, roles, sessions, login page, notes, site name), logged and shown
+   * in the login's activity. Everything else in the store stays the owner's. Restricted roles (policy) keep
+   * coordinator-given access only. */
+  private siteLogin(entry: Login, caller: LoginCaller) {
+    if (!caller.owner && !entry.lab)
+      throw new LoginError(`${loginLabel(entry)} is not a site login. ${OWNER_CHANGES}`)
+    return entry
+  }
   private selfService(caller: LoginCaller) {
     if (!caller.owner && policy.restrictedRoles.includes(caller.role))
       throw new LoginError(
@@ -834,7 +844,7 @@ export class LoginStore {
           : {}),
     }
     return this.change((index) => {
-      const entry = this.existing(index, name, caller)
+      const entry = this.siteLogin(this.existing(index, name, caller), caller)
       const gaps = this.gaps(entry, who, index)
       if (gaps.some((gap) => gap.kind === 'policy'))
         throw new LoginError(unavailableText(entry, who, gaps))
@@ -875,7 +885,7 @@ export class LoginStore {
     if (patch.notes !== undefined && (typeof patch.notes !== 'string' || patch.notes.length > 4000))
       throw new LoginError('Invalid login notes')
     return this.change((index) => {
-      let entry = this.existing(index, name, caller)
+      let entry = this.siteLogin(this.existing(index, name, caller), caller)
       const changed: string[] = []
       if (patch.notes !== undefined && patch.notes !== entry.notes) {
         entry.notes = patch.notes

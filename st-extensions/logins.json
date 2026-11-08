@@ -25,7 +25,7 @@
       "precautions": [
         "Never put values in argv, logs or tool output.",
         "Hunters see and change only coordinator-assigned lab targets.",
-        "Other agents fix access, login page, notes and site name themselves (st logins allow/edit, logged); only username and password are the owner's."
+        "On a saved site login, other agents fix access, login page, notes and site name themselves (st logins allow/edit, logged); only username and password are the owner's. Backup keys, API keys, passwords and tool logins stay the owner's."
       ],
       "examples": [
         "st logins run --with NAME=ENV -- COMMAND",

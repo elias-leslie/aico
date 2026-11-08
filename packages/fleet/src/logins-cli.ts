@@ -48,8 +48,8 @@ Logins live in Aico's private secrets folder. Values enter through hidden input 
   show NAME                           metadata and recent activity, no value (NAME or an account
                                       login's site name)
   allow NAME [--role ROLE | --session ID] [--machine NAME]
-                                      give yourself (or ROLE; a coordinator: session ID) what is missing
-                                      to use NAME: machine, role or session. Logged; no owner step
+                                      site logins: give yourself (or ROLE; a coordinator: session ID) what
+                                      is missing to use NAME: machine, role or session. Logged; no owner step
   edit NAME [--notes TEXT] [--kind KIND] [--login-url URL] [--site NAME] [--program PATH] [--no-program PATH]
                                       fix notes, the kind, the login page (same site), the site name
                                       or the programs lab run may hand it to; the login page is
@@ -73,8 +73,9 @@ Logins live in Aico's private secrets folder. Values enter through hidden input 
       selected fields through AGENT_HUB_LAB_CREDENTIAL_FD; no child output. Only to the
       shared adapters and the login's own programs (edit --program); PYTHON -I SCRIPT
       counts as SCRIPT
-Only the username and password are the owner's: a wrong or missing one is one plain ask
-(tether ask create). Everything else agents fix themselves, logged in the login's activity
+On a saved site login only the username and password are the owner's: a wrong or missing one is
+one plain ask (tether ask create). Everything else on it agents fix themselves, logged in the login's
+activity. Backup keys, API keys, passwords and tool logins stay the owner's, on the Logins page
 (restricted roles get lab targets from a coordinator).`
 
 /** One command's lines of the usage above, so `aico logins edit --help` answers about edit. */

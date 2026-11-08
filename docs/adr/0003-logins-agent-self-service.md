@@ -1,11 +1,11 @@
-# ADR 0003: Saved logins are agent self-service, except the username and password
+# ADR 0003: Saved site logins are agent self-service, except the username and password
 
-- Status: accepted (owner decision, 2026-11-07).
+- Status: accepted (owner decisions, 2026-11-07 and 2026-11-08: site logins only).
 - Context: a Canvas login the owner saved on the Logins page was invisible to the agent that needed it (`aico logins list` dropped it), the refusal did not say what was missing, and every fix (machine, role, session, login page) was owner-only. The owner was sent back to the page three times for one login.
 
 ## Decision
 
-- Once the owner has saved a login's username and password, any agent fixes everything else itself, applied at once, with no ask, tap or wait:
+- Once the owner has saved a site login's (account or lab login's) username and password, any agent fixes everything else itself, applied at once, with no ask, tap or wait:
   - who may use it: machines, roles, its own session (`aico logins allow NAME` gives the caller whatever is missing; `--role`, `--machine`, `grant` and `revoke` for others);
   - notes, the login page (same site), and an account or lab login's site name (`aico logins edit NAME`).
 - Each change is recorded in the login's activity with who made it and what changed (never a value), and the Logins page shows it under the login and in Recent activity, so the owner can see or undo it.
@@ -15,6 +15,7 @@
 
 ## Limits kept on purpose
 
+- Everything else in the store (backup keys, API keys, passwords, tool logins) stays the owner's on the Logins page: who may use it and its notes and kind. An agent's `allow`, `grant`, `revoke` or `edit` on one is refused, and `aico logins list` says so.
 - A login page on another site needs the owner (Edit on the Logins page): the saved password would otherwise be typed into a site the owner never chose. For the same reason an agent never sets the first login page of an account login, and the probe only suggests pages on the saved site.
 - Opening a login to another session (it may be a hunter's) and `aico logins assign` stay with a coordinator or the owner.
 - Restricted roles (`restrictedRoles` in `packages/fleet/data/logins-policy.json`: hunting, recon, verification) never reach the owner's own logins, get lab targets from a coordinator, not by themselves, and no other agent can name them on a login.
