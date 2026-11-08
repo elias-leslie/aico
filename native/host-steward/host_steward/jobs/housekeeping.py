@@ -236,7 +236,7 @@ def maintain(
     guestfs = Path(cfg["guestfs_dir"])
     if (
         guestfs.is_dir()
-        and now - guestfs.stat().st_mtime > float(cfg["guestfs_stale_days"]) * 86400
+        and min(now, time.time()) - guestfs.stat().st_mtime > float(cfg["guestfs_stale_days"]) * 86400
         and run(["pgrep", "-f", cfg["guestfs_pattern"]], timeout=15).rc != 0
     ):
         done, _ = actor.apply(

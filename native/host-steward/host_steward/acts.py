@@ -39,7 +39,7 @@ class Actor:
                 self.would.append(text)
             return None
         result = self.run(argv, timeout=timeout)
-        log.info("ran %s (exit %s)", " ".join(argv[:4]), result.rc)
+        log.info("ran %s: %s (exit %s)", text, " ".join(argv[:4]), result.rc)
         return result
 
     def apply(self, label: str, change: Callable[[], Any]) -> tuple[bool, Any]:
@@ -47,6 +47,8 @@ class Actor:
         if not self.live:
             self.would.append(label)
             return False, None
+        # One journal line per live change, written before it runs, so a wrong run leaves the list of what went.
+        log.info("doing %s", label)
         return True, change()
 
 

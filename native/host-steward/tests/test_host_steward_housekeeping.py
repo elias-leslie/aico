@@ -124,6 +124,14 @@ def test_actor_live_runs_the_command():
     assert fake.calls == [["echo", "a"]] and actor.would == []
 
 
+def test_actor_live_logs_each_change_with_its_label(caplog):
+    caplog.set_level("INFO", logger="host-steward")
+    actor = acts.Actor(True, run=Fake((["echo"], Result(0, ""))))
+    actor.apply("remove old scratch thing (1.2 GiB)", lambda: None)
+    actor.do(["echo", "a"], "say a")
+    assert "doing remove old scratch thing (1.2 GiB)" in caplog.text and "ran say a" in caplog.text
+
+
 def test_every_controller_has_a_switch():
     assert set(DATA["acting"]) >= {"memctl", "housekeeping", "space_guard", "scrub", "nvme_tests"}
     assert all(isinstance(on, bool) for on in DATA["acting"].values())
@@ -160,7 +168,7 @@ def make_housekeeping_tree(tmp_path):
     (spotify / "blob").write_bytes(b"x" * 4096)
     gfs = tmp_path / "gfs"
     gfs.mkdir()
-    os.utime(gfs, (NOW - 9 * 86400, NOW - 9 * 86400))
+    os.utime(gfs, (time.time() - 9 * 86400,) * 2)  # the sweep caps its clock at the real one
     for n in (1, 2, 3, 4):
         (tmp_path / "pw" / f"chromium-{n}").mkdir(parents=True)
         os.utime(tmp_path / "pw" / f"chromium-{n}", (NOW - 100 + n, NOW - 100 + n))
