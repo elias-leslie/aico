@@ -339,6 +339,42 @@ describe("a session's last message and context fill", () => {
     expect(whole).toBe(long)
   })
 
+  it("quotes the pane's conversation, not a side run written after it", async () => {
+    const later = (text: string, input: number) => ({
+      ...reply(text, input),
+      timestamp: '2026-11-08T11:00:00Z',
+    })
+    write(
+      ['.claude', 'projects', '-work-demo', 'b1.jsonl'],
+      jsonl(user('Do it'), reply('Main.', 100)),
+    )
+    write(
+      ['.claude', 'projects', '-work-demo', 'b2.jsonl'],
+      jsonl(user('Side'), later('Side.', 200)),
+    )
+    const h = history()
+    h.seenInPane('abcd1236', 'claude', 'b1')
+    h.bind('abcd1236', 'claude', 'b2')
+    await h.scan()
+    expect(h.closingMessage('abcd1236', 'claude-code')?.text).toBe('Main.')
+    expect(h.contextOf('abcd1236', 'claude-code').tokens).toBe(100)
+    // The pane moved on (a cleared conversation): the new one is current.
+    write(
+      ['.claude', 'projects', '-work-demo', 'b3.jsonl'],
+      jsonl(user('Next'), reply('New.', 300)),
+    )
+    h.seenInPane('abcd1236', 'claude', 'b3')
+    await h.scan()
+    expect(h.closingMessage('abcd1236', 'claude-code')?.text).toBe('New.')
+    // Nothing seen in the pane: the one written last, as before.
+    write(['.claude', 'projects', '-work-demo', 'b4.jsonl'], jsonl(user('A'), reply('Older.', 1)))
+    write(['.claude', 'projects', '-work-demo', 'b5.jsonl'], jsonl(user('B'), later('Newer.', 2)))
+    h.bind('abcd1237', 'claude', 'b4')
+    h.bind('abcd1237', 'claude', 'b5')
+    await h.scan()
+    expect(h.closingMessage('abcd1237', 'claude-code')?.text).toBe('Newer.')
+  })
+
   it('reads the newest reply of its own tool, masked; unknown stays null', async () => {
     write(
       ['.claude', 'projects', '-work-demo', 'a6.jsonl'],

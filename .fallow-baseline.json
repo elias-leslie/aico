@@ -146,6 +146,7 @@
     "unused-class-member:packages/tether/src/waits.ts:WaitStore:countArmed",
     "unused-class-member:packages/tether/src/waits.ts:WaitStore:forWaiter",
     "unused-class-member:packages/tether/src/waits.ts:WaitStore:keep",
+    "unused-class-member:packages/tether/src/waits.ts:WaitStore:keptFor",
     "unused-class-member:packages/tether/src/waits.ts:WaitStore:lastSend",
     "unused-class-member:packages/tether/src/waits.ts:WaitStore:onSession",
     "unused-class-member:packages/tether/src/waits.ts:WaitStore:prune",

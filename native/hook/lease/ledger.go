@@ -219,7 +219,14 @@ var ownWindow = func(h *Hook) string { return h.WindowOf(h.ID.AgentID) }
 var sessionState = func(window string) (desc map[string]any, ended bool) {
 	status, err := tetherCall("GET", "/v1/sessions/"+url.PathEscape(window), nil, &desc)
 	if status == http.StatusNotFound || status == http.StatusGone {
-		return nil, true
+		// A wake or wait kept past End relaunches the conversation: not over yet.
+		var kept struct {
+			ComesBack bool `json:"comesBack"`
+		}
+		if _, err := tetherCall("GET", "/v1/sessions/"+url.PathEscape(window)+"/comes-back", nil, &kept); err != nil {
+			return nil, false
+		}
+		return nil, !kept.ComesBack
 	}
 	if err != nil {
 		return nil, false
@@ -227,8 +234,12 @@ var sessionState = func(window string) (desc map[string]any, ended bool) {
 	return desc, false
 }
 
+// agentWindow is the Aico session an agent runs in now, "" when it isn't running. A var so tests need no process.
+var agentWindow = func(h *Hook, agent string) string { return h.WindowOf(agent) }
+
 // mayCloseFor: someone other than the sender may close its request once Tether says the sender's Aico session has
-// ended (a dead process alone proves nothing: a session relaunches and reads its acks), or when they launched it.
+// ended for good (a dead process alone proves nothing: a session relaunches and reads its acks, and a kept wake
+// brings its conversation back in a new session), or when they launched it.
 // A request from outside an Aico session names no window, so only its sender closes it.
 func (h *Hook) mayCloseFor(r map[string]any) bool {
 	window := str(r["from_window"])
@@ -237,7 +248,13 @@ func (h *Hook) mayCloseFor(r map[string]any) bool {
 	}
 	desc, ended := sessionState(window)
 	if ended {
-		return true
+		now := agentWindow(h, str(r["from"]))
+		if now == "" || now == window {
+			return true
+		}
+		if desc, ended = sessionState(now); ended {
+			return true
+		}
 	}
 	own := ownWindow(h)
 	return own != "" && (str(desc["parentId"]) == own || str(desc["coordinatorId"]) == own)

@@ -547,11 +547,14 @@ describe('WaitService', () => {
       coordinatorId: null,
       resumeId: null,
     }
+    expect(h.waits.store.keptFor(WAITER)).toBe(false)
     h.waits.keep(WAITER, ended)
+    expect(h.waits.store.keptFor(WAITER)).toBe(true)
     expect(h.waits.store.get(wait.id)?.key).toBeNull()
     h.set({ state: 'idle', stateAt: T0 - SETTLE, stateAgentAt: T0 + 1 })
     expect(h.relaunched).toHaveLength(1)
     expect(h.delivered).toHaveLength(0)
+    expect(h.waits.store.keptFor(WAITER)).toBe(false)
   })
 
   it('a long poll before start holds instead of answering at once', async () => {

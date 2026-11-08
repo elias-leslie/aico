@@ -3,7 +3,7 @@
 // copies rows byte for byte. The only widening is the tmux_servers unit CHECK,
 // which additionally admits non-default instance unit names.
 
-export const SCHEMA_VERSION = 37
+export const SCHEMA_VERSION = 38
 
 /** Conversations observed in an owned workload survive its retirement and delayed transcript ingestion. */
 export const TRANSCRIPT_OWNERS_SQL = `
@@ -14,6 +14,10 @@ export const TRANSCRIPT_OWNERS_SQL = `
   );
   CREATE INDEX IF NOT EXISTS transcript_owners_session ON transcript_owners(session_id);
 `
+
+/** v38: when the agent in the session's own pane was last seen on this conversation; null for a side run. */
+export const TRANSCRIPT_OWNERS_PANE_SQL =
+  'ALTER TABLE transcript_owners ADD COLUMN pane_seen_at INTEGER'
 
 /** v34: the latest model call's prompt tokens per conversation (its context fill). */
 export const TRANSCRIPT_CONTEXT_SQL = 'ALTER TABLE transcripts ADD COLUMN context_tokens INTEGER'

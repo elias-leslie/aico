@@ -233,6 +233,8 @@ export class History {
     []
   /** Newest conversation name per running session; null: rebuild on next ask. */
   private owned: Map<string, ConversationName> | null = null
+  /** The conversation last written as seen in each session's pane. */
+  private readonly inPane = new Map<string, string>()
   private readonly options: Required<Omit<HistoryOptions, 'now' | 'projectOf'>> &
     Pick<HistoryOptions, 'projectOf'>
 
@@ -268,7 +270,21 @@ export class History {
       .run(`${tool}:${nativeId}`, session, session)
   }
 
+  /** The conversation the agent in the session's own pane is on. Binding alone can't say: a side run
+   * in the pane (an agent's `claude -p`) binds itself too. Written only when it changes: polled often. */
+  seenInPane(session: string, tool: string, nativeId: string): void {
+    if (tool === 'claude') tool = 'claude-code'
+    this.bind(session, tool, nativeId)
+    const id = `${tool}:${nativeId}`
+    if (this.inPane.get(session) === id) return
+    this.inPane.set(session, id)
+    this.db
+      .prepare('UPDATE transcript_owners SET pane_seen_at = ? WHERE transcript_id = ?')
+      .run(Date.now(), id)
+  }
+
   endOwned(session: string): void {
+    this.inPane.delete(session)
     this.db
       .prepare(
         'UPDATE transcript_owners SET ended_at = ? WHERE session_id = ? AND ended_at IS NULL',
@@ -905,14 +921,14 @@ export class History {
     }
   }
 
-  /** The session's current conversation in its own tool (a session can also own side runs of
-   * others: an agent's `codex exec`), the one written last. */
+  /** The session's current conversation in its own tool: the one last seen in its pane (a session
+   * also owns side runs: an agent's `claude -p` or `codex exec`), else the one written last. */
   private currentOf(session: string, tool?: string): Row | undefined {
     const rows = this.db
       .prepare(
         `SELECT t.* FROM transcript_owners o JOIN transcripts t ON t.id = o.transcript_id
          WHERE o.session_id = ? AND t.ignored = 0 AND t.parent_id IS NULL
-         ORDER BY COALESCE(t.ended_at, t.file_mtime) DESC`,
+         ORDER BY o.pane_seen_at IS NULL, o.pane_seen_at DESC, COALESCE(t.ended_at, t.file_mtime) DESC`,
       )
       .all(session) as unknown as Row[]
     return rows.find((row) => row.tool === tool) ?? rows[0]

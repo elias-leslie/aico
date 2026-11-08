@@ -38,6 +38,7 @@ import {
   TMUX_SERVERS_TABLE_SQL,
   TRANSCRIPT_CONTEXT_SQL,
   TRANSCRIPT_NAMES_COLUMNS,
+  TRANSCRIPT_OWNERS_PANE_SQL,
   TRANSCRIPT_OWNERS_SQL,
   TRANSCRIPTS_SQL,
   WAITS_ARMED_BY_COLUMNS,
@@ -446,6 +447,16 @@ export class Store {
           if (!has) this.db.exec(sql)
         }
         this.recordVersion(37, now)
+      }
+      if (current < 38) {
+        // v38: which of a session's conversations its own pane is on (transcript_owners.pane_seen_at).
+        const has = this.db
+          .prepare(
+            "SELECT 1 FROM pragma_table_info('transcript_owners') WHERE name = 'pane_seen_at'",
+          )
+          .get()
+        if (!has) this.db.exec(TRANSCRIPT_OWNERS_PANE_SQL)
+        this.recordVersion(38, now)
       }
     })
   }

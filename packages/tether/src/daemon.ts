@@ -825,7 +825,7 @@ function createAgentPoller(
     nodeProcFs,
     env.HOME ?? homedir(),
     {
-      conversation: (id, tool, nativeId) => context.history?.bind(id, tool, nativeId),
+      conversation: (id, tool, nativeId) => context.history?.seenInPane(id, tool, nativeId),
       ...(models ? { models: (id, source) => models.see(id, source, nodeFileTail) } : {}),
       ...(context.history ? { runs: context.history.agentRun } : {}),
     },

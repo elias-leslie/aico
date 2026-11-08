@@ -446,6 +446,22 @@ func TestOthersCloseOnlyForAnEndedOrLaunchedSender(t *testing.T) {
 		t.Fatalf("ended sender: %v %v", r, err)
 	}
 
+	// Its session ended but its agent came back in another (a kept wake): only the sender closes.
+	savedAgent := agentWindow
+	t.Cleanup(func() { agentWindow = savedAgent })
+	back := acked("aabbccdd")
+	agentWindow = func(*Hook, string) string { return "eeeeeeee" }
+	sessionState = func(w string) (map[string]any, bool) {
+		if w == "eeeeeeee" {
+			return map[string]any{"id": w}, false
+		}
+		return nil, true
+	}
+	if _, err := b.Confirm(back, false); err == nil {
+		t.Error("sender relaunched: only the sender closes")
+	}
+	agentWindow = savedAgent
+
 	// The session that launched the sender may, whoever else is running.
 	launched := acked("aabbccdd")
 	sessionState = func(string) (map[string]any, bool) {
@@ -465,5 +481,17 @@ func TestOthersCloseOnlyForAnEndedOrLaunchedSender(t *testing.T) {
 	// A row with no window (sent outside Aico) stays its sender's, ended or not.
 	if _, err := b.Confirm(acked(""), false); err == nil {
 		t.Error("no window: only the sender closes")
+	}
+}
+
+// A session gone from Tether is ended only if nothing kept will bring it back.
+func TestSessionStateAsksWhetherAGoneSessionComesBack(t *testing.T) {
+	sandbox(t)
+	fake.ComesBack = map[string]bool{"aabbccdd": true}
+	if _, ended := sessionState("aabbccdd"); ended {
+		t.Error("a kept wake brings it back: not ended")
+	}
+	if _, ended := sessionState("bbbbbbbb"); !ended {
+		t.Error("nothing kept: ended")
 	}
 }

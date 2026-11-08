@@ -1283,6 +1283,13 @@ function registerTerminalReadRoutes(router: Router, context: LifecycleApiContext
     })
     // The agent's last message and context fill, for a coordinator reading a lane. An ended
     // session's transcript stays readable, so its report does too.
+    .add('GET', '/v1/sessions/:id/comes-back', (_req, res, params) => {
+      const id = params.id ?? ''
+      if (!/^[0-9a-f]{8}$/.test(id)) throw new HttpError(404, 'not_found')
+      sendJson(res, 200, {
+        comesBack: Boolean(context.wakes?.store.keptFor(id) || context.waits?.store.keptFor(id)),
+      })
+    })
     .add('GET', '/v1/sessions/:id/report', (_req, res, params) => {
       const id = params.id ?? ''
       if (!/^[0-9a-f]{8}$/.test(id)) throw new HttpError(404, 'not_found')

@@ -334,6 +334,17 @@ export class WaitStore {
     )
   }
 
+  /** An armed wait kept past this ended session's End is still to come. */
+  keptFor(endedId: string): boolean {
+    return Boolean(
+      this.db
+        .prepare(
+          "SELECT 1 FROM waits WHERE kept = 1 AND state = 'armed' AND json_extract(ended_session, '$.id') = ? LIMIT 1",
+        )
+        .get(endedId),
+    )
+  }
+
   /** Undo `keep` after an End that did not happen. */
   unkeep(waiter: string): void {
     this.db.prepare('UPDATE waits SET kept = 0, ended_session = NULL WHERE waiter = ?').run(waiter)

@@ -134,12 +134,12 @@ describe('control socket', () => {
     expect(health.body).toMatchObject({
       status: 'ok',
       instance: 'test',
-      apiVersion: 33,
-      schemaVersion: 37,
+      apiVersion: 34,
+      schemaVersion: 38,
       lifecycle: 'disabled',
     })
     const version = await call('GET', '/v1/version')
-    expect(version.body).toMatchObject({ name: 'tether', apiVersion: 33, minApiVersion: 1 })
+    expect(version.body).toMatchObject({ name: 'tether', apiVersion: 34, minApiVersion: 1 })
   })
 
   it('returns 404 and 405 with stable error codes', async () => {
@@ -217,6 +217,10 @@ describe('lifecycle API (no tmux started)', () => {
     expect((await call('POST', '/v1/sessions', { origin: 'cli', size, extra: 1 })).status).toBe(400)
     expect((await call('GET', '/v1/sessions/ffffffff')).status).toBe(404)
     expect((await call('GET', '/v1/sessions/NOTANID/report')).status).toBe(404)
+    expect((await call('GET', '/v1/sessions/NOTANID/comes-back')).status).toBe(404)
+    expect((await call('GET', '/v1/sessions/ffffffff/comes-back')).body).toEqual({
+      comesBack: false,
+    })
     // No record of it is no message and unknown context, never zero.
     expect((await call('GET', '/v1/sessions/ffffffff/report')).body).toMatchObject({
       id: 'ffffffff',
@@ -454,7 +458,7 @@ describe('event stream', () => {
     await call('PATCH', '/v1/tools/pi', { enabled: false })
     await vi.waitFor(() => expect(lines).toHaveLength(2))
     req.destroy()
-    expect(lines[0]).toMatchObject({ type: 'hello', data: { apiVersion: 33, instance: 'test' } })
+    expect(lines[0]).toMatchObject({ type: 'hello', data: { apiVersion: 34, instance: 'test' } })
     expect(lines[1]).toMatchObject({ type: 'tools.changed', seq: 1, data: { slug: 'pi' } })
 
     const gap = await new Promise<string>((resolve) => {
@@ -590,6 +594,12 @@ describe('session wakes API', () => {
       sessionId: null,
       kept: true,
       endedSession: { id: '0a1b2c3d', tool: 'codex' },
+    })
+
+    // Gone from the list, but its kept wake brings it back; a plain End does not.
+    expect((await call('GET', '/v1/sessions/0a1b2c3d')).status).toBe(404)
+    expect((await call('GET', '/v1/sessions/0a1b2c3d/comes-back')).body).toEqual({
+      comesBack: true,
     })
 
     insertWidget('0a1b2c3e', 'codex', 1_000, { origin: 'cli' })

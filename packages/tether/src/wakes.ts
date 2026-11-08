@@ -544,6 +544,17 @@ export class WakeStore {
     )
   }
 
+  /** A check-in kept past this ended session's End is still to come. */
+  keptFor(endedId: string): boolean {
+    return Boolean(
+      this.db
+        .prepare(
+          "SELECT 1 FROM wakes WHERE kept = 1 AND json_extract(ended_session, '$.id') = ? LIMIT 1",
+        )
+        .get(endedId),
+    )
+  }
+
   /** Undo `keep` after an End that did not happen. */
   unkeep(sessionId: string): void {
     this.db
