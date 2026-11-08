@@ -128,7 +128,7 @@ def _host_admission(now: float) -> Admission | None:
             return None
         offload = state.get("offload")
         return Admission(state["admit"], f"host {_public_label(str(state.get('state', '')))}: "
-                         f"{_public_label(str(state.get('reason', '')))}",
+                         f"{_plain(state.get('reason', ''))}",
                          _public_label(offload) if isinstance(offload, str) and offload else None)
     except (OSError, ValueError, TypeError, KeyError, AttributeError):
         return None
@@ -146,8 +146,7 @@ def host_memory(now: float | None = None) -> dict[str, Any] | None:
             return None
     except (OSError, ValueError, TypeError, KeyError, AttributeError):
         return None
-    text = state.get("memory_reason" if mem == "memory_state" else "reason", "")
-    reason = re.sub(r"[^a-zA-Z0-9 .,:%()_-]", "", str(text))[:160]  # host-steward's plain sentence
+    reason = _plain(state.get("memory_reason" if mem == "memory_state" else "reason", ""))
     return {"state": state[mem], "reason": reason,
             **{k: state[k] for k in ("mem_available_gib", "swap_used_pct", "psi_some_avg60") if isinstance(state.get(k), int | float)}}
 
@@ -375,6 +374,17 @@ def heavy_work(label: str, *, work_class: str = "heavy", project: str | None = N
         os.close(admission)
 
 
+def _plain(text: object) -> str:
+    """host-steward's plain sentence, with only the characters it writes."""
+    return re.sub(r"[^a-zA-Z0-9 .,:;%()_-]", "", str(text))[:160]
+
+
+def _next_status(since: float) -> float:
+    """When to print the next wait line: 5 s, then doubling to once a minute (agents read every line)."""
+    now = time.monotonic()
+    return now + min(60.0, max(5.0, now - since))
+
+
 def _public_label(value: str) -> str:
     # Callers supply operation/project names, never argv, environment or paths.
     return re.sub(r"[^a-zA-Z0-9 ._-]", "?", value)[:80]
@@ -566,7 +576,7 @@ def _wait_owner(lane: str, admission: int, activity: int, label: str,
                     print(f"[st] Waiting for host admission: {_public_label(label)} class=heavy "
                           f"wait_age={time.monotonic() - since:.1f}s reason={admission_gate.reason}",
                           file=sys.stderr, flush=True)
-                    next_status = time.monotonic() + 5
+                    next_status = _next_status(since)
                 time.sleep(1)
                 continue
             with _metadata():
@@ -583,7 +593,7 @@ def _wait_owner(lane: str, admission: int, activity: int, label: str,
                         return chosen
             if time.monotonic() >= next_status:
                 _wait_status(lane, label, since, activity, admission)
-                next_status = time.monotonic() + 5
+                next_status = _next_status(since)
             time.sleep(0.1)
     finally:
         try:
@@ -610,5 +620,5 @@ def _wait_lock(descriptor: int, label: str, *, lane: str = "heavy", project: str
         except BlockingIOError:
             if time.monotonic() >= next_status:
                 _wait_status(lane, label, since, activity, admission)
-                next_status = time.monotonic() + 5
+                next_status = _next_status(since)
             time.sleep(0.1)
