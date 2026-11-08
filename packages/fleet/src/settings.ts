@@ -35,6 +35,8 @@ export interface FleetSettings {
   statusMs: number
   /** How long a Proxmox guest power reading is reused (default 60 s). */
   powerCacheMs?: number
+  /** A reading older than this no longer says a guest is off, when reads keep failing. */
+  powerStaleMs?: number
   /** Timeout for one guest power reading (default 10 s). */
   powerTimeoutMs?: number
   statusUrl: string
@@ -131,6 +133,7 @@ export function readSettings(env: NodeJS.ProcessEnv, controlSocket: string): Fle
     'maxChannels',
     'bufferBytes',
     'powerCacheMs',
+    'powerStaleMs',
     'powerTimeoutMs',
   ] as const) {
     const n = value[key]

@@ -114,8 +114,29 @@ export function hostReadsStoppedDisk(type: string, parts: string[], via: string 
     ((type === 'qemu' && via === 'agent') || (type === 'lxc' && via === 'pct'))
   )
 }
-/** Exit code of ssh itself: the connection failed, so the host is off or off the network. */
-const SSH_NO_ANSWER = 255
+/**
+ * ssh itself couldn't reach the host, so it's off or off the network. Its exit code 255 alone doesn't
+ * say that: a rejected key, a changed host key or a missing key file are real failures.
+ */
+const SSH_NO_ROUTE =
+  /connection refused|timed out|no route to host|network is unreachable|host is down|connection closed|connection reset|broken pipe|server not responding/i
+export const hostAway = (result: { code: number; err: string }): boolean =>
+  result.code === 255 && SSH_NO_ROUTE.test(result.err)
+/**
+ * A source on an external disk that isn't mounted (unplugged): off, like a machine. A folder missing
+ * from a mounted disk is still a failure.
+ */
+export function diskAway(
+  path: string,
+  mounts = readFileSync('/proc/self/mounts', 'utf8'),
+): boolean {
+  if (!/^\/(media|mnt)\//.test(path) || existsSync(path)) return false
+  const root = path
+    .split('/')
+    .slice(0, path.startsWith('/media/') ? 4 : 3)
+    .join('/')
+  return !mounts.split('\n').some((line) => line.split(' ')[1] === root)
+}
 /** How a guest (or, with no `guest`, the Proxmox host) stands now, from the host's own list. */
 async function readPower(
   rt: Runtime,
@@ -123,7 +144,7 @@ async function readPower(
   guest?: { vmid: number; type: string },
 ): Promise<GuestPower> {
   const listing = await rt.run([...ssh, 'guests'])
-  if (listing.code === SSH_NO_ANSWER) return { state: 'off' }
+  if (hostAway(listing)) return { state: 'off' }
   if (listing.code) return { state: 'unknown' }
   try {
     return readListed(JSON.parse(listing.out), guest)
@@ -190,8 +211,9 @@ async function proxmoxJob(
   const guestId = onHost ? undefined : { vmid: Number(parts[1]), type: parts[0] as string }
   // The host itself doesn't answer: everything on it is off.
   const listing = await rt.run([...ssh, 'guests'])
-  if (listing.code === SSH_NO_ANSWER) return offline()
-  if (listing.code) throw new Error('The Proxmox guest list is unavailable.')
+  if (hostAway(listing)) return offline()
+  if (listing.code)
+    throw new Error(`The Proxmox guest list is unavailable${failureReason(listing, ': ')}.`)
   const resources = JSON.parse(listing.out) as {
     vmid: number
     type: string
@@ -203,13 +225,21 @@ async function proxmoxJob(
     before: readListed(resources, guestId),
     read: () => readPower(rt, ssh, guestId),
   }
+  // A step that fails because the machine just went off isn't a failure either.
+  const wentOff = async () =>
+    (await machine.read().catch((): GuestPower => ({ state: 'unknown' }))).state === 'off'
   if (source.id === rt.cfg.remoteSqlite.source) {
     if (machine.before.state === 'off') return offline()
-    await checked(rt.run, rt.cfg.remoteSqlite.snapshotCommand)
-    const seconds = Number((await checked(rt.run, rt.cfg.remoteSqlite.timeCommand)).trim())
-    if (!Number.isFinite(seconds) || seconds <= 0)
-      throw new Error('The gem Aico snapshot date is unavailable.')
-    dataAt = new Date(Math.min(rt.now().getTime(), seconds * 1000)).toISOString()
+    try {
+      await checked(rt.run, rt.cfg.remoteSqlite.snapshotCommand)
+      const seconds = Number((await checked(rt.run, rt.cfg.remoteSqlite.timeCommand)).trim())
+      if (!Number.isFinite(seconds) || seconds <= 0)
+        throw new Error('The gem Aico snapshot date is unavailable.')
+      dataAt = new Date(Math.min(rt.now().getTime(), seconds * 1000)).toISOString()
+    } catch (error) {
+      if (await wentOff()) return offline()
+      throw error
+    }
   }
   let filename = 'pve-cluster-config.sql'
   if (!onHost) {
@@ -224,9 +254,14 @@ async function proxmoxJob(
     )
       return offline()
     if (guest.type === 'lxc' && guest.status === 'running' && parts[2] !== 'files') {
-      const pool = Number(await checked(rt.run, [...ssh, 'thinpool']))
-      if (!Number.isFinite(pool) || pool >= rt.cfg.pve.thinPoolMaximumPercent)
-        throw new Error('The Proxmox storage pool has insufficient room for a capture.')
+      try {
+        const pool = Number(await checked(rt.run, [...ssh, 'thinpool']))
+        if (!Number.isFinite(pool) || pool >= rt.cfg.pve.thinPoolMaximumPercent)
+          throw new Error('The Proxmox storage pool has insufficient room for a capture.')
+      } catch (error) {
+        if (await wentOff()) return offline()
+        throw error
+      }
     }
     filename =
       parts[2] === 'files'
@@ -378,8 +413,8 @@ export async function backupJob(
     const seconds = (rt.now().getTime() - Date.parse(attemptedAt)) / 1000
     const machine = await failedCopyMachine(job, seconds)
     if (machine === 'off') return off()
-    if (machine === 'changed')
-      return { ...old, source: job.id, target, attemptedAt, error: undefined }
+    // The last good copy waits for the next normal run. An earlier real failure still stands.
+    if (machine === 'changed') return { ...old, source: job.id, target, attemptedAt }
     return {
       ...old,
       source: job.id,
@@ -458,6 +493,7 @@ export async function driveBackup(
           paths: [s.path],
           binds: [],
           dataAt: payloadTime(s.path) ?? '',
+          offline: diskAway(s.path),
           prepare: s.id in rt.cfg.prepare,
         })
       }

@@ -141,7 +141,8 @@ def aico_backups(ctx: Ctx) -> list[Signal]:
             native_problems.append((state, f"{name}: recovery point is {state}"))
         if not isinstance(entry.get("snapshot"), str) or not entry["snapshot"] or not isinstance(entry.get("path"), str) or not entry["path"].startswith("/"):
             native_problems.append(("failed", f"{name}: no verified received recovery point"))
-    if not any(e.get("target") == "native" and e.get("state") == "off" for e in entries):
+    required = {f"native/{name}" for name in ctx.cfg["native_required_sources"]}
+    if not any(e.get("id") in required and e.get("state") == "off" for e in entries):
         native_problems += run_problems("native", ctx.cfg["native_failed_hours"])
     return [source, signal("backups.pve", problems), signal("backups.native", native_problems)]
 

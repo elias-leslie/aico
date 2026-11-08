@@ -81,7 +81,7 @@ export interface Problem {
   key: string
   what: string
   project?: string
-  state: 'warn' | 'failed'
+  state: 'off' | 'warn' | 'failed'
   reason: string
 }
 
@@ -254,18 +254,27 @@ interface Disk {
   have: Set<string>
 }
 
-async function look(peer: Peer, cfg: WipConfig, machine: string): Promise<Disk | string> {
+async function look(
+  peer: Peer,
+  cfg: WipConfig,
+  machine: string,
+): Promise<Disk | { state: Problem['state']; reason: string }> {
   const dir = sq(cfg.mirrorDir)
   const answer = await peer.exec(
     `mkdir -p ${dir}/${sq(machine)} && df -Pk ${dir} | tail -n 1 && du -sk ${dir} && ls -1 ${dir}/${sq(machine)}`,
   )
   if (answer.code)
-    return `${peer.name} did not answer (${answer.out.trim().split('\n').at(-1) || `exit ${answer.code}`})`
+    return {
+      // 255: the link itself. Off or restarting, and the next run catches up; a machine that stays
+      // down has its own row. Any other exit is the peer answering that it can't.
+      state: answer.code === 255 ? 'off' : 'failed',
+      reason: `${peer.name} did not answer (${answer.out.trim().split('\n').at(-1) || `exit ${answer.code}`})`,
+    }
   const [df, du, ...names] = answer.out.trim().split('\n')
   const free = Number(df?.trim().split(/\s+/)[3])
   const used = Number(du?.split(/\s+/)[0])
   if (!Number.isFinite(free) || !Number.isFinite(used))
-    return `${peer.name} gave a disk reading Aico cannot read`
+    return { state: 'failed', reason: `${peer.name} gave a disk reading Aico cannot read` }
   return { freeKiB: free, usedKiB: used, have: new Set(names.map((n) => n.replace(/\.git$/, ''))) }
 }
 
@@ -299,13 +308,12 @@ export async function mirror(deps: WipDeps): Promise<WipReport> {
   const targets: Peer[] = []
   for (const peer of found.peers) {
     const disk = await look(peer, cfg, machine)
-    if (typeof disk === 'string')
+    if ('reason' in disk)
       report.problems.push({
         key: `peer-${peer.name}`,
         what: `Repo copy to ${peer.name}`,
-        // Off or restarting: the next run catches up, and a machine that stays down has its own row.
-        state: 'warn',
-        reason: disk,
+        state: disk.state,
+        reason: disk.reason,
       })
     else {
       disks.set(peer.name, disk)
@@ -528,7 +536,7 @@ export async function mirror(deps: WipDeps): Promise<WipReport> {
 export function summary(report: WipReport, machine: string, peers: number): string {
   if (report.off) return report.off
   const failed = report.problems.filter((p) => p.state === 'failed')
-  const warned = report.problems.filter((p) => p.state === 'warn')
+  const warned = report.problems.filter((p) => p.state !== 'failed')
   const parts = [
     `${report.mirrored.length} ${report.mirrored.length === 1 ? 'repo' : 'repos'} copied to ${peers} ${peers === 1 ? 'machine' : 'machines'}, ${report.unchanged} unchanged${report.idle ? `, ${report.idle} not active` : ''}`,
   ]

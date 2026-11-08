@@ -32,7 +32,7 @@ export interface Result {
 }
 export type Execute = (
   argv: string[],
-  options?: { env?: NodeJS.ProcessEnv; cwd?: string },
+  options?: { env?: NodeJS.ProcessEnv; cwd?: string; timeout?: number },
 ) => Promise<Result>
 /** Bounded output, no argv or environment logging (credentials are file references only). */
 export const execute: Execute = (argv, options = {}) =>

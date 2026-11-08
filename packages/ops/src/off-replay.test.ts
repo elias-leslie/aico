@@ -10,9 +10,17 @@ import { fileURLToPath } from 'node:url'
 import { peerStatusRow } from '@aico/fleet/power'
 import { type AlertBatch, type StatusRow, StatusStore } from '@aico/status'
 import { afterEach, describe, expect, it } from 'vitest'
-import { backupJob, type GuestPower } from './backup-drive'
+import { backupJob, diskAway, type GuestPower, hostAway } from './backup-drive'
 import { observeExternal } from './backup-external'
-import { type BackupState, backupRows, config, copyKey, entries } from './backup-plan'
+import {
+  type BackupEntry,
+  type BackupState,
+  backupRows,
+  config,
+  copyKey,
+  entries,
+  markUnplugged,
+} from './backup-plan'
 import type { Runtime } from './backup-runtime'
 import { scheduledEntries } from './backups'
 
@@ -344,6 +352,52 @@ describe('the notices that fired because a machine was off', () => {
     })
   })
 
+  describe('ssh that fails for another reason is not a machine that is off', () => {
+    const external = (err: string, code = 255) => ({ code, err })
+    it('hostAway needs ssh to say it could not reach the host', () => {
+      for (const err of [
+        'ssh: connect to host h port 22: Connection refused',
+        'ssh: connect to host h port 22: Connection timed out',
+        'ssh: connect to host h port 22: No route to host',
+        'Connection closed by 10.0.0.1 port 22',
+      ])
+        expect(hostAway(external(err))).toBe(true)
+      for (const err of [
+        'root@h: Permission denied (publickey).',
+        'Host key verification failed.',
+        'Warning: Identity file /x not accessible: No such file or directory.',
+        '',
+      ])
+        expect(hostAway(external(err))).toBe(false)
+      expect(hostAway(external('Connection refused', 1))).toBe(false)
+    })
+  })
+
+  describe('a T7 that comes back', () => {
+    const row = (): BackupEntry =>
+      ({ id: 'native/x', target: 'native', state: 'failed', meaning: 'old' }) as BackupEntry
+    it('stays off until a run has finished since it came back, and says so', () => {
+      const items = [row()]
+      markUnplugged(items, true, true)
+      expect(items[0]).toMatchObject({ state: 'off', nextRun: null })
+      expect(items[0]?.meaning).toContain('back')
+    })
+    it('once a run has finished, its rows speak for themselves', () => {
+      const items = [row()]
+      markUnplugged(items, true, false)
+      expect(items[0]?.state).toBe('failed')
+    })
+  })
+
+  describe('an unplugged disk', () => {
+    const mounts = '/dev/sda1 /media/me/Backups fuseblk rw 0 0\n'
+    it('off when its disk is not mounted, a failure when the folder is missing from a mounted disk', () => {
+      expect(diskAway('/media/me/Gone/archive', mounts)).toBe(true)
+      expect(diskAway('/media/me/Backups/archive-not-there', mounts)).toBe(false)
+      expect(diskAway('/srv/data/missing', mounts)).toBe(false)
+    })
+  })
+
   describe('release-push', () => {
     const link = (state: 'off' | 'warn'): StatusRow => ({
       id: 'fleet/standby/guest',
@@ -404,13 +458,55 @@ describe('the notices that fired because a machine was off', () => {
       argv.includes('status')
         ? { code: 0, out: 'status: running\n', err: '' }
         : { code: 0, out: JSON.stringify({ exitcode: 0, 'out-data': '' }), err: '' }
-    const noHost = async () => ({ code: 255, out: '', err: 'no route' })
+    const noHost = async () => ({
+      code: 255,
+      out: '',
+      err: 'ssh: connect to host h port 22: No route to host',
+    })
     it('just booted, or a host not up yet: no failure', async () => {
       for (const run of [running, noHost]) {
         const state = emptyState()
         await observeExternal(rt(run, T0), state, ['portfolio-ai-complete'])
         expect(state.copies[id]?.error).toBeUndefined()
       }
+    })
+    it('the Proxmox host off for days: off the whole time, never Failed', async () => {
+      const state = emptyState()
+      for (const at of [T0, T0 + 31 * MIN, T0 + 3 * 24 * 60 * MIN]) {
+        await observeExternal(rt(noHost, at), state, ['portfolio-ai-complete'])
+        expect(state.copies[id]).toMatchObject({ observed: 'offline' })
+        expect(state.copies[id]?.error).toBeUndefined()
+      }
+    })
+    it('a rejected key on a running host: Failed once the window has passed', async () => {
+      const rejected = async () => ({
+        code: 255,
+        out: '',
+        err: 'root@h: Permission denied (publickey).',
+      })
+      const state = emptyState()
+      await observeExternal(rt(rejected, T0), state, ['portfolio-ai-complete'])
+      expect(state.copies[id]?.error).toBeUndefined()
+      await observeExternal(rt(rejected, T0 + 31 * MIN), state, ['portfolio-ai-complete'])
+      expect(state.copies[id]?.observed).toBe('failed')
+    })
+    it('back after days off with its old artifact: its age counts from the return', async () => {
+      const old = T0 - 20 * 24 * 60 * MIN
+      const artifact = async (argv: string[]) =>
+        argv.includes('status')
+          ? { code: 0, out: 'status: running\n', err: '' }
+          : { code: 0, out: JSON.stringify({ exitcode: 0, 'out-data': `${old / 1000},` }), err: '' }
+      const state = emptyState()
+      state.copies[id] = {
+        source: 'portfolio-ai-complete',
+        target: 'drive',
+        dataAt: new Date(old).toISOString(),
+        observed: 'offline',
+      }
+      await observeExternal(rt(artifact, T0), state, ['portfolio-ai-complete'])
+      expect(state.copies[id]).toMatchObject({ observed: 'ok', backAt: new Date(T0).toISOString() })
+      await observeExternal(rt(artifact, T0 + 10 * MIN), state, ['portfolio-ai-complete'])
+      expect(state.copies[id]?.backAt).toBe(new Date(T0).toISOString())
     })
     it('still unreadable after the window: Failed', async () => {
       const state = emptyState()

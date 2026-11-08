@@ -34,13 +34,21 @@ export interface Copy {
   observed?: 'ok' | 'offline' | 'failed'
   /** Its owner machine could not be read, since then; a failure only once that has lasted. */
   unreadSince?: string
+  /** When an external owner came back from being off: its artifact's age counts from then. */
+  backAt?: string
 }
 export interface BackupState {
   copies: Record<string, Copy>
   runs: Partial<
     Record<
       BackupTarget | 'snapshots' | 'guard' | 'verify',
-      { started: string; finished?: string; ok: boolean }
+      {
+        started: string
+        finished?: string
+        ok: boolean
+        /** The T7 was found unplugged; its rows stay off until a run finishes after it's back. */
+        unpluggedAt?: string
+      }
     >
   >
   points: BackupPoint[]
@@ -262,7 +270,9 @@ export function entries(
   if (machine === cfg.workstation)
     for (const external of migrated.external.filter((s) => s.enabled)) {
       const copy = state.copies[`external/${external.id}`]
-      const age = copy?.dataAt ? now - Date.parse(copy.dataAt) : null
+      const age = copy?.dataAt
+        ? now - Math.max(Date.parse(copy.dataAt), copy.backAt ? Date.parse(copy.backAt) : 0)
+        : null
       const fresh =
         age !== null &&
         age <=
@@ -304,15 +314,17 @@ export function entries(
  * like a machine turned off on purpose, and run again once it is back. Only the T7 (native)
  * copies; Drive and CT 160 copies have no such state.
  */
-export function markUnplugged(items: BackupEntry[], attached: boolean): void {
-  if (attached) return
+export function markUnplugged(items: BackupEntry[], attached: boolean, waiting = false): void {
+  if (attached && !waiting) return
   for (const item of items)
     if (item.target === 'native')
       Object.assign(item, {
         state: 'off',
         nextRun: null,
         running: false,
-        meaning: 'The T7 drive is unplugged. Backups to it resume when it is plugged in.',
+        meaning: attached
+          ? 'The T7 drive is back. Its next run brings it up to date.'
+          : 'The T7 drive is unplugged. Backups to it resume when it is plugged in.',
       })
 }
 export function backupRows(items: BackupEntry[]): StatusRow[] {

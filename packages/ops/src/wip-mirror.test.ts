@@ -224,11 +224,21 @@ describe('wip mirror', () => {
     expect(full.problems[0]?.reason).toMatch(/would pass 0 MB/)
   })
 
-  it('a peer that does not answer is off or restarting: a warning, not a failure', async () => {
+  it('a peer that answers with an error, or an unreadable disk, is a real failure', async () => {
+    const root = repo('app')
+    const broken: Peer = { ...fakePeer('gem'), exec: async () => ({ code: 1, out: 'no space' }) }
+    const report = await mirror(deps([{ id: 'app', root }], {}, {}, [broken]))
+    expect(report.problems).toEqual([expect.objectContaining({ key: 'peer-gem', state: 'failed' })])
+    const garbled: Peer = { ...fakePeer('gem'), exec: async () => ({ code: 0, out: 'huh' }) }
+    const again = await mirror(deps([{ id: 'app', root }], {}, {}, [garbled]))
+    expect(again.problems).toEqual([expect.objectContaining({ key: 'peer-gem', state: 'failed' })])
+  })
+
+  it('a peer whose link does not answer is off or restarting: off, not a failure', async () => {
     const root = repo('app')
     const down: Peer = { ...fakePeer('gem'), exec: async () => ({ code: 255, out: '' }) }
     const report = await mirror(deps([{ id: 'app', root }], {}, {}, [down]))
-    expect(report.problems).toEqual([expect.objectContaining({ key: 'peer-gem', state: 'warn' })])
+    expect(report.problems).toEqual([expect.objectContaining({ key: 'peer-gem', state: 'off' })])
     expect(summary(report, 'home', 1)).toContain('Skipped: gem did not answer')
   })
 

@@ -1,4 +1,4 @@
-import { payloadTime } from './backup-drive'
+import { diskAway, hostAway, payloadTime } from './backup-drive'
 import { type BackupState, migrated } from './backup-plan'
 import type { Runtime } from './backup-runtime'
 /** External owners keep their own schedules. Their artifact dates, never unit-success times, prove data age. */
@@ -14,28 +14,33 @@ export async function observeExternal(
       const probe = rt.cfg.externalProbes[source.id as keyof typeof rt.cfg.externalProbes]
       const old = state.copies[`external/${source.id}`]
       let running = false
+      const markOff = () => {
+        state.copies[`external/${source.id}`] = {
+          ...old,
+          source: source.id,
+          target: 'drive',
+          error: undefined,
+          unreadSince: undefined,
+          observed: 'offline',
+          attemptedAt: rt.now().toISOString(),
+        }
+      }
+      // Its artifact had no chance to get newer while off: its age counts from its return.
+      const backAt = old?.observed === 'offline' ? { backAt: rt.now().toISOString() } : {}
       try {
         if ('statusCommand' in probe) {
           const status = await rt.run(probe.statusCommand)
+          if (hostAway(status)) return markOff()
           if (status.code || !/^status: (stopped|running)\s*$/.test(status.out))
             throw new Error('The backup owner machine state could not be checked.')
-          if (status.out.trim() === 'status: stopped') {
-            state.copies[`external/${source.id}`] = {
-              ...old,
-              source: source.id,
-              target: 'drive',
-              error: undefined,
-              unreadSince: undefined,
-              observed: 'offline',
-              attemptedAt: rt.now().toISOString(),
-            }
-            return
-          }
+          if (status.out.trim() === 'status: stopped') return markOff()
           running = true
         }
         let date: string | null = null
-        if ('path' in probe && probe.path) date = payloadTime(probe.path)
-        else if ('command' in probe && probe.command) {
+        if ('path' in probe && probe.path) {
+          if (diskAway(probe.path)) return markOff()
+          date = payloadTime(probe.path)
+        } else if ('command' in probe && probe.command) {
           const result = await rt.run(probe.command)
           if (result.code)
             throw new Error(
@@ -61,6 +66,8 @@ export async function observeExternal(
           dataAt: date,
           observed: 'ok',
           attemptedAt: rt.now().toISOString(),
+          ...(date === old?.dataAt && old.backAt ? { backAt: old.backAt } : {}),
+          ...backAt,
         }
       } catch (error) {
         // A machine still booting, or a Proxmox host that doesn't answer yet, isn't a failed
@@ -74,7 +81,7 @@ export async function observeExternal(
             target: 'drive',
             unreadSince: since,
             // It is on now, so the row stops saying off and waits on its last good date.
-            ...(running && old?.observed === 'offline' ? { observed: undefined } : {}),
+            ...(running && old?.observed === 'offline' ? { observed: undefined, ...backAt } : {}),
           }
           return
         }

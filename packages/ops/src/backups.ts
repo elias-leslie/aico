@@ -258,16 +258,22 @@ export async function runBackup(
 ): Promise<boolean> {
   if (target === 'verify' && scheduled && rt.now().getDay() !== rt.cfg.verify.day) return true
   const started = rt.now().toISOString()
-  state.runs[target] = { started, ok: false }
-  saveRun(rt.cfg, target, state.runs[target] as NonNullable<BackupState['runs'][typeof target]>)
-  if (target !== 'snapshots' && target !== 'guard') saveState(rt.cfg, state)
-  // An unplugged T7 isn't a failed backup: its rows show off, and it runs when it is back.
+  // An unplugged T7 isn't a failed backup or a run: its rows show off, and it runs when it is back.
   const t7Gone = () =>
     target === 'native' && !existsSync(join('/dev/disk/by-uuid', rt.cfg.nativeDriveUuid))
   if (t7Gone()) {
     console.log('The T7 drive is unplugged; nothing to copy to.')
+    state.runs.native = {
+      ...(state.runs.native ?? { started, ok: true }),
+      unpluggedAt: started,
+    }
+    saveState(rt.cfg, state)
     return true
   }
+  const away = target === 'native' ? state.runs.native?.unpluggedAt : undefined
+  state.runs[target] = { started, ok: false, ...(away ? { unpluggedAt: away } : {}) }
+  saveRun(rt.cfg, target, state.runs[target] as NonNullable<BackupState['runs'][typeof target]>)
+  if (target !== 'snapshots' && target !== 'guard') saveState(rt.cfg, state)
   let ok = false
   try {
     if (target === 'native') await nativeBackup(rt, state, scheduled)
@@ -313,7 +319,8 @@ export async function runBackup(
         }
     console.error(message)
   } finally {
-    state.runs[target] = { started, finished: rt.now().toISOString(), ok }
+    const finished = rt.now().toISOString()
+    state.runs[target] = { started, finished, ok, ...(t7Gone() ? { unpluggedAt: finished } : {}) }
     saveRun(rt.cfg, target, state.runs[target] as NonNullable<BackupState['runs'][typeof target]>)
     if (target !== 'snapshots' && target !== 'guard') saveState(rt.cfg, state)
   }
@@ -689,13 +696,31 @@ export async function backups(argv: string[], env = process.env): Promise<number
     lockFiles.length &&
     env.AICO_BACKUPS_LOCKED !== '1'
   ) {
-    // A scheduled run can wait behind another backup for an hour. Tell Status it has started, so its
-    // rows don't read late while it waits and works.
-    if (verb === 'run' && args.includes('--scheduled'))
-      await report(cfg, readState(cfg), machine).catch((error) =>
-        console.error(`Could not tell Status this run started: ${(error as Error).message}`),
-      )
-    return runUnderLock(env, args, lockFiles)
+    if (verb !== 'run' || !args.includes('--scheduled')) return runUnderLock(env, args, lockFiles)
+    // A scheduled run can wait behind another backup for hours. Keep telling Status it's under way
+    // so its rows don't read late, and never let a hung probe hold up the backup itself.
+    const { runReportSeconds, runReportTimeoutSeconds } = cfg.schedule
+    const bounded: Execute = (argv, options) =>
+      execute(argv, { ...options, timeout: runReportTimeoutSeconds * 1000 })
+    let telling = false
+    const tell = async () => {
+      if (telling) return
+      telling = true
+      await report(cfg, readState(cfg), machine, bounded)
+        .catch((error) =>
+          console.error(`Could not tell Status this run started: ${(error as Error).message}`),
+        )
+        .finally(() => {
+          telling = false
+        })
+    }
+    await tell()
+    const every = setInterval(() => void tell(), runReportSeconds * 1000)
+    try {
+      return await runUnderLock(env, args, lockFiles)
+    } finally {
+      clearInterval(every)
+    }
   }
   const state = readState(cfg)
   if (verb === 'list') return listCommand(rt, state, machine, args)
@@ -799,7 +824,11 @@ export async function scheduledEntries(
     }
   })
   if (machine === cfg.workstation)
-    markUnplugged(items, existsSync(join('/dev/disk/by-uuid', cfg.nativeDriveUuid)))
+    markUnplugged(
+      items,
+      existsSync(join('/dev/disk/by-uuid', cfg.nativeDriveUuid)),
+      Boolean(state.runs.native?.unpluggedAt),
+    )
   const result = await jobsRun
   let jobs: {
     kind: string

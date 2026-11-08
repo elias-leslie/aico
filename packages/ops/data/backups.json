@@ -77,7 +77,9 @@
     "freshLocalHours": 8,
     "freshDriveHours": 36,
     "freshAppendHours": 2,
-    "ownerUnreadMinutes": 30
+    "ownerUnreadMinutes": 30,
+    "runReportSeconds": 300,
+    "runReportTimeoutSeconds": 60
   },
   "pve": {
     "alias": "proxmox-gem",

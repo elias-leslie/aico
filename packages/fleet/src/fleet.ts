@@ -591,8 +591,13 @@ export class Fleet {
           s,
           peer,
           pins.find((pin) => pin.name === peer.name)?.role,
-          // A reading from before the peer's last contact (one that just dropped) is not evidence it is off.
-          reading && reading.at > (peer.lastSeen ?? 0) ? reading.value.get(peer.name) : undefined,
+          // A reading from before the peer's last contact (one that just dropped), or one too old, is
+          // not evidence it is off.
+          reading &&
+            reading.at > (peer.lastSeen ?? 0) &&
+            Date.now() - reading.at < (s.powerStaleMs ?? 30 * 60_000)
+            ? reading.value.get(peer.name)
+            : undefined,
           this.startedAt,
           this.runningSince.get(peer.name),
         ),
