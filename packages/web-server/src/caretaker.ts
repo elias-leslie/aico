@@ -55,6 +55,8 @@ export interface CaretakerState {
   calls: number
   /** Things said once a day (limit reached, no model answering). */
   said: string[]
+  /** When the routes were last checked (routeCheck). */
+  routesAt?: number
 }
 
 export const emptyState = (): CaretakerState => ({
@@ -214,6 +216,45 @@ export function parseAnswer(raw: unknown): Answer | null {
 
 const iso = (ms: number) => new Date(ms).toISOString()
 
+/** A daily look at both routes, since one sign-in carries several apps: which answer, in plain words. */
+export async function routeCheck(
+  policy: Policy,
+  via: {
+    sub(model: string, text: string): Promise<{ data?: unknown; text?: string; failed?: string }>
+    free(model: string, text: string): Promise<string>
+  },
+): Promise<{ state: 'ok' | 'warn' | 'failed'; meaning: string }> {
+  const check = 'Reply with exactly the word ready.'
+  const model = policy.models.at(-1) as string
+  const free = policy.free_tier_models.at(-1) as string
+  const sub = await via
+    .sub(model, check)
+    .catch((error: Error) => ({ failed: error.message, text: '' }))
+  const subUp = !sub.failed && Boolean(sub.text?.trim())
+  let freeWhy = ''
+  try {
+    await via.free(free, check)
+  } catch (error) {
+    freeWhy = (error as Error).message
+  }
+  if (subUp && !freeWhy)
+    return { state: 'ok', meaning: 'Antigravity and the Gemini free tier both answer.' }
+  if (subUp)
+    return {
+      state: 'warn',
+      meaning: `Antigravity answers; the free tier doesn't: ${maskSecrets(freeWhy)}`,
+    }
+  if (!freeWhy)
+    return {
+      state: 'warn',
+      meaning: `Antigravity doesn't answer, so its apps may fail and the caretaker runs on the free tier: ${maskSecrets(sub.failed ?? 'no answer')}. Sign in again with agy.`,
+    }
+  return {
+    state: 'failed',
+    meaning: `Neither Antigravity nor the free tier answers: ${maskSecrets(sub.failed ?? '')}; ${maskSecrets(freeWhy)}`,
+  }
+}
+
 /** One pass: note what's bad, look at earlier actions, act on what has settled. */
 export async function pass(
   policy: Policy,
@@ -311,6 +352,16 @@ export async function pass(
         what: 'no-model',
         text: `No model answered: ${answer.failed}`,
       })
+      // A serious row is told anyway: no model is no reason for silence. Anything else waits for one.
+      if (serious) {
+        const quiet: Episode = { at: now, action: 'none', verifyAt: now, stage: 'done' }
+        state.episodes[id] = quiet
+        await tell(
+          row,
+          quiet,
+          `${row.meaning ?? row.what} No model answered, so nothing was tried.`,
+        )
+      }
       continue
     }
     const { diagnosis, model } = answer

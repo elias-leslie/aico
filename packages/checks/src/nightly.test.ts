@@ -83,6 +83,18 @@ describe('nightly deep lane', () => {
     expect(result).toMatchObject({ passed: false, last: 'stopped after 0.2 s' })
   })
 
+  it('names what a passing live stage skipped', () => {
+    const smoke = {
+      id: 'live-smoke',
+      passed: true,
+      ms: 1,
+      last: 'live-smoke passed (skipped for provider limits: claude codex)',
+    }
+    expect(summary(gate(), [smoke], null)).toContain(
+      'live passed: live-smoke; live-smoke skipped for provider limits: claude codex.',
+    )
+  })
+
   it('says the gate time against last night, the slowest stages and what failed', () => {
     expect(summary(gate(), [{ id: 'ok', passed: true, ms: 1, last: '' }], 138_000)).toBe(
       'Nightly checks passed: gate passed in 142 s (last night 138 s) at abcdef1234; slowest vitest 87 s, tsc 7 s, biome 3 s. live passed: ok.',

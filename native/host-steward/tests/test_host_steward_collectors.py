@@ -243,7 +243,7 @@ def systemd(user_over=None, system_over=None, user_ok=True):
             return Result(1, "", "no bus")
         out = ""
         for unit in names:
-            if unit.startswith("aico"):
+            if unit.startswith(("aico", "tether")):
                 out += block(unit, LoadState="not-found", ActiveState="inactive")
             elif unit.endswith(".service") and unit == "nightshift-notify-critical.service":
                 out += block(
@@ -332,6 +332,17 @@ def test_floor_stopped_timer_and_masked_unit(tmp_path):
     assert "timer is stopped" in held.fields["why"] and "path is masked" in held.fields["why"]
 
 
+def test_floor_path_names_its_own_meaning(tmp_path):
+    run = systemd(user_ok=False)
+    state = {}
+    ctx = floor_ctx(tmp_path, run, state)
+    ctx.cfg["paths"][-1]["down_signal"] = "sessions.down"
+    floor.run(ctx)
+    later = floor_ctx(tmp_path, run, state, now=NOW + 11 * 60)
+    later.cfg["paths"][-1]["down_signal"] = "sessions.down"
+    assert codes(floor.run(later)) == [("sessions.down", "failed")]
+
+
 def test_floor_unreadable_user_manager(tmp_path):
     state = {}
     run = systemd(user_ok=False)
@@ -386,7 +397,7 @@ def test_floor_delivery_heartbeat(tmp_path):
     beat = tmp_path / "delivery.json"
     beat.write_text(json.dumps({"at": NOW - 3 * 3600}))
     ctx = floor_ctx(tmp_path, systemd(), {"Nightshift": {"delivery_watch_since": NOW - 3600 * 5}})
-    ctx.cfg["paths"][1]["delivery_file"] = str(beat)
+    ctx.cfg["paths"][-1]["delivery_file"] = str(beat)
     out = floor.run(ctx)
     assert (
         codes(out) == [("floor.down", "failed")]

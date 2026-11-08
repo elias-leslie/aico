@@ -376,8 +376,13 @@ what = "The {path} push path is down: {why}"
 impact = "Alerts to the owner's phone may not leave this host"
 next = "Restart the named units; check the journal for why they stopped"
 
+[signal."sessions.down"]
+what = "Sessions are down: {why}"
+impact = "Agent sessions can't start or open until Tether is back"
+next = "Restart the named units; check the journal for why they stopped"
+
 [signal."floor.watching:ok"]
-what = "The {path} push path is being watched: {why}"
+what = "{path} is being watched: {why}"
 
 [signal."floor.none"]
 what = "No push path is installed to judge"

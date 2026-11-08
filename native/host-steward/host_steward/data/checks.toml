@@ -249,6 +249,13 @@ optional_user_units = ["aico-jobs.service"]
 system_units = []
 skip_when_absent = true
 
+[[checks.floor.paths]]
+name = "Sessions"
+user_units = ["tether@default.service"]
+system_units = []
+down_signal = "sessions.down"
+skip_when_absent = true
+
 [checks.probes]
 what = "Workstation probes"
 every_min = 15

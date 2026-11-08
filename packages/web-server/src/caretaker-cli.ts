@@ -27,6 +27,7 @@ import {
   type Policy,
   type ProblemRow,
   pass,
+  routeCheck,
 } from './caretaker'
 
 const CARETAKER_USAGE = `Usage: aico caretaker <command>
@@ -113,16 +114,12 @@ const silenceBound: Post = (url, headers, body) =>
     req.end(body)
   })
 
-async function askModels(
-  policy: Policy,
-  io: CaretakerIo,
-  text: string,
-  skipSub: boolean,
-): Promise<ModelAnswer | { failed: string }> {
-  return askChain(skipSub ? { ...policy, models: [] } : policy, text, {
-    sub: async (model, question) => {
+/** The model routes, as `askChain` and `routeCheck` take them. */
+function routes(policy: Policy, io: CaretakerIo) {
+  return {
+    sub: async (model: string, question: string, schema?: unknown) => {
       const { outcome } = await ask(
-        { model, question, schema: ANSWER_SCHEMA, role: policy.role, cwd: io.dataDir },
+        { model, question, schema, role: policy.role, cwd: io.dataDir },
         {},
         io.env,
       )
@@ -130,8 +127,21 @@ async function askModels(
         ? { data: outcome.data, text: outcome.text }
         : { failed: `${outcome.kind}: ${'detail' in outcome ? outcome.detail : ''}` }
     },
-    free: async (model, question) =>
+    free: async (model: string, question: string) =>
       (await generate(model, [{ text: question }], { env: io.env, post: silenceBound })).text,
+  }
+}
+
+async function askModels(
+  policy: Policy,
+  io: CaretakerIo,
+  text: string,
+  skipSub: boolean,
+): Promise<ModelAnswer | { failed: string }> {
+  const via = routes(policy, io)
+  return askChain(skipSub ? { ...policy, models: [] } : policy, text, {
+    sub: (model, question) => via.sub(model, question, ANSWER_SCHEMA),
+    free: via.free,
   })
 }
 
@@ -211,6 +221,31 @@ function readLog(io: CaretakerIo): CaretakerEvent[] {
     .split('\n')
     .filter(Boolean)
     .map((line) => JSON.parse(line) as CaretakerEvent)
+}
+
+/** The routes row, once per route_check_hours. It must never stop a pass. */
+async function checkRoutes(io: CaretakerIo, policy: Policy, state: CaretakerState): Promise<void> {
+  const now = Date.now()
+  if (state.routesAt && now - state.routesAt < policy.route_check_hours * 3600_000) return
+  state.routesAt = now
+  const { state: shown, meaning } = await routeCheck(policy, routes(policy, io))
+  await postStatusRows(
+    io.baseUrl,
+    [
+      {
+        id: `${machineId()}/model-routes`,
+        what: 'Antigravity sign-in and free tier',
+        kind: 'check',
+        machine: machineId(),
+        project: 'aico',
+        state: shown,
+        meaning: meaning.slice(0, 800),
+        last_run: new Date(now).toISOString(),
+        actions: [{ kind: 'log', ref: 'aico caretaker log' }],
+      },
+    ],
+    { timeoutMs: 5000 },
+  )
 }
 
 async function drillRow(io: CaretakerIo, state: 'failed' | 'ok', meaning: string): Promise<void> {
@@ -305,6 +340,8 @@ export async function runCaretakerCli(argv: string[], io: CaretakerIo): Promise<
   const state = load(io)
   try {
     await pass(POLICY, state, deps(io, POLICY))
+    save(io, state)
+    await checkRoutes(io, POLICY, state)
     save(io, state)
     await report(io, state)
     return 0

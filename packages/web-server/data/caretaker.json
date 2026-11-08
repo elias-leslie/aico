@@ -6,6 +6,7 @@
   "settle_minutes": 10,
   "verify_minutes": 10,
   "retry_after_hours": 24,
+  "route_check_hours": 24,
   "max_actions_per_day": 6,
   "max_model_calls_per_day": 20,
   "evidence_bytes": 12000,
@@ -29,7 +30,7 @@
     "deploy:*",
     "ominull.*"
   ],
-  "serious": ["*/check-storage", "*/check-floor"],
+  "serious": ["*/check-storage", "*/check-floor", "*/check-pve", "*/check-guests"],
   "evidence": [
     "^journalctl( --user)? -u [A-Za-z0-9@._-]+( -g [A-Za-z0-9_-]+)?( -n [0-9]+)?( --no-pager)?$",
     "^aico routines log [A-Za-z0-9@._-]+$"
@@ -109,7 +110,7 @@
     {
       "id": "rerun-wip-mirror",
       "what": "Run this routine again",
-      "rows": ["jobs/wip-mirror-*"],
+      "rows": ["jobs/wip-mirror-davion-sidarli"],
       "argv": ["aico", "routines", "run", "wip-mirror-davion-sidarli"]
     },
     {

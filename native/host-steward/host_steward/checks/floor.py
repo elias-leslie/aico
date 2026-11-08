@@ -6,7 +6,7 @@ signal and nothing is sent. The drill (floor-drill) is not ported.
 
 Each [[checks.floor.paths]] entry in checks.toml is one push path: the user and system units it needs, an optional
 heartbeat unit (its last good finish must be recent) and an optional delivery heartbeat file. A path with
-skip_when_absent is not judged until one of its units exists (Aico's before it is installed); optional_units are
+down_signal names its own meaning when it is no phone path; skip_when_absent is not judged until one of its units exists (Aico's before it is installed); optional_units are
 judged only when installed. A cause that is already time-based (a stale heartbeat) counts at once; the others must
 hold on two passes confirm_min apart, so a restart never fails the row. The clock for "stale" starts at the latest of
 the last success, a run in progress, boot and when this check first watched.
@@ -232,7 +232,7 @@ def run(ctx: Ctx) -> list[Signal]:
         if held:
             signals.append(
                 Signal(
-                    "floor.down",
+                    conf.get("down_signal", "floor.down"),
                     "failed",
                     {"path": name, "why": "; ".join(text for _c, text in held)},
                 )

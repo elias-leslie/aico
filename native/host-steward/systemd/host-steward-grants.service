@@ -1,4 +1,5 @@
 [Unit]
+StartLimitIntervalSec=0
 Description=Aico access grants
 After=network.target
 
@@ -7,7 +8,8 @@ Type=simple
 ExecStart=/usr/local/lib/host-steward/host-steward grants-serve
 RuntimeDirectory=host-steward
 RuntimeDirectoryMode=0755
-Restart=on-failure
+Restart=always
+RestartSec=2
 UMask=0077
 
 [Install]

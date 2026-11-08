@@ -11,6 +11,7 @@ import {
   parseAnswer,
   pass,
   question,
+  routeCheck,
 } from './caretaker'
 
 const POLICY_FOR_TEST: Policy = {
@@ -291,5 +292,40 @@ describe('caretaker question and answers', () => {
       if (action.argv[0] === 'sudo')
         expect(action.argv.slice(1, 5)).toEqual(['-n', 'systemctl', '--no-ask-password', 'start'])
     }
+  })
+})
+
+describe('caretaker route check', () => {
+  const up = { sub: async () => ({ text: 'ready' }), free: async () => 'ready' }
+  const subDown = { ...up, sub: async () => ({ failed: 'signed out' }) }
+  const freeDown = {
+    ...up,
+    free: async () => {
+      throw new Error('quota')
+    },
+  }
+  it('says which route answers', async () => {
+    expect((await routeCheck(POLICY, up)).state).toBe('ok')
+    expect(await routeCheck(POLICY, subDown)).toMatchObject({
+      state: 'warn',
+      meaning: expect.stringContaining('signed out'),
+    })
+    expect(await routeCheck(POLICY, freeDown)).toMatchObject({
+      state: 'warn',
+      meaning: expect.stringContaining('quota'),
+    })
+    expect((await routeCheck(POLICY, { ...subDown, free: freeDown.free })).state).toBe('failed')
+  })
+})
+
+describe('caretaker with no model', () => {
+  it('still tells the owner about a serious row', async () => {
+    const disk = { ...job, id: 'here/check-storage', what: 'Disk', kind: 'check' as const }
+    const h = harness([disk, job], () => ({ failed: 'all down' }))
+    await h.go()
+    h.advance(10)
+    await h.go()
+    expect(h.notices.length).toBe(1)
+    expect(h.notices[0]).toMatchObject({ interrupt: 'needs-you' })
   })
 })

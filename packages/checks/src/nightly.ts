@@ -111,6 +111,15 @@ const headSha = (root: string) => git(root, ['rev-parse', 'HEAD^{commit}']).trim
 
 const seconds = (ms: number) => `${Math.round(ms / 1000)} s`
 
+/** What a live stage passed without running: "passed" alone would hide a test with no model exercised. */
+const skips = (deep: DeepResult[]) =>
+  deep
+    .flatMap((result) => {
+      const said = result.last.match(/\((skipped[^)]*)\)/)?.[1]
+      return said ? [`; ${result.id} ${said}`] : []
+    })
+    .join('')
+
 /** The Status sentence: gate time (and last night's), slowest stages, live results, failures. */
 export function summary(gate: GateResult, deep: DeepResult[], previousMs: number | null): string {
   const failedStages = gate.results.filter(
@@ -131,7 +140,7 @@ export function summary(gate: GateResult, deep: DeepResult[], previousMs: number
     ? 'no live checks declared'
     : deepFailed.length
       ? `live failed: ${deepFailed.map((r) => `${r.id} (${r.last.slice(0, 80)})`).join('; ')}`
-      : `live passed: ${deep.map((r) => r.id).join(', ')}`
+      : `live passed: ${deep.map((r) => r.id).join(', ')}${skips(deep)}`
   const ok = gate.passed && !gate.refused && !deepFailed.length
   return `Nightly checks ${ok ? 'passed' : 'failed'}: ${gateText}. ${deepText}.`
 }

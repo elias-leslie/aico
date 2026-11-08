@@ -23,7 +23,7 @@ WorkingDirectory=__PROJECT_ROOT__/packages/tether
 # "-": a missing release never keeps the installed daemon from starting.
 ExecStartPre=-__PROJECT_ROOT__/packages/tether/scripts/install-release.sh
 ExecStart=%h/.local/lib/tether/bin/tether --instance default serve
-Restart=on-failure
+Restart=always
 RestartSec=2
 UMask=0077
 Environment=PATH=%h/.claude/bin:%h/.codex/bin:%h/bin:%h/.local/bin:%h/.cargo/bin:/usr/local/bin:/usr/bin:/bin

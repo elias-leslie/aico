@@ -21,7 +21,7 @@ After=podman-user-wait-network-online.service
 Type=simple
 Slice=app.slice
 ExecStart=%h/.local/lib/tether/bin/tether --instance %i serve
-Restart=on-failure
+Restart=always
 RestartSec=2
 UMask=0077
 # Panes inherit this PATH, so agent CLIs resolve identically from Aico web and
