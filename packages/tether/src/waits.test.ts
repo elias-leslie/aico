@@ -1,5 +1,6 @@
 import { adoptLineage, bindCatalog, insertWidget, removeWidget } from '@aico/session-engine/catalog'
 import { Store } from '@aico/session-engine/store'
+import { BACKGROUND_SHELLS } from '@aico/session-engine/tui/adapters/contract'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LaneReporter, LaneReportStore, type LaneView } from './lane-reports'
 import type { PullRead } from './wait-kinds'
@@ -332,6 +333,60 @@ describe('sessionVerdict', () => {
   })
 })
 
+describe('--until finished and background shells', () => {
+  const SHELLS = BACKGROUND_SHELLS
+  const lane = (overrides: Partial<LaneView>) =>
+    view({ state: 'idle', stateAgentAt: 200, ...overrides })
+
+  it('an idle with them running is not finished until the hold runs out; --until idle does not wait', () => {
+    const at = 1_000_000
+    const hold = DEFAULT_WAKE_POLICY.laneBackgroundHoldSeconds * 1000
+    const running = lane({ stateAt: at, stateDetail: SHELLS })
+    const verdict = (until: string, now: number) =>
+      sessionVerdict({ until, since: 100 }, running, false, DEFAULT_WAKE_POLICY, now)
+    expect(verdict('finished', at + 60_000)).toEqual({ outcome: null, recheckAt: at + hold })
+    expect(verdict('finished', at + hold).outcome).toBe('until')
+    expect(verdict('idle', at + 60_000).outcome).toBe('until')
+    const clean = lane({ stateAt: at, stateDetail: null })
+    expect(
+      sessionVerdict(
+        { until: 'finished', since: 100 },
+        clean,
+        false,
+        DEFAULT_WAKE_POLICY,
+        at + 60_000,
+      ).outcome,
+    ).toBe('until')
+  })
+
+  it('the line says what it is, and a finished one quotes the session', () => {
+    const base = {
+      ref: LANE,
+      host: null,
+      until: 'finished',
+      note: null,
+      armedAt: 0,
+      cursor: {
+        state: 'idle' as const,
+        detail: SHELLS,
+        title: 'TEST lane',
+        requestId: 'test-lane',
+      },
+    }
+    expect(waitLine(base, 'until', 1)).toBe(
+      '[Ready] session "TEST lane" (req test-lane) went idle; background shells still running · st aico root status test-lane',
+    )
+    expect(waitLine({ ...base, until: 'idle' }, 'until', 1)).toContain(
+      'is idle; background shells still running',
+    )
+    expect(
+      waitLine({ ...base, cursor: { ...base.cursor, detail: null } }, 'until', 1, 'All done.'),
+    ).toBe(
+      '[Ready] session "TEST lane" (req test-lane) finished its turn · st aico root report test-lane · says: All done.',
+    )
+  })
+})
+
 describe('waitLine', () => {
   const base = {
     ref: LANE,
@@ -344,13 +399,13 @@ describe('waitLine', () => {
 
   it('names the session, the outcome and the command to look with', () => {
     expect(waitLine(base, 'until', T0)).toBe(
-      '[Ready] session "TEST lane" (req test-lane) went idle · st aico root status test-lane',
+      '[Ready] session "TEST lane" (req test-lane) finished its turn · st aico root status test-lane',
     )
     expect(waitLine(base, 'gone', T0)).toBe(
-      '[Wait over] session "TEST lane" (req test-lane) ended before it went idle · st aico root status test-lane',
+      '[Wait over] session "TEST lane" (req test-lane) ended before it finished · st aico root status test-lane',
     )
     expect(waitLine(base, 'timeout', T0 + 2 * 3600_000)).toBe(
-      '[Wait timed out] session "TEST lane" (req test-lane) not idle yet after 2h: it is working · st aico root status test-lane',
+      '[Wait timed out] session "TEST lane" (req test-lane) not finished after 2h: it is working · st aico root status test-lane',
     )
   })
 
@@ -393,7 +448,7 @@ describe('WaitService', () => {
       {
         to: WAITER,
         source: `wait:${wait.id}`,
-        line: '[Ready] session "TEST lane" (req test-lane) went idle · st aico root status test-lane',
+        line: '[Ready] session "TEST lane" (req test-lane) finished its turn · st aico root status test-lane',
       },
     ])
     h.waits.check()
@@ -433,7 +488,7 @@ describe('WaitService', () => {
     expect(over.state).toBe('timed_out')
     expect(over.outcome).toBe('timeout')
     expect(h.delivered.map((item) => item.line)).toEqual([
-      '[Wait timed out] session "TEST lane" (req test-lane) not idle yet after 2m: it is working · re: "store lane" · st aico root status test-lane',
+      '[Wait timed out] session "TEST lane" (req test-lane) not finished after 2m: it is working · re: "store lane" · st aico root status test-lane',
     ])
   })
 
@@ -548,7 +603,7 @@ describe('WaitService', () => {
     expect(h.waits.store.get(finished.wait.id)?.outcome).toBe('gone')
     expect(h.delivered.map((item) => item.line).sort()).toEqual([
       '[Ready] session "TEST lane" (req test-lane) ended · st aico root status test-lane',
-      '[Wait over] session "TEST lane" (req test-lane) ended before it went idle · st aico root status test-lane',
+      '[Wait over] session "TEST lane" (req test-lane) ended before it finished · st aico root status test-lane',
     ])
   })
 

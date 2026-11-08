@@ -20,7 +20,11 @@
 //   the deploy is reported. `st aico watch` adds an explicit watch and
 //   `st aico unwatch` an exception.
 // - Finished is the agent's own clock, not Tether's edges: idle with a
-//   `stateAgentAt` later than the last report, held `laneSettleSeconds`. It
+//   `stateAgentAt` later than the last report, held `laneSettleSeconds`, and no
+//   background shells of its own still running. Those hold the line: their end
+//   starts its next turn. Past `laneBackgroundHoldSeconds` the line goes out
+//   saying they still run (a dev server left behind must not hide a finished
+//   lane), and it does not count as a repeat. It
 //   catches turns too short for the poll and turns during a Tether restart,
 //   and the persisted cursor never repeats one. A lane that waits on a
 //   check-in of its own is not finished; a new generation (recovery, respawn,
@@ -31,7 +35,9 @@
 //   repeat up to `laneRepeatQuietMaxSeconds`: a lane waiting on its own work
 //   with short turns in between stays quiet, one that stalls is heard within
 //   the cap. A send or wait from the receiver, a new generation, blocked or
-//   ended starts over at the normal floor.
+//   ended starts over at the normal floor. Once that quiet has passed the line
+//   wakes its receiver: a coordinator with nothing else to do would otherwise
+//   never learn the lane is done.
 // - Blocked fires for a permission prompt or a question held
 //   `laneBlockedSeconds`, never for `dialog open`.
 // - Ended comes from the sessions delete trigger (lane_outbox, written in the
@@ -50,15 +56,12 @@
 //   withdraws its queued wait lines; those report the same handled work. A
 //   root spared only because its helper ended the lane keeps its own wait.
 //
-// - A went-idle line the receiver does not need is dropped: the lane told
+// - A finished line the receiver does not need is dropped: the lane told
 //   that receiver with a request (`st sessions send`; never an ack, which may
 //   open a turn of work) during the turn that just ended, so it heard from the
-//   lane already (the explicit message carries the report path). A repeat went-idle line
-//   (the receiver neither sent to the lane, by a root send or a coordination
-//   message or ack, nor armed a wait since the last one)
-//   is ride-along: it never wakes the receiver on its own, and joins its next
-//   wake or natural turn. Finished, blocked, ended and model lines are wake
-//   class otherwise.
+//   lane already (the explicit message carries the report path).
+// - A finished line carries the lane's last message, cleaned and cut to
+//   `laneClosingMaxChars`, so the coordinator needn't go and read the lane.
 //
 // Each report is one event line queued on the receiver's delivery queue
 // (wakes, kind `event`): pasted once the agent is idle, nobody is typing and
@@ -66,6 +69,7 @@
 
 import { AGENT_STATES, type AgentState } from '@aico/session-engine/agent-state'
 import type { Db } from '@aico/session-engine/store'
+import { BACKGROUND_SHELLS } from '@aico/session-engine/tui/adapters/contract'
 import { HttpError, onlyFields, type Router, readJsonObject, sendJson } from '@aico/shared/http'
 import { type ModelSwitch, modelSwitchOf, modelSwitchText } from './model-switch'
 
@@ -169,7 +173,8 @@ export function laneTitle(raw: string, max = TITLE_MAX_CHARS): string {
   return title || 'untitled'
 }
 
-/** What a report's line names: never agent reply text. */
+/** What a report's line names. The only agent reply text a line carries is a finished lane's
+ * last message (`closingWords`). */
 export interface LaneSnapshot {
   id: string
   host: string | null
@@ -184,20 +189,45 @@ export interface LaneSnapshot {
 export function laneLine(
   outcome: LaneOutcome,
   lane: LaneSnapshot,
-  extra: { minutes?: number | null; detail?: string | null; exited?: boolean } = {},
+  extra: {
+    minutes?: number | null
+    detail?: string | null
+    exited?: boolean
+    /** Its background shells still run (the hold ran out). */
+    shells?: boolean
+    /** Its last message, already cleaned (`closingWords`). */
+    closing?: string | null
+  } = {},
 ): string {
+  const after = extra.minutes && extra.minutes >= 1 ? ` after ${extra.minutes}m` : ''
   const what =
-    // "went idle", not "finished": an idle lane may only be waiting on its own
-    // check; Tether can't tell done from paused until the lane ends.
     outcome === 'finished'
-      ? `went idle${extra.minutes && extra.minutes >= 1 ? ` after ${extra.minutes}m` : ''}`
+      ? extra.shells
+        ? `went idle${after}; background shells still running`
+        : `finished its turn${after}`
       : outcome === 'blocked'
         ? `is blocked: ${extra.detail && BLOCKING_DETAILS.has(extra.detail) ? extra.detail : 'waiting on input'}`
         : extra.exited
           ? 'has no running agent; the session is still open'
           : 'ended'
-  const { name, look } = lineNames(lane)
+  const { name, look, report } = lineNames(lane)
+  if (outcome === 'finished' && extra.closing)
+    return `[Ready] lane ${name} ${what} · ${report} · says: ${extra.closing}`
   return `[Ready] lane ${name} ${what} · ${look}`
+}
+
+/** An agent's last message as a line carries it: one line, no control or direction marks, at
+ * most `max` characters. Last in the line, so a delivery cut loses only its tail. */
+export function closingWords(text: string | null | undefined, max: number): string | null {
+  if (!text || max <= 0) return null
+  const flat = text
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping them is the point
+    .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069]+/g, ' ')
+    .replace(/ {2,}/g, ' ')
+    .trim()
+  if (!flat) return null
+  const chars = [...flat]
+  return chars.length > max ? `${chars.slice(0, max).join('')}…` : flat
 }
 
 /** The one line a model switch gets (src/model-switch.ts). */
@@ -215,13 +245,16 @@ export function lineNames(lane: {
   host: string | null
   title: string
   requestId: string | null
-}): { name: string; look: string } {
+}): { name: string; look: string; report: string } {
   const host = lane.host && HOST_NAME.test(lane.host) ? ` on ${lane.host}` : ''
   const request = lane.requestId && REQUEST_ID.test(lane.requestId) ? lane.requestId : null
   return {
     name: `"${laneTitle(lane.title)}"${host}${request ? ` (req ${request})` : ''}`,
     look: request
       ? `st aico root status ${request}`
+      : `st aico widget status --widget-id ${lane.id}`,
+    report: request
+      ? `st aico root report ${request}`
       : `st aico widget status --widget-id ${lane.id}`,
   }
 }
@@ -507,6 +540,8 @@ export interface LaneReportPolicy {
   laneFinishedFloorSeconds: number
   laneRepeatQuietSeconds: number
   laneRepeatQuietMaxSeconds: number
+  laneBackgroundHoldSeconds: number
+  laneClosingMaxChars: number
 }
 
 /** A local session's lineage, for receivers and watch cycles. */
@@ -528,8 +563,10 @@ export interface LaneReportOperations {
   /** Local sessions' lineage (watch cycles, lineage receivers). */
   sessions(): LocalLineage[]
   /** Queue one line on the receiver's delivery queue (coalescing by source).
-   * `ride`: ride-along class, which never wakes the receiver on its own. */
-  deliver(receiver: string, source: string, line: string, ride?: boolean): void
+   */
+  deliver(receiver: string, source: string, line: string): void
+  /** A local lane's last message, as it wrote it; null when none can be read. */
+  closing?(lane: string): string | null
   /** Whether the lane (a session here) told `receiver` with a wake-class
    * message at or after `since` (src/wake-runtime.ts `toldSince`). */
   told?(lane: string, receiver: string, since: number): boolean
@@ -539,7 +576,7 @@ export interface LaneReportOperations {
   /** An End's informed receivers no longer need waits on this session. */
   handled(lane: string, host: string | null, receivers: readonly string[]): void
   /** Whether one of `by` sent to this lane (`inject` with `from`) or armed a
-   * wait on it after `since`: it acted on the lane, so its next went-idle line
+   * wait on it after `since`: it acted on the lane, so its next finished line
    * is no repeat. */
   acted(lane: string, host: string | null, by: readonly string[], since: number): boolean
   /** A local lane's agent has left its pane for good: a clean exit, or crash
@@ -558,7 +595,7 @@ export interface LaneReportOperations {
   ): Set<string>
   /** A lane's model switch had no receiver (the owner's notice takes it). */
   unheard?(lane: string): void
-  /** The lane went idle waiting on something of its own (no went-idle line):
+  /** The lane went idle waiting on something of its own (no finished line):
    * its still-queued ride-along replies to `receivers` become wakes. Returns
    * the receivers whose line did. */
   promoteReplies?(lane: string, receivers: readonly string[]): string[]
@@ -606,7 +643,7 @@ function laneWhere(lane: { id: string; host: string | null }): string {
   return lane.host ? `${lane.host}/${lane.id}` : lane.id
 }
 
-/** How long a went-idle line must hold idle after `streak` lines with no
+/** How long a finished line must hold idle after `streak` lines with no
  * act from the receiver: none extra for the first, then the quiet doubling
  * per repeat up to its cap. */
 function repeatQuietMs(
@@ -738,10 +775,10 @@ export class LaneReporter {
   /**
    * Something reached this local lane: a line pasted into it or taken by it
    * (not a check-in or wait line it set itself), a send typed into it, or its
-   * own reply to a message. Its next went-idle line is a first line (a wake),
+   * own reply to a message. Its next finished line is a first line (a wake),
    * never a ride-along repeat: what reached it may be work whose end its
    * receivers still need to hear. Counted when the lane got it, not when it
-   * was sent: a request sent before the lane's last went-idle line but pasted
+   * was sent: a request sent before the lane's last finished line but pasted
    * after it must still wake.
    */
   reached(lane: string, why: string): void {
@@ -764,7 +801,7 @@ export class LaneReporter {
     if (cursor.finishedStreak === 0 && !marked) return
     cursor.finishedStreak = 0
     this.store.save(cursor, this.ops.now())
-    this.ops.log(`lane=${lane} ${why}: its next went-idle line is a first line`)
+    this.ops.log(`lane=${lane} ${why}: its next finished line is a first line`)
   }
 
   /** A session descriptor arrived (created or updated, local or relayed). */
@@ -979,7 +1016,7 @@ export class LaneReporter {
         memory.workingSeenAt = null
         memory.heldIdleAt = 0
         if (view.waitingOn) {
-          // No went-idle line carries a ride-along reply it sent this turn (a
+          // No finished line carries a ride-along reply it sent this turn (a
           // noted yes to its launcher): that reply wakes its receiver now,
           // not when the lane's own wait fires.
           const promoted =
@@ -1012,17 +1049,22 @@ export class LaneReporter {
         }
       }
       const quiet = repeatQuietMs(policy, streak)
-      const settle = Math.max(policy.laneSettleSeconds * 1000, quiet) - held
+      // Not finished while its own background shells run; past the hold, it says they do.
+      const shells = view.stateDetail === BACKGROUND_SHELLS
+      const hold = shells ? policy.laneBackgroundHoldSeconds * 1000 : 0
+      const settle = Math.max(policy.laneSettleSeconds * 1000, quiet, hold) - held
       const floor = cursor.finishedSentAt
         ? policy.laneFinishedFloorSeconds * 1000 - (now - cursor.finishedSentAt)
         : 0
       const remaining = Math.max(settle, floor)
       if (remaining > 0) {
         wait = remaining
-        if (quiet > 0 && memory.holdLogged !== view.stateAgentAt) {
+        if ((quiet > 0 || hold > 0) && memory.holdLogged !== view.stateAgentAt) {
           memory.holdLogged = view.stateAgentAt
           this.ops.log(
-            `lane=${laneWhere(view)} idle again: repeat ${streak} goes out after ${Math.round(quiet / 1000)}s quiet`,
+            hold > 0
+              ? `lane=${laneWhere(view)} idle with background shells running: held up to ${Math.round(hold / 1000)}s`
+              : `lane=${laneWhere(view)} idle again: repeat ${streak} goes out after ${Math.round(quiet / 1000)}s quiet`,
           )
         }
       } else {
@@ -1048,18 +1090,26 @@ export class LaneReporter {
               agentAt: view.stateAgentAt,
             },
             snapshotOf(view),
-            { minutes },
+            {
+              minutes,
+              shells,
+              closing:
+                view.host === null
+                  ? closingWords(this.ops.closing?.(view.id), policy.laneClosingMaxChars)
+                  : null,
+            },
             null,
-            { toldSince, ride: streak > 0 },
+            { toldSince },
           )
           cursor.finishedAt = view.stateAgentAt
-          // A turn the lane reported itself is no went-idle line sent: it
+          // A turn the lane reported itself is no finished line sent: it
           // neither starts the floor nor counts toward the repeat backoff.
           // A line for an idle from before something reached the lane leaves
-          // the streak at 0: the idle after it is still a first line.
+          // the streak at 0: the idle after it is still a first line, as is
+          // the turn after a line that said its background shells still run.
           if (!told) {
             cursor.finishedSentAt = now
-            if (!beforeReach) cursor.finishedStreak += 1
+            if (!beforeReach && !shells) cursor.finishedStreak += 1
           }
           this.store.save(cursor, now)
         })
@@ -1163,7 +1213,7 @@ export class LaneReporter {
     lane: LaneSnapshot,
     extra: Parameters<typeof laneLine>[2] = {},
     endedBy: string | null = null,
-    delivery: { toldSince?: number; ride?: boolean } = {},
+    delivery: { toldSince?: number } = {},
   ): boolean {
     const { outcome } = event
     const all = this.receivers(lane)
@@ -1179,7 +1229,7 @@ export class LaneReporter {
     let receivers = left.filter((id) => !heard.has(id))
     let toldAll = false
     if (heard.size) skipped += ` (heard from its wait: ${[...heard].join(',')})`
-    // A went-idle line after the lane told the receiver in that turn adds nothing.
+    // A finished line after the lane told the receiver in that turn adds nothing.
     if (
       outcome === 'finished' &&
       lane.host === null &&
@@ -1199,12 +1249,8 @@ export class LaneReporter {
       return toldAll
     }
     const line = laneLine(outcome, lane, extra)
-    const ride = delivery.ride === true
-    for (const receiver of receivers)
-      this.ops.deliver(receiver, `lane:${where}:${outcome}`, line, ride)
-    this.ops.log(
-      `lane=${where} ${outcome} -> ${receivers.join(',')}${ride ? ' (ride-along: repeat)' : ''}${skipped}`,
-    )
+    for (const receiver of receivers) this.ops.deliver(receiver, `lane:${where}:${outcome}`, line)
+    this.ops.log(`lane=${where} ${outcome} -> ${receivers.join(',')}${skipped}`)
     return false
   }
 

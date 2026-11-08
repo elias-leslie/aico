@@ -4,6 +4,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { hostname } from 'node:os'
+import { Catalog } from '@aico/context'
 import type { Hub } from '@aico/fleet/hub/hub'
 import {
   AUTO_HOST,
@@ -350,6 +351,8 @@ function descriptor(row: WidgetRow, status: SessionStatus): Record<string, unkno
     host: null,
   }
 }
+
+const MODEL_CATALOG = new Catalog()
 
 const HOOK_EVENTS = new Set(ADAPTERS.flatMap((adapter) => adapter.hooks.stateReports))
 
@@ -1257,6 +1260,28 @@ function registerTerminalReadRoutes(router: Router, context: LifecycleApiContext
         throw new HttpError(409, 'workload_unavailable')
       }
       sendJson(res, 200, { generation: generationOf(row), text })
+    })
+    // The agent's last message and context fill, for a coordinator reading a lane. An ended
+    // session's transcript stays readable, so its report does too.
+    .add('GET', '/v1/sessions/:id/report', (_req, res, params) => {
+      const id = params.id ?? ''
+      if (!/^[0-9a-f]{8}$/.test(id)) throw new HttpError(404, 'not_found')
+      const tool = getWidget(id)?.tool
+      const closing = context.history?.closingMessage(id, tool) ?? null
+      const { tokens, model } = context.history?.contextOf(id, tool) ?? {
+        tokens: null,
+        model: null,
+      }
+      const window = model ? (MODEL_CATALOG.get(model)?.context_window ?? null) : null
+      sendJson(res, 200, {
+        id,
+        text: closing?.text ?? null,
+        at: closing?.at ?? null,
+        contextTokens: tokens,
+        contextWindow: window,
+        contextPercent: tokens !== null && window ? Math.round((tokens / window) * 100) : null,
+        model,
+      })
     })
     // The sign-in link on a `Sign in: <tool>` session's screen, joined into one
     // URL; `url` is null until the tool has printed it. 404 for any other session.

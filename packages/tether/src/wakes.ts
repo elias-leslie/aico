@@ -40,6 +40,12 @@ export interface WakePolicy {
   laneRepeatQuietSeconds: number
   /** Lane reports: the most quiet a repeat needs (the doubling's cap). */
   laneRepeatQuietMaxSeconds: number
+  /** Lane reports and `--until finished`: how long an idle agent with background shells still
+   * running is held as not finished; after this it is reported as idle with them running. */
+  laneBackgroundHoldSeconds: number
+  /** Lane reports and session waits: the most of a finished agent's last message a line
+   * carries (the rest is in `st aico root report`); 0 leaves it out. */
+  laneClosingMaxChars: number
   /** Waits: the deadline when none is given. */
   waitDefaultMinutes: number
   /** Waits: the furthest deadline. */
@@ -64,6 +70,8 @@ export const DEFAULT_WAKE_POLICY: Readonly<WakePolicy> = Object.freeze({
   laneFinishedFloorSeconds: 120,
   laneRepeatQuietSeconds: 600,
   laneRepeatQuietMaxSeconds: 1800,
+  laneBackgroundHoldSeconds: 1800,
+  laneClosingMaxChars: 1200,
   waitDefaultMinutes: 1440,
   waitMaxMinutes: 10080,
   maxWaitsPerSession: 20,
@@ -85,6 +93,8 @@ const WAKE_POLICY_BOUNDS: Readonly<Record<keyof WakePolicy, { min: number; max: 
     laneFinishedFloorSeconds: { min: 0, max: 3600 },
     laneRepeatQuietSeconds: { min: 0, max: 3600 },
     laneRepeatQuietMaxSeconds: { min: 0, max: 14400 },
+    laneBackgroundHoldSeconds: { min: 0, max: 14400 },
+    laneClosingMaxChars: { min: 0, max: 1500 },
     waitDefaultMinutes: { min: 1, max: 10080 },
     waitMaxMinutes: { min: 1, max: 43200 },
     maxWaitsPerSession: { min: 1, max: 100 },

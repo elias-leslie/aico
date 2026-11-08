@@ -28,6 +28,9 @@ import type { ContextHook, ContextStatus, TuiSpec } from '../spec'
  * on busy work (reboot, lane reports); only the gated wake paste treats it
  * as able to take a line (wake-runtime.ts). */
 export const MAIN_TURN_OVER = 'main turn over, background work running'
+/** The `stateDetail` of an idle agent whose turn is over with background shells of its own still
+ * running: their finish starts its next turn, so it is not finished yet. It still takes lines. */
+export const BACKGROUND_SHELLS = 'background shells running'
 
 /** What a state search has to look with. `seams` holds per-adapter test
  * seams, keyed by adapter id. */

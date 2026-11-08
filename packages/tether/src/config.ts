@@ -36,11 +36,13 @@
  *     filed it when an app did (schema 35).
  * 32: `attach` on `POST /v1/asks` (paths linked as a share), `attached` on the ask: those
  *     files as they are on disk now.
+ * 33: `GET /v1/sessions/:id/report`: the agent's last message and context fill; the idle
+ *     detail `background shells running`; `laneBackgroundHoldSeconds` and `laneClosingMaxChars`.
  *
  * A bump also changes EXPECTED_TETHER_API_VERSION in packages/tether-client (config.test.ts keeps
  * them equal): a deploy restarts Tether when its code changed, and the web server names a daemon
  * older than that. */
-export const API_VERSION = 32
+export const API_VERSION = 33
 
 /** Where Aico's web server listens on this host (`AICO_WEB_URL` overrides it). */
 export const AICO_WEB_DEFAULT_URL = 'http://127.0.0.1:3002'

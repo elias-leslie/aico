@@ -20,7 +20,7 @@ import {
 import type { AgentObservation, FileTail, ProcFs } from '../../../proc-fs'
 import { nodeFileTail, UUID_RE } from '../../../proc-fs'
 import type { ContextStatus, TuiSpec } from '../spec'
-import { type AgentProbe, MAIN_TURN_OVER, type TuiAdapter } from './contract'
+import { type AgentProbe, BACKGROUND_SHELLS, MAIN_TURN_OVER, type TuiAdapter } from './contract'
 
 // --- state ------------------------------------------------------------------
 
@@ -141,7 +141,8 @@ export function findClaude(fs: ProcFs, home: string, pids: number[]): ClaudeProc
   return null
 }
 
-/** Claude's status: busy → working, waiting → blocked, idle or shell → idle. */
+/** Claude's status: busy → working, waiting → blocked, idle → idle, shell (its turn is over, a
+ * background shell still runs) → idle with BACKGROUND_SHELLS. */
 export function claudeSignal(text: string): AgentSignal | null {
   let state: Record<string, unknown>
   try {
@@ -164,8 +165,9 @@ export function claudeSignal(text: string): AgentSignal | null {
         detail: typeof state.waitingFor === 'string' ? state.waitingFor : 'waiting',
       }
     case 'idle':
-    case 'shell':
       return { ...base, state: 'idle', detail: null }
+    case 'shell':
+      return { ...base, state: 'idle', detail: BACKGROUND_SHELLS }
     default:
       return null
   }

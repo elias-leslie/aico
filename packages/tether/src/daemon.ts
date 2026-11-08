@@ -547,11 +547,13 @@ function startLaneReports(
             parentId: row.parentId,
             launched: row.launched,
           })),
-        deliver: (receiver, source, line, ride) => {
+        deliver: (receiver, source, line) => {
           const now = Date.now()
-          wakes.store.addEvent({ sessionId: receiver, source, note: line, now, ride })
+          wakes.store.addEvent({ sessionId: receiver, source, note: line, now })
           wakes.changed(receiver)
         },
+        closing: (lane) =>
+          context.history?.closingMessage(lane, getWidget(lane)?.tool)?.text ?? null,
         told: (lane, receiver, since) => wakes.toldSince(lane, receiver, since),
         promoteReplies: (lane, receivers) => wakes.promoteReplies(lane, receivers),
         withdraw: (receiver, source) => wakes.withdrawEvents(receiver, source).withdrawn,
@@ -678,6 +680,7 @@ function startWaits(
           }
           return false
         },
+        closing: (id) => context.history?.closingMessage(id, getWidget(id)?.tool)?.text ?? null,
         view: (id, host) => {
           if (host === null) {
             const row = getWidget(id)

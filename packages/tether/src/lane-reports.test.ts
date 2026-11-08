@@ -8,8 +8,10 @@ import {
   setCoordinator,
 } from '@aico/session-engine/catalog'
 import { Store } from '@aico/session-engine/store'
+import { BACKGROUND_SHELLS } from '@aico/session-engine/tui/adapters/contract'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  closingWords,
   LaneReporter,
   type LaneReportOperations,
   LaneReportStore,
@@ -76,11 +78,18 @@ function view(overrides: Partial<LaneView> = {}): LaneView {
   }
 }
 
-function harness(options: { store?: Store; sessions?: LocalLineage[]; policy?: WakePolicy } = {}) {
+function harness(
+  options: {
+    store?: Store
+    sessions?: LocalLineage[]
+    policy?: WakePolicy
+    closing?: (lane: string) => string | null
+  } = {},
+) {
   const store = options.store ?? new Store(':memory:', () => 1_000)
   if (!options.store) stores.push(store)
   bindCatalog(store.db)
-  const delivered: { to: string; source: string; line: string; ride: boolean }[] = []
+  const delivered: { to: string; source: string; line: string }[] = []
   /** `lane>receiver` -> when the lane told it with a wake-class message. */
   const toldAt = new Map<string, number>()
   /** The receivers' delivery queues: `to|source` while undelivered. */
@@ -102,8 +111,9 @@ function harness(options: { store?: Store; sessions?: LocalLineage[]; policy?: W
     policy: () => options.policy ?? DEFAULT_WAKE_POLICY,
     receiver: (id) => receivers.has(id),
     sessions: () => sessions,
-    deliver: (to, source, line, ride) => {
-      delivered.push({ to, source, line, ride: ride === true })
+    closing: options.closing,
+    deliver: (to, source, line) => {
+      delivered.push({ to, source, line })
       queued.add(`${to}|${source}`)
     },
     told: (lane, to, since) => (toldAt.get(`${lane}>${to}`) ?? -Infinity) >= since,
@@ -180,7 +190,7 @@ describe('lane lines', () => {
       launched: true,
     }
     expect(laneLine('finished', lane, { minutes: 4 })).toBe(
-      '[Ready] lane "Store lane" (req neri-r1) went idle after 4m · st aico root status neri-r1',
+      '[Ready] lane "Store lane" (req neri-r1) finished its turn after 4m · st aico root status neri-r1',
     )
     expect(laneLine('blocked', { ...lane, requestId: null }, { detail: 'permission prompt' })).toBe(
       `[Ready] lane "Store lane" is blocked: permission prompt · st aico widget status --widget-id ${LANE}`,
@@ -229,8 +239,7 @@ describe('finished', () => {
       {
         to: ROOT,
         source: `lane:${LANE}:finished`,
-        line: expect.stringContaining('lane "TEST" went idle'),
-        ride: false,
+        line: expect.stringContaining('lane "TEST" finished its turn'),
       },
     ])
     step(reporter, { stateAgentAt: 200 }, SETTLE * 2)
@@ -245,7 +254,7 @@ describe('finished', () => {
     expect(delivered).toHaveLength(0)
     step(reporter, { stateAgentAt: 400 }, SETTLE)
     expect(delivered).toHaveLength(1)
-    expect(delivered[0]?.line).toContain('went idle after 6m')
+    expect(delivered[0]?.line).toContain('finished its turn after 6m')
   })
 
   it('a restart neither repeats a finish nor loses one that happened while down', () => {
@@ -281,8 +290,8 @@ describe('finished', () => {
 
   it('a lane idle on its own wait has its ride-along replies to its receivers wake them now', () => {
     // SummitFlow dcd7053e2 gap: the lane acked its launcher with a noted yes
-    // (ride-along: its went-idle line would carry it), then armed its own
-    // wait. No went-idle line goes, so the yes must not sit until the wait fires.
+    // (ride-along: its finished line would carry it), then armed its own
+    // wait. No finished line goes, so the yes must not sit until the wait fires.
     const { reporter, delivered, promoted, logs } = harness()
     step(reporter, { state: 'working', stateAgentAt: 100 })
     step(reporter, { stateAgentAt: 200, waitingOn: 'a check-in at 14:00' }, SETTLE * 2)
@@ -358,14 +367,14 @@ describe('finished', () => {
   })
 })
 
-describe('repeat went-idle backoff', () => {
+describe('repeat finished backoff', () => {
   /** One short turn: working, then idle at `at`, then `ms` pass. */
   function turn(reporter: LaneReporter, at: number, ms: number, extra: Partial<LaneView> = {}) {
     step(reporter, { ...extra, state: 'working', stateAgentAt: at - 1 })
     step(reporter, { ...extra, stateAgentAt: at }, ms)
   }
 
-  it('the first went-idle line is unchanged; repeats need a growing quiet', () => {
+  it('the first finished line is unchanged; repeats need a growing quiet', () => {
     const { reporter, delivered, logs } = harness()
     turn(reporter, 100, SETTLE)
     expect(delivered).toHaveLength(1) // first: the normal settle
@@ -381,7 +390,7 @@ describe('repeat went-idle backoff', () => {
     expect(delivered).toHaveLength(1)
     vi.advanceTimersByTime(1)
     expect(delivered).toHaveLength(2)
-    expect(delivered[1]?.line).toContain('went idle')
+    expect(delivered[1]?.line).toContain('finished its turn')
     // The next repeat needs twice the quiet, then the cap.
     turn(reporter, 400, QUIET * 2 - 1)
     expect(delivered).toHaveLength(2)
@@ -560,7 +569,6 @@ describe('ended', () => {
         to: ROOT,
         source: `lane:${LANE}:ended`,
         line: expect.stringContaining('lane "Lane title" ended'),
-        ride: false,
       },
     ])
     expect(new LaneReportStore(store.db).get('', LANE)).toBeUndefined()
@@ -637,7 +645,7 @@ describe('ended', () => {
     expect(store.db.prepare('SELECT * FROM session_end_requests').all()).toEqual([])
   })
 
-  it("a coordinator ending its lane loses that lane's went-idle line still queued for it", () => {
+  it("a coordinator ending its lane loses that lane's finished line still queued for it", () => {
     const { reporter, delivered, queued, withdrawn, logs, store } = harness()
     insertWidget(ROOT, 'claude-code', 1_000)
     insertWidget(LANE, 'claude-code', 1_000)
@@ -725,7 +733,7 @@ describe('ended', () => {
     adoptLineage(LANE, { coordinatorId: ROOT, coordinatorColor: null, parentId: ROOT })
     step(reporter, { state: 'working', stateAgentAt: 100 })
     step(reporter, { state: 'idle', stateAgentAt: 200 }, SETTLE)
-    take(ROOT) // the root took the went-idle line
+    take(ROOT) // the root took the finished line
     step(reporter, { state: 'working', stateAgentAt: 300 })
     step(
       reporter,
@@ -892,7 +900,6 @@ describe('ended', () => {
         to: ROOT,
         source: `lane:neri-vm/${LANE}:ended`,
         line: expect.stringContaining('lane "Remote" on neri-vm ended'),
-        ride: false,
       },
     ])
   })
@@ -935,7 +942,7 @@ describe('who hears a lane line (root -> lane -> session)', () => {
     adoptLineage(LANE, { coordinatorId: ROOT, coordinatorColor: null, parentId: HELPER_PARENT })
   }
 
-  it('went idle, blocked and ended go to the lane that launched it, never the root', () => {
+  it('finished, blocked and ended go to the lane that launched it, never the root', () => {
     const { reporter, delivered } = harness()
     localGrandchild()
     step(reporter, { ...grandchild, state: 'working', stateAgentAt: 100 })
@@ -1114,21 +1121,86 @@ describe('who hears a lane line (root -> lane -> session)', () => {
   })
 })
 
-describe('delivery classes of went-idle lines', () => {
+describe('a lane with background shells running', () => {
+  const SHELLS = BACKGROUND_SHELLS
+  const HOLD = DEFAULT_WAKE_POLICY.laneBackgroundHoldSeconds * 1000
+
+  it('is not finished: no line until they end, then one line that wakes', () => {
+    const { reporter, delivered, logs } = harness()
+    step(reporter, { state: 'working', stateAgentAt: 99 })
+    step(reporter, { stateAgentAt: 100, stateDetail: SHELLS }, HOLD - 1_000)
+    expect(delivered).toEqual([])
+    expect(logs.some((l) => l.includes('idle with background shells running'))).toBe(true)
+    // The shell ended; its notification started the turn that just finished.
+    step(reporter, { state: 'working', stateAgentAt: 199 })
+    step(reporter, { stateAgentAt: 200 }, SETTLE)
+    expect(delivered.map((d) => d.line)).toEqual([expect.stringContaining('finished its turn')])
+  })
+
+  it('past the hold the line says they still run, and the real finish still wakes', () => {
+    const { reporter, delivered } = harness()
+    step(reporter, { state: 'working', stateAgentAt: 99 })
+    step(reporter, { stateAgentAt: 100, stateDetail: SHELLS }, HOLD)
+    expect(delivered.map((d) => d.line)).toEqual([
+      expect.stringContaining('went idle; background shells still running'),
+    ])
+    // No repeat quiet for the finish that follows (the night's 80 minutes): only the settle and floor.
+    step(reporter, { state: 'working', stateAgentAt: 199 })
+    step(reporter, { stateAgentAt: 200 }, SETTLE + FLOOR)
+    expect(delivered).toHaveLength(2)
+    expect(delivered[1].line).toContain('finished its turn')
+  })
+})
+
+describe("a finished lane's last message", () => {
+  it('goes out with the line, one clean line, after the command to read it all', () => {
+    const { reporter, delivered } = harness({
+      closing: () => 'Done.\n\nCommits:\u0007 abc\u202e  and def',
+    })
+    step(reporter, { state: 'working', stateAgentAt: 99, requestId: 'burn-l1' })
+    step(reporter, { stateAgentAt: 100, requestId: 'burn-l1' }, SETTLE)
+    expect(delivered[0].line).toBe(
+      '[Ready] lane "TEST" (req burn-l1) finished its turn · st aico root report burn-l1 · says: Done. Commits: abc and def',
+    )
+  })
+
+  it('is cut to the policy, and a reader with nothing to say changes nothing', () => {
+    expect(closingWords('x'.repeat(50), 10)).toBe(`${'x'.repeat(10)}…`)
+    expect(closingWords('  \n ', 10)).toBeNull()
+    expect(closingWords(null, 10)).toBeNull()
+    expect(closingWords('anything', 0)).toBeNull()
+    const { reporter, delivered } = harness({ closing: () => null })
+    step(reporter, { state: 'working', stateAgentAt: 99 })
+    step(reporter, { stateAgentAt: 100 }, SETTLE)
+    expect(delivered[0].line).not.toContain('says:')
+    expect(delivered[0].line).toContain('st aico widget status')
+  })
+
+  it('a remote lane sends no read of a transcript this computer does not have', () => {
+    const closing = vi.fn(() => 'never read')
+    const { reporter, delivered } = harness({ closing })
+    step(reporter, { state: 'working', stateAgentAt: 99, host: 'davion-gem' })
+    step(reporter, { stateAgentAt: 100, host: 'davion-gem' }, SETTLE)
+    expect(closing).not.toHaveBeenCalled()
+    expect(delivered.every((d) => !d.line.includes('says:'))).toBe(true)
+  })
+})
+
+describe('delivery classes of finished lines', () => {
   /** One short turn: working, then idle at `at`, then `ms` pass. */
   function turn(reporter: LaneReporter, at: number, ms: number, extra: Partial<LaneView> = {}) {
     step(reporter, { ...extra, state: 'working', stateAgentAt: at - 1 })
     step(reporter, { ...extra, stateAgentAt: at }, ms)
   }
 
-  it('the first went-idle line wakes; a repeat the receiver ignored rides along', () => {
+  it('the first finished line wakes; a repeat the receiver ignored wakes once its quiet has passed', () => {
     const { reporter, delivered } = harness()
     turn(reporter, 100, SETTLE)
     turn(reporter, 200, QUIET)
-    expect(delivered.map((d) => d.ride)).toEqual([false, true])
+    expect(delivered).toHaveLength(2)
   })
 
-  it('a lane that told its launcher in the turn that just ended sends no went-idle line', () => {
+  it('a lane that told its launcher in the turn that just ended sends no finished line', () => {
     const { reporter, delivered, toldAt, logs } = harness()
     step(reporter, { state: 'working', stateAgentAt: 100 })
     // Its done message reaches the launcher mid-turn.
@@ -1158,7 +1230,7 @@ describe('delivery classes of went-idle lines', () => {
     // The next turn ends before Tether sees it working, with no message of its own.
     vi.advanceTimersByTime(60_000)
     step(reporter, { stateAgentAt: Date.now() }, SETTLE)
-    expect(delivered.map((d) => [d.to, d.ride])).toEqual([[ROOT, false]])
+    expect(delivered.map((d) => d.to)).toEqual([ROOT])
   })
 
   it('a message just before the previous idle does not hide a quick next turn', () => {
@@ -1188,7 +1260,7 @@ describe('delivery classes of went-idle lines', () => {
     // held (settle); turn N+1 ends with no message of its own.
     step(reporter, { state: 'working', stateAgentAt: Date.now() }, 60_000)
     step(reporter, { stateAgentAt: Date.now() }, SETTLE)
-    expect(delivered.map((d) => [d.to, d.ride])).toEqual([[ROOT, false]])
+    expect(delivered.map((d) => d.to)).toEqual([ROOT])
   })
 
   it('a turn that began while a settled idle line was held reports only its own length', () => {
@@ -1199,9 +1271,9 @@ describe('delivery classes of went-idle lines', () => {
     step(reporter, { stateAgentAt: 200 }, 60_000)
     step(reporter, { state: 'working', stateAgentAt: 250 }, 2 * 60_000)
     step(reporter, { stateAgentAt: 300 }, QUIET)
-    expect(delivered.map((d) => d.line.match(/went idle after \d+m/)?.[0])).toEqual([
+    expect(delivered.map((d) => d.line.match(/finished its turn after \d+m/)?.[0])).toEqual([
       undefined,
-      'went idle after 2m',
+      'finished its turn after 2m',
     ])
   })
 
@@ -1229,7 +1301,7 @@ describe('delivery classes of went-idle lines', () => {
     expect(delivered).toEqual([])
     // The next turn ends without a message: a first line, on time, wake class.
     turn(reporter, 300, SETTLE)
-    expect(delivered.map((d) => [d.to, d.ride])).toEqual([[ROOT, false]])
+    expect(delivered.map((d) => d.to)).toEqual([ROOT])
   })
 
   it('blocked and ended lines are never dropped for a message', () => {
@@ -1241,7 +1313,7 @@ describe('delivery classes of went-idle lines', () => {
       { state: 'blocked', stateDetail: 'permission prompt', stateAt: Date.now() },
       DEFAULT_WAKE_POLICY.laneBlockedSeconds * 1000,
     )
-    expect(delivered.map((d) => [d.source.split(':').pop(), d.ride])).toEqual([['blocked', false]])
+    expect(delivered.map((d) => d.source.split(':').pop())).toEqual(['blocked'])
   })
 
   it('a request sent before the last idle line but pasted after it wakes at the end of its work', () => {
@@ -1249,21 +1321,21 @@ describe('delivery classes of went-idle lines', () => {
     // The launcher sends while the lane is still finishing a turn.
     step(reporter, { state: 'working', stateAgentAt: 99 })
     waits.recordSend(ROOT, LANE, Date.now())
-    // The lane goes idle: its first went-idle line wakes (streak 1).
+    // The lane goes idle: its first finished line wakes (streak 1).
     step(reporter, { stateAgentAt: 100 }, SETTLE)
-    expect(delivered.map((d) => d.ride)).toEqual([false])
+    expect(delivered).toHaveLength(1)
     // The request is pasted only now; the lane acks it, works and stops
-    // without a done report. That idle wakes the launcher, not rides along.
+    // without a done report. That idle is a first line, with no quiet to wait out.
     vi.advanceTimersByTime(FLOOR)
     reporter.reached(LANE, 'got coord:cc:1c7a9f')
     expect(logs).toContain(
-      `lane=${LANE} got coord:cc:1c7a9f: its next went-idle line is a first line`,
+      `lane=${LANE} got coord:cc:1c7a9f: its next finished line is a first line`,
     )
     turn(reporter, 300, SETTLE)
-    expect(delivered.map((d) => d.ride)).toEqual([false, false])
-    // A turn nothing reached (a self-wake) is a repeat again: it rides along.
+    expect(delivered).toHaveLength(2)
+    // A turn nothing reached (a self-wake) is a repeat again, after its quiet.
     turn(reporter, 400, QUIET)
-    expect(delivered.map((d) => d.ride)).toEqual([false, false, true])
+    expect(delivered).toHaveLength(3)
   })
 
   it('what reached the lane before its last idle line was sent leaves the next idle a repeat', () => {
@@ -1275,10 +1347,10 @@ describe('delivery classes of went-idle lines', () => {
     step(reporter, { stateAgentAt: 200 }, SETTLE + FLOOR)
     // Then a self-wake turn: nothing reached it since that line.
     turn(reporter, 300, QUIET)
-    expect(delivered.map((d) => d.ride)).toEqual([false, false, true])
+    expect(delivered).toHaveLength(3)
   })
 
-  it('a paste into a lane whose repeat is held: that held line rides, the end of the new work wakes', () => {
+  it('a paste into a lane whose repeat is held: that held line goes out, the end of the new work wakes', () => {
     const { reporter, delivered } = harness()
     turn(reporter, 100, SETTLE)
     // A self-wake turn: its idle is a repeat, held for the quiet.
@@ -1288,10 +1360,10 @@ describe('delivery classes of went-idle lines', () => {
     // Tether sees the new turn begin.
     reporter.reached(LANE, 'got coord:x')
     vi.advanceTimersByTime(5_000)
-    expect(delivered.map((d) => d.ride)).toEqual([false, true])
+    expect(delivered).toHaveLength(2)
     // The work the request started ends: a wake.
     turn(reporter, 300, SETTLE + FLOOR)
-    expect(delivered.map((d) => d.ride)).toEqual([false, true, false])
+    expect(delivered).toHaveLength(3)
   })
 
   it('a paste while a first line is held: that line wakes, and so does the end of the new work', () => {
@@ -1302,9 +1374,9 @@ describe('delivery classes of went-idle lines', () => {
     reporter.reached(LANE, 'got coord:x')
     reporter.reached(LANE, 'got coord:y')
     vi.advanceTimersByTime(SETTLE)
-    expect(delivered.map((d) => d.ride)).toEqual([false])
+    expect(delivered).toHaveLength(1)
     turn(reporter, 300, SETTLE + FLOOR)
-    expect(delivered.map((d) => d.ride)).toEqual([false, false])
+    expect(delivered).toHaveLength(2)
   })
 
   it('a paste into a lane whose repeat is held, then a Tether restart: the end of the new work still wakes (review P3-3)', () => {
@@ -1318,12 +1390,12 @@ describe('delivery classes of went-idle lines', () => {
     // the repeat it was, and does not use up the reset.
     const again = harness({ store: first.store })
     step(again.reporter, { stateAgentAt: 200 }, QUIET)
-    expect(again.delivered.map((d) => d.ride)).toEqual([true])
+    expect(again.delivered).toHaveLength(1)
     turn(again.reporter, 300, SETTLE + FLOOR)
-    expect(again.delivered.map((d) => d.ride)).toEqual([true, false])
+    expect(again.delivered).toHaveLength(2)
     // Nothing reached it since: the next idle is a repeat again.
     turn(again.reporter, 400, QUIET)
-    expect(again.delivered.map((d) => d.ride)).toEqual([true, false, true])
+    expect(again.delivered).toHaveLength(3)
   })
 
   it('a lane with no cursor (nobody reports it) ignores what reached it', () => {
@@ -1542,7 +1614,6 @@ describe('model switch lines', () => {
         to: ROOT,
         source: `lane:${LANE}:model`,
         line: '[Model changed] lane "Neri shape" (req neri-p2a) now on claude-opus-4-8 after a cyber refusal · turn stopped · last commit e5a9695 · worktree changed since: no · rewind it (st aico root rewind neri-p2a), or relaunch from a handoff',
-        ride: false,
       },
     ])
     step(reporter, {

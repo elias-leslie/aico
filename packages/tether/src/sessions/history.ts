@@ -904,6 +904,38 @@ export class History {
     }
   }
 
+  /** The session's current conversation in its own tool (a session can also own side runs of
+   * others: an agent's `codex exec`), the one written last. */
+  private currentOf(session: string, tool?: string): Row | undefined {
+    const rows = this.db
+      .prepare(
+        `SELECT t.* FROM transcript_owners o JOIN transcripts t ON t.id = o.transcript_id
+         WHERE o.session_id = ? AND t.ignored = 0 AND t.parent_id IS NULL
+         ORDER BY COALESCE(t.ended_at, t.file_mtime) DESC`,
+      )
+      .all(session) as unknown as Row[]
+    return rows.find((row) => row.tool === tool) ?? rows[0]
+  }
+
+  /** What the agent in a session said last: its newest reply text, masked and cut as every event
+   * is. null: no conversation, transcript or reply to read. */
+  closingMessage(session: string, tool?: string): { text: string; at: number | null } | null {
+    const row = this.currentOf(session, tool)
+    if (!row) return null
+    const page = this.events(row, { limit: 500 })
+    if (page === 'gone') return null
+    for (const event of [...page.items].reverse())
+      if (event.role === 'assistant' && event.kind === 'text' && event.text.trim())
+        return { text: event.text, at: event.at ?? null }
+    return null
+  }
+
+  /** The session's context fill at its latest reply. Unknown is null, never zero. */
+  contextOf(session: string, tool?: string): { tokens: number | null; model: string | null } {
+    const row = this.currentOf(session, tool)
+    return { tokens: row?.context_tokens ?? null, model: row?.model ?? null }
+  }
+
   /** Events read from the transcript: the last `limit` before `before` (default: the end), or
    * the first `limit` from `from`. */
   events(

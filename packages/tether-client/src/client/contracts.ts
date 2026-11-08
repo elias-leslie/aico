@@ -41,7 +41,7 @@ export interface SizeHolder {
 const MIN_TETHER_API_VERSION = 3
 /** The Tether API version this release was written against (packages/tether's API_VERSION, which
  * a test keeps equal). A daemon reporting less is older than the web server expects. */
-export const EXPECTED_TETHER_API_VERSION = 32
+export const EXPECTED_TETHER_API_VERSION = 33
 /** The API version Aico's clients speak; Tether must still accept it. */
 const AICO_TETHER_API_VERSION = 1
 

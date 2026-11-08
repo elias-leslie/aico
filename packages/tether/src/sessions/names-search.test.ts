@@ -316,6 +316,46 @@ describe('Codex and Pi: names and doing now', () => {
   })
 })
 
+describe("a session's last message and context fill", () => {
+  const reply = (text: string, input: number) => ({
+    type: 'assistant',
+    timestamp: '2026-11-08T10:00:00Z',
+    message: {
+      id: `m-${input}`,
+      model: 'claude-opus-5-5',
+      content: [{ type: 'text', text }],
+      usage: { input_tokens: input, output_tokens: 1 },
+    },
+  })
+
+  it('reads the newest reply of its own tool, masked; unknown stays null', async () => {
+    write(
+      ['.claude', 'projects', '-work-demo', 'a6.jsonl'],
+      jsonl(
+        user('Do the thing'),
+        reply('Working on it', 100),
+        reply(`Done. token ${['sk', 'ant', 'api03', 'abcdefghijklmnopqrstuvwx'].join('-')}`, 2000),
+        {
+          type: 'assistant',
+          message: { id: 'm-9', content: [{ type: 'tool_use', id: 't', name: 'Bash', input: {} }] },
+        },
+      ),
+    )
+    const h = history()
+    h.bind('abcd1234', 'claude', 'a6')
+    await h.scan()
+    const said = h.closingMessage('abcd1234', 'claude-code')
+    expect(said?.text).toContain('Done.')
+    expect(said?.text).not.toContain('abcdefghijklmnop')
+    expect(h.contextOf('abcd1234', 'claude-code')).toEqual({
+      tokens: 2000,
+      model: 'claude-opus-5-5',
+    })
+    expect(h.closingMessage('nobody')).toBeNull()
+    expect(h.contextOf('nobody')).toEqual({ tokens: null, model: null })
+  })
+})
+
 describe('session names for running sessions', () => {
   it('a bound session is named by its newest named conversation', async () => {
     write(

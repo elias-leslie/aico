@@ -220,6 +220,7 @@ Apps keep their own byte path: a PTY that runs `tmux attach` against the session
 | --- | --- | --- |
 | `GET /v1/sessions/:id/attach` | none | `{generation, argv: ["/usr/bin/tmux","-S","<socket>","attach-session","-t","$3"], env, unset}`. `argv` is the exact client argv. |
 | `GET /v1/sessions/:id/capture` | query `escapes=1` | `{generation, text}`: the visible screen |
+| `GET /v1/sessions/:id/report` | | `{id, text, at, contextTokens, contextWindow, contextPercent, model}`: the agent's last message (masked, at most 4000 characters) and context fill, from its transcript. Each is null while unknown; an ended session's stays readable *(33)* |
 | `GET /v1/sessions/:id/scrollback` | query `fromLine`, `count` (at most 5000, default 5000), `escapes=1` | `{generation, fromLine, totalLines, historySize, text}`. One bounded page of pane history (Aico `scrollback-page.ts`); line `historySize + r` is visible row `r`. Without `fromLine`, the last page. `400 invalid_query` for a non-integer. |
 | `POST /v1/sessions/:id/inject` | `{generation, text, mode: "type" \| "paste", submit?: bool, model?: string \| null, thinkingLevel?: string \| null}` | `{generation, delivered: true}`. `from` *(13)*, the sending session's id, records the send so a [wait](#waits) that session sets on this one counts turns from it |
 | `GET /v1/sessions/:id/pane-mode` *(post-cutover)* | none | `{generation, alternateScreen, mouseReporting, historySize, inMode, mode}`: whether the pane shows its alternate screen, whether the program asked for mouse reporting, the history line count, and whether tmux shows a mode over the pane (`mode` is its name, such as `copy-mode`, else null). Read-only `display-message`. `409 workload_unavailable` when tmux cannot answer. |
@@ -665,6 +666,8 @@ and `session.updated` for the session it belongs to.
 | `laneFinishedFloorSeconds` | 120 | at most one `finished` per lane in this long; later ones fold into the next (0-3600) |
 | `laneRepeatQuietSeconds` | 600 | a repeat `finished` (no send or wait from its receiver since the last) needs the lane idle this long, doubling per repeat; 0 is off (0-3600) |
 | `laneRepeatQuietMaxSeconds` | 1800 | the most quiet a repeat needs (0-14400) |
+| `laneBackgroundHoldSeconds` | 1800 | an idle agent with background shells running is not finished for this long; after that the line says they still run (0-14400) |
+| `laneClosingMaxChars` | 1200 | the most of a finished agent's last message a line carries; 0 leaves it out (0-1500) |
 
 ## Lane reports
 
@@ -672,7 +675,7 @@ A lane started with `st aico create` (or `POST /v1/roots` with `launchedBy`) tel
 finishes a turn, is blocked on the user, or ends. Nobody subscribes and no check-in is scheduled. Each report is one
 line on the receiver's delivery queue ([Wakes](#wakes)), pasted under the same gates:
 
-`[Ready] lane "Store lane" (req neri-r1) went idle after 6m · st aico root status neri-r1`
+`[Ready] lane "Store lane" (req neri-r1) finished its turn after 6m · st aico root report neri-r1 · says: Done, 3 commits…`
 `[Ready] lane "Store lane" on neri-vm is blocked: permission prompt · st aico widget status --widget-id 1a2b3c4d`
 `[Ready] lane "Store lane" (req neri-r1) has no running agent; the session is still open · st aico root status neri-r1`
 `[Ready] lane "Store lane" (req neri-r1) ended · st aico root status neri-r1`
@@ -697,7 +700,10 @@ reply text. An undelivered line for the same lane and outcome is replaced by the
   joined reports nothing, and nothing is backfilled for sessions from before v12.
 - **finished**: the lane is `idle` with a `stateAgentAt` later than the last one reported, held `laneSettleSeconds`.
   It catches turns too short for the poll and turns during a Tether restart; the per-lane cursor is kept in the
-  database, so a restart never repeats one. A lane whose `waitingOn` is set is not finished. *(schema 29)* Its
+  database, so a restart never repeats one. *(33)* An agent idle with `stateDetail` `background shells running` (a
+  Claude Code turn over with its own background shells going) is not finished either: the line waits for them, up to
+  `laneBackgroundHoldSeconds`, then says `went idle; background shells still running` and does not count as a repeat.
+  A lane whose `waitingOn` is set is not finished. *(schema 29)* Its
   still-queued ride-along `reply` deliveries ([Deliveries](#deliveries)) to its receivers then become wakes, since no
   `finished` line goes out to carry them (a noted yes to its launcher, then a wait of its own armed). Log: `lane=<id>
   idle on its own wait: its ride-along reply wakes <ids>`. A lane launched
@@ -707,7 +713,7 @@ reply text. An undelivered line for the same lane and outcome is replaced by the
   `laneFinishedFloorSeconds`. *(schema 25)* A repeat, the next `finished` with no act from its receiver since the
   last, needs the lane to hold idle with no new turn `laneRepeatQuietSeconds`, doubling per repeat up to
   `laneRepeatQuietMaxSeconds` (defaults 10, 20, then 30 minutes): a lane waiting on its own work with short turns in
-  between stays quiet, and one that stalls is heard within the cap. It starts over at the normal settle and floor
+  between stays quiet, and one that stalls is heard within the cap. Once the quiet has passed it wakes the receiver. It starts over at the normal settle and floor
   when a receiver sends to the lane (`inject` with `from`, as `st aico root send` does) or arms a session wait on it,
   on a new generation, and after a `blocked` or `ended`. *(25)* A wake-class delivery to the lane with the receiver in `from`
   (a coordination request or ack, [Deliveries](#deliveries)) counts as a send; a ride-along one does not. It also
@@ -719,12 +725,12 @@ reply text. An undelivered line for the same lane and outcome is replaced by the
   memory notice), its own `wait:` lines and an agent's check-in do not; a line merged into a queued one keeps the
   queued one's mark. So a request sent before the
   lane's last `finished` line but pasted after it still makes the next `finished` a wake. Log: `lane=<id> <why>:
-  its next went-idle line is a first line`. When something reaches the lane while its last idle's line is still
+  its next finished line is a first line`. When something reaches the lane while its last idle's line is still
   held, that line goes out as it would have and the idle after it is the first line, across a restart too
   (`lane_reports.reached_after`). The streak is kept in the cursor, so a restart keeps it
   (the quiet counts from the restart). Log: `lane=<id> idle again: repeat N goes out after Ns quiet`, once per idle.
-  *(24, schema 28)* Two classes ([Deliveries](#deliveries)): the first `finished` line is a wake; a repeat is
-  ride-along, so it never wakes the receiver alone and joins its next wake or turn. And when the lane already told
+  *(33)* Every `finished` line is a wake: a coordinator with nothing else to do must still hear that a lane is done.
+  *(schema 28)* When the lane already told
   the receiver (a wake line posted with `from` naming the lane, not a `reply`: SummitFlow's request, never an ack)
   during the turn that just ended, the `finished` line is dropped: the receiver heard it, and the explicit message
   carries the report. The turn is from when Tether first saw the lane working (less 3 s), never before the lane's
@@ -844,8 +850,9 @@ the `waits` table, apart from wakes, and survive Tether restarts.
   unrecorded), else the time it is armed. `st aico root send` passes `from` only to a session on this computer whose
   Tether takes it (API 13).
 - **finished** is `idle` with a `stateAgentAt` after `since` (an idle Tether saw only at its own start, with no agent
-  time, is no turn), held `laneSettleSeconds`, and `waitingOn` null;
-  **idle** is `idle` held `laneSettleSeconds`; **blocked** is `permission prompt` or `input needed` held
+  time, is no turn), held `laneSettleSeconds`, `waitingOn` null and no background shells running (held up to
+  `laneBackgroundHoldSeconds`, then the line says they still run);
+  **idle** is `idle` held `laneSettleSeconds`, whatever runs in the background (the line says so); **blocked** is `permission prompt` or `input needed` held
   `laneBlockedSeconds` (never `dialog open`); **ended** is the session gone, or for a local one its agent left the pane
   for good. A session that ends before any other condition holds fires `gone`. A session that had already ended when
   the wait is armed (a retired id, or a root request's tombstone) fires at once: `until` for `ended`, `gone` for the
@@ -856,10 +863,11 @@ the `waits` table, apart from wakes, and survive Tether restarts.
   with the last state Tether saw. Only a cancel is quiet, and the CLI confirms it.
 - **Delivery.** The line goes on the waiter's delivery queue as an event row (source `wait:<id>`), pasted under the
   [wake](#wakes) gates, events first, under 1800 bytes. It names the session (title cleaned as in lane reports, at most
-  60 characters), the outcome, the waiter's own note and the command that shows it; never the session's reply text:
-  `[Ready] session "Store lane" (req neri-r1) went idle · re: "merge after" · st aico root status neri-r1`,
-  `[Wait over] session "Store lane" (req neri-r1) ended before it went idle · …`,
-  `[Wait timed out] session "Store lane" (req neri-r1) not idle yet after 2h: it is working · …`.
+  60 characters), the outcome, the waiter's own note and the command that shows it; of the session's reply text, only
+  its last message on a local `finished` or `idle` (cleaned to one line, at most `laneClosingMaxChars`, last on the line):
+  `[Ready] session "Store lane" (req neri-r1) finished its turn · re: "merge after" · st aico root report neri-r1 · says: Done…`,
+  `[Wait over] session "Store lane" (req neri-r1) ended before it finished · …`,
+  `[Wait timed out] session "Store lane" (req neri-r1) not finished after 2h: it is working · …`.
   Check-in lists and `maxPerSession` do not count waits. While a waiter has an armed wait its `waitingOn` names it.
 - **End.** A waiter's waits end with it, unless End says `keepWakes: true`: then its armed waits are kept, and one that
   becomes ready relaunches the conversation like a kept wake (also when it fires while the End is still running); one

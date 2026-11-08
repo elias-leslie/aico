@@ -58,8 +58,11 @@ describe('Claude status file', () => {
     expect(
       claudeSignal(claudeFile('waiting', 6, { waitingFor: 'permission prompt' })),
     ).toMatchObject({ state: 'blocked', detail: 'permission prompt', agentSessionId: CLAUDE })
-    expect(claudeSignal(claudeFile('idle', 7))).toMatchObject({ state: 'idle' })
-    expect(claudeSignal(claudeFile('shell', 7))).toMatchObject({ state: 'idle' })
+    expect(claudeSignal(claudeFile('idle', 7))).toMatchObject({ state: 'idle', detail: null })
+    expect(claudeSignal(claudeFile('shell', 7))).toMatchObject({
+      state: 'idle',
+      detail: 'background shells running',
+    })
     expect(claudeSignal(claudeFile('later-unknown', 7))).toBeNull()
     expect(claudeSignal('{not json')).toBeNull()
   })

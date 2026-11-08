@@ -19,14 +19,16 @@
 // kinds (src/wait-kinds.ts: job, reply, ask, host, cmd) read their
 // owner's state at arm, when it changes (a file watch, an event, a nudge),
 // every 60 s and at start. Lines are built from typed values only: never
-// agent reply text or an owner's free text. A `cmd` wait names no ref: the
+// an owner's free text, and of agent reply text only a session's last message
+// when it finished or is idle (`closingWords`). A `cmd` wait names no ref: the
 // waiter sends the command (`argv`, `cwd`) and Tether runs it as a transient
 // unit under a ref it makes (src/wait-readers.ts), stopped once the wait is over.
 
 import { randomBytes } from 'node:crypto'
 import type { Db } from '@aico/session-engine/store'
+import { BACKGROUND_SHELLS } from '@aico/session-engine/tui/adapters/contract'
 import { HttpError, onlyFields, type Router, readJsonObject, sendJson } from '@aico/shared/http'
-import { BLOCKING_DETAILS, type LaneView, laneTitle, lineNames } from './lane-reports'
+import { BLOCKING_DETAILS, closingWords, type LaneView, laneTitle, lineNames } from './lane-reports'
 import {
   isPullKind,
   PULL_KINDS,
@@ -452,6 +454,8 @@ export type WaitPolicy = Pick<
   WakePolicy,
   | 'laneSettleSeconds'
   | 'laneBlockedSeconds'
+  | 'laneBackgroundHoldSeconds'
+  | 'laneClosingMaxChars'
   | 'waitDefaultMinutes'
   | 'waitMaxMinutes'
   | 'maxWaitsPerSession'
@@ -482,9 +486,14 @@ export function sessionVerdict(
   if (wait.until === 'finished') {
     // A turn that ended after `since` by the agent's own clock (0, a first
     // sighting with no agent time, is no known turn), and the agent waits on
-    // nothing of its own.
+    // nothing of its own: no wait, and no background shells (past their hold
+    // the line says they still run).
     if (target.state === 'idle' && target.stateAgentAt > wait.since && !target.waitingOn)
-      return settle(policy.laneSettleSeconds)
+      return settle(
+        target.stateDetail === BACKGROUND_SHELLS
+          ? Math.max(policy.laneSettleSeconds, policy.laneBackgroundHoldSeconds)
+          : policy.laneSettleSeconds,
+      )
   } else if (wait.until === 'idle') {
     if (target.state === 'idle') return settle(policy.laneSettleSeconds)
   } else if (wait.until === 'blocked') {
@@ -511,23 +520,23 @@ export function spanLabel(ms: number): string {
 }
 
 const UNTIL_WORDS: Record<SessionUntil, { ready: string; not: string; gone: string }> = {
-  // Idle after the send is all Tether knows: never "finished" (it may be waiting on its own check).
-  finished: { ready: 'went idle', not: 'not idle yet', gone: 'ended before it went idle' },
+  finished: { ready: 'finished its turn', not: 'not finished', gone: 'ended before it finished' },
   idle: { ready: 'is idle', not: 'not idle', gone: 'ended before it was idle' },
   blocked: { ready: 'is blocked', not: 'not blocked', gone: 'ended without being blocked' },
   ended: { ready: 'ended', not: 'not ended', gone: 'ended' },
 }
 
-/** The one line a waiter gets. Built from typed values and the waiter's own
- * note only. */
+/** The one line a waiter gets. Built from typed values, the waiter's own note and the session's
+ * cleaned last message (`closing`, on `until` of finished or idle). */
 export function waitLine(
   wait: Pick<Wait, 'ref' | 'host' | 'until' | 'note' | 'armedAt' | 'cursor'>,
   outcome: WaitOutcome,
   now: number,
+  closing: string | null = null,
 ): string {
   const cursor = wait.cursor
   const until = wait.until as SessionUntil
-  const { name, look } = lineNames({
+  const { name, look, report } = lineNames({
     id: wait.ref,
     host: wait.host,
     title: cursor?.title ?? wait.ref,
@@ -536,8 +545,11 @@ export function waitLine(
   const words = UNTIL_WORDS[until]
   const detail =
     cursor?.detail && BLOCKING_DETAILS.has(cursor.detail) ? cursor.detail : 'waiting on input'
+  const shells = cursor?.detail === BACKGROUND_SHELLS
   let head: string
-  if (outcome === 'until')
+  if (outcome === 'until' && shells && (until === 'finished' || until === 'idle'))
+    head = `[Ready] session ${name} ${until === 'idle' ? 'is idle' : 'went idle'}; background shells still running`
+  else if (outcome === 'until')
     head = `[Ready] session ${name} ${until === 'blocked' ? `is blocked: ${detail}` : words.ready}`
   else if (outcome === 'gone') head = `[Wait over] session ${name} ${words.gone}`
   else {
@@ -548,6 +560,7 @@ export function waitLine(
     head = `[Wait timed out] session ${name} ${words.not} after ${spanLabel(now - wait.armedAt)}${state}`
   }
   const note = wait.note ? ` · re: "${laneTitle(wait.note, NOTE_MAX_CHARS)}"` : ''
+  if (closing) return `${head}${note} · ${report} · says: ${closing}`
   return `${head}${note} · ${look}`
 }
 
@@ -611,6 +624,8 @@ export interface WaitOperations {
   resolve(ref: string): { id: string; host: string | null } | null
   /** The session as it is now; null when it is gone. */
   view(id: string, host: string | null): LaneView | null
+  /** A local session's last message, as it wrote it; null when none can be read. */
+  closing?(id: string): string | null
   /** A session that `ref` named and that has ended (its id, retired or a
    * root request's tombstone); null when `ref` never named one here. */
   endedSession(ref: string): string | null
@@ -1147,7 +1162,7 @@ export class WaitService {
   ): void {
     const line = isPullKind(wait.kind)
       ? pullWaitLine(wait, outcome, reading, now)
-      : waitLine(wait, outcome, now)
+      : waitLine(wait, outcome, now, this.closingOf(wait, outcome))
     const fired = this.store.transaction(() => {
       if (
         !this.store.settle(wait, outcome === 'timeout' ? 'timed_out' : 'fired', outcome, line, now)
@@ -1173,6 +1188,13 @@ export class WaitService {
     this.ops.log(`wait=${wait.id} on ${where(wait)} ${outcome} -> ${to}`)
     this.notify(wait.id)
     this.ops.changed(wait.waiter)
+  }
+
+  /** What a session's line quotes of it: its last message once it finished or is idle. */
+  private closingOf(wait: Wait, outcome: WaitOutcome): string | null {
+    if (outcome !== 'until' || wait.host !== null) return null
+    if (wait.until !== 'finished' && wait.until !== 'idle') return null
+    return closingWords(this.ops.closing?.(wait.ref), this.ops.policy().laneClosingMaxChars)
   }
 
   private letGo(wait: Wait): void {
