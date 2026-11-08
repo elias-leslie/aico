@@ -110,6 +110,8 @@ export interface UploadConfig {
   maxBytes: number
   /** Uploads older than this are deleted by maintenance. */
   maxAgeMs: number
+  /** Most files one maintenance pass deletes: a wrong dir or rule loses a few, not the folder. */
+  maxDeletesPerRun?: number
 }
 
 export interface CaptureConfig {
@@ -253,6 +255,7 @@ const DEFAULT_APP_OPTIONS_FILE = '/etc/aico/fcm-app.json'
 const DEFAULT_UPLOAD_DIR_NAME = 'aico-uploads'
 const DEFAULT_MAX_UPLOAD_MB = 10
 const DEFAULT_UPLOAD_MAX_AGE_SECONDS = 24 * 60 * 60
+const DEFAULT_UPLOAD_CLEANUP_MAX_PER_RUN = 200
 const DEFAULT_MAINTENANCE_INTERVAL_SECONDS = 15 * 60
 const DEFAULT_EMPTY_PANE_DAYS = 7
 // vision-extract (bake-off 2026-11-02): agy with a Gemini Flash model first, a
@@ -526,6 +529,10 @@ export function loadConfig(
       remoteDir: env.AICO_REMOTE_UPLOAD_DIR?.trim() || DEFAULT_REMOTE_UPLOAD_DIR,
       maxBytes: positiveInt(env.MAX_FILE_SIZE_MB, DEFAULT_MAX_UPLOAD_MB) * 1024 * 1024,
       maxAgeMs: positiveInt(env.UPLOAD_MAX_AGE_SECONDS, DEFAULT_UPLOAD_MAX_AGE_SECONDS) * 1000,
+      maxDeletesPerRun: positiveInt(
+        env.UPLOAD_CLEANUP_MAX_PER_RUN,
+        DEFAULT_UPLOAD_CLEANUP_MAX_PER_RUN,
+      ),
     },
     maintenance: {
       enabled: flag(env.MAINTENANCE_ENABLED, true),

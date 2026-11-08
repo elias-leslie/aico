@@ -268,7 +268,9 @@ export async function cleanupOldUploads(
     errors: 0,
     max_age_seconds: Math.round(config.maxAgeMs / 1000),
   }
-  const cutoff = now - config.maxAgeMs
+  // The real clock caps it: a clock ahead of the world must not make every upload look old.
+  const cutoff = Math.min(now, Date.now()) - config.maxAgeMs
+  let left = config.maxDeletesPerRun ?? Number.POSITIVE_INFINITY
   const directories: string[] = []
   const walk = async (dir: string): Promise<void> => {
     let entries: import('node:fs').Dirent[]
@@ -289,6 +291,14 @@ export async function cleanupOldUploads(
       stats.scanned_files += 1
       try {
         if ((await lstat(path)).mtimeMs >= cutoff) continue
+        if (left <= 0) {
+          if (left === 0)
+            console.warn('[aico-web] upload cleanup stopped at its limit; the rest waits')
+          left = -1
+          continue
+        }
+        left -= 1
+        console.log(`[aico-web] upload removed path=${path}`)
         await unlink(path)
         stats.deleted_files += 1
       } catch (error) {

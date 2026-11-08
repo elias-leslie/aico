@@ -296,6 +296,23 @@ describe('cleanupOldUploads', () => {
     expect(readdirSync(dir)).toEqual(['fresh.txt'])
   })
 
+  it('stops at its per-run limit and ignores a clock ahead of the real one', async () => {
+    for (const name of ['a', 'b', 'c']) write(`${name}.txt`, 3600)
+    write('new.txt', 10)
+    const config = {
+      dir,
+      remoteDir: '~/.cache/aico/uploads',
+      maxBytes: 1,
+      maxAgeMs: 300_000,
+      maxDeletesPerRun: 2,
+    }
+    // A clock a year ahead would make "new.txt" old too; the real clock caps it.
+    const stats = await cleanupOldUploads(config, Date.now() + 365 * 86400_000)
+    expect(stats.deleted_files).toBe(2)
+    expect(readdirSync(dir)).toHaveLength(2)
+    expect(readdirSync(dir)).toContain('new.txt')
+  })
+
   it('reports nothing for a missing upload dir', async () => {
     const stats = await cleanupOldUploads({
       dir: join(dir, 'missing'),

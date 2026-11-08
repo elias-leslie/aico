@@ -114,6 +114,7 @@ describe('loadConfig: uploads, shares and maintenance', () => {
       remoteDir: '~/.cache/aico/uploads',
       maxBytes: 10 * 1024 * 1024,
       maxAgeMs: 86_400_000,
+      maxDeletesPerRun: 200,
     })
     expect(config.maintenance).toEqual({ enabled: true, intervalMs: 900_000, emptyPaneDays: 7 })
   })
@@ -137,6 +138,7 @@ describe('loadConfig: uploads, shares and maintenance', () => {
       remoteDir: '/srv/drops',
       maxBytes: 2 * 1024 * 1024,
       maxAgeMs: 60_000,
+      maxDeletesPerRun: 200,
     })
     expect(config.maintenance).toEqual({ enabled: false, intervalMs: 30_000, emptyPaneDays: 3 })
   })
