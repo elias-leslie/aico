@@ -44,6 +44,8 @@ interface Episode {
   /** waiting: the action ran, its look is due. done: nothing more this round. */
   stage: 'waiting' | 'done'
   noticeKey?: string
+  /** A notice that couldn't be sent yet: the next pass tries it again. */
+  owed?: string
 }
 
 export interface CaretakerState {
@@ -57,6 +59,8 @@ export interface CaretakerState {
   said: string[]
   /** When the routes were last checked (routeCheck). */
   routesAt?: number
+  /** No model answered: nothing asks again before this. */
+  askAfter?: number
 }
 
 export const emptyState = (): CaretakerState => ({
@@ -121,13 +125,15 @@ function isSerious(policy: Policy, row: ProblemRow): boolean {
 }
 
 /** The key of Status's own sustained notice (status-actions.ts sustainedKey): the owner hears once. */
-const noticeKey = (rowId: string) => `status-sustained:${rowId}`.slice(0, 200)
+const noticeKey = (rowId: string) =>
+  `status-sustained:${rowId.replace(/[^A-Za-z0-9_.:/@+=,-]/g, '_')}`.slice(0, 200)
 
 /** The read-only commands a row names for itself that the policy allows, as argv. */
 function evidenceCommands(policy: Policy, row: ProblemRow): string[][] {
   const refs = (row.actions ?? []).filter((a) => a.kind === 'log').map((a) => a.ref)
   return refs
     .filter((ref) => policy.evidence.some((pattern) => new RegExp(pattern).test(ref)))
+    .slice(0, policy.max_evidence_commands)
     .map((ref) => ref.split(' '))
 }
 
@@ -196,21 +202,38 @@ export async function askChain(
   return { failed: failures.join('; ') }
 }
 
+/** The first whole JSON object in a text: a model sometimes says it twice, or adds a line after it. */
+function firstObject(text: string): string | null {
+  const start = text.indexOf('{')
+  if (start < 0) return null
+  let depth = 0
+  let inString = false
+  for (let at = start; at < text.length; at++) {
+    const char = text[at]
+    if (inString) {
+      if (char === '\\') at++
+      else if (char === '"') inString = false
+    } else if (char === '"') inString = true
+    else if (char === '{') depth++
+    else if (char === '}' && --depth === 0) return text.slice(start, at + 1)
+  }
+  return null
+}
+
 export function parseAnswer(raw: unknown): Answer | null {
   let value = raw
   if (typeof value === 'string') {
-    const start = value.indexOf('{')
-    const end = value.lastIndexOf('}')
-    if (start < 0 || end < start) return null
+    const object = firstObject(value)
+    if (!object) return null
     try {
-      value = JSON.parse(value.slice(start, end + 1))
+      value = JSON.parse(object)
     } catch {
       return null
     }
   }
   const { diagnosis, action } = (value ?? {}) as Record<string, unknown>
   return typeof diagnosis === 'string' && typeof action === 'string'
-    ? { diagnosis: diagnosis.slice(0, 600), action: action.trim() }
+    ? { diagnosis: diagnosis.slice(0, 600), action: action.trim().slice(0, 80) }
     : null
 }
 
@@ -281,20 +304,37 @@ export async function pass(
   const tell = async (row: ProblemRow, episode: Episode, detail: string) => {
     if (!isSerious(policy, row)) return
     const key = noticeKey(row.id)
-    await deps.notify({
-      v: 1,
-      source: 'aico',
-      kind: 'alert',
-      severity: 'critical',
-      title: `${row.what} is still down`.slice(0, 200),
-      body: detail.slice(0, 1000),
-      key,
-      cooldown: 7 * 24 * 3600,
-      push: 'phone',
-      interrupt: 'needs-you',
-    })
+    episode.owed = detail
+    try {
+      await deps.notify({
+        v: 1,
+        source: 'aico',
+        kind: 'alert',
+        severity: 'critical',
+        title: `${row.what} is still down`.slice(0, 200),
+        body: detail.slice(0, 1000),
+        key,
+        cooldown: 7 * 24 * 3600,
+        push: 'phone',
+        interrupt: majorOf(row, new Map()) === 'outage' ? 'outage' : 'needs-you',
+      })
+    } catch (error) {
+      sayOnce(`notify:${row.id}`, {
+        row: row.id,
+        what: 'notify-failed',
+        text: `Couldn't tell the owner, trying again each pass: ${(error as Error).message}`,
+      })
+      return
+    }
+    delete episode.owed
     episode.noticeKey = key
     say({ row: row.id, what: 'notified', text: `Told the owner: ${detail}` })
+  }
+  /** A serious row where nothing can be tried: no model or no budget is no reason for silence. */
+  const tellUntried = async (row: ProblemRow, why: string) => {
+    const quiet: Episode = { at: now, action: 'none', verifyAt: now, stage: 'done' }
+    state.episodes[row.id] = quiet
+    await tell(row, quiet, `${row.meaning ?? row.what} ${why}`)
   }
 
   // Earlier actions: cleared, or still bad once their look is due.
@@ -304,7 +344,15 @@ export async function pass(
       const shown = byId.get(id)?.shown
       if (episode.stage === 'waiting' && shown !== 'off')
         say({ row: id, what: 'cleared', text: `${episode.action} cleared it.` })
-      if (episode.noticeKey) await deps.resolve(episode.noticeKey, 'Back to normal.')
+      delete episode.owed
+      if (episode.noticeKey)
+        await deps.resolve(episode.noticeKey, 'Back to normal.').catch((error: Error) =>
+          say({
+            row: id,
+            what: 'notify-failed',
+            text: `Couldn't end the notice: ${error.message}`,
+          }),
+        )
       // A problem that comes straight back is the same problem until retry_after_hours has passed.
       if (now - episode.at >= policy.retry_after_hours * 3600_000) delete state.episodes[id]
       else {
@@ -313,6 +361,7 @@ export async function pass(
       }
       continue
     }
+    if (episode.owed) await tell(row, episode, episode.owed)
     if (episode.stage === 'waiting' && now >= episode.verifyAt) {
       episode.stage = 'done'
       const text = `${episode.action} did not clear it; stopping here.`
@@ -326,43 +375,46 @@ export async function pass(
   }
 
   // What has settled and has had no attempt.
-  for (const [id, row] of bad) {
-    if (state.episodes[id]) continue
-    if (now - (state.seen[id] as number) < policy.settle_minutes * 60_000) continue
+  const settle = async (id: string, row: ProblemRow) => {
+    if (state.episodes[id]) return
+    if (now - (state.seen[id] as number) < policy.settle_minutes * 60_000) return
     const candidates = actionsFor(policy, id)
     const serious = isSerious(policy, row)
     if (!candidates.length && !serious) {
       sayOnce(`skip:${id}`, { row: id, what: 'skipped', text: 'Nothing on the list for this row.' })
-      continue
+      return
     }
     if (state.calls >= policy.max_model_calls_per_day) {
       sayOnce('limit:calls', { what: 'limit', text: 'Daily limit on model calls reached.' })
-      continue
+      if (serious)
+        await tellUntried(row, 'The daily limit on model calls is used up, so nothing was tried.')
+      return
     }
     if (candidates.length && state.actions >= policy.max_actions_per_day) {
       sayOnce('limit:actions', { what: 'limit', text: 'Daily limit on actions reached.' })
-      continue
+      if (serious)
+        await tellUntried(row, 'The daily limit on actions is used up, so nothing was tried.')
+      return
+    }
+    if (now < (state.askAfter ?? 0)) {
+      if (serious) await tellUntried(row, 'No model answered, so nothing was tried.')
+      return
     }
     state.calls += 1
     const logs = await evidence(policy, row, deps)
-    const answer = await deps.ask(question(policy, row, candidates, logs))
+    const answer = await deps
+      .ask(question(policy, row, candidates, logs))
+      .catch((error: Error) => ({ failed: error.message }))
     if ('failed' in answer) {
+      state.askAfter = now + policy.no_model_wait_minutes * 60_000
       sayOnce('no-model', {
         row: id,
         what: 'no-model',
         text: `No model answered: ${answer.failed}`,
       })
-      // A serious row is told anyway: no model is no reason for silence. Anything else waits for one.
-      if (serious) {
-        const quiet: Episode = { at: now, action: 'none', verifyAt: now, stage: 'done' }
-        state.episodes[id] = quiet
-        await tell(
-          row,
-          quiet,
-          `${row.meaning ?? row.what} No model answered, so nothing was tried.`,
-        )
-      }
-      continue
+      // A serious row is told anyway. Anything else waits for a model to come back.
+      if (serious) await tellUntried(row, 'No model answered, so nothing was tried.')
+      return
     }
     const { diagnosis, model } = answer
     say({ row: id, what: 'diagnosed', text: diagnosis, model })
@@ -378,7 +430,7 @@ export async function pass(
           model,
         })
       await tell(row, episode, `${row.meaning ?? row.what} ${diagnosis}`)
-      continue
+      return
     }
     state.actions += 1
     const { code, output } = await deps.run(chosen.argv)
@@ -390,9 +442,15 @@ export async function pass(
         text: `${chosen.id} failed: ${maskSecrets(output).slice(-300)}`,
       })
       await tell(row, episode, `${row.meaning ?? row.what} ${chosen.id} failed. ${diagnosis}`)
-      continue
+      return
     }
     episode.stage = 'waiting'
     episode.verifyAt = now + (chosen.verify_minutes ?? policy.verify_minutes) * 60_000
   }
+
+  // One row's trouble doesn't stop the rest; the state keeps it from being asked twice.
+  for (const [id, row] of bad)
+    await settle(id, row).catch((error: Error) =>
+      say({ row: id, what: 'error', text: maskSecrets(error.message).slice(0, 300) }),
+    )
 }

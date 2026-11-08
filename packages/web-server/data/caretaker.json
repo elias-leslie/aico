@@ -9,6 +9,8 @@
   "route_check_hours": 24,
   "max_actions_per_day": 6,
   "max_model_calls_per_day": 20,
+  "no_model_wait_minutes": 60,
+  "max_evidence_commands": 3,
   "evidence_bytes": 12000,
   "wire_silence_seconds": 300,
   "keep_log_lines": 2000,

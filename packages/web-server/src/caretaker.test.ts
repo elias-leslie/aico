@@ -156,7 +156,7 @@ describe('caretaker pass', () => {
     await h.go()
     expect(h.notices.length).toBe(1)
     expect(h.notices[0]).toMatchObject({
-      interrupt: 'needs-you',
+      interrupt: 'outage',
       key: 'status-sustained:here/web',
       source: 'aico',
     })
@@ -225,9 +225,10 @@ describe('caretaker pass', () => {
     await h.go()
     h.advance(10)
     await h.go()
+    expect(h.questions).toHaveLength(1)
     expect(whats(h.events)).toEqual(['no-model'])
     up = true
-    h.advance(10)
+    h.advance(POLICY_FOR_TEST.no_model_wait_minutes)
     await h.go()
     expect(h.ran.length).toBe(1)
   })
@@ -242,6 +243,82 @@ describe('caretaker pass', () => {
     await h.go()
     expect(h.ran.length).toBe(1)
     expect(whats(h.events)).toEqual(['diagnosed', 'acted', 'stayed'])
+  })
+})
+
+describe('caretaker reaches the owner whatever else fails', () => {
+  const storage: ProblemRow = { ...job, id: 'here/check-storage', kind: 'check', what: 'Disk' }
+
+  it('a notice that fails is sent on the next pass, and the row is not asked about again', async () => {
+    const h = harness([storage], () => ({ diagnosis: 'full', action: 'none' }))
+    const notify = h.deps.notify
+    let down = true
+    h.deps.notify = async (notice) => {
+      if (down) throw new Error('tray is down')
+      await notify(notice)
+    }
+    await h.go()
+    h.advance(11)
+    await h.go()
+    expect(h.notices).toHaveLength(0)
+    expect(whats(h.events)).toContain('notify-failed')
+    down = false
+    await h.go()
+    await h.go()
+    expect(h.notices).toHaveLength(1)
+    expect(h.questions).toHaveLength(1)
+  })
+
+  it('a serious row is told when the daily limits are used up, without asking', async () => {
+    const h = harness([storage], () => ({ diagnosis: 'full', action: 'none' }))
+    await h.go()
+    h.advance(11)
+    h.state.calls = POLICY_FOR_TEST.max_model_calls_per_day
+    await h.go()
+    expect(h.notices).toHaveLength(1)
+    expect(h.questions).toHaveLength(0)
+  })
+
+  it('no model: one ask, none until the wait is over, and a bad row stops nothing', async () => {
+    const h = harness([job, { ...job, id: 'jobs/y' }], () => ({ failed: 'both down' }))
+    h.deps.ask = async (text) => {
+      h.questions.push(text)
+      throw new Error('both down')
+    }
+    await h.go()
+    h.advance(11)
+    await h.go()
+    await h.go()
+    expect(h.questions).toHaveLength(1)
+    h.advance(POLICY_FOR_TEST.no_model_wait_minutes + 1)
+    await h.go()
+    expect(h.questions).toHaveLength(2)
+    expect(whats(h.events).filter((what) => what === 'no-model')).toHaveLength(1)
+  })
+
+  it('a strange row id still makes a notice key the notice rules accept', async () => {
+    const h = harness([{ ...web, id: 'here/a b;$(id)' }], () => ({
+      diagnosis: 'full',
+      action: 'none',
+    }))
+    await h.go()
+    h.advance(11)
+    await h.go()
+    expect(h.notices[0]?.key).toMatch(/^[A-Za-z0-9][A-Za-z0-9_.:/@+=,-]{0,199}$/)
+  })
+
+  it('names an outage for a service, and needs-you for a serious check', async () => {
+    const h = harness([web, storage], () => ({ diagnosis: 'd', action: 'none' }))
+    await h.go()
+    h.advance(11)
+    await h.go()
+    expect(h.notices.map((notice) => notice.interrupt).sort()).toEqual(['needs-you', 'outage'])
+  })
+
+  it('reads the first object when a model says it twice, and caps a long action', () => {
+    const one = '{"diagnosis":"d {x} \\" }","action":"none"}'
+    expect(parseAnswer(`${one}\n${one}`)).toEqual({ diagnosis: 'd {x} " }', action: 'none' })
+    expect(parseAnswer({ diagnosis: 'd', action: 'x'.repeat(5000) })?.action).toHaveLength(80)
   })
 })
 

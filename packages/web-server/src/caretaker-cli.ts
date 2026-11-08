@@ -10,11 +10,10 @@ import {
   renameSync,
   writeFileSync,
 } from 'node:fs'
-import { request } from 'node:https'
 import { dirname, join } from 'node:path'
 import { ask } from '@aico/agent'
 import { deleteStatusRow, machineId, postStatusRows } from '@aico/status'
-import { generate, type Post } from '@aico/video'
+import { generate, silenceBound } from '@aico/video'
 import {
   ANSWER_SCHEMA,
   askChain,
@@ -96,25 +95,6 @@ function runCommand(io: CaretakerIo, argv: string[]): Promise<{ code: number; ou
   })
 }
 
-/** The free-tier POST, with the same wire-silence bound as every other model call: no bytes for this long is a dead connection. */
-const silenceBound: Post = (url, headers, body) =>
-  new Promise((resolve, reject) => {
-    const req = request(url, { method: 'POST', headers }, (res) => {
-      const chunks: Buffer[] = []
-      res.on('data', (chunk) => chunks.push(chunk))
-      res.on('end', () =>
-        resolve({ status: res.statusCode ?? 0, text: Buffer.concat(chunks).toString('utf8') }),
-      )
-      res.on('error', reject)
-    })
-    req.setTimeout(POLICY.wire_silence_seconds * 1000, () =>
-      req.destroy(new Error(`no bytes for ${POLICY.wire_silence_seconds} s`)),
-    )
-    req.on('error', reject)
-    req.end(body)
-  })
-
-/** The model routes, as `askChain` and `routeCheck` take them. */
 function routes(policy: Policy, io: CaretakerIo) {
   return {
     sub: async (model: string, question: string, schema?: unknown) => {
@@ -125,10 +105,19 @@ function routes(policy: Policy, io: CaretakerIo) {
       )
       return outcome.kind === 'done'
         ? { data: outcome.data, text: outcome.text }
-        : { failed: `${outcome.kind}: ${'detail' in outcome ? outcome.detail : ''}` }
+        : {
+            // An answer that missed the schema may still hold the object (the model said it twice).
+            text: outcome.kind === 'schema_invalid' ? outcome.text : undefined,
+            failed: `${outcome.kind}: ${'detail' in outcome ? outcome.detail : 'errors' in outcome ? outcome.errors.join(', ') : ''}`,
+          }
     },
     free: async (model: string, question: string) =>
-      (await generate(model, [{ text: question }], { env: io.env, post: silenceBound })).text,
+      (
+        await generate(model, [{ text: question }], {
+          env: io.env,
+          post: silenceBound(policy.wire_silence_seconds),
+        })
+      ).text,
   }
 }
 
