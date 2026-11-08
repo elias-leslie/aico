@@ -10,6 +10,7 @@ const routine = (over: Partial<Routine> = {}): Routine => ({
   project: 'school-check',
   source: 'registered',
   home: 'davion-sidarli',
+  hosts: ['davion-sidarli', 'aico'],
   schedule: 'daily at 19:00',
   scope: 'user',
   command: ['/srv/workspaces/projects/school-check/run.sh'],
@@ -93,6 +94,10 @@ describe('Routines', () => {
     expect(rows[1]?.textContent).not.toContain('Nothing new.')
     fireEvent.click(rows[1]?.querySelector('button') as HTMLElement)
     expect(rows[1]?.textContent).toContain('Nothing new.')
+    expect(rows[1]?.textContent).toContain(
+      'runs on either davion-sidarli or aico',
+    )
+    expect(rows[1]?.textContent).toContain('Last run')
     expect(rows[1]?.textContent).toContain(
       '/srv/workspaces/projects/school-check/run.sh',
     )

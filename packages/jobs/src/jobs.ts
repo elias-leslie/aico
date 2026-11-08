@@ -26,7 +26,7 @@ export interface JobDef {
   cwd?: string
 }
 
-const KIND = /^[a-z0-9][a-z0-9-]{0,63}$/
+export const KIND = /^[a-z0-9][a-z0-9-]{0,63}$/
 const AT = /^([01]\d|2[0-3]):([0-5]\d)$/
 
 function fail(where: string, message: string): never {

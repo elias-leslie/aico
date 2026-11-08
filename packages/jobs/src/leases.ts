@@ -39,6 +39,9 @@ const MIGRATIONS = [
      lease_s INTEGER NOT NULL,
      created_at INTEGER NOT NULL
    ) STRICT`,
+  // Runs on either host: the lease authority and the machines that may take it over.
+  `ALTER TABLE routines ADD COLUMN lease_host TEXT;
+   ALTER TABLE routines ADD COLUMN workers TEXT`,
 ]
 
 export function jobsDbPath(dataDir: string): string {
@@ -92,6 +95,10 @@ export interface Routine {
   post?: string
   /** Where a command runs; default the scheduler's. */
   cwd?: string
+  /** The one machine that holds the lease (default: host). */
+  lease_host?: string
+  /** Machines that may run it, host first; the others take over after lease_s (default: host only). */
+  workers?: string[]
   /** user: a systemd user unit; system: a system unit (root). */
   scope: 'user' | 'system'
   lease_s: number
@@ -288,8 +295,8 @@ export class JobStore {
   addRoutine(routine: Routine): void {
     this.db
       .prepare(
-        `INSERT INTO routines (kind, project, what, host, at, every_min, command, post, cwd, scope, lease_s, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT OR REPLACE INTO routines (kind, project, what, host, at, every_min, command, post, cwd, scope, lease_s, created_at, lease_host, workers)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         routine.kind,
@@ -304,6 +311,8 @@ export class JobStore {
         routine.scope,
         routine.lease_s,
         routine.created_at,
+        routine.lease_host ?? null,
+        routine.workers ? JSON.stringify(routine.workers) : null,
       )
   }
 
@@ -325,6 +334,8 @@ export class JobStore {
       ...(row.command !== null ? { command: JSON.parse(row.command as string) as string[] } : {}),
       ...(row.post !== null ? { post: row.post as string } : {}),
       ...(row.cwd !== null ? { cwd: row.cwd as string } : {}),
+      ...(row.lease_host !== null ? { lease_host: row.lease_host as string } : {}),
+      ...(row.workers !== null ? { workers: JSON.parse(row.workers as string) as string[] } : {}),
       scope: row.scope as Routine['scope'],
       lease_s: row.lease_s as number,
       created_at: row.created_at as number,

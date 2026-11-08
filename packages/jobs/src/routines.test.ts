@@ -4,9 +4,10 @@ import { join } from 'node:path'
 import type { StatusRow } from '@aico/status'
 import { describe, expect, it } from 'vitest'
 import { whereOf } from './act'
+import { leaseCall } from './fleet-leases'
 import type { JobDef } from './jobs'
 import { JobStore } from './leases'
-import { loadJobs, newRoutine } from './routines'
+import { loadJobs, newRoutine, readEither } from './routines'
 import { parseAdd, type RoutineView, routinesCommand } from './routines-cli'
 import { Runner } from './runner'
 
@@ -252,5 +253,160 @@ describe('scheduling a registered routine', () => {
     await runner.tick()
     await runner.idle()
     expect(ran).toEqual([])
+  })
+})
+
+describe('a routine that runs on either host', () => {
+  const EITHER = { home: 'ws', lease_host: 'gem', workers: ['ws', 'gem'] }
+
+  it('registers on both machines, runs once on the home host and is never taken over after', async () => {
+    const dir = scratch()
+    const file = join(dir, 'jobs.json')
+    writeFileSync(file, JSON.stringify({ either: EITHER, jobs: [] }))
+    expect(readEither(file)).toEqual(EITHER)
+    const ws = new JobStore(':memory:')
+    const gem = new JobStore(':memory:')
+    // The gem side is the lease authority: its socket is leaseCall over its own store and job list.
+    const call =
+      (caller: string) =>
+      (op: string, kind: string, extra: object = {}) =>
+        leaseCall(
+          gem,
+          loadJobs(file, gem),
+          'gem',
+          { op, kind, ...extra } as never,
+          caller,
+          clock.now,
+        )
+    const clock = { now: new Date(2026, 10, 7, 12, 0).getTime() }
+    const lines: string[] = []
+    const errors: string[] = []
+    const run = (...args: string[]) =>
+      routinesCommand(
+        args,
+        {
+          jobs: loadJobs(file, ws),
+          store: ws,
+          machine: 'ws',
+          env: {},
+          dataDir: dir,
+          either: EITHER,
+          peer: () => ({
+            register: async (routine) => void call('ws')('register', routine.kind, { routine }),
+            unregister: async (kind) => call('ws')('unregister', kind) as boolean,
+          }),
+          postRows: async () => {},
+          removeRow: async () => {},
+          now: () => clock.now,
+        },
+        (l) => lines.push(l),
+        (l) => errors.push(l),
+      )
+    expect(
+      await run('add', ...ADD, '--at', '19:00', '--hosts', 'either', '--command', 'true'),
+    ).toBe(0)
+    expect(lines.join('')).toContain('on ws or gem')
+    for (const store of [ws, gem])
+      expect(store.routines()[0]).toMatchObject({
+        kind: 'school-check',
+        host: 'ws',
+        lease_host: 'gem',
+        workers: ['ws', 'gem'],
+      })
+    // Both machines' schedulers run it against the gem authority.
+    const gemJobs = () => loadJobs(file, gem)
+    const ran: string[] = []
+    const runnerOn = (machine: string, store: JobStore) =>
+      new Runner({
+        store,
+        jobs: () => loadJobs(file, store),
+        machine,
+        holder: `${machine}:1`,
+        authority: () => ({
+          claim: (kind, who, now) =>
+            leaseCall(
+              gem,
+              gemJobs(),
+              'gem',
+              { op: 'claim', kind, who } as never,
+              machine,
+              now,
+            ) as never,
+          renew: (lease, now) =>
+            leaseCall(
+              gem,
+              gemJobs(),
+              'gem',
+              { op: 'renew', kind: lease.kind, lease } as never,
+              machine,
+              now,
+            ) as boolean,
+          complete: (lease, result, ranAt) => {
+            leaseCall(
+              gem,
+              gemJobs(),
+              'gem',
+              { op: 'complete', kind: lease.kind, lease, result, ranAt } as never,
+              machine,
+              clock.now,
+            )
+          },
+          release: () => {},
+          get: (kind) => gem.get(kind),
+        }),
+        act: async () => {
+          ran.push(machine)
+          return { state: 'ok', meaning: 'fine' }
+        },
+        postRows: async () => {},
+        now: () => clock.now,
+        log: () => {},
+      })
+    const onWs = runnerOn('ws', ws)
+    const onGem = runnerOn('gem', gem)
+    onGem.start()
+    clock.now = new Date(2026, 10, 7, 19, 0, 1).getTime()
+    await onGem.tick()
+    await onGem.idle()
+    // The other machine waits one lease for the home host, so nobody has run it yet.
+    expect(ran).toEqual([])
+    await onWs.tick()
+    await onWs.idle()
+    expect(ran).toEqual(['ws'])
+    // The home host is gone for the evening's retries: the day's slot is spent, not run again.
+    clock.now += 3_600_000
+    await onGem.tick()
+    await onGem.idle()
+    expect(ran).toEqual(['ws'])
+    expect(gem.get('school-check')).toMatchObject({ lastMachine: 'ws', lastState: 'ok' })
+    // If the home host is down at the slot, the other one takes it after the lease.
+    clock.now = new Date(2026, 10, 8, 19, 0, 1).getTime()
+    await onGem.tick()
+    await onGem.idle()
+    expect(ran).toEqual(['ws'])
+    clock.now += 301_000
+    await onGem.tick()
+    await onGem.idle()
+    expect(ran).toEqual(['ws', 'gem'])
+    expect(gem.get('school-check')?.lastMachine).toBe('gem')
+    // Removing it from ws removes it from gem too.
+    expect(await run('remove', 'school-check')).toBe(0)
+    expect(gem.routines()).toEqual([])
+  })
+
+  it('needs the either entry, and refuses --host with it', () => {
+    const base = { kind: 'k', project: 'p', what: 'W', at: '19:00', command: ['/bin/true'] }
+    expect(() => newRoutine({ ...base, hosts: 'either' }, 'ws', new Set(), 0, null)).toThrow(
+      "'either'",
+    )
+    expect(() =>
+      newRoutine({ ...base, hosts: 'either', host: 'ws' }, 'ws', new Set(), 0, EITHER),
+    ).toThrow('not both')
+    expect(() => newRoutine({ ...base, hosts: 'both' }, 'ws', new Set(), 0, EITHER)).toThrow(
+      '--hosts',
+    )
+    expect(() => newRoutine({ ...base, hosts: 'either' }, 'other', new Set(), 0, EITHER)).toThrow(
+      'run this on ws',
+    )
   })
 })

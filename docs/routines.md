@@ -18,6 +18,13 @@ Run on the machine that should run it (the default host is the machine you are o
 - `--at HH:MM` runs daily at that local time; `--every MINUTES` repeats after each run finishes.
 - `--command ARGV...` is last on the line. The program is a path (or on the scheduler's PATH);
   `--cwd` defaults to the folder you ran `add` in.
+- `--hosts either` runs it on whichever of davion-sidarli and aico is online (the pair is the
+  `either` entry in packages/jobs/data/jobs.json). Run `add` on a machine that can run it: it also
+  registers the routine on the other one over the fleet link, and refuses (registering nothing) if
+  that machine is unreachable. The lease lives on the always-on machine, so a day's slot runs once:
+  the home host first, the other after one lease period if the home host did not start it. Routines
+  with this setting need their checkout, logins, tools and any state on both machines (not Aico's
+  job). Status and Routines show which machine ran it last.
 - `--post /api/path` POSTs to Aico web instead of running a command.
 - `--scope system` runs it as a system unit (root); the default is a user unit.
 - `--kind` is unique across all routines. `--project` is the project id and labels the row.

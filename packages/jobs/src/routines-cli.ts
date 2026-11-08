@@ -9,19 +9,21 @@ import type { StatusRow } from '@aico/status'
 import { remoteAuthority } from './fleet-leases'
 import { type JobDef, resumeAt, schedule } from './jobs'
 import type { JobState, JobStore } from './leases'
-import { newRoutine, type RoutineInput } from './routines'
+import { type EitherHosts, newRoutine, type RoutineInput } from './routines'
 import { jobRow, type LeaseAuthority } from './runner'
 
 const ROUTINES_USAGE = `Usage: aico routines <command>
   list [--json]      every routine: project, schedule, next run, how it last went
   add --project P --kind K --what "..." (--at HH:MM | --every MINUTES)
-      (--post /aico/path | --command ARGV...) [--cwd DIR] [--host H] [--scope user|system] [--lease SECONDS]
+      (--post /aico/path | --command ARGV...) [--cwd DIR] [--hosts either|this] [--scope user|system] [--lease SECONDS]
                      register a routine; --command takes the rest of the line, so it goes last
   remove KIND        unregister a routine you added (built-in ones live in jobs.json)
   pause KIND         stop its scheduled runs (Run now still works)
   resume KIND        schedule it again
   run KIND           run it now; its worker starts it within seconds
   log KIND           the output of its last run
+--hosts either runs it on whichever of the two Aico machines is online (never twice for one slot);
+run add on a machine that can run it: it registers the routine on the other one over the fleet link.
 A failed routine shows in Status and the morning digest; it reaches the phone only if its own
 command sends an \`aico notify\` that asks for it.`
 
@@ -37,6 +39,10 @@ export interface RoutinesContext {
   machine: string
   env: NodeJS.ProcessEnv
   dataDir: string
+  /** The machines `--hosts either` means (jobs.json). */
+  either?: EitherHosts | null
+  /** The lease link to another machine (tests give their own). */
+  peer?: (name: string) => Pick<ReturnType<typeof remoteAuthority>, 'register' | 'unregister'>
   /** Sends Status rows to aico-web; failures are the caller's to ignore. */
   postRows: (rows: StatusRow[]) => Promise<void>
   removeRow: (id: string) => Promise<void>
@@ -50,6 +56,9 @@ export interface RoutineView {
   project: string
   source: 'built-in' | 'registered'
   home: string
+  /** Every machine that may run it, and the one that holds its lease. */
+  hosts: string[]
+  leaseHost: string
   schedule: string
   at?: string
   every_min?: number
@@ -87,6 +96,9 @@ function controlOf(job: JobDef, ctx: RoutinesContext): Control {
   }
 }
 
+const peerOf = (name: string, ctx: RoutinesContext) =>
+  ctx.peer?.(name) ?? remoteAuthority(join(peerDir(ctx.env, process.getuid?.(), name), 'jobs.sock'))
+
 async function viewOf(job: JobDef, ctx: RoutinesContext): Promise<RoutineView> {
   const now = (ctx.now ?? Date.now)()
   let state: JobState | null = null
@@ -102,6 +114,8 @@ async function viewOf(job: JobDef, ctx: RoutinesContext): Promise<RoutineView> {
     project: job.project,
     source: job.source ?? 'built-in',
     home: job.home,
+    hosts: job.workers ?? [job.home],
+    leaseHost: job.lease_host ?? job.home,
     schedule: schedule(job),
     ...(job.at !== undefined ? { at: job.at } : {}),
     ...(job.every_min !== undefined ? { every_min: job.every_min } : {}),
@@ -140,7 +154,19 @@ export function parseAdd(args: readonly string[]): RoutineInput {
     values.set(flag.slice(2), value)
     i++
   }
-  const known = ['project', 'kind', 'what', 'at', 'every', 'post', 'cwd', 'host', 'scope', 'lease']
+  const known = [
+    'project',
+    'kind',
+    'what',
+    'at',
+    'every',
+    'post',
+    'cwd',
+    'host',
+    'hosts',
+    'scope',
+    'lease',
+  ]
   const unknown = [...values.keys()].find((key) => !known.includes(key))
   if (unknown) throw new Error(`unknown option --${unknown}`)
   for (const field of ['project', 'kind', 'what'] as const)
@@ -160,6 +186,7 @@ export function parseAdd(args: readonly string[]): RoutineInput {
     ...(values.has('post') ? { post: values.get('post') } : {}),
     ...(values.has('cwd') ? { cwd: values.get('cwd') } : {}),
     ...(values.has('host') ? { host: values.get('host') } : {}),
+    ...(values.has('hosts') ? { hosts: values.get('hosts') } : {}),
     ...(values.has('scope') ? { scope: values.get('scope') } : {}),
     ...(lease !== undefined ? { lease_s: Number(lease) } : {}),
   }
@@ -201,14 +228,39 @@ export async function routinesCommand(
     try {
       const input = parseAdd(args)
       if (input.command && !input.cwd) input.cwd = process.cwd()
-      routine = newRoutine(input, ctx.machine, new Set(ctx.jobs.map((job) => job.kind)), now())
+      routine = newRoutine(
+        input,
+        ctx.machine,
+        new Set(ctx.jobs.map((job) => job.kind)),
+        now(),
+        ctx.either ?? null,
+      )
     } catch (error) {
       err(`aico routines add: ${(error as Error).message}`)
       return 2
     }
+    // Every other machine that may run it keeps the routine too, so its scheduler can take over.
+    const others = (routine.workers ?? []).filter((name) => name !== ctx.machine)
+    const sent: string[] = []
+    try {
+      for (const name of others) {
+        await peerOf(name, ctx).register(routine)
+        sent.push(name)
+      }
+    } catch (error) {
+      for (const name of sent)
+        await peerOf(name, ctx)
+          .unregister(routine.kind)
+          .catch(() => {})
+      err(
+        `aico routines add: could not register it on ${others.find((name) => !sent.includes(name))} ` +
+          `(${(error as Error).message}); nothing was registered. Try again when that machine is online.`,
+      )
+      return 1
+    }
     ctx.store.addRoutine(routine)
     out(
-      `Registered ${routine.kind} (${routine.project}): ${schedule(routine)} on ${routine.host}. ` +
+      `Registered ${routine.kind} (${routine.project}): ${schedule(routine)} on ${(routine.workers ?? [routine.host]).join(' or ')}. ` +
         `The scheduler picks it up within seconds; aico routines run ${routine.kind} tries it now.`,
     )
     return 0
@@ -230,6 +282,16 @@ export async function routinesCommand(
     }
     ctx.store.removeRoutine(job.kind)
     await ctx.removeRow(`jobs/${job.kind}`).catch(() => {})
+    for (const name of (job.workers ?? []).filter((worker) => worker !== ctx.machine)) {
+      try {
+        await peerOf(name, ctx).unregister(job.kind)
+      } catch (error) {
+        err(
+          `aico routines remove: ${name} is not reachable (${(error as Error).message}); ` +
+            `run aico routines remove ${job.kind} there too, or it keeps scheduling it.`,
+        )
+      }
+    }
     out(`Removed ${job.kind}.`)
     return 0
   }

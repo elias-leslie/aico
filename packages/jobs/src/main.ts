@@ -10,7 +10,7 @@ import { act, postJob, systemdUnits, unitInFlight, whereOf } from './act'
 import { remoteAuthority, serveLeases } from './fleet-leases'
 import type { JobDef } from './jobs'
 import { type JobState, JobStore, jobsDbPath } from './leases'
-import { loadJobs } from './routines'
+import { loadJobs, readEither } from './routines'
 import { routinesCommand } from './routines-cli'
 import { jobRow, type LeaseAuthority, Runner } from './runner'
 
@@ -134,6 +134,7 @@ export async function main(argv: string[], env = process.env): Promise<number> {
       machine,
       env,
       dataDir,
+      either: readEither(jobsFile),
       postRows: (rows) => postRows(webUrl, rows),
       removeRow: (id) => removeRow(webUrl, id),
     })

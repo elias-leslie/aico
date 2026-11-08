@@ -11,6 +11,7 @@ import {
 import {
   chipOf,
   headOf,
+  hostsText,
   type Routine,
   scheduleText,
   sortRoutines,
@@ -140,7 +141,7 @@ function Row({ routine }: { routine: Routine }) {
               {routine.project}
             </span>{' '}
             {routine.source === 'registered' ? 'Registered' : 'Built in'} · runs
-            on {routine.home}
+            on {hostsText(routine)}
           </p>
           {routine.command && (
             <p className={styles.cmd}>{routine.command.join(' ')}</p>

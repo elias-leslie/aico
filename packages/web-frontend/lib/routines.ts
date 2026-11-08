@@ -10,6 +10,8 @@ export interface Routine {
   project: string
   source: 'built-in' | 'registered'
   home: string
+  /** Every machine that may run it; more than one means whichever is online. */
+  hosts: string[]
   schedule: string
   scope: 'user' | 'system'
   command?: string[]
@@ -50,6 +52,12 @@ export function chipOf(routine: Routine): { chip: RoutineChip; word: string } {
 /** "daily at 19:00" as a sentence start. */
 export const scheduleText = (routine: Routine) =>
   routine.schedule.charAt(0).toUpperCase() + routine.schedule.slice(1)
+
+/** Where it runs, in words: one machine, or whichever of several is online. */
+export const hostsText = (routine: Routine) =>
+  routine.hosts.length > 1
+    ? `either ${routine.hosts.join(' or ')}`
+    : routine.home
 
 /** Failed routines first, then warnings, then the rest by project and name. */
 export function sortRoutines(list: readonly Routine[]): Routine[] {

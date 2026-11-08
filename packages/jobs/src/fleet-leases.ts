@@ -6,16 +6,35 @@ import { createServer as createCarrier, createConnection, type Server, type Sock
 import { dirname } from 'node:path'
 import type { JobDef } from './jobs'
 import { nextRun, resumeAt } from './jobs'
-import { type JobResult, type JobState, type JobStore, type Lease, StaleLease } from './leases'
+import {
+  type JobResult,
+  type JobState,
+  type JobStore,
+  type Lease,
+  type Routine,
+  StaleLease,
+} from './leases'
 import type { LeaseAuthority } from './runner'
 
 export interface LeaseCall {
-  op: 'claim' | 'renew' | 'complete' | 'release' | 'get' | 'run' | 'pause' | 'resume'
+  op:
+    | 'claim'
+    | 'renew'
+    | 'complete'
+    | 'release'
+    | 'get'
+    | 'run'
+    | 'pause'
+    | 'resume'
+    | 'register'
+    | 'unregister'
   kind: string
   who?: { holder: string; machine: string }
   lease?: Lease
   result?: JobResult
   ranAt?: number
+  /** register: a routine another machine of its workers registered, to keep here too. */
+  routine?: Routine
 }
 
 /** Local socket is private; remote callers reach it only over the pinned link.
@@ -28,6 +47,23 @@ export function leaseCall(
   caller: string,
   now = Date.now(),
 ): unknown {
+  // A routine registered on another of its machines is kept here too, so this machine's scheduler
+  // knows it: only a machine in its own worker list may send it.
+  if (call.op === 'register') {
+    const routine = call.routine
+    if (!routine || routine.kind !== call.kind || !(routine.workers ?? []).includes(caller))
+      throw new Error('Routine is not for this caller')
+    if (jobs.some((entry) => entry.kind === routine.kind && entry.source !== 'registered'))
+      throw new Error(`There is already a built-in job '${routine.kind}' here`)
+    store.addRoutine(routine)
+    return null
+  }
+  if (call.op === 'unregister') {
+    const known = store.routines().find((entry) => entry.kind === call.kind)
+    if (known && !(known.workers ?? []).includes(caller))
+      throw new Error('Routine is not for this caller')
+    return store.removeRoutine(call.kind)
+  }
   const job = jobs.find(
     (entry) => entry.kind === call.kind && (entry.lease_host ?? entry.home) === authority,
   )
@@ -215,6 +251,8 @@ export function remoteAuthority(socket: string): LeaseAuthority & {
   run(kind: string): Promise<boolean>
   pause(kind: string): Promise<boolean>
   resume(kind: string): Promise<boolean>
+  register(routine: Routine): Promise<void>
+  unregister(kind: string): Promise<boolean>
 } {
   return {
     claim: async (kind, who) =>
@@ -231,5 +269,9 @@ export function remoteAuthority(socket: string): LeaseAuthority & {
     run: async (kind) => (await remoteCall(socket, { op: 'run', kind })) as boolean,
     pause: async (kind) => (await remoteCall(socket, { op: 'pause', kind })) as boolean,
     resume: async (kind) => (await remoteCall(socket, { op: 'resume', kind })) as boolean,
+    register: async (routine) => {
+      await remoteCall(socket, { op: 'register', kind: routine.kind, routine })
+    },
+    unregister: async (kind) => (await remoteCall(socket, { op: 'unregister', kind })) as boolean,
   }
 }

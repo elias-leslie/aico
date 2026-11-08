@@ -2,9 +2,9 @@
 // instead of editing jobs.json. The scheduler reads them with the built-in jobs, so a routine
 // takes the same lease, runs as the same kind of unit and writes the same Status row.
 
-import { existsSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
-import { type JobDef, parseJobs, readJobs } from './jobs'
+import { type JobDef, KIND, parseJobs, readJobs } from './jobs'
 import type { JobStore, Routine } from './leases'
 
 const DEFAULT_LEASE_S = 300
@@ -18,6 +18,8 @@ function routineJob(routine: Routine): JobDef {
     what: routine.what,
     project: routine.project,
     home: routine.host,
+    ...(routine.lease_host !== undefined ? { lease_host: routine.lease_host } : {}),
+    ...(routine.workers !== undefined ? { workers: routine.workers } : {}),
     ...(routine.at !== undefined ? { at: routine.at } : {}),
     ...(routine.every_min !== undefined ? { every_min: routine.every_min } : {}),
     run: routine.post !== undefined ? { post: routine.post } : { command: routine.command ?? [] },
@@ -41,6 +43,27 @@ export function loadJobs(jobsFile: string, store: JobStore): JobDef[] {
   ]
 }
 
+/** The machines "either" means, from jobs.json's `either` entry (data, not code). */
+export interface EitherHosts {
+  home: string
+  lease_host: string
+  workers: string[]
+}
+
+export function readEither(jobsFile: string): EitherHosts | null {
+  const either = (JSON.parse(readFileSync(jobsFile, 'utf8')) as { either?: Partial<EitherHosts> })
+    .either
+  const names = [either?.home, either?.lease_host, ...(either?.workers ?? [])]
+  if (
+    !either ||
+    !names.every((name) => typeof name === 'string' && KIND.test(name)) ||
+    !either.workers?.includes(either.home as string) ||
+    !either.workers.includes(either.lease_host as string)
+  )
+    return null
+  return either as EitherHosts
+}
+
 export interface RoutineInput {
   kind: string
   project: string
@@ -53,6 +76,8 @@ export interface RoutineInput {
   cwd?: string
   scope?: string
   lease_s?: number
+  /** `either`: runs on whichever of the machines in jobs.json's `either` entry is online. */
+  hosts?: string
 }
 
 /**
@@ -64,11 +89,27 @@ export function newRoutine(
   machine: string,
   taken: ReadonlySet<string>,
   now: number,
+  either: EitherHosts | null = null,
 ): Routine {
-  const host = (input.host ?? machine).toLowerCase()
-  if (host !== machine)
+  if (input.hosts !== undefined && input.hosts !== 'either' && input.hosts !== 'this')
+    throw new Error('--hosts is either (whichever online machine runs it) or this')
+  if (input.hosts === 'either' && input.host !== undefined)
+    throw new Error('give --hosts either or --host H, not both')
+  if (input.hosts === 'either' && !either)
+    throw new Error("jobs.json has no 'either' entry naming the machines")
+  const host = (
+    input.hosts === 'either' ? (either as EitherHosts).home : (input.host ?? machine)
+  ).toLowerCase()
+  const placement =
+    input.hosts === 'either'
+      ? {
+          lease_host: (either as EitherHosts).lease_host,
+          workers: [host, ...(either as EitherHosts).workers.filter((name) => name !== host)],
+        }
+      : null
+  if (!(placement?.workers ?? [host]).includes(machine))
     throw new Error(
-      `a routine runs on the machine it is registered on; run this on ${host} (this is ${machine})`,
+      `a routine is registered on a machine that runs it; run this on ${host} (this is ${machine})`,
     )
   if (taken.has(input.kind)) throw new Error(`there is already a routine or job '${input.kind}'`)
   if ((input.command === undefined) === (input.post === undefined))
@@ -110,6 +151,7 @@ export function newRoutine(
     ...(job.at !== undefined ? { at: job.at } : {}),
     ...(job.every_min !== undefined ? { every_min: job.every_min } : {}),
     ...('command' in job.run ? { command: job.run.command } : { post: job.run.post }),
+    ...(placement ?? {}),
     ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
     scope: job.scope ?? 'user',
     lease_s,
