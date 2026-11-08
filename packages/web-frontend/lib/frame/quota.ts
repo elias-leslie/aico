@@ -164,6 +164,21 @@ function glanceOf(provider: UsageProvider, now: number): QuotaGlance {
   }
 }
 
+/** The subscription a tool runs on: they share a name (`claude`, `codex`) in the tool's slug or aliases. */
+export function toolGlance(
+  glances: readonly QuotaGlance[],
+  names: readonly string[],
+): QuotaGlance | undefined {
+  return glances.find((glance) => names.includes(glance.id))
+}
+
+/** The agent picker's few words: "73% left", "on credits", "used up"; nothing when not known. */
+export function pickerSuffix(glance: QuotaGlance): string | null {
+  if (glance.state === 'credits') return 'on credits'
+  if (glance.state === 'used_up') return 'used up'
+  return glance.left === null ? null : `${glance.left}% left`
+}
+
 /** Every subscription's glance, in the order the report lists them. */
 export function quotaGlances(
   report: UsageReport | null,

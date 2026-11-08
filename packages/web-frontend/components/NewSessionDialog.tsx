@@ -4,6 +4,7 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { clsx } from 'clsx'
 import { Search } from 'lucide-react'
 import { type ReactNode, useMemo, useState } from 'react'
+import { pickerSuffix, quotaGlances, toolGlance } from '@/lib/frame/quota'
 import { useAgentTools } from '@/lib/hooks/use-agent-tools'
 import {
   HOST_STATE_LABELS,
@@ -16,6 +17,7 @@ import {
   type ProjectSetting,
   useProjectSettings,
 } from '@/lib/hooks/use-project-settings'
+import { useUsage } from '@/lib/hooks/use-usage'
 import { sessionHostLabel } from '@/lib/machines'
 import { AgentIcon, getAgentColor } from './AgentIcon'
 import { SheetHandle, SheetTitleBar } from './SheetChrome'
@@ -68,6 +70,7 @@ export function NewSessionDialog({
 }: NewSessionDialogProps) {
   const local = useProjectSettings()
   const { enabledTools, defaultTool } = useAgentTools()
+  const glances = quotaGlances(useUsage().report)
   const [query, setQuery] = useState('')
   const [pickedProjectId, setPickedProjectId] = useState<string | null>(null)
   const [kind, setKind] = useState<'agent' | 'shell'>('agent')
@@ -232,21 +235,34 @@ export function NewSessionDialog({
               )}
               {kind === 'agent' && enabledTools.length > 0 && (
                 <fieldset aria-label="Agent" className="lantern-tools mt-2.5">
-                  {enabledTools.map((t) => (
-                    <button
-                      key={t.slug}
-                      type="button"
-                      aria-pressed={t.slug === tool?.slug}
-                      onClick={() => setPickedToolSlug(t.slug)}
-                      className="lantern-tool"
-                    >
-                      <AgentIcon
-                        slug={t.slug}
-                        color={getAgentColor(t.slug, t.color)}
-                      />
-                      <span className="truncate">{t.name}</span>
-                    </button>
-                  ))}
+                  {enabledTools.map((t) => {
+                    const glance = toolGlance(glances, [t.slug, ...t.aliases])
+                    const suffix = glance && pickerSuffix(glance)
+                    return (
+                      <button
+                        key={t.slug}
+                        type="button"
+                        aria-pressed={t.slug === tool?.slug}
+                        onClick={() => setPickedToolSlug(t.slug)}
+                        className="lantern-tool"
+                        title={suffix ? glance.answer : undefined}
+                      >
+                        <AgentIcon
+                          slug={t.slug}
+                          color={getAgentColor(t.slug, t.color)}
+                        />
+                        <span className="truncate">{t.name}</span>
+                        {suffix && (
+                          <span
+                            className="ml-auto flex-none text-xs"
+                            style={{ color: 'var(--mist)' }}
+                          >
+                            {suffix}
+                          </span>
+                        )}
+                      </button>
+                    )
+                  })}
                 </fieldset>
               )}
               {toolIsLastUsed && (

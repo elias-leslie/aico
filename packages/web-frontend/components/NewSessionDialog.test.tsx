@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -18,8 +19,15 @@ const projectState = vi.hoisted(() => ({
   refetch: vi.fn(),
 }))
 const tools = [
-  { slug: 'claude-code', name: 'Claude Code', color: null, description: null },
-  { slug: 'codex', name: 'Codex', color: null, description: null },
+  {
+    slug: 'claude-code',
+    name: 'Claude Code',
+    color: null,
+    description: null,
+    aliases: ['claude'],
+  },
+  { slug: 'codex', name: 'Codex', color: null, description: null, aliases: [] },
+  { slug: 'pi', name: 'Pi', color: null, description: null, aliases: [] },
 ]
 
 vi.mock('@/lib/hooks/use-project-settings', () => ({
@@ -64,6 +72,13 @@ vi.mock('@/lib/hooks/use-agent-tools', () => ({
   useAgentTools: () => ({ enabledTools: tools, defaultTool: tools[0] }),
 }))
 
+const usage = vi.hoisted(() => ({
+  report: null as unknown,
+}))
+vi.mock('@/lib/hooks/use-usage', () => ({
+  useUsage: () => ({ report: usage.report }),
+}))
+
 function renderDialog(defaultProjectId?: string, onStart = vi.fn<Start>()) {
   const onClose = vi.fn()
   render(
@@ -93,6 +108,48 @@ describe('NewSessionDialog', () => {
       lab: [{ id: 'neri', name: 'Neri', root_path: '/home/u/neri' }],
     }
     hostProjects.failures = {}
+  })
+
+  it('says what each subscription has left beside its agent, and nothing when not known', () => {
+    const provider = (id: string, status: string, left: number | null) => ({
+      id,
+      name: id,
+      status,
+      answer: `${id} answer`,
+      credits: null,
+      windows:
+        left === null
+          ? []
+          : [
+              {
+                label: 'Weekly',
+                state: 'ok',
+                left_percent: left,
+                text: `Weekly ${left}% left`,
+                resets_at: null,
+                length_seconds: 604800,
+                resets_in_seconds: null,
+              },
+            ],
+    })
+    usage.report = {
+      providers: [
+        provider('claude', 'ok', 73),
+        provider('codex', 'on_credits', 0),
+      ],
+    }
+    renderDialog()
+    const agent = screen.getByRole('group', { name: 'Agent' })
+    const claude = within(agent).getByRole('button', { name: /Claude Code/ })
+    expect(claude).toHaveTextContent('73% left')
+    expect(claude).toHaveAttribute('title', 'claude answer')
+    expect(
+      within(agent).getByRole('button', { name: /Codex/ }),
+    ).toHaveTextContent('on credits')
+    expect(
+      within(agent).getByRole('button', { name: 'Pi' }),
+    ).not.toHaveAttribute('title')
+    usage.report = null
   })
 
   it('offers no host choice when Tether links to no host', () => {

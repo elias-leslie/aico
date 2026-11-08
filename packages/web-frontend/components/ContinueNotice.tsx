@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { type QuotaGlance, quotaGlances } from '@/lib/frame/quota'
+import { type QuotaGlance, quotaGlances, toolGlance } from '@/lib/frame/quota'
 import { type AgentTool, useAgentTools } from '@/lib/hooks/use-agent-tools'
 import { useTerminalPanes } from '@/lib/hooks/use-terminal-panes'
 import { useUsage } from '@/lib/hooks/use-usage'
@@ -15,8 +15,7 @@ function ownGlance(
   mode: string,
   tool: AgentTool | undefined,
 ): QuotaGlance | undefined {
-  const names = tool ? [tool.slug, ...tool.aliases] : [mode]
-  return glances.find((glance) => names.includes(glance.id))
+  return toolGlance(glances, tool ? [tool.slug, ...tool.aliases] : [mode])
 }
 
 /**

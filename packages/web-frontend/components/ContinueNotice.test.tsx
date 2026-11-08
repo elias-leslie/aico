@@ -14,7 +14,10 @@ const h = vi.hoisted(() => ({
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: h.push }) }))
 vi.mock('@/lib/hooks/use-usage', () => ({ useUsage: () => ({ report: null }) }))
-vi.mock('@/lib/frame/quota', () => ({ quotaGlances: () => h.glances }))
+vi.mock('@/lib/frame/quota', async (original) => ({
+  ...(await original<typeof import('@/lib/frame/quota')>()),
+  quotaGlances: () => h.glances,
+}))
 vi.mock('@/lib/hooks/use-agent-tools', () => ({
   useAgentTools: () => ({ enabledTools: h.tools }),
 }))
