@@ -244,18 +244,23 @@ func (h *Hook) Confirm(id string, withdraw bool) (map[string]any, error) {
 
 // AckAuthorizes: a yes-ack of this request from holder (the project's lease holder), under two hours old.
 func (h *Hook) AckAuthorizes(id string, holder Lease, project string) bool {
+	r := h.yesFrom(id, holder.AgentID)
+	return r != nil && (!truthy(r["project"]) || str(r["project"]) == project)
+}
+
+// yesFrom: my request id, answered yes by agent under two hours ago, else nil.
+func (h *Hook) yesFrom(id, agent string) map[string]any {
 	mine := h.lineage().SelfIDs(h.ID)
 	for _, r := range h.Rows() {
 		if str(r["id"]) != id || !mine[str(r["from"])] || str(r["intent"]) != "yes" {
 			continue
 		}
-		if str(r["acked_by"]) != holder.AgentID || (truthy(r["project"]) && str(r["project"]) != project) {
-			return false
+		if t, ok := parseStamp(str(r["acked_at"])); ok && str(r["acked_by"]) == agent && time.Since(t) <= ackValid {
+			return r
 		}
-		t, ok := parseStamp(str(r["acked_at"]))
-		return ok && time.Since(t) <= ackValid
+		return nil
 	}
-	return false
+	return nil
 }
 
 // KnownTarget: to names a registered identity (its exact id or a 13+ char session prefix).

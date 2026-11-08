@@ -298,7 +298,7 @@ func settledMain(h *lease.Hook, p lease.Project, paths []string, committed bool,
 		return fail("%v", err)
 	}
 	if withAck != "" {
-		found = h.ExceptAcked(found, withAck, p.ID)
+		found = h.ExceptAcked(found, withAck)
 	}
 	out := map[string][]string{}
 	for path, ids := range found {

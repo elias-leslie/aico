@@ -375,21 +375,21 @@ func TestWritersYesHandsOverTheirPaths(t *testing.T) {
 	if err != nil || len(found[theirs]) == 0 {
 		t.Fatalf("the other agent's write must show: %v (%v)", found, err)
 	}
-	row, _, err := a.Send(SendOpts{To: "cc:222222", Text: "may I commit theirs.txt?"})
+	row, _, err := a.Send(SendOpts{To: "cc:222222", Text: "may I commit theirs.txt?", Project: "elsewhere"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	id := row["id"].(string)
-	if got := a.ExceptAcked(found, id, "demo"); len(got[theirs]) == 0 {
+	if got := a.ExceptAcked(found, id); len(got[theirs]) == 0 {
 		t.Errorf("an open request hands nothing over: %v", got)
 	}
 	if _, err := b.Ack(id, "yes", ""); err != nil {
 		t.Fatal(err)
 	}
-	if got := a.ExceptAcked(found, id, "demo"); len(got[theirs]) != 0 {
+	if got := a.ExceptAcked(found, id); len(got[theirs]) != 0 {
 		t.Errorf("the writer's yes hands its path over: %v", got)
 	}
-	if got := b.ExceptAcked(found, id, "demo"); len(got[theirs]) == 0 {
+	if got := b.ExceptAcked(found, id); len(got[theirs]) == 0 {
 		t.Errorf("only the requester may use the yes: %v", got)
 	}
 }

@@ -359,12 +359,12 @@ func (h *Hook) Foreign(project string, paths []string) (map[string][]string, err
 }
 
 // ExceptAcked drops from found (Foreign's answer) the agents whose yes to ackID (my request, under two hours
-// old) lets me take their uncommitted work, as a lease holder's yes does for a hold.
-func (h *Hook) ExceptAcked(found map[string][]string, ackID, project string) map[string][]string {
+// old, sent from any project: the files are the writer's either way) lets me take their uncommitted work.
+func (h *Hook) ExceptAcked(found map[string][]string, ackID string) map[string][]string {
 	out := map[string][]string{}
 	for path, ids := range found {
 		for _, id := range ids {
-			if !h.AckAuthorizes(ackID, Lease{AgentID: strings.TrimPrefix(id, "lease:")}, project) {
+			if h.yesFrom(ackID, strings.TrimPrefix(id, "lease:")) == nil {
 				out[path] = append(out[path], id)
 			}
 		}
