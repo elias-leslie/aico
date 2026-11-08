@@ -14,12 +14,10 @@ import type { Hub } from '@aico/fleet/hub/hub'
 import type { EventBus } from '@aico/session-engine/events'
 import type { Db } from '@aico/session-engine/store'
 import { HttpError, type Router, readJsonObject, sendJson } from '@aico/shared/http'
+import { ASK_LIMITS, ASK_ORIGINS, type AskOrigin } from '@aico/tether-client/client/asks'
 import type { ShowConfig } from './config'
 import { realPaths, ShareStore } from './shares'
 
-const MAX_ASK_OPTIONS = 5
-/** The most files one ask can want or be answered with. */
-const MAX_ASK_FILES = 20
 /** Ids named in the wake line; the rest are in `tether ask get`. */
 const FILES_IN_NOTE = 5
 /** The most asks listed at once (newest kept). */
@@ -273,20 +271,22 @@ function parseAsk(body: Record<string, unknown>): AskRequest {
   const session = body.session ?? null
   if (session !== null && (typeof session !== 'string' || !SESSION.test(session)))
     throw new HttpError(400, 'invalid_body', { field: 'session' })
-  const requester = oneLine(body.requester, 'requester', 60, false)
+  const requester = oneLine(body.requester, 'requester', ASK_LIMITS.requester, false)
   if (session === null && requester === null)
     throw new HttpError(400, 'invalid_body', {
       field: 'requester',
       detail: 'name the asker: a session or a requester',
     })
-  const question = oneLine(body.question, 'question', 200, true) as string
+  const question = oneLine(body.question, 'question', ASK_LIMITS.question, true) as string
   const rawOptions = body.options ?? []
-  if (!Array.isArray(rawOptions) || rawOptions.length > MAX_ASK_OPTIONS)
+  if (!Array.isArray(rawOptions) || rawOptions.length > ASK_LIMITS.options)
     throw new HttpError(400, 'invalid_body', {
       field: 'options',
-      detail: `at most ${MAX_ASK_OPTIONS} choices`,
+      detail: `at most ${ASK_LIMITS.options} choices`,
     })
-  const options = rawOptions.map((option) => oneLine(option, 'options', 100, true) as string)
+  const options = rawOptions.map(
+    (option) => oneLine(option, 'options', ASK_LIMITS.option, true) as string,
+  )
   if (new Set(options).size !== options.length)
     throw new HttpError(400, 'invalid_body', { field: 'options', detail: 'choices repeat' })
   const recommended = body.recommended ?? null
@@ -317,8 +317,8 @@ function parseAsk(body: Record<string, unknown>): AskRequest {
     question,
     options,
     recommended: recommended as number | null,
-    body: multiLine(body.body, 'body', 4000),
-    command: multiLine(body.command, 'command', 2000),
+    body: multiLine(body.body, 'body', ASK_LIMITS.body),
+    command: multiLine(body.command, 'command', ASK_LIMITS.command),
     open: openLink(body.open),
     origin: parseOrigin(body.origin),
     share: share as string | null,
@@ -334,18 +334,18 @@ function parseAttach(value: unknown): string[] | null {
   if (
     !Array.isArray(value) ||
     value.length < 1 ||
-    value.length > MAX_ASK_FILES ||
+    value.length > ASK_LIMITS.files ||
     !value.every(
       (path) =>
         typeof path === 'string' &&
         isAbsolute(path) &&
-        path.length <= 4096 &&
+        path.length <= ASK_LIMITS.path &&
         !ONE_LINE_BAD.test(path),
     )
   )
     throw new HttpError(400, 'invalid_body', {
       field: 'attach',
-      detail: `1 to ${MAX_ASK_FILES} absolute paths`,
+      detail: `1 to ${ASK_LIMITS.files} absolute paths`,
     })
   return value as string[]
 }
@@ -365,8 +365,7 @@ function attachedFiles(paths: readonly string[]): AttachedFile[] {
   })
 }
 
-const ASK_ORIGINS = ['notice', 'status'] as const
-export type AskOrigin = (typeof ASK_ORIGINS)[number]
+export type { AskOrigin }
 
 function parseOrigin(value: unknown): AskOrigin | null {
   if (value === undefined || value === null) return null
@@ -377,7 +376,7 @@ function parseOrigin(value: unknown): AskOrigin | null {
 
 /** `open`: one https link of at most 300 characters. */
 function openLink(value: unknown): string | null {
-  const link = oneLine(value, 'open', 300, false)
+  const link = oneLine(value, 'open', ASK_LIMITS.open, false)
   if (link === null) return null
   if (!/^https:\/\/[^\s]+$/.test(link))
     throw new HttpError(400, 'invalid_body', { field: 'open', detail: 'an https link' })
@@ -395,13 +394,13 @@ function parseWantsFiles(value: unknown): WantsFiles | null {
   const { min, max } = wanted
   if (!Number.isSafeInteger(min) || !Number.isSafeInteger(max))
     throw bad('min and max are whole numbers')
-  if ((min as number) < 0 || (max as number) < 1 || (max as number) > MAX_ASK_FILES)
-    throw bad(`min from 0, max from 1 to ${MAX_ASK_FILES}`)
+  if ((min as number) < 0 || (max as number) < 1 || (max as number) > ASK_LIMITS.files)
+    throw bad(`min from 0, max from 1 to ${ASK_LIMITS.files}`)
   if ((min as number) > (max as number)) throw bad('min is over max')
   return {
     min: min as number,
     max: max as number,
-    hint: oneLine(wanted.hint, 'files.hint', 100, false),
+    hint: oneLine(wanted.hint, 'files.hint', ASK_LIMITS.fileHint, false),
   }
 }
 
@@ -426,11 +425,11 @@ function parseAnswerFiles(value: unknown, max: number): AnswerFile[] {
     if (!Number.isSafeInteger(file.size) || (file.size as number) < 0) throw bad('size')
     return {
       id: file.id,
-      name: oneLine(file.name, 'files.name', 255, true) as string,
-      mime: oneLine(file.mime, 'files.mime', 127, true) as string,
+      name: oneLine(file.name, 'files.name', ASK_LIMITS.fileName, true) as string,
+      mime: oneLine(file.mime, 'files.mime', ASK_LIMITS.fileMime, true) as string,
       size: file.size as number,
-      path: oneLine(file.path, 'files.path', 4096, false),
-      host: oneLine(file.host, 'files.host', 120, false),
+      path: oneLine(file.path, 'files.path', ASK_LIMITS.path, false),
+      host: oneLine(file.host, 'files.host', ASK_LIMITS.host, false),
     }
   })
 }
@@ -1073,13 +1072,13 @@ export function registerAskRoutes(
           throw new HttpError(400, 'invalid_body', { field: 'option' })
         answer = ask.options[index as number] as string
       }
-      const text = oneLine(body.text, 'text', 100, false)
+      const text = oneLine(body.text, 'text', ASK_LIMITS.option, false)
       if (text !== null) {
         if (answer !== null)
           throw new HttpError(400, 'invalid_body', { detail: 'give an option or a text, not both' })
         answer = text
       }
-      const note = multiLine(body.note, 'note', 1000)
+      const note = multiLine(body.note, 'note', ASK_LIMITS.note)
       let files: AnswerFile[] = []
       if (body.files !== undefined) {
         if (!ask.wantsFiles && !(Array.isArray(body.files) && body.files.length === 0))

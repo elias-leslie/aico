@@ -16,6 +16,7 @@
     "./files": "./src/files/browser.ts",
     "./teams": "./src/client/teams.ts",
     "./term": "./src/term/index.ts",
+    "./client/asks": "./src/client/asks.ts",
     "./client/contracts": "./src/client/contracts.ts",
     "./client/sync-peers": "./src/client/sync-peers.ts",
     "./term/remote": "./src/term/remote.ts",

@@ -9,6 +9,7 @@
 import { resolve } from 'node:path'
 import { blobPath } from '@aico/notes/blobs'
 import type { TetherClient } from '@aico/tether-client'
+import { ASK_LIMITS, ASK_ORIGINS, type AskOrigin } from '@aico/tether-client/client/asks'
 import { pendingGrants } from './grants'
 import { objectBody, type Router } from './http'
 import { tetherCall } from './lifecycle'
@@ -25,7 +26,6 @@ const NOT_ONE_LINE = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u
 // biome-ignore lint/suspicious/noControlCharactersInRegex: rejecting control characters is the point
 const NOT_TEXT = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u
 const STATES = ['open', 'answered', 'done', 'withdrawn'] as const
-const MAX_FILES = 20
 /** What the answer says when the owner chose to answer without the files. */
 const NO_FILES_TEXT = 'No files'
 
@@ -67,7 +67,7 @@ export interface Ask {
   /** An https link the ask opens (Tether API 31); absent from an older Tether. */
   open?: string | null
   /** Who filed it when an app did (Tether API 31); absent from an older Tether. */
-  origin?: 'notice' | 'status' | null
+  origin?: AskOrigin | null
   share: string | null
   /** What the asker attached (`tether ask create --file`); validateAsk gives [] for an older Tether. */
   attached?: AttachedFile[]
@@ -136,9 +136,9 @@ function validWants(value: unknown): value is WantsFiles | null {
     Number.isSafeInteger(w.max) &&
     (w.min as number) >= 0 &&
     (w.max as number) >= 1 &&
-    (w.max as number) <= MAX_FILES &&
+    (w.max as number) <= ASK_LIMITS.files &&
     (w.min as number) <= (w.max as number) &&
-    (w.hint === null || line(w.hint, 100))
+    (w.hint === null || line(w.hint, ASK_LIMITS.fileHint))
   )
 }
 
@@ -148,11 +148,11 @@ function validFile(value: unknown): value is AnswerFile {
   return (
     typeof f.id === 'string' &&
     ID.test(f.id) &&
-    line(f.name, 255) &&
-    line(f.mime, 127) &&
+    line(f.name, ASK_LIMITS.fileName) &&
+    line(f.mime, ASK_LIMITS.fileMime) &&
     time(f.size) &&
-    (f.path === null || line(f.path, 4096)) &&
-    (f.host === null || line(f.host, 120))
+    (f.path === null || line(f.path, ASK_LIMITS.path)) &&
+    (f.host === null || line(f.host, ASK_LIMITS.host))
   )
 }
 
@@ -160,9 +160,9 @@ function validAttached(value: unknown): value is AttachedFile {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const f = value as Record<string, unknown>
   return (
-    line(f.path, 4096) &&
+    line(f.path, ASK_LIMITS.path) &&
     (f.path as string).startsWith('/') &&
-    line(f.name, 255) &&
+    line(f.name, ASK_LIMITS.fileName) &&
     (f.kind === 'file' || f.kind === 'folder' || f.kind === 'missing') &&
     (f.size === null || time(f.size))
   )
@@ -180,10 +180,14 @@ export function validateAsk(data: unknown): Ask | null {
   const a = data as Record<string, unknown>
   if (typeof a.id !== 'string' || !ID.test(a.id)) return null
   if (a.session !== null && (typeof a.session !== 'string' || !SESSION.test(a.session))) return null
-  if (a.requester !== null && !line(a.requester, 60)) return null
+  if (a.requester !== null && !line(a.requester, ASK_LIMITS.requester)) return null
   if (a.session === null && a.requester === null) return null
-  if (!line(a.question, 200)) return null
-  if (!Array.isArray(a.options) || a.options.length > 5 || !a.options.every((o) => line(o, 100)))
+  if (!line(a.question, ASK_LIMITS.question)) return null
+  if (
+    !Array.isArray(a.options) ||
+    a.options.length > ASK_LIMITS.options ||
+    !a.options.every((o) => line(o, ASK_LIMITS.option))
+  )
     return null
   if (
     a.recommended !== null &&
@@ -192,24 +196,34 @@ export function validateAsk(data: unknown): Ask | null {
       (a.recommended as number) >= a.options.length)
   )
     return null
-  if (!text(a.body, 4000) || !text(a.command, 2000) || !text(a.note, 1000)) return null
+  if (
+    !text(a.body, ASK_LIMITS.body) ||
+    !text(a.command, ASK_LIMITS.command) ||
+    !text(a.note, ASK_LIMITS.note)
+  )
+    return null
   if (
     a.open !== undefined &&
     a.open !== null &&
-    !(line(a.open, 300) && /^https:\/\//.test(a.open as string))
+    !(line(a.open, ASK_LIMITS.open) && /^https:\/\//.test(a.open as string))
   )
     return null
-  if (a.origin !== undefined && a.origin !== null && a.origin !== 'notice' && a.origin !== 'status')
+  if (a.origin !== undefined && a.origin !== null && !ASK_ORIGINS.includes(a.origin as AskOrigin))
     return null
   if (a.share !== null && (typeof a.share !== 'string' || !ID.test(a.share))) return null
-  if (a.answer !== null && !line(a.answer, 100)) return null
+  if (a.answer !== null && !line(a.answer, ASK_LIMITS.option)) return null
   // Absent from a Tether older than API 26: wants none.
   const wantsFiles = a.wantsFiles ?? null
   if (!validWants(wantsFiles)) return null
   const files = a.files ?? []
-  if (!Array.isArray(files) || files.length > MAX_FILES || !files.every(validFile)) return null
+  if (!Array.isArray(files) || files.length > ASK_LIMITS.files || !files.every(validFile))
+    return null
   const attached = a.attached ?? []
-  if (!Array.isArray(attached) || attached.length > MAX_FILES || !attached.every(validAttached))
+  if (
+    !Array.isArray(attached) ||
+    attached.length > ASK_LIMITS.files ||
+    !attached.every(validAttached)
+  )
     return null
   if (typeof a.blocking !== 'boolean') return null
   if (!STATES.includes(a.state as Ask['state'])) return null
@@ -225,7 +239,7 @@ export function validateAsk(data: unknown): Ask | null {
   }
   if (!time(a.createdAt) || !time(a.updatedAt) || (a.answeredAt !== null && !time(a.answeredAt)))
     return null
-  if (a.host !== undefined && !line(a.host, 120)) return null
+  if (a.host !== undefined && !line(a.host, ASK_LIMITS.host)) return null
   if (a.peer !== undefined && !validPeer(a.peer)) return null
   return {
     id: a.id,
@@ -237,7 +251,7 @@ export function validateAsk(data: unknown): Ask | null {
     body: a.body,
     command: a.command,
     ...(typeof a.open === 'string' ? { open: a.open } : {}),
-    ...(a.origin === 'notice' || a.origin === 'status' ? { origin: a.origin } : {}),
+    ...(ASK_ORIGINS.includes(a.origin as AskOrigin) ? { origin: a.origin as AskOrigin } : {}),
     share: a.share as string | null,
     attached: attached as AttachedFile[],
     wantsFiles,
@@ -498,7 +512,8 @@ export class Asks {
         throw new HttpError(422, 'One of those files does not belong to this question')
       return {
         id: capture.id,
-        name: capture.name.replace(NOT_ONE_LINE_ALL, '').trim().slice(0, 255) || 'file',
+        name:
+          capture.name.replace(NOT_ONE_LINE_ALL, '').trim().slice(0, ASK_LIMITS.fileName) || 'file',
         mime: capture.mime,
         size: capture.size,
         // On a linked host's ask this folder is not the asker's: it reads the file by id.
