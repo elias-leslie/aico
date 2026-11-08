@@ -23,8 +23,8 @@ import {
   stateFile,
 } from './backup-plan'
 
-/** Enough for restic's error and a capture's own line; a backup row is not a log. */
-const REASON_LIMIT = 300
+/** What fits after the copy's own sentence in a backup row's 300 characters; a row is not a log. */
+const REASON_LIMIT = 200
 export interface Result {
   code: number
   out: string
@@ -72,9 +72,9 @@ function cleanReason(text: string): string {
     .trim()
 }
 /**
- * Why a failed run failed, from what restic (with --json) and what it ran wrote to stderr: its exit
- * message, its last per-file or per-stream error, and the last plain line (a capture's or rclone's own
- * words). Empty when they said nothing. The prefix only appears with a reason.
+ * Why a failed run failed, from what restic (with --json) and what it ran wrote to stderr: the last
+ * plain line (a capture's or rclone's own words) first as it says the most, then its last per-file
+ * error and its exit message. Empty when they said nothing. The prefix only appears with a reason.
  */
 export function failureReason(result: Result, prefix = ''): string {
   let exit = '',
@@ -96,7 +96,7 @@ export function failureReason(result: Result, prefix = ''): string {
     } catch {}
     plain = cleanReason(line.replace(/^subprocess \S+: /, ''))
   }
-  const reasons = [exit, failed, plain].filter(
+  const reasons = [plain, failed, exit].filter(
     (reason, at, all) =>
       reason && all.indexOf(reason) === at && !all.some((o) => o !== reason && o.includes(reason)),
   )

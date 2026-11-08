@@ -649,12 +649,12 @@ it('a proven unchanged offline guest keeps its old data age without becoming lat
     'guest',
     'Guest data',
     'drive',
-    { source: 'guest', target: 'drive', dataAt, offlineSince: since },
+    { source: 'guest', target: 'drive', dataAt, offlineSince: since, observed: 'offline' },
     config({}),
     'host',
     now,
   )
-  expect(row.state).toBe('ok')
+  expect(row.state).toBe('off')
   expect(row.dataAt).toBe(dataAt)
   expect(row.meaning).toContain('off')
 })
@@ -710,7 +710,7 @@ it('a failed copy keeps restic and the capture words, without paths or secrets',
     },
   )
   expect(copy.error).toBe(
-    'The Drive copy failed (restic exit 1); the last good copy is preserved. Restic said: Fatal: unable to save snapshot: failed to save <path>: Fatal: command failed: exit status 2; summitflow-pve-backup: the stopped VM disk has no readable root filesystem',
+    'The Drive copy failed (restic exit 1); the last good copy is preserved. Restic said: summitflow-pve-backup: the stopped VM disk has no readable root filesystem; Fatal: unable to save snapshot: failed to save <path>: Fatal: command failed: exit status 2',
   )
   expect(copy.observed).toBe('failed')
 })
@@ -720,7 +720,7 @@ it('a failure reason hides paths from inside backups and anything like a secret'
     reason(
       '{"message_type":"error","error":{"message":"/srv/my files/tax return.pdf: open my files/tax return.pdf: permission denied"},"during":"archival","item":"/srv/my files/tax return.pdf"}\n{"message_type":"exit_error","code":3,"message":"Warning: at least one source file could not be read"}',
     ),
-  ).toBe('Warning: at least one source file could not be read; permission denied')
+  ).toBe('permission denied; Warning: at least one source file could not be read')
   expect(reason('tar: srv/data/a b.db: Cannot open: Permission denied')).toBe(
     'tar: <path>: Cannot open: Permission denied',
   )
@@ -740,7 +740,7 @@ it('a failure reason hides paths from inside backups and anything like a secret'
     ),
   ).toBe('Fatal: repository does not exist: stat <path>: no such file')
   expect(reason('')).toBe('')
-  expect(reason('x'.repeat(10) + ' y'.repeat(400)).length).toBe(300)
+  expect(reason('x'.repeat(10) + ' y'.repeat(400)).length).toBe(200)
 })
 it('a stale restic lock is recovered using the existing safe unlock protocol', async () => {
   const c = cfg(),
@@ -938,12 +938,16 @@ it('shows the stopped external backup owner as off with its last good artifact d
   )
   expect(resumed?.state).toBe('ok')
   expect(resumed?.dataAt).not.toBe(dataAt)
+  // Proxmox not answering says nothing new about it: its last state stands until that has lasted.
   statusCode = 255
   expect(
     (await scheduledEntries(state, c, c.workstation, run)).find(
       (e) => e.id === 'external/portfolio-ai-complete',
     )?.state,
-  ).toBe('failed')
+  ).toBe('off')
+  state.copies['external/portfolio-ai-complete']!.unreadSince = new Date(
+    Date.now() - c.schedule.ownerUnreadMinutes * 60000 - 1000,
+  ).toISOString()
   statusCode = 0
   status = 'unknown'
   expect(
