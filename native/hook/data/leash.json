@@ -1,7 +1,7 @@
 {
   "about": "Limits for agents that can't be trusted unwatched (today: Antigravity sessions, through `aico-hook agy`). Checked in code on every tool call, before the agent's own permission rules. A refusal tells the agent why and what to do instead. Stops a dumb agent, not a hostile one: a script the agent runs is read when it is a plain file, but what a program does at run time isn't seen.",
   "refusal": "Refused by Aico's limits for this agent: {why} Don't try another way around it. If the task needs this, say so in your report, or ask with: tether ask create \"<one line that stands alone>\" --option A --option B --recommend 1",
-  "allowed_tools": ["run_command", "read_file", "write_file", "edit_file", "search_web", "manage_task", "invoke_subagent", "manage_subagents", "define_subagent"],
+  "allowed_tools": ["finish", "run_command", "read_file", "write_file", "edit_file", "search_web", "manage_task", "invoke_subagent", "manage_subagents", "define_subagent", "finish"],
   "tool_refused": "the tool {tool} is off for this agent.",
   "ask_tool": "ask_question",
   "ask_refused": "questions to the owner go through tether ask, not {tool}.",

@@ -159,6 +159,7 @@ func TestAgyLeashAllowsTheJob(t *testing.T) {
 		tool string
 		args map[string]any
 	}{
+		{"finish", map[string]any{}},
 		{"read_file", map[string]any{"Path": "/etc/hostname"}},
 		{"read_file", map[string]any{"Path": filepath.Join(root, "a.go")}},
 		{"write_file", map[string]any{"Path": filepath.Join(root, "b.go"), "Content": "package b\n"}},
