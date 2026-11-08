@@ -231,6 +231,7 @@ func (h *Hook) InboxHook(mode, provider string) (context, block string) {
 		return extra(), ""
 	}
 	h.Cfg.Observe(h.ID, false, false, false) // registered every turn: an agent that only reads must stay addressable
+	h.AdoptWindowMessages()
 	agent := h.ID.AgentID
 	var rd *ride
 	if mode == "turn" && takesRide(provider, event, worker) {

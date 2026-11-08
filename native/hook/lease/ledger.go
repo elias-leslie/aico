@@ -437,18 +437,24 @@ func (h *Hook) ResolveTarget(to string) string {
 // sessionWindow: the Aico window of a running session named by its window id or its request id, and its host when
 // it runs on another computer; "" when no session has that name.
 func sessionWindow(name string) (widget, host string, err error) {
+	item, err := findSession(name)
+	return str(item["id"]), str(item["host"]), err
+}
+
+// findSession: the running session named by its window id or its request id, nil when none.
+func findSession(name string) (map[string]any, error) {
 	var list struct {
 		Items []map[string]any `json:"items"`
 	}
 	if _, err := tetherCall("GET", "/v1/sessions", nil, &list); err != nil {
-		return "", "", err
+		return nil, err
 	}
 	for _, item := range list.Items {
 		if str(item["id"]) == name || str(item["rootRequestId"]) == name {
-			return str(item["id"]), str(item["host"]), nil
+			return item, nil
 		}
 	}
-	return "", "", nil
+	return nil, nil
 }
 
 // windowAgent: the newest live main-thread identity running in that window, or "".
@@ -468,7 +474,9 @@ func windowAgent(ids map[string]map[string]any, widget string) string {
 
 // SendTarget resolves a send's target or says why no message should be written: a row addressed to a name no agent
 // answers to is never seen, while the sender would believe it was delivered. A remote name (id@host) is its host's
-// to judge. An unreachable store is the caller's error, not an unknown name.
+// to judge. A local agent session whose agent hasn't registered yet resolves to its window: the message waits there
+// for that agent (Antigravity registers only on its first prompt, so sending again would never help). An unreachable
+// store is the caller's error, not an unknown name.
 func (h *Hook) SendTarget(to string) (string, error) {
 	if _, err := loadDocErr(coordDoc); err != nil {
 		return "", err
@@ -477,15 +485,19 @@ func (h *Hook) SendTarget(to string) (string, error) {
 	if strings.Contains(resolved, "@") || h.KnownTarget(resolved) {
 		return resolved, nil
 	}
-	widget, host, err := sessionWindow(to)
+	session, err := findSession(to)
 	if err != nil {
 		return "", err
 	}
+	widget, host := str(session["id"]), str(session["host"])
 	if host != "" {
 		return "", fmt.Errorf("not sent: %s runs on %s, and its agent isn't known here. Use st aico root send %s", to, host, to)
 	}
 	if widget != "" {
-		return "", fmt.Errorf("not sent: %s (window %s) has no agent registered yet; it registers when its agent starts, so send again in a moment", to, widget)
+		if tool := str(session["tool"]); tool == "" || tool == "shell" {
+			return "", fmt.Errorf("not sent: %s (window %s) is a shell with no agent in it", to, widget)
+		}
+		return widget, nil
 	}
 	live, more := h.LiveAgents(), ""
 	if len(live) == 0 {

@@ -476,12 +476,12 @@ func TestSendTargetRefusesWhatNoAgentAnswersTo(t *testing.T) {
 	sandbox(t)
 	a := agent(sidA, "")
 	register(t, a)
-	fake.Sessions = []map[string]any{{"id": "abcd1234", "rootRequestId": "still-starting"}}
+	fake.Sessions = []map[string]any{{"id": "abcd1234", "rootRequestId": "a-shell", "tool": "shell"}}
 	if _, err := a.SendTarget("burn-gone"); err == nil || !strings.Contains(err.Error(), "not sent: burn-gone") || !strings.Contains(err.Error(), "st aico roots") {
 		t.Errorf("an unknown name is refused with what to use: %v", err)
 	}
-	if _, err := a.SendTarget("still-starting"); err == nil || !strings.Contains(err.Error(), "abcd1234") || !strings.Contains(err.Error(), "send again") {
-		t.Errorf("a window whose agent has not registered says so: %v", err)
+	if _, err := a.SendTarget("a-shell"); err == nil || !strings.Contains(err.Error(), "abcd1234") || !strings.Contains(err.Error(), "no agent") {
+		t.Errorf("a plain shell has no one to read a message: %v", err)
 	}
 	fake.Sessions = append(fake.Sessions, map[string]any{"id": "ef567890", "rootRequestId": "over-there", "host": "agent-work"})
 	if _, err := a.SendTarget("over-there"); err == nil || !strings.Contains(err.Error(), "runs on agent-work") || !strings.Contains(err.Error(), "st aico root send over-there") {
@@ -489,6 +489,45 @@ func TestSendTargetRefusesWhatNoAgentAnswersTo(t *testing.T) {
 	}
 	if got, err := a.SendTarget("cc:333333@davion-gem"); err != nil || got != "cc:333333@davion-gem" {
 		t.Errorf("a remote name is its host's to judge: %q %v", got, err)
+	}
+}
+
+func TestAMessageToASessionWhoseAgentHasNotRegisteredWaitsForIt(t *testing.T) {
+	sandbox(t)
+	a, b, other := agent(sidA, ""), agent(sidB, "UserPromptSubmit"), agent(sidC, "UserPromptSubmit")
+	register(t, a)
+	fake.Sessions = []map[string]any{{"id": "abcd1234", "rootRequestId": "still-starting", "tool": "agy"}}
+	to, err := a.SendTarget("still-starting")
+	if err != nil || to != "abcd1234" {
+		t.Fatalf("the window holds it: %q %v", to, err)
+	}
+	row, _, err := a.Send(SendOpts{To: to, Text: "are you there"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The line goes to the window even with no agent: it is the first prompt an Antigravity session needs.
+	if line, err := a.Wake(to, a.ID.AgentID, false); err != nil || !strings.Contains(line, "[Message] Request") {
+		t.Fatalf("wake: %q %v", line, err)
+	}
+	if len(fake.Deliveries) != 1 || fake.Deliveries[0]["session"] != "abcd1234" {
+		t.Fatalf("deliveries: %v", fake.Deliveries)
+	}
+
+	startWindow(t, other, "ef567890")
+	if context, _ := other.InboxHook("turn", "claude_code"); strings.Contains(context, "are you there") {
+		t.Errorf("another window's agent must not get it: %s", context)
+	}
+	startWindow(t, b, "abcd1234")
+	if context, _ := b.InboxHook("turn", "claude_code"); !strings.Contains(context, "are you there") {
+		t.Errorf("the window's agent is shown it on its first turn: %q", context)
+	}
+	for _, r := range ledgerRows(t) {
+		if str(r["id"]) == str(row["id"]) && str(r["to"]) != b.ID.AgentID {
+			t.Errorf("the row is the agent's now, for acks and the sender's view: %v", r)
+		}
+	}
+	if got, err := a.SendTarget("still-starting"); err != nil || got != b.ID.AgentID {
+		t.Errorf("once registered a send goes to the agent: %q %v", got, err)
 	}
 }
 

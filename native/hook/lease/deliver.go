@@ -257,6 +257,9 @@ func (h *Hook) WindowOf(agent string) string {
 	if agent == "" {
 		return ""
 	}
+	if widgetID.MatchString(agent) {
+		return agent // a message waiting for a window's agent is addressed to the window
+	}
 	r := rows(h.Cfg.loadDoc(), "identities")[agent]
 	if r == nil {
 		return ""
@@ -269,9 +272,13 @@ func (h *Hook) WindowOf(agent string) string {
 
 // Wake queues the recipient's line. sender is the agent whose command queues it (its window is the line's
 // `from`); reply marks an ack. It returns the line queued, "" when the recipient has no window it is the agent
-// of or nothing waits; an error means Tether did not take it (the ledger row is written either way).
+// of or nothing waits; an error means Tether did not take it (the ledger row is written either way). A window with no
+// agent yet gets the line too: it is what starts an agent that registers only on its first prompt.
 func (h *Hook) Wake(to, sender string, reply bool) (string, error) {
 	t := h.TargetFor(to)
+	if t == nil && widgetID.MatchString(to) {
+		t = &Target{Widget: to, AgentID: to, Family: map[string]bool{to: true}}
+	}
 	if t == nil {
 		return "", nil
 	}
@@ -289,8 +296,40 @@ func (h *Hook) Wake(to, sender string, reply bool) (string, error) {
 	if _, err := tetherCall("POST", "/v1/sessions/"+url.PathEscape(t.Widget)+"/deliveries", body, nil); err != nil {
 		return "", err
 	}
-	_ = markQueued(t.AgentID, true)
+	if t.AgentID != t.Widget { // a window's own line is taken back when its agent adopts the messages
+		_ = markQueued(t.AgentID, true)
+	}
 	return line, nil
+}
+
+// AdoptWindowMessages makes the messages sent to this agent's window before it registered its own, so everything
+// after (inbox, acks, what the sender sees) works by agent id as usual. If its line hasn't gone out, this turn shows
+// them and the line is taken back.
+func (h *Hook) AdoptWindowMessages() {
+	waiting := false
+	for _, r := range h.Rows() {
+		waiting = waiting || widgetID.MatchString(str(r["to"]))
+	}
+	if !waiting {
+		return
+	}
+	t := h.TargetFor(h.ID.AgentID)
+	if t == nil {
+		return
+	}
+	adopted := false
+	err := h.withLedger(func(rows []map[string]any, _ map[string]any) ([]map[string]any, bool, error) {
+		adopted = false
+		for _, r := range rows {
+			if str(r["to"]) == t.Widget {
+				r["to"], adopted = t.AgentID, true
+			}
+		}
+		return rows, adopted, nil
+	})
+	if err == nil && adopted {
+		_, _ = tetherCall("DELETE", "/v1/sessions/"+url.PathEscape(t.Widget)+"/deliveries?source="+url.QueryEscape(sourcePre+t.Widget), nil, nil)
+	}
 }
 
 // markQueued remembers that a line is queued for agent (or taken back), so the turn hook asks Tether to drop a
