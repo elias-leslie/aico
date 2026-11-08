@@ -1,0 +1,26 @@
+{
+  "copiesDir": {
+    "davion-sidarli": "/srv/scratch/aico/session-copies",
+    "*": "~/.cache/aico/session-copies"
+  },
+  "state": "~/.local/state/aico/session-copies-sent.json",
+  "continuity": "~/.local/state/tether/default/continuity.json",
+  "tetherBin": "~/.local/lib/tether/bin/tether",
+  "peerAico": "$HOME/.local/bin/aico",
+  "liveStatuses": ["running", "uncertain"],
+  "exclude": {
+    "tools": ["shell"],
+    "projects": ["neri", "neri-hunters"],
+    "pathSegments": ["neri", "neri-hunters"],
+    "rolePattern": "hunt|recon|verif|triage"
+  },
+  "activeWindowMin": 360,
+  "maxSessionMb": 128,
+  "maxTotalMb": 2048,
+  "minFreeMb": 4096,
+  "maxPassMb": 64,
+  "batchMb": 16,
+  "keepEndedHours": 72,
+  "messageChars": 400,
+  "historyTools": ["claude-code", "codex", "pi"]
+}

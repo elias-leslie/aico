@@ -21,6 +21,7 @@ import { power, powerDeps } from './power'
 import { run } from './sh'
 import { snapDeps, snapshots } from './snapshots'
 import { routeOp, vm } from './vm'
+import { shift } from './session-copies'
 import { wip } from './wip-mirror'
 
 const USAGE = `Usage:
@@ -46,6 +47,7 @@ const USAGE = `Usage:
       Proxmox guests with Aico Logins' scoped API token (Proxmox enforces its pools)
   aico wip run | restore PROJECT --to DIR            copies of the active repos (uncommitted work too) on the other full machines
   aico context-sync run                              copy memories, prompts, roles and the launch policy to the other full machines (the standby's read-only copy)
+  aico shift list | show ID | run                    what was running on the other machines when last heard from, with a copy of each session's conversation
   aico plug [status] [--json]                        every power plug: its sockets, machine, on or off, how long on
   aico plug on|off MACHINE|PLUG:SOCKET [--force]     switch one socket (PLUG:SOCKET, e.g. shed:1, also for an empty one)
   aico plug cycle MACHINE|PLUG:SOCKET [--wait S] [--force]  off, wait (default 10 s), on
@@ -89,6 +91,7 @@ export async function main(argv: string[], env = process.env): Promise<number> {
     if (verb === 'backups') return await backups(rest, env)
     if (verb === 'wip') return await wip(rest, env)
     if (verb === 'context-sync') return await contextSync(rest, env)
+    if (verb === 'shift') return await shift(rest, env)
     // Help before anything reads the project, git or a host: `aico deploy --help` works anywhere.
     if (
       ['deploy', 'logs', 'snapshots', 'vm', 'plug', 'away', 'power'].includes(verb as string) &&

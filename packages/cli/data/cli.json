@@ -109,6 +109,10 @@
           "context-sync",
           "copy memories, prompts, roles and the launch policy to the standby's read-only copy: run"
         ],
+        [
+          "shift",
+          "what was running on the other machine when last heard from, with its session copies: list, show, run"
+        ],
         ["phones", "paired phones: list, remove"],
         ["app", "the phone app's published version and outage drills"],
         ["declare", "record a host change you made, so Status knows it was you"],

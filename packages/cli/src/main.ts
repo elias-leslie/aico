@@ -74,6 +74,7 @@ export const NATIVE = new Set([
   'power',
   'wip',
   'context-sync',
+  'shift',
   'backups',
   'web',
   'video',
