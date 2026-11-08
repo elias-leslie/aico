@@ -7,7 +7,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -391,6 +393,58 @@ func TestWritersYesHandsOverTheirPaths(t *testing.T) {
 	}
 	if got := b.ExceptAcked(found, id); len(got[theirs]) == 0 {
 		t.Errorf("only the requester may use the yes: %v", got)
+	}
+}
+
+// startWindow runs a detached process as a window's agent (not under this test's own harness, which would make it
+// a nested one) and registers that identity on it.
+func startWindow(t *testing.T, h *Hook, widget string) {
+	t.Helper()
+	cmd := exec.Command("sh", "-c", "sleep 30 >/dev/null 2>&1 & echo $!")
+	cmd.Env = append(os.Environ(), "AICO_WIDGET_ID="+widget)
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(out)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = syscall.Kill(pid, syscall.SIGKILL) })
+	_, _, start, ok := procStat(pid)
+	if !ok {
+		t.Fatal("no stat for the window's process")
+	}
+	h.ID.Anchor = fmt.Sprintf("%d:%s", pid, start)
+	h.Cfg.Observe(h.ID, false, false, false)
+}
+
+func TestSendTargetAcceptsRequestAndWindowIds(t *testing.T) {
+	sandbox(t)
+	a, b := agent(sidA, ""), agent(sidB, "")
+	register(t, a)
+	startWindow(t, b, "abcd1234")
+	fake.Sessions = []map[string]any{{"id": "abcd1234", "rootRequestId": "burn-l7c-coordination"}}
+	for _, to := range []string{"burn-l7c-coordination", "abcd1234", "cc:222222", "22222222-aaaa-4bbb-8ccc-000000000002"} {
+		if got, err := a.SendTarget(to); err != nil || got != "cc:222222" {
+			t.Errorf("%s resolves to %q (%v), want cc:222222", to, got, err)
+		}
+	}
+}
+
+func TestSendTargetRefusesWhatNoAgentAnswersTo(t *testing.T) {
+	sandbox(t)
+	a := agent(sidA, "")
+	register(t, a)
+	fake.Sessions = []map[string]any{{"id": "abcd1234", "rootRequestId": "still-starting"}}
+	if _, err := a.SendTarget("burn-gone"); err == nil || !strings.Contains(err.Error(), "not sent: burn-gone") || !strings.Contains(err.Error(), "st aico roots") {
+		t.Errorf("an unknown name is refused with what to use: %v", err)
+	}
+	if _, err := a.SendTarget("still-starting"); err == nil || !strings.Contains(err.Error(), "abcd1234") || !strings.Contains(err.Error(), "send again") {
+		t.Errorf("a window whose agent has not registered says so: %v", err)
+	}
+	if got, err := a.SendTarget("cc:333333@davion-gem"); err != nil || got != "cc:333333@davion-gem" {
+		t.Errorf("a remote name is its host's to judge: %q %v", got, err)
 	}
 }
 

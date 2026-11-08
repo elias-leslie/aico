@@ -263,6 +263,9 @@ func (h *Hook) yesFrom(id, agent string) map[string]any {
 	return nil
 }
 
+// maxListedAgents bounds the live agents a refused send lists: enough to spot the one meant.
+const maxListedAgents = 12
+
 // KnownTarget: to names a registered identity (its exact id or a 13+ char session prefix).
 func (h *Hook) KnownTarget(to string) bool {
 	ids := rows(h.Cfg.loadDoc(), "identities")
@@ -280,30 +283,89 @@ func (h *Hook) KnownTarget(to string) bool {
 	return false
 }
 
-// ResolveTarget maps the session forms listings print (claude-code:9548c97a, cc:9548c97a, a bare session
-// prefix) to the registered agent id, when exactly one identity's session starts with that prefix.
+// ResolveTarget maps the forms listings and st aico print to the registered agent id: the session forms
+// (claude-code:9548c97a, cc:9548c97a, a session prefix or the whole id) when exactly one identity's session starts
+// with it, then a request id or window id, to that window's live main agent.
 func (h *Hook) ResolveTarget(to string) string {
 	ids := rows(h.Cfg.loadDoc(), "identities")
 	if _, ok := ids[to]; ok {
 		return to
 	}
-	prefix := to[strings.LastIndex(to, ":")+1:]
-	if len(prefix) < 6 {
-		return to
-	}
-	found := ""
-	for id, r := range ids {
-		if strings.HasPrefix(str(r["session"]), prefix) {
-			if found != "" && found != id {
-				return to
+	if prefix := to[strings.LastIndex(to, ":")+1:]; len(prefix) >= 6 {
+		found := ""
+		for id, r := range ids {
+			if strings.HasPrefix(str(r["session"]), prefix) {
+				if found != "" && found != id {
+					return to
+				}
+				found = id
 			}
-			found = id
+		}
+		if found != "" {
+			return found
 		}
 	}
-	if found == "" {
-		return to
+	if widget := sessionWindow(to); widget != "" {
+		if agent := windowAgent(ids, widget); agent != "" {
+			return agent
+		}
 	}
-	return found
+	return to
+}
+
+// sessionWindow: the Aico window of a running session named by its window id or its request id, or "".
+func sessionWindow(name string) string {
+	var list struct {
+		Items []map[string]any `json:"items"`
+	}
+	if _, err := tetherCall("GET", "/v1/sessions", nil, &list); err != nil {
+		return ""
+	}
+	for _, item := range list.Items {
+		if str(item["id"]) == name || str(item["rootRequestId"]) == name {
+			return str(item["id"])
+		}
+	}
+	return ""
+}
+
+// windowAgent: the newest live main-thread identity running in that window, or "".
+func windowAgent(ids map[string]map[string]any, widget string) string {
+	agent, newest := "", ""
+	for id, r := range ids {
+		anchor := str(r["anchor"])
+		if anchor == "" || nested(anchor) || widgetFor(anchor) != widget {
+			continue
+		}
+		if k := str(r["last"]); agent == "" || k > newest || (k == newest && id > agent) {
+			agent, newest = id, k
+		}
+	}
+	return agent
+}
+
+// SendTarget resolves a send's target or says why no message should be written: a row addressed to a name no agent
+// answers to is never seen, while the sender would believe it was delivered. A remote name (id@host) is its host's
+// to judge. An unreachable store is the caller's error, not an unknown name.
+func (h *Hook) SendTarget(to string) (string, error) {
+	if _, err := loadDocErr(coordDoc); err != nil {
+		return "", err
+	}
+	resolved := h.ResolveTarget(to)
+	if strings.Contains(resolved, "@") || h.KnownTarget(resolved) {
+		return resolved, nil
+	}
+	if widget := sessionWindow(to); widget != "" {
+		return "", fmt.Errorf("not sent: %s (window %s) has no agent registered yet; it registers when its agent starts, so send again in a moment", to, widget)
+	}
+	live, more := h.LiveAgents(), ""
+	if len(live) == 0 {
+		live = []string{"none"}
+	}
+	if len(live) > maxListedAgents {
+		live, more = live[:maxListedAgents], fmt.Sprintf(" and %d more", len(live)-maxListedAgents)
+	}
+	return "", fmt.Errorf("not sent: %s is not a running session or agent. Use a request id from st aico roots, a session id or an agent id. Live agents: %s%s", to, strings.Join(live, ", "), more)
 }
 
 // LiveAgents: registered identities whose harness process is alive.

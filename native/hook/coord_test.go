@@ -29,10 +29,35 @@ func capture(t *testing.T, fn func() int) (code int, out, errOut string) {
 
 func as(t *testing.T, session string) { t.Setenv("CLAUDE_CODE_SESSION_ID", session) }
 
+// registered makes a session a known agent the way its first turn does.
+func registered(t *testing.T, session string) {
+	t.Helper()
+	as(t, session)
+	t.Setenv("ST_COORD_ANCHOR", "1:2")
+	t.Setenv("ST_COORD_HARNESS", "claude-code")
+	stdin(t, `{"hook_event_name":"UserPromptSubmit","session_id":"`+session+`","prompt":"hi"}`)
+	capture(t, func() int { return coordMain("inbox", []string{"turn"}) })
+	t.Setenv("ST_COORD_ANCHOR", "")
+	t.Setenv("ST_COORD_HARNESS", "")
+}
+
 const (
 	sessA = "11111111-aaaa-4bbb-8ccc-000000000001"
 	sessB = "22222222-aaaa-4bbb-8ccc-000000000002"
 )
+
+func TestSendToAnUnknownNameWritesNothing(t *testing.T) {
+	t.Chdir(sandbox(t))
+	as(t, sessA)
+	code, out, errOut := capture(t, func() int { return coordMain("sessions", []string{"send", "burn-gone", "hello"}) })
+	if code == 0 || out != "" || !strings.Contains(errOut, "not sent: burn-gone") {
+		t.Fatalf("refused: %d %q %q", code, out, errOut)
+	}
+	_, inbox, _ := capture(t, func() int { return coordMain("sessions", []string{"inbox"}) })
+	if strings.Contains(inbox, "hello") {
+		t.Errorf("a refused send left a request behind: %q", inbox)
+	}
+}
 
 func TestSessionSendHelpDoesNotSendARequest(t *testing.T) {
 	t.Chdir(sandbox(t))
@@ -79,6 +104,7 @@ func TestLeaseVerbsAndHandshakeFromTheCommandLine(t *testing.T) {
 		t.Fatalf("an action word is not a path: %d %q", code, errOut)
 	}
 
+	registered(t, sessB)
 	code, out, _ := run(sessA, "sessions", "send", "cc:222222", "please look at the lease change", "--source-key", "k1")
 	if code != 0 || !strings.HasPrefix(out, "sent ") {
 		t.Fatalf("send: %d %q", code, out)
@@ -110,6 +136,7 @@ func TestLeaseVerbsAndHandshakeFromTheCommandLine(t *testing.T) {
 func TestInboxHookPrintsHookJSON(t *testing.T) {
 	repo := sandbox(t)
 	t.Chdir(repo)
+	registered(t, sessB)
 	as(t, sessA)
 	if code, _, _ := capture(t, func() int {
 		return coordMain("sessions", []string{"send", "cc:222222", "urgent: build is red"})
@@ -152,7 +179,11 @@ func TestSessionsInboxPrintsNoticesAndRefusesUnknown(t *testing.T) {
 		as(t, session)
 		return capture(t, func() int { return coordMain("sessions", args) })
 	}
-	_, out, _ := run(sessA, "send", "cc:222222", "can I take the lease file")
+	registered(t, sessB)
+	_, out, errSend := run(sessA, "send", "cc:222222", "can I take the lease file")
+	if len(strings.Fields(out)) < 2 {
+		t.Fatalf("send: %q %q", out, errSend)
+	}
 	id := strings.Fields(out)[1]
 	if code, _, _ := run(sessB, "ack", id, "eta:5"); code != 0 {
 		t.Fatal("ack failed")

@@ -390,7 +390,7 @@ func requestTarget(h *lease.Hook, id string) string {
 
 func send(h *lease.Hook, pos []string, flags map[string]string) int {
 	if len(pos) == 1 && (pos[0] == "--help" || pos[0] == "-h") {
-		fmt.Println("Usage: sessions send TO TEXT [--fyi] [--source-key K]")
+		fmt.Println("Usage: sessions send TO TEXT [--fyi] [--source-key K]\nTO: a request id (st aico roots), a session or window id, or an agent id (cc:222222)")
 		return 0
 	}
 	if len(pos) != 2 {
@@ -399,7 +399,11 @@ func send(h *lease.Hook, pos []string, flags map[string]string) int {
 	if d := flags["--delivery"]; d != "" && d != "handshake" {
 		return fail("aico sends handshakes only; fleet roots and native threads go through st sessions send --delivery %s", d)
 	}
-	to, text := h.ResolveTarget(pos[0]), pos[1]
+	to, err := h.SendTarget(pos[0])
+	if err != nil {
+		return fail("%v", err)
+	}
+	text := pos[1]
 	fyi := flags["--fyi"] != ""
 	project := ""
 	if p, err := lease.CLIProject(); err == nil {
@@ -429,13 +433,6 @@ func send(h *lease.Hook, pos []string, flags map[string]string) int {
 		if werr != nil {
 			fmt.Fprintf(os.Stderr, "WARNING Tether did not take the wake line (%v); the recipient's hook still shows the request\n", werr)
 		}
-	}
-	if !h.KnownTarget(to) {
-		live := strings.Join(h.LiveAgents(), ", ")
-		if live == "" {
-			live = "none"
-		}
-		fmt.Fprintf(os.Stderr, "WARNING %s is not a registered agent id (cc:/codex:/pi:/agy: id or 13+ char session prefix); it cannot see or ack this. Live agents: %s\n", to, live)
 	}
 	return 0
 }
