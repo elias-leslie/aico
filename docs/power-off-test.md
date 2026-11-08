@@ -2,6 +2,14 @@
 
 Proves that each host comes back on its own after a power cut, that the other host keeps the owner informed while it is down, and that nothing needs a hand to recover. Run it with the owner, once agent work is idle.
 
+**Owner, Nov 8: the Kasa plugs are not plugged in and won't be; the kids can power things on if asked.** So the run is the short one below. The plug steps further down (and `aico plug`, `aico away`, **Shut down all**) describe what was built and stay off.
+
+## The short run, no plugs
+
+1. Gem BIOS: Restore on AC Power Loss = Power On. Pull its power for 30 seconds and put it back without touching the button. It starts by itself; Aico, Ominull, Jobinator and Dadbot are back within about 3 minutes with no help. Portfolio stays off (Autostart off).
+2. Workstation BIOS, only to wake it from the phone: ErP = Disabled, AC BACK = Always On. From the phone on mobile data: Machines > Workstation > Shut down, then Power on. If it doesn't wake, someone presses the button; it comes back with no login.
+3. A frozen box has no remote fix: someone holds its button for 5 seconds, then presses it once.
+
 ## Setup
 
 - Two Kasa EP40 plugs on the house wifi (Davion), Third-Party Compatibility on in the Kasa app; the router lets the lan side reach only their control port (TCP 9999). Everything is in the shed:

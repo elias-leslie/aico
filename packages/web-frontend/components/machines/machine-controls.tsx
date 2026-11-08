@@ -138,7 +138,7 @@ export function useMachineControls(machine: Machine, onChanged: () => void) {
         message: [
           `${name} shuts down cleanly. Sessions save their place and come back when it starts.`,
           machine.here ? 'Aico carries on from the Standby.' : '',
-          'Power on here starts it again, using Wake-on-LAN or its plug. Neither has been tried yet with it really off.',
+          'Power on here starts it again with Wake-on-LAN. That hasn’t been tried yet with it really off: if it doesn’t start, someone at home presses its power button.',
         ]
           .filter(Boolean)
           .join(' '),
