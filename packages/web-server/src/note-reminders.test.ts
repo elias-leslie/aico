@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { Router } from './http'
+import type { Router } from './http'
 import { ago, registerReminderRoutes, sendDueReminders } from './note-reminders'
 import { NotesStore } from './notes-db'
 import { Link, openHost, settle } from './sync/harness'
@@ -62,11 +62,11 @@ describe('note reminders', () => {
     store.notes.create({ title: 'Renew plates', remindAt: T0 })
     wall = T0 + 3 * 3_600_000
     sendDueReminders(deps(null))
-    expect(notices[0]?.body).toBe('This was due 3 hours ago.')
+    expect(notices[0]?.body).toBe('This was due 3 h ago.')
     expect(notices[0]).not.toHaveProperty('open')
     expect(parseNotice(notices[0])).toMatchObject({ push: 'phone', severity: 'warning' })
-    expect(ago(90 * 1000)).toBe('2 minutes ago')
-    expect(ago(60 * MIN)).toBe('1 hour ago')
+    expect(ago(90 * 1000)).toBe('2 min ago')
+    expect(ago(60 * MIN)).toBe('1 h ago')
     expect(ago(3 * 86_400_000)).toBe('3 days ago')
   })
 

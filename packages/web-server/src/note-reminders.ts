@@ -9,6 +9,7 @@
 
 import type { Notifier } from '@aico/notify'
 import { maskSecrets } from '@aico/shared/secrets'
+import { ago as agoText } from '@aico/shared/time'
 import { fromThisMachine } from './guard'
 import type { Router } from './http'
 import type { NoteRow } from './notes-data'
@@ -28,14 +29,8 @@ export interface ReminderDeps {
 
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`
 
-/** "3 hours ago", "2 days ago": no clock time, since the two hosts do not share a time zone. */
-export function ago(ms: number): string {
-  const minutes = Math.round(ms / 60_000)
-  if (minutes < 60) return `${plural(minutes, 'minute')} ago`
-  const hours = Math.round(minutes / 60)
-  if (hours < 48) return `${plural(hours, 'hour')} ago`
-  return `${plural(Math.round(hours / 24), 'day')} ago`
-}
+/** "3 h ago", "2 days ago" for a time `ms` back: no clock time, since the two hosts do not share a time zone. */
+export const ago = (ms: number): string => agoText(0, ms)
 
 /** What the notice calls the note: its title, else the first line of its text. */
 function nameOf(note: NoteRow): string {

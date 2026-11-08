@@ -1,21 +1,11 @@
+import { agoOrDate } from '@aico/shared/time'
 import type { FilePlace } from '@/lib/api/pane-files'
 
 export type SortBy = 'name' | 'modified'
 
-/** A short "when it changed": minutes and hours ago for today, then the day. */
-export function modifiedLabel(ms: number, now = Date.now()): string {
-  const ago = now - ms
-  if (ago < 60_000) return 'just now'
-  if (ago < 3_600_000) return `${Math.floor(ago / 60_000)} min ago`
-  if (ago < 86_400_000) return `${Math.floor(ago / 3_600_000)} h ago`
-  const at = new Date(ms)
-  const sameYear = at.getFullYear() === new Date(now).getFullYear()
-  return at.toLocaleDateString([], {
-    month: 'short',
-    day: 'numeric',
-    year: sameYear ? undefined : 'numeric',
-  })
-}
+/** A short "when it changed": minutes and hours ago for two days, then the day. */
+export const modifiedLabel = (ms: number, now = Date.now()): string =>
+  agoOrDate(ms, now)
 
 function within(folder: string, root: string): boolean {
   const base = root.replace(/\/+$/, '')

@@ -8,7 +8,7 @@ const places = [
 ]
 
 describe('modifiedLabel', () => {
-  it('says minutes and hours ago for today, then the day', () => {
+  it('says minutes and hours ago for two days, then the day', () => {
     expect(modifiedLabel(now - 20_000, now)).toBe('just now')
     expect(modifiedLabel(now - 4 * 60_000, now)).toBe('4 min ago')
     expect(modifiedLabel(now - 3 * 3_600_000, now)).toBe('3 h ago')

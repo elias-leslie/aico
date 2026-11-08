@@ -1,6 +1,7 @@
 // The Projects page's data and words. The shapes follow docs/plans/projects-page/plan.md
 // (GET /api/projects/overview, /:id, /:id/timeline; POST /:id/places/:index/power).
 
+import { ago, shortAgo } from '@aico/shared/time'
 import { apiFetch } from './api-fetch'
 
 export type RunState = 'running' | 'stopped' | 'down' | 'starting' | 'unknown'
@@ -259,19 +260,11 @@ export const runStateText: Record<RunState, string> = {
 /** "9 min", "3 h", "2 d": the list's short age. */
 export function shortAge(iso: string | null, now: number): string {
   const ms = iso ? Date.parse(iso) : Number.NaN
-  if (Number.isNaN(ms)) return ''
-  const minutes = Math.max(0, Math.floor((now - ms) / 60_000))
-  if (minutes < 1) return 'now'
-  if (minutes < 60) return `${minutes} min`
-  if (minutes < 48 * 60) return `${Math.floor(minutes / 60)} h`
-  return `${Math.floor(minutes / 1440)} d`
+  return Number.isNaN(ms) ? '' : shortAgo(ms, now)
 }
 
 /** "checked 1 min ago". */
-function longAge(iso: string, now: number): string {
-  const short = shortAge(iso, now)
-  return short === 'now' ? 'just now' : `${short} ago`
-}
+const longAge = (iso: string, now: number) => ago(Date.parse(iso), now)
 
 const clock = (ms: number) =>
   new Date(ms).toLocaleTimeString('en-GB', {

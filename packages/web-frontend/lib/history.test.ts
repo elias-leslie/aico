@@ -51,8 +51,10 @@ describe('recent sessions copy', () => {
 
   it('ages in minutes and hours, and shows no age for an unknown time', () => {
     expect(agoAt(null, 0)).toBe('—')
-    expect(agoAt(0, 30_000)).toBe('just now')
+    expect(agoAt(0, 20_000)).toBe('just now')
     expect(agoAt(0, 5 * 60_000)).toBe('5 min ago')
+    // Hours round the way Status says them: 90 minutes is "2 h ago" everywhere.
+    expect(agoAt(0, 90 * 60_000)).toBe('2 h ago')
     expect(agoAt(0, 3 * 3_600_000)).toBe('3 h ago')
   })
 })

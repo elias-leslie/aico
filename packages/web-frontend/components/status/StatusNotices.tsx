@@ -1,7 +1,7 @@
 'use client'
 
 import { RefreshCw, Server } from 'lucide-react'
-import { at, plural, type StatusRow, silentMachines } from '@/lib/status'
+import { ago, at, plural, type StatusRow, silentMachines } from '@/lib/status'
 
 type Mode = 'loading' | 'failed' | 'empty' | 'live'
 
@@ -89,10 +89,7 @@ export function StatusNotices({
           <p>
             <b>
               Showing status from {at(readAt, now)},{' '}
-              {readAt
-                ? `${Math.max(1, Math.round((now - readAt) / 60_000))} min ago`
-                : ''}
-              .
+              {readAt ? ago(readAt, now) : ''}.
             </b>{' '}
             Couldn’t refresh: no connection to Aico. States may have changed
             since.

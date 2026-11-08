@@ -2,7 +2,7 @@
 // window, when it resets, and the credits behind it. State is ok while the subscription
 // has room (or credits carry it) and warn when it is used up, unknown, or could not be read.
 
-import { localTime } from '@aico/shared/time'
+import { ago as agoText, localTime } from '@aico/shared/time'
 import type { StatusRow } from '@aico/status'
 import config from '../data/usage.json' with { type: 'json' }
 import { currentPlan, type Plans } from './plans'
@@ -19,12 +19,7 @@ import {
 /** A moment in this machine's local time with its zone: "Nov 6, 5:00 AM EST". */
 export const when = (iso: string) => localTime(micros(iso) / 1000)
 
-function ago(seconds: number): string {
-  if (seconds < 90) return 'just now'
-  if (seconds < 5400) return `${Math.round(seconds / 60)} min ago`
-  if (seconds < 172800) return `${Math.round(seconds / 3600)} h ago`
-  return `${Math.round(seconds / 86400)} days ago`
-}
+const ago = (seconds: number) => agoText(0, seconds * 1000)
 
 const count = (value: number) =>
   value >= 10000

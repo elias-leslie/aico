@@ -4,7 +4,7 @@ import { dirname, join, relative, resolve } from 'node:path'
 import { backupTargetName } from '@aico/shared/backup-targets'
 import { aicoDataDir } from '@aico/shared/data-dir'
 import { nearest } from '@aico/shared/suggest'
-import { localTime } from '@aico/shared/time'
+import { ago, localTime } from '@aico/shared/time'
 import {
   deleteStatusRow,
   machineId,
@@ -647,14 +647,8 @@ export async function backups(argv: string[], env = process.env): Promise<number
   return sourceCommand(rt, state, verb as string, args)
 }
 
-function since(iso: string | null | undefined, now: number): string {
-  if (!iso) return 'never'
-  const minutes = Math.round((now - Date.parse(iso)) / 60000)
-  if (minutes < 2) return 'just now'
-  if (minutes < 90) return `${minutes} min ago`
-  if (minutes < 48 * 60) return `${Math.round(minutes / 60)} h ago`
-  return `${Math.round(minutes / 1440)} days ago`
-}
+const since = (iso: string | null | undefined, now: number) =>
+  iso ? ago(Date.parse(iso), now) : 'never'
 
 /** `aico backups list` for a person: problems first, each target in one line, archived sources folded. */
 export function listText(

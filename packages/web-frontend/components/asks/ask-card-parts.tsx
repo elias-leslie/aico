@@ -1,5 +1,6 @@
 'use client'
 
+import { ago } from '@aico/shared/time'
 import { clsx } from 'clsx'
 import { Check, Copy } from 'lucide-react'
 import { useRouter } from 'next/navigation'
@@ -79,15 +80,6 @@ function awayText(state: string | undefined): string {
       : 'not reachable'
 }
 
-/** "48 min ago": how long ago, in words. */
-function agoWords(ms: number): string {
-  const minutes = Math.max(0, Math.round(ms / 60_000))
-  if (minutes < 1) return 'just now'
-  if (minutes < 60) return `${minutes} min ago`
-  if (minutes < 48 * 60) return `${Math.round(minutes / 60)} h ago`
-  return `${Math.floor(minutes / 1440)} days ago`
-}
-
 /** The question's text as the agent wrote it (markdown shown formatted); in
  * the side's list it folds to a few lines, with the rest one click away. */
 function AskBody({ text, clamp }: { text: string; clamp: boolean }) {
@@ -153,7 +145,7 @@ export function AskHead({
           <span className="min-w-0 truncate" style={{ color: 'var(--mist)' }}>
             <span style={{ color: 'var(--bone)' }}>{asker.name}</span>
             {' · asked '}
-            {agoWords(now - ask.createdAt)}
+            {ago(ask.createdAt, now)}
             {ask.host ? ` · on ${ask.host}` : ''}
           </span>
         </Meta>

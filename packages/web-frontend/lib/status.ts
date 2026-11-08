@@ -15,9 +15,10 @@ import {
   tierLabel,
   tierOf,
 } from '@aico/shared/status-order'
+import { ago } from '@aico/shared/time'
 import { machineLabel } from './machine-name'
 
-export { isProblem, PROBLEMS, type Problem, type Shown, tierLabel, tierOf }
+export { ago, isProblem, PROBLEMS, type Problem, type Shown, tierLabel, tierOf }
 export const KINDS = [
   'check',
   'job',
@@ -198,15 +199,6 @@ function atShort(ms: number | null, now: number): string {
   return Math.abs(now - ms) < 6 * DAY
     ? `${weekday(ms)} ${clock(ms)}`
     : monthDay(ms)
-}
-
-export function ago(ms: number, now: number): string {
-  const minutes = Math.max(0, Math.round((now - ms) / 60_000))
-  if (minutes < 1) return 'just now'
-  if (minutes < 60) return `${minutes} min ago`
-  return minutes < 48 * 60
-    ? `${Math.round(minutes / 60)} h ago`
-    : `${Math.floor(minutes / 1440)} days ago`
 }
 
 export interface When {

@@ -1,5 +1,7 @@
 // Recent sessions: how the session history (Tether's /v1/history, through /api/history) reads on screen.
 
+import { agoOrDate } from '@aico/shared/time'
+
 /** The answer shapes below mirror @aico/tether-client's History* contracts; the page only reads them. */
 export type HistoryOutcome = 'completed' | 'aborted' | 'error'
 
@@ -192,17 +194,8 @@ export function countOf(n: number, one: string, many = `${one}s`): string {
 }
 
 /** "4 min ago", "2 h ago", or the date for older ones. */
-export function agoAt(ms: number | null, now: number): string {
-  if (ms === null) return '—'
-  const minutes = Math.floor(Math.max(0, now - ms) / 60_000)
-  if (minutes < 1) return 'just now'
-  if (minutes < 60) return `${minutes} min ago`
-  if (minutes < 24 * 60) return `${Math.floor(minutes / 60)} h ago`
-  return new Date(ms).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-  })
-}
+export const agoAt = (ms: number | null, now: number): string =>
+  ms === null ? '—' : agoOrDate(ms, now)
 
 export function clock(ms: number | null): string {
   if (ms === null) return '—'
