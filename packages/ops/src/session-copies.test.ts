@@ -13,7 +13,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { openDatabase, readQuery } from '@aico/store'
 import { afterEach, beforeEach, expect, test } from 'vitest'
-import jobsConfig from '../../jobs/data/jobs.json' with { type: 'json' }
 import copiesConfig from '../data/session-copies.json' with { type: 'json' }
 import {
   answerSizes,
@@ -512,7 +511,10 @@ test('a session title holding a key is masked before it leaves', async () => {
 })
 
 test('the jobs runner sends from both machines through one command', () => {
-  const ours = jobsConfig.jobs.filter((job) => job.kind.startsWith('session-copies-'))
+  const { jobs } = JSON.parse(
+    readFileSync(join(import.meta.dirname, '../../jobs/data/jobs.json'), 'utf8'),
+  ) as { jobs: { kind: string; home: string; run: { command: string[] } }[] }
+  const ours = jobs.filter((job) => job.kind.startsWith('session-copies-'))
   expect(ours.map((job) => job.home).sort()).toEqual(['aico', 'davion-sidarli'])
   for (const job of ours) expect(job.run.command.slice(-2)).toEqual(['shift', 'run'])
 })
