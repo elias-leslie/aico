@@ -44,123 +44,122 @@ workload before adding load. Reuse configured limits rather than inventing new o
 Update this record with verified checkpoints and remaining work; remove only this
 work's ROADMAP line when its agreed scope is complete.
 
-## Verified checkpoints
+## Verified checkpoints (updated 18:37 EST)
 
-- `94ad7ed6`: owner-zone time formatting; shared TypeScript check and five time
-  tests pass. Not deployed yet.
-- `43a40c63` and `d89c94bd`: initial schedule/phone checkpoints. Independent review
-  reproduced a delayed-run deadline error and phone removal resurrection; the
-  schedule worker is finishing those corrections before deployment.
-- `16e9ad41` and `7a56f603`: shutdown-cut receipts, accurate retry reporting,
-  actual host-boot evidence and per-guest capture serialization. The second commit
-  fixes both independent review findings; reviewer confirmed them resolved.
-  Scoped checks passed 1,534 Python tests, 181 contracts and 251 related TypeScript
-  tests. The committed restricted helper is installed on gem; its source list did
-  not change. Existing streams continue using their original loaded code.
-- `a1ebdc4b`: a fresh Machines reading for automatic browser power decisions,
-  including waiting out an older in-flight read. Regressions failed before the
-  fix; 43 related tests and independent review pass. Not deployed yet.
-- Dadbot `475ab5af`: Money History grouping, unique Paid identities and legacy
-  note/log compatibility. All 636 tests pass; independent review found no further
-  supported issue. Deployed with the documented script; all three changed source
-  hashes match, app and tunnel are active, zero restarts, public manifest HTTP 200.
-  Old records without membership cannot reveal
-  an exact historical split between same-second payments; no records were rewritten.
-- Gem's corrected-memory policy, including rate spikes, is installed as
-  record-only in the Proxmox sender. Its timer is enabled and active. Uncorrected
-  error detection remains tested. The live row now reports `ok` and record-only.
-- BlackBox CT 140 is running, `onboot=1`; HTTPS `/healthz` answered `status: ok`
-  and its service showed zero restarts. The owner will test it in another session.
-- Removed the abandoned, inactive `proof-stuck` test routine.
-- Restored Cinderwake's three voice environments using its pinned installer.
-  Dependency checks and engine/scorer imports pass; 61 seeds validate with zero
-  issues and reference builds complete. Installed the missing SoX runtime on the
-  workstation. This does not claim an acting A/B or a new GPU rendering pass.
-- A real-user Aico test created a Codex session with a first message and observed
-  its `READY` reply. Canceling the dialog created no session. The tester ended its
-  test session and closed its browser session. Screenshot:
-  `/srv/scratch/readiness-new-session-test/started.png` (regenerable evidence).
+- Aico time formatting, schedule deadlines, reboot-cut backup receipts, phone
+  synchronization and standalone-agent heat delivery are committed and deployed
+  on both controllers. Final phone checkpoint `ce3876bd` and delivery checkpoint
+  `a9532b08` passed focused tests and independent review. No test phone pushes.
+- Dadbot `475ab5af` is deployed: 636 tests passed; changed live source hashes match,
+  application and tunnel recovered after the gem reboot. Real records were not
+  rewritten. Exact historical splits cannot be recovered from ambiguous old rows.
+- Gem's known corrected-memory reporting remains record-only, including spikes;
+  uncorrected-error detection remains enabled. Do not reopen the false ECC warning.
+- BlackBox is on with autostart, as requested. Its health check passed after reboot.
+  The asset registry's old parked setting was subsequently found and corrected in
+  source; live registry verification is still pending this checkpoint's deployment.
+- Cinderwake's three pinned voice environments are restored. Dependencies/imports,
+  61 seeds and reference builds pass. SoX is installed. No acting A/B or new GPU
+  rendering is claimed. The abandoned inactive proof-stuck routine was removed.
+- Earlier real-user Aico testing created a session, saw its READY reply, and ended
+  it; cancel created no session. Evidence: `/srv/scratch/readiness-new-session-test/`.
 
-## Approved backup and thermal protection work
+## Approved backup and thermal protection work: implemented
 
-The owner approved all seven recommendations after reviewing their examples and
-reasons. Keep sampling inexpensive and no more frequent than protection requires.
-Normal background CPU limits also tighten when hot. Notify affected standalone
-agents when no coordinator is present; enforcement must not depend on agents.
+The owner approved all seven recommendations. Production temperature sampling is
+15 seconds locally, with no recurring SSH/sensor scans. Notices use the existing
+Aico settings and delivery path; coordinators or active standalone agents receive
+host events. Enforcement does not depend on them responding.
 
-1. One owner for each backup source: the standby owns gem's guests; the
-   workstation owns its own data. Reuse the existing source registry and preserve
-   the source IDs and recovery coverage.
-2. Replace repeated guest-agent/base64 chunk transfers with continuous supported
-   streams. Preserve encryption, existing credentials and completed backup history.
-3. Inspect the 9.45 GB of Portfolio weekly archives and prove coverage before
-   changing their recurring capture. Do not delete archives or old snapshots.
-4. Add lightweight local host thermal enforcement in the existing native package,
-   independent of Aico or agent availability. No recurring SSH/PVE scans for it.
-5. Limit actual host/guest backup workers, including a normal modest CPU ceiling
-   and reduced hot budgets. Do not throttle or stop whole VMs or production
-   services. Serialize exports across controllers.
-6. Deliver deduplicated host heat/action/recovery events to affected coordinators
-   or active agents using existing session delivery. Owner notices stay behind
-   Aico's notification preferences.
-7. Prove guard decisions using injected readings; verify real resource controls
-   with a short bounded benign job. No deliberate heating or full-backup load test.
+1. Gem sources now have CT 190 as their single Drive owner. Workstation sources
+   remain workstation-owned; source IDs and old repository histories are preserved.
+2. Dispatcher `689fdaad` is installed and hash-verified. QEMU captures use native
+   backup locks, freeze/snapshot/thaw and a continuous plain tar stream; LXC uses a
+   continuous scoped stream. Repeated gzip/base64 guest-agent chunks are removed.
+   Signal and guest-shutdown cleanup passed 164 dispatcher tests and fresh review.
+3. VM 180's 10.12 GB app-backup directory includes 9.45 GB of complete weekly
+   Portfolio artifacts. These and all backup histories were preserved. Only two
+   abandoned generated chunk directories were deleted: 2,264 files / 27,147,948,432
+   bytes. Offline snapshot, mount, loop device and temporary lock were removed.
+4. Native guard `116bf831` is enabled on gem, before guest startup, and survived
+   the controlled reboot. Normal backup CPU budget is 50% of one core, hot 20%,
+   critical 10%; hot is 85 C twice, critical 90 C, recovery at or below 80 C.
+   These are workload-control thresholds, not claims about a damage temperature.
+5. The budget applies to actual backup workers, not whole application guests.
+   A host-wide export lock prevents simultaneous controller exports. ST heavy-work
+   admission `8cb8d103` reads the same public local guard heartbeat.
+6. Durable ordered heat/action/recovery delivery passed injected-event tests and
+   actual consumer tests. There is no extra phone sender or preference bypass.
+7. Bounded harmless live proofs verified real 50/20/10% cgroup values, overlap and
+   critical deferral, recovery admission, LXC scope cleanup, and a running VM's
+   snapshot/thaw/lock cleanup. No full backup or deliberate heat test was started.
+   Evidence: `/srv/scratch/aico-backup-bounded-proof/`.
 
-## Current facts and awaiting verification
+Guard visibility inside CT 190 initially failed across its boot-time /run mount.
+`168428b5` fixes this with a read-only bind to /mnt and a standard tmpfiles alias.
+A real CT restart proved the alias, read-only mount, fresh heartbeat and installed
+SDK admission. No new service was added for this.
 
-- Both controller backup units and the two gem export sessions are stopped.
-  The earlier Claude coordinator requested the workstation run at 14:00:02 and
-  its child requested the standby run at 14:12:39. Their host export sessions
-  consumed 47m40s and 44m57s of CPU time. Local locks did not coordinate hosts.
-- VM 180 is currently off. Its two abandoned generated export directories have
-  been reclaimed as detailed below. The 10.12 GB application-backup folder includes 9.45 GB of weekly
-  Portfolio archives; this is durable history and must be preserved.
-- Gem was about 87–89°C during overlapping transfers and returned to about
-  45°C after the stop. A bounded synthetic API test confirms significant transfer
-  CPU without compression/encryption. It does not quantify encryption's share.
-  All load tests ended; no full backup was restarted.
-- Both Drive routines were unpaused. They are now temporarily paused through the
-  owning schedulers while the approved replacement is implemented; restore their
-  schedules after deployment and bounded verification. Other routine pauses,
-  including Jobinator's AI pause, must remain unchanged.
-- Inspected VM 180 while it stayed off, using a temporary read-only thin snapshot;
-  snapshot, mount and loop device were removed after inspection. The weekly
-  directory contains timestamped complete Portfolio artifacts with PostgreSQL
-  dumps and 71 uploaded files (20.9 MB in the inspected manifests). Newer archives
-  are about 104 MB each; earlier ones are about 376 MB. Preserve this history.
-  Removed only the two abandoned generated chunk directories: 2,264 part files,
-  27,147,948,432 bytes. VM 180 stayed off; a temporary PVE backup lock prevented
-  startup during the offline cleanup. The filesystem now has 34,560,405,504 bytes
-  available. The temporary mount, loop device and backup lock were cleared.
-- The stopped VM's SSH metadata has two unrestricted management public keys and
-  the standby's restricted port-forward key. One management fingerprint matches
-  the workstation's existing gem key. Do not widen the standby key or copy a
-  management private key as a shortcut to the new transport.
-- `4bf3fcae`: initial local thermal guard and native sender integration. Focused
-  independent review passed 71 tests and found two notification defects: a repeated
-  sensor outage reused its episode ID, and a heat/recovery pair could be missed
-  between five-minute sender ticks. The guard worker is fixing both with unique
-  persisted episodes and transition-only publication over existing Status transport.
-  No live installation yet.
-- `cf96af79` and `830c5855`: strict guard row contract, standalone/coordinator
-  delivery, persisted deduplication, recovery and explicit powered-off handling.
-  The base gate passed 2,347 TypeScript tests, 1,583 Python tests and contract
-  checks; independent review is underway. No live pushes or deployment yet.
-- Finish and review schedule/phone corrections and browser on-demand lifecycle;
-  deploy Aico to both hosts and browser tools to both entry points, then validate
-  the live paths. VM 100's on-demand runtime policy is registered on both hosts.
-  A two-controller shutdown race was reproduced before rollout; the browser
-  worker is fixing it at the existing guest pool lock using existing guest sudo
-  authority. No new grants, keys or permissions are needed.
-- `ce3876bd`: the final phone receipt checkpoint passed fresh independent review
-  and 43 focused tests. `a9532b08`: thermal delivery receipts and cancellation of
-  obsolete withdrawals now commit atomically; the interruption/restart regression
-  reproduced the defect before the fix. Fresh independent review and all 15
-  thermal delivery tests pass. These checkpoints are not deployed yet.
-- The local ST heavy-work admission integration passes 45 SDK tests and 115
-  service-tool tests. It reads the guard's cached public heartbeat, closes new
-  heavy admission when installed evidence is hot or invalid, and retains memory
-  admission. Fresh review is underway. No new polling or SSH is introduced.
-- Verify fixed retention behavior without manually deleting/pruning backups;
-  perform the controlled gem reboot once active work and handshakes permit it,
-  verify recovery, and apply the approved guest states.
+The two Drive routines are resumed. Verified next runs: standby Nov 8 20:30 EST
+(Nov 9 01:30 UTC), workstation Nov 9 04:00 EST. Both were idle after resumption;
+no immediate backup was launched. Jobinator's intentional AI pause is preserved.
+
+### Backup incident facts and remaining handoff
+
+Claude's coordinator requested the workstation run at 14:00:02 EST; its child
+requested the standby run at 14:12:39. Separate controller locks allowed overlap.
+The two gem exporters consumed about 47m40s and 44m57s CPU before the explicit
+15:54 stop. The old transport made 1,132 guest-agent/base64 chunk calls. A bounded
+synthetic API test reproduced transfer CPU without compression/encryption; no
+historical profile exists to quantify encryption's share. Gem was about 87–89 C
+and cooled to about 45 C after the stop.
+
+Actual successful snapshots in the old workstation Drive repository were verified
+for host files (`2052950e`), CT 190 data (`41346b2e`) and browser state (`e7d19c3e`).
+The new standby repository has cluster config (`87ee2057`); the other three await
+their first scheduled copy there. This is an incomplete ownership handoff, with
+verified earlier coverage, rather than proof of lost backups. Never import old
+snapshot IDs into the new repository's receipts. No forget/prune was run manually.
+
+The native backup health check was found to inspect only the local owner's API,
+so it misread moved sources as missing. A minimal owner-aware coverage read is
+being implemented; verification and deployment remain open. Keep actual copy
+coverage separate from each owner's run health and retain repository provenance.
+
+## Controlled reboot and browser lifecycle
+
+Gem reboot completed. Boot ID changed from `9bd79d6a-db02-45ea-a907-10151ec92b79`
+to `7461f85b-c0a2-4a13-bb17-48fc83dc6675`. Portfolio's agent cleared the interruption
+and deliberately left its newly renamed/resized VM 180 off. The handshakes were
+closed after recovery. This proves clean reboot recovery, not BIOS power recovery.
+
+All selected always-on guests returned. Postboot checks passed for BlackBox,
+Ominull hub, backup receiver timer/repository, OpenCanary service, Aico/Tether,
+Jobinator backend/frontend/database/scheduler and Dadbot web/tunnel/manifest.
+No decoy ports, family records, hunter data or paused AI routines were exercised.
+
+Browser pool locking and boot-bound stopping fences are installed on VM 100 and
+both controllers. Live testing uncovered a separate severe standby CLI recursion:
+when PATH lacked st, browser-st called itself for VM discovery. The recursive
+children were stopped after observed memory pressure. Browser commits `5c9b8757`
+and `fc957f5e` remove self-fallback, resolve the supported installed ST facade and
+return a clear error. Regression tests and the 1,261-test gate passed; both
+controllers now run the fixed release.
+
+The patched live test proved cold start, two-controller use, retaining the VM when
+only one controller closes, and automatic poweroff after both close/reap. All
+created sessions are closed. Root confirmed VM 100 stopped. Independent two-second
+resource observation recorded peak 71.875 C, CT 190 peak 767,614,976 bytes / 72 pids,
+zero memory-pressure full avg10, no budget breach; observer was removed afterwards.
+Evidence: `/srv/scratch/browser-on-demand-live-report.md` and the bounded-proof
+resource log. Follow-up browser commit `3355648a` explains lazy startup without
+calling the saved session unusable, and answers fixture help successfully. Its
+1,261-test gate passed; both controllers now run it and live help exits zero.
+
+## Remaining before this checkpoint closes
+
+- Verify and deploy owner-aware backup health and BlackBox registry correction.
+- Verify final live state and document any honest remaining limits.
+- Remove only this work's ROADMAP line when those are complete.
+- Then execute the separately approved remote-use shakedown, starting with Claude's
+  existing reports and unfinished work rather than repeating or abandoning it.

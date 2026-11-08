@@ -1,44 +1,40 @@
-# Proxmox guest states for after the readiness work
+# Proxmox guest states after readiness work
 
-Inventory observed Nov 8 at 2:38 PM EST. The owner approved these states, with
-VM 100 changed to automatic on-demand power. VM 180 is now off; the replacement
-backup transport reads a hypervisor snapshot without starting it.
+Observed Nov 8 after the controlled gem reboot and live browser test. All states
+below follow the owner's choices. VM 180 was renamed and resized by the Portfolio
+agent, which deliberately left it off. Memory is in GiB.
 
-| ID | VM | Current | Recommended after work |
-|---|---|---|---|
-| 100 | st-browser | On | On demand; start for browser work, stop when unused |
-| 110 | wfp-target-win11 | Off | Off; start for a Windows test |
-| 112 | ominull-target-linux | Off | Off; start for an isolation test |
-| 120 | neri-lab | Off | Off; on demand |
-| 121 | neri-gitlab | Off | Off; on demand |
-| 123 | neri-wordpress-core | Off | Off; on demand |
-| 124 | neri-woocommerce-multisite | Off | Off; on demand |
-| 125 | neri-workbench | Off | Off; on demand |
-| 180 | apps | On | Off after backup and Portfolio verification |
-| 200 | agent-work | Off | Off; on demand |
-| 201 | neri-hunters | Off | Off; on demand |
-| 210 | dadbot | On | On; family service |
-| 9000 | ubuntu-2404-cloud | Off | Off; template |
-| 9001 | ubuntu-2404-agent-ready | Off | Off; template |
+| ID | VM | Cores | Memory | State | Autostart | Intended use |
+|---|---|---:|---:|---|---|---|
+| 100 | st-browser | 4 | 8 | Off | No | Starts for agent browser work; stops when unused |
+| 110 | wfp-target-win11 | 4 | 6 | Off | No | Windows tests on demand |
+| 112 | ominull-target-linux | 2 | 2 | Off | No | Isolation tests on demand |
+| 120 | neri-lab | 4 | 4 | Off | No | On demand |
+| 121 | neri-gitlab | 4 | 8 | Off | No | On demand |
+| 123 | neri-wordpress-core | 2 | 4 | Off | No | On demand |
+| 124 | neri-woocommerce-multisite | 2 | 2 | Off | No | On demand |
+| 125 | neri-workbench | 2 | 2 | Off | No | On demand |
+| 180 | portfolio-ai | 4 | 6 | Off | No | Owner's Portfolio work on demand |
+| 200 | agent-work | 8 | 16 | Off | No | On demand |
+| 201 | neri-hunters | 6 | 12 | Off | No | On demand |
+| 210 | dadbot | 2 | 2 | On | Yes | Family service |
+| 9000 | ubuntu-2404-cloud | 2 | 2 | Off | No | Template |
+| 9001 | ubuntu-2404-agent-ready | 2 | 2 | Off | No | Template |
 
-Proxmox also runs these containers:
+| ID | Container | Cores | Memory | State | Autostart | Intended use |
+|---|---|---:|---:|---|---|---|
+| 140 | blackbox-vault | 2 | 1 | On | Yes | Owner requested; separate BlackBox test planned |
+| 150 | ominull-hub | 2 | 1 | On | Yes | Monitoring hub |
+| 160 | restic-append | 2 | 1 | On | Yes | Backup receiver |
+| 170 | opencanary | 1 | 0.5 | On | Yes | Monitoring service |
+| 190 | aico | 2 | 10 | On | Yes | Standby Aico |
+| 191 | jobinator | 2 | 2 | On | Yes | Application and scheduler; AI remains paused |
 
-| ID | Container | Current | Recommended after work |
-|---|---|---|---|
-| 140 | blackbox-vault | Off at inventory | On with autostart; owner will test separately |
-| 150 | ominull-hub | On | On; monitoring hub |
-| 160 | restic-append | On | On; backup receiver |
-| 170 | opencanary | On | On; monitoring service |
-| 190 | aico | On | On; standby Aico |
-| 191 | jobinator | On | On; application and scheduler |
+VM 100's live two-controller test proved it starts for browser work, remains on
+while the other controller still has a session, and stops after the final close
+and reap. No manual power action was used in that retest. Further user shakedown
+may start it again temporarily; leave it off when all test sessions are closed.
 
-BlackBox update: CT 140 was started and its autostart enabled at the owner's
-request. Its application health check passed. Other power changes remain after
-the active backups and final checks. VM 100 still has autostart enabled until its
-automatic on-demand lifecycle is installed and validated.
-
-Fresh inventory before deployment: all listed containers and VM 210 are running with
-autostart enabled. All other QEMU guests except VM 100 are off with autostart
-disabled. Both templates are off. VM 100 is the only remaining state change;
-its helper and both controllers must be deployed and verified first. No guest
-currently has a PVE operation lock.
+The controlled reboot proved recovery of the listed always-on guests. It does
+not prove automatic startup after loss of mains power; the owner skipped the
+unwired smart-plug test. Do not turn that into a recurring new owner ask.
