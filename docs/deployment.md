@@ -13,6 +13,15 @@ scripts/deploy-remote.sh aico-gem --sha FULL_COMMIT
 
 It copies the workstation release (the commit's source plus its `node_modules`, built bundles and `packages/web-frontend/out`; no build caches, runtime state, `.env` or auth files) into a **new** `~/.local/lib/aico/releases/FULL_COMMIT` on the CT, unchanged files hard-linked to its current release. It compares every file's checksum against the workstation copy, then runs that release's `AICO_INSTALL_SOURCE_SHA=FULL_COMMIT bash scripts/install.sh --prebuilt --start` and waits for web health. `--prebuilt` checks the required bundles, static page and dependencies before installing files and runs no dependency install or build. The CT keeps its configuration and data. `--dry-run` shows the copy and changes nothing.
 
+### Browser on CT 190
+
+`scripts/peer-release.sh` also runs `scripts/peer-tools.sh aico-gem`, which puts the workstation's `aico-hook` on the CT (`st sessions inbox` and the edit guard need it; the CT has no Go) and the browser runtime. `st browser` runs the workstation's accepted browser-automation release: the script copies that release without its `.venv`, builds the CT's own with `uv sync --frozen` (uv is copied over once) and installs the pinned agent-browser with `npm ci`. Sessions run on the browser VM (VM 100), not on the CT, so the CT needs no Chrome. What the scripts do not do is host configuration, set once:
+
+- `st vm ip 100` works from the CT: the Proxmox role `AicoAudit` (token `aico@pve!ct190`) holds `VM.GuestAgent.Audit`.
+- The CT reaches the VM over SSH: its own key `~/.ssh/id_ed25519_browser_vm`, named for the VM's address in the CT's `~/.ssh/config`, and its public half in the VM user's `authorized_keys`.
+- The VM accepts the CT's CDP connections: `/etc/pve/firewall/100.fw` allows tcp 9300:9339 from 192.168.86.59 (port 9222 stays workstation only), and the VM's `~/.config/st-browser/chrome.env` has `ST_BROWSER_CDP_ALLOW=192.168.86.0/24` (socat takes one range; the VM firewall is the real allowlist).
+- A login the CT's routines use (for example the Focus parent portal, `st browser login focus-pcsb`) is granted to machine `aico` on Aico's Logins page; only the owner can grant.
+
 Tether alone also reaches peers on its own: a workstation holding the update signing key signs each Tether release it installs, and its hub sends that signed release to a pinned peer whose Tether API is older when their link comes up.
 
 Afterward verify web health, Tether health, active unit paths, a synthetic Logins entry reaching both peers and its removal reaching both, the CT's own append-only backup job, and its heartbeat Status row. Read metadata only; never reveal the entry's value.

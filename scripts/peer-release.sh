@@ -12,6 +12,8 @@
 #   that release built none).
 # - Tether: the workstation's installed, signed Tether goes over the fleet link with
 #   `tether fleet push-update`; the peer installs it only when it differs and is newer.
+# - The tools st shells out to that are no part of the release: aico-hook and the browser runtime
+#   (scripts/peer-tools.sh; a no-op when the peer already has them).
 # While a deploy holds this machine's releases lock, the run does nothing and the next one sends it.
 # The last line says what happened (the job's Status meaning).
 set -euo pipefail
@@ -56,4 +58,8 @@ tether="$("$TETHER" fleet push-update "$MACHINE" "$TETHER_LIB" 2>&1 | tail -n 1)
   echo "$MACHINE $release, but its Tether update failed: $tether"
   exit 1
 }
-echo "$MACHINE $release. Tether: ${tether:-sent}"
+tools="$("$HERE/peer-tools.sh" "$HOST" 2>&1 | tail -n 1)" || {
+  echo "$MACHINE $release. Tether: ${tether:-sent}. Peer tools failed: $tools"
+  exit 1
+}
+echo "$MACHINE $release. Tether: ${tether:-sent}. ${tools#"$HOST "}"
