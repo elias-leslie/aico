@@ -26,7 +26,10 @@ for d in "$tray"/releases/*/; do
 done
 
 install -d "$base/icons"
+icons_before=$(cat "$base"/icons/*.png 2>/dev/null | sha256sum)
 install -m 0644 "$here"/icons/*.png "$base/icons/"
+icons_changed=0
+[ "$icons_before" = "$(cat "$base"/icons/*.png | sha256sum)" ] || icons_changed=1
 
 install -D -m 0644 "$here/aico-tray.service" "$HOME/.config/systemd/user/aico-tray.service"
 systemctl --user --no-ask-password daemon-reload
@@ -40,5 +43,12 @@ cp -f "$here"/shell-extension/$ext/* "$edir/$ext/"
 if [ "${1:-}" = "--start" ]; then
   systemctl --user --no-ask-password enable aico-tray.service
   systemctl --user --no-ask-password restart aico-tray.service
+fi
+# The top-bar indicator extension caches tray icons by name, so a redrawn icon under the same name stays old
+# until the extension reloads; the tray restarts after it so it registers again.
+indicators=ubuntu-appindicators@ubuntu.com
+if [ "$icons_changed" = 1 ] && gnome-extensions list --enabled 2>/dev/null | grep -qx "$indicators"; then
+  gnome-extensions disable "$indicators" && gnome-extensions enable "$indicators"
+  ! systemctl --user --quiet is-active aico-tray.service || systemctl --user --no-ask-password restart aico-tray.service
 fi
 echo "aico-tray $rel installed"
