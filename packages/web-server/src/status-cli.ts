@@ -1,7 +1,7 @@
 // `aico status`: this machine's Status rows from aico-web (GET /api/status), problems
 // first with what each means and what to do, healthy rows folded into a count.
 
-import { localClock, localTime } from '@aico/shared/time'
+import { localClock, localTime, readingDay } from '@aico/shared/time'
 import { concentration, counted, type ShownRow, type StatusView } from '@aico/status'
 
 const cliName = () => process.env.AICO_CLI_NAME || 'aico'
@@ -60,9 +60,7 @@ const ACTION_LABELS: Record<string, string> = {
 /** A time in local words with its zone: "today 10:30 PM EST", "yesterday 10:10 PM EST", else "Nov 1, 2:00 PM EST". */
 export function when(iso: string, now: number): string {
   const at = new Date(iso)
-  const day = (date: Date) =>
-    new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
-  const days = Math.round((day(at) - day(new Date(now))) / 86_400_000)
+  const days = Math.round((readingDay(at) - readingDay(now)) / 86_400_000)
   if (days === 0) return `today ${localClock(at)}`
   if (days === -1) return `yesterday ${localClock(at)}`
   if (days === 1) return `tomorrow ${localClock(at)}`

@@ -1,5 +1,5 @@
 import { afterEach, expect, it } from 'vitest'
-import { ago, agoOrDate, localClock, localTime, shortAgo, spanText } from './time'
+import { ago, agoOrDate, localClock, localTime, readingDay, shortAgo, spanText } from './time'
 
 const zone = process.env.TZ
 afterEach(() => {
@@ -50,4 +50,19 @@ it('says an age or a limit in the fewest words, and an age rounds like the rest'
   expect(spanText(2.5 * 3_600_000)).toBe('3 h')
   expect(spanText(38 * 3_600_000)).toBe('38 h')
   expect(spanText(72 * 3_600_000)).toBe('3 days')
+})
+
+it('reads times in the owner zone on a machine that runs UTC, unless TZ is set', () => {
+  const before = process.env.TZ
+  try {
+    delete process.env.TZ
+    expect(localClock('2026-11-07T03:28:50Z')).toBe('10:28 PM EST')
+    expect(localTime('2026-11-07T03:28:50Z')).toBe('Nov 6, 10:28 PM EST')
+    expect(readingDay('2026-11-07T03:28:50Z')).toBe(Date.UTC(2026, 10, 6))
+    process.env.TZ = 'UTC'
+    expect(localClock('2026-11-07T03:28:50Z')).toBe('3:28 AM UTC')
+  } finally {
+    if (before === undefined) delete process.env.TZ
+    else process.env.TZ = before
+  }
 })

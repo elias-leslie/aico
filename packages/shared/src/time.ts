@@ -2,7 +2,21 @@
 // way everywhere ("Nov 6, 10:30 PM EST"), so a reset beside a collection time cannot be off by hours.
 // Formatters are made per call so a changed TZ is honored.
 
-/** "Nov 6, 10:30 PM EST" in the local zone. */
+/** The zone people read times in, whatever zone the machine runs (the standby's container is UTC).
+ * Display only: a routine's schedule keeps its own zone. A set TZ still wins. */
+const readingZone = (): string | undefined =>
+  'window' in globalThis
+    ? undefined
+    : process.env.TZ || process.env.AICO_OWNER_TZ || 'America/New_York'
+
+/** Midnight UTC of the calendar day `at` falls on in the owner's zone, to compare days by. */
+export function readingDay(at: Date | number | string): number {
+  return Date.parse(
+    new Intl.DateTimeFormat('en-CA', { timeZone: readingZone() }).format(new Date(at)),
+  )
+}
+
+/** "Nov 6, 10:30 PM EST" in the owner's zone. */
 export function localTime(at: Date | number | string): string {
   return new Intl.DateTimeFormat('en-US', {
     month: 'short',
@@ -10,15 +24,17 @@ export function localTime(at: Date | number | string): string {
     hour: 'numeric',
     minute: '2-digit',
     timeZoneName: 'short',
+    timeZone: readingZone(),
   }).format(new Date(at))
 }
 
-/** "10:30 PM EST" in the local zone. */
+/** "10:30 PM EST" in the owner's zone. */
 export function localClock(at: Date | number | string): string {
   return new Intl.DateTimeFormat('en-US', {
     hour: 'numeric',
     minute: '2-digit',
     timeZoneName: 'short',
+    timeZone: readingZone(),
   }).format(new Date(at))
 }
 
