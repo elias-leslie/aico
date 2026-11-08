@@ -1,7 +1,7 @@
 """The memory event record (schema v1): ~/.local/state/host-steward/memory-events.jsonl.
 
 memctl writes the kernel kills, pane-stopped and outside-hog; Tether's memory guard (packages/tether
-src/lifecycle/job-guard.ts) appends its own tool-job kills, warnings and agent-hog records with killer tether.
+packages/session-engine/src/lifecycle/job-guard.ts) appends its own tool-job kills, warnings and agent-hog records with killer tether.
 One JSON object per line, appended and rotated at max_bytes (one older file, .1, is kept):
   kind   kill | warning | pane-stopped | agent-hog | outside-hog
   killer tether | memctl | kernel-pane-cap | kernel-cgroup | kernel-global | oomd   (None for warnings and hogs)

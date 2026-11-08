@@ -11,8 +11,96 @@ import {
   type HookReport,
   reportAgentState,
 } from '@aico/session-engine/agent-state'
+import {
+  adoptLineage,
+  allocateWidgetId,
+  clearLaunched,
+  coordinatorSubtree,
+  getTmuxServer,
+  getWidget,
+  insertWidget,
+  joinCoordinator,
+  listSessions,
+  listWidgets,
+  recordLauncher,
+  rootRequestForWidget,
+  type SessionOrigin,
+  setCoordinator,
+  setWidgetName,
+  setWidgetProject,
+  transferCoordinator,
+  type WidgetRow,
+} from '@aico/session-engine/catalog'
+import {
+  autoName,
+  badge,
+  conversationDoing,
+  displayTitle,
+  rememberProjects,
+  taskName,
+} from '@aico/session-engine/display'
+import {
+  agentExitOf,
+  cachedSessionStatus,
+  contextStatus,
+  discardNeverAllocated,
+  endSession,
+  ensureSessionSerialized,
+  hasVerifiedStatus,
+  holdPromotion,
+  isDir,
+  lastEnsureFailure,
+  lifecycleOwners,
+  lifecycleStatus,
+  lingerEnabled,
+  loadTui,
+  notifySessionChanged,
+  probeContext,
+  type RespawnResult,
+  reconcileWidgetTool,
+  releaseLifecycleOwner,
+  releasePromotion,
+  respawnAndRelaunch,
+  rootManagedGateState,
+  type SessionStatus,
+  sessionDiagnostics,
+  switchProject,
+  tmuxPaneTargetForWidget,
+  tmuxTargetForWidget,
+  verifySessionStatus,
+  whenReady,
+} from '@aico/session-engine/engine'
 import type { EventBus } from '@aico/session-engine/events'
+import { claimTmuxViewSize, type ResizeClaimResult } from '@aico/session-engine/interactive-tmux'
+import { isNeverAllocatedWidget } from '@aico/session-engine/lifecycle-guard'
+import { ForegroundPaneMemory, systemdPaneMemoryHost } from '@aico/session-engine/pane-memory'
+import {
+  createRootHandler,
+  isProjectRootPath,
+  type MutationRejection,
+  parseLabel,
+  type RootControlOperations,
+  type RootHandlerState,
+  type WidgetMutation,
+} from '@aico/session-engine/root-control'
+import { sessionSpec, withRootPrompt } from '@aico/session-engine/root-launch'
+import {
+  generationOf,
+  runTmux,
+  TMUX_BIN,
+  withRunningSession,
+} from '@aico/session-engine/running-session'
+import { readScrollbackPage } from '@aico/session-engine/scrollback-page'
 import type { Store } from '@aico/session-engine/store'
+import {
+  bracketedPasteTargetArgs,
+  captureVisibleTargetArgs,
+  isBoundedTerminalText,
+  sendKeyTargetArgs,
+  sendTextTargetArgs,
+  sessionName,
+  type TmuxTarget,
+} from '@aico/session-engine/tmux'
 import { agyDoing } from '@aico/session-engine/tui/adapters/agy-doing'
 import {
   createBlankSlateWorkspace,
@@ -49,95 +137,12 @@ import {
   UnknownPool,
 } from './hub/placement'
 import { type LaneReporter, laneView, registerLaneRoutes } from './lane-reports'
-import {
-  adoptLineage,
-  allocateWidgetId,
-  clearLaunched,
-  coordinatorSubtree,
-  getTmuxServer,
-  getWidget,
-  insertWidget,
-  joinCoordinator,
-  listSessions,
-  listWidgets,
-  recordLauncher,
-  rootRequestForWidget,
-  type SessionOrigin,
-  setCoordinator,
-  setWidgetName,
-  setWidgetProject,
-  transferCoordinator,
-  type WidgetRow,
-} from './lifecycle/catalog'
-import {
-  autoName,
-  badge,
-  conversationDoing,
-  displayTitle,
-  rememberProjects,
-  taskName,
-} from './lifecycle/display'
-import {
-  agentExitOf,
-  cachedSessionStatus,
-  contextStatus,
-  discardNeverAllocated,
-  endSession,
-  ensureSessionSerialized,
-  hasVerifiedStatus,
-  holdPromotion,
-  isDir,
-  lastEnsureFailure,
-  lifecycleOwners,
-  lifecycleStatus,
-  lingerEnabled,
-  loadTui,
-  notifySessionChanged,
-  probeContext,
-  type RespawnResult,
-  reconcileWidgetTool,
-  releaseLifecycleOwner,
-  releasePromotion,
-  respawnAndRelaunch,
-  rootManagedGateState,
-  type SessionStatus,
-  sessionDiagnostics,
-  switchProject,
-  tmuxPaneTargetForWidget,
-  tmuxTargetForWidget,
-  verifySessionStatus,
-  whenReady,
-} from './lifecycle/engine'
-import { claimTmuxViewSize, type ResizeClaimResult } from './lifecycle/interactive-tmux'
-import { isNeverAllocatedWidget } from './lifecycle/lifecycle-guard'
-import { ForegroundPaneMemory, systemdPaneMemoryHost } from './lifecycle/pane-memory'
-import {
-  createRootHandler,
-  isProjectRootPath,
-  type MutationRejection,
-  parseLabel,
-  type RootControlOperations,
-  type RootHandlerState,
-  type WidgetMutation,
-} from './lifecycle/root-control'
-import { sessionSpec, withRootPrompt } from './lifecycle/root-launch'
-import { readScrollbackPage } from './lifecycle/scrollback-page'
-import {
-  bracketedPasteTargetArgs,
-  captureVisibleTargetArgs,
-  isBoundedTerminalText,
-  sendKeyTargetArgs,
-  sendTextTargetArgs,
-  sessionName,
-  type TmuxTarget,
-} from './lifecycle/tmux'
 import type { ModelSwitch, ModelWatch } from './model-switch'
 import { paneModeArgs, parsePaneMode } from './pane-mode'
 import type { Project, ProjectProvider } from './projects'
 import { type Continuity, registerRebootRoutes } from './reboot'
 import { type Recovery, registerRecoveryRoutes } from './recovery'
 import { RewindRefused, rewindClaude } from './rewind'
-import { generationOf, runTmux, TMUX_BIN, withRunningSession } from './running-session'
 import type { History } from './sessions/history'
 import { parseViewerLabel, recordSizeHolder, sizeHolderOf } from './size-holder'
 import { registerWaitRoutes, type WaitService } from './waits'

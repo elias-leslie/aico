@@ -7,7 +7,7 @@
 > **Lifecycle moved to Tether.** Aico's session lifecycle (tmux server and pane
 > scopes, launch gate, End, admission, root control) moved to Tether at Tether
 > `bcbf73e` and was removed from Aico at `05ede7e` (branch `tether-client`). The
-> invariants below are pinned in Tether's `src/lifecycle/invariants.test.ts`;
+> invariants below are pinned in Tether's `packages/session-engine/src/lifecycle/invariants.test.ts`;
 > the harness is Tether's `scripts/tether-lifecycle-harness.sh`. Paths and module
 > names below are historical.
 

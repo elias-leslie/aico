@@ -5,20 +5,8 @@
 
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { AgentAdmissionDenied } from '@aico/session-engine/agent-admission'
 import { agentStateOf } from '@aico/session-engine/agent-state'
-import {
-  type ContinuitySnapshot,
-  observeAgent,
-  readJsonFile,
-} from '@aico/session-engine/continuity'
-import { nodeProcFs } from '@aico/session-engine/proc-fs'
-import { MAIN_TURN_OVER } from '@aico/session-engine/tui/adapters/contract'
-import { ensureBlankSlateWorkspace, isBlankSlateRoot } from '@aico/session-engine/tui/blank-slate'
-import { isResumeSessionId } from '@aico/session-engine/tui/launch'
-import { getTui, isDeliveryTool } from '@aico/session-engine/tui/registry'
-import { DeliveryLog, registerDeliveryRoutes } from './deliveries'
-import { HttpError, type Router, readJsonObject, sendJson } from './http'
-import { AgentAdmissionDenied } from './lifecycle/agent-admission'
 import {
   allocateWidgetId,
   clearLaunched,
@@ -34,7 +22,12 @@ import {
   setWidgetName,
   setWidgetProject,
   type WidgetRow,
-} from './lifecycle/catalog'
+} from '@aico/session-engine/catalog'
+import {
+  type ContinuitySnapshot,
+  observeAgent,
+  readJsonFile,
+} from '@aico/session-engine/continuity'
 import {
   discardNeverAllocated,
   ensureSessionSerialized,
@@ -47,12 +40,19 @@ import {
   verifiedCurrentManagedPane,
   verifySessionStatus,
   whenReady,
-} from './lifecycle/engine'
-import { withRootPrompt } from './lifecycle/root-launch'
-import { captureVisibleTargetArgs, clientActivityTargetArgs } from './lifecycle/tmux'
+} from '@aico/session-engine/engine'
+import { nodeProcFs } from '@aico/session-engine/proc-fs'
+import { withRootPrompt } from '@aico/session-engine/root-launch'
+import { pasteIntoRunningSession, runTmux } from '@aico/session-engine/running-session'
+import { captureVisibleTargetArgs, clientActivityTargetArgs } from '@aico/session-engine/tmux'
+import { MAIN_TURN_OVER } from '@aico/session-engine/tui/adapters/contract'
+import { ensureBlankSlateWorkspace, isBlankSlateRoot } from '@aico/session-engine/tui/blank-slate'
+import { isResumeSessionId } from '@aico/session-engine/tui/launch'
+import { getTui, isDeliveryTool } from '@aico/session-engine/tui/registry'
+import { DeliveryLog, registerDeliveryRoutes } from './deliveries'
+import { HttpError, type Router, readJsonObject, sendJson } from './http'
 import type { LifecycleContext } from './lifecycle-context'
 import type { Continuity } from './reboot'
-import { pasteIntoRunningSession, runTmux } from './running-session'
 import {
   applyWakePolicyPatch,
   cleanNote,

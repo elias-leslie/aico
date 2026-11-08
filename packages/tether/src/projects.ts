@@ -3,13 +3,9 @@
 
 import { mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, normalize } from 'node:path'
+import type { Project } from '@aico/session-engine/project'
 
-export interface Project {
-  id: string
-  name: string
-  root: string
-  lifecycle: string | null
-}
+export type { Project }
 
 export interface ProjectList {
   source: 'registry' | 'local'

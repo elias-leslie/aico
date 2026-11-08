@@ -1,5 +1,5 @@
 {
-  "description": "Aico owner view-mutation validation. The owner (src/lifecycle/root-control.ts) is authoritative; every client validator must agree with these vectors.",
+  "description": "Aico owner view-mutation validation. The owner (packages/session-engine/src/lifecycle/root-control.ts) is authoritative; every client validator must agree with these vectors.",
   "version": 1,
   "labels": [
     {

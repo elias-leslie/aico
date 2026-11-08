@@ -40,7 +40,7 @@ SPARE_MAX_PRESSURE_AVG10 = 5.0
 _SPARE_LANE = "heavy2"
 # A fresh heavy owner waits before taking any slot while host-steward closes
 # admission. Without a current host decision, apply Tether's agent
-# admission PSI thresholds (src/lifecycle/agent-admission.ts).
+# admission PSI thresholds (packages/session-engine/src/lifecycle/agent-admission.ts).
 HOST_ADMISSION = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")) / "host-steward/admission.json"
 PRESSURE_MAX_FULL_AVG60 = 2.0
 PRESSURE_MAX_FULL_AVG10 = 5.0

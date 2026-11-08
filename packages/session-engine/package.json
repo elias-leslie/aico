@@ -8,7 +8,8 @@
     "layer": 4,
     "imports": [
       "@aico/shared",
-      "@aico/context"
+      "@aico/context",
+      "@aico/tether-client"
     ],
     "db": [
       "tether.db"
@@ -16,18 +17,41 @@
   },
   "type": "module",
   "exports": {
+    "./agent-admission": "./src/lifecycle/agent-admission.ts",
     "./agent-state": "./src/agent-state.ts",
+    "./catalog": "./src/lifecycle/catalog.ts",
     "./continuity": "./src/continuity.ts",
+    "./dead-shells": "./src/dead-shells.ts",
+    "./display": "./src/lifecycle/display.ts",
+    "./engine": "./src/lifecycle/engine.ts",
+    "./entries": "./src/lifecycle/entries.ts",
+    "./entry-agent": "./src/entry-agent.ts",
     "./entry-files": "./src/entry-files.ts",
     "./entry-scan": "./src/entry-scan.ts",
     "./env": "./src/env.ts",
     "./events": "./src/events.ts",
     "./generation": "./src/generation.ts",
+    "./interactive-tmux": "./src/lifecycle/interactive-tmux.ts",
+    "./job-guard": "./src/lifecycle/job-guard.ts",
+    "./lifecycle-guard": "./src/lifecycle/lifecycle-guard.ts",
+    "./memory-policy": "./src/memory-policy.ts",
     "./model-record": "./src/model-record.ts",
+    "./owner-retirement": "./src/lifecycle/owner-retirement.ts",
+    "./ownership": "./src/lifecycle/ownership.ts",
+    "./pane-caps": "./src/lifecycle/pane-caps.ts",
+    "./pane-memory": "./src/lifecycle/pane-memory.ts",
     "./paths": "./src/paths.ts",
     "./proc-facts": "./src/proc-facts.ts",
     "./proc-fs": "./src/proc-fs.ts",
+    "./procfs": "./src/lifecycle/procfs.ts",
+    "./project": "./src/project.ts",
+    "./root-control": "./src/lifecycle/root-control.ts",
+    "./root-launch": "./src/lifecycle/root-launch.ts",
+    "./running-session": "./src/running-session.ts",
+    "./scrollback-page": "./src/lifecycle/scrollback-page.ts",
     "./store": "./src/store.ts",
+    "./testing": "./src/lifecycle/testing.ts",
+    "./tmux": "./src/lifecycle/tmux.ts",
     "./tools": "./src/tools.ts",
     "./tui/adapters/agy-doing": "./src/lifecycle/tui/adapters/agy-doing.ts",
     "./tui/adapters/claude-code": "./src/lifecycle/tui/adapters/claude-code.ts",
@@ -51,6 +75,7 @@
   },
   "dependencies": {
     "@aico/shared": "0.1.0",
-    "@aico/context": "0.1.0"
+    "@aico/context": "0.1.0",
+    "@aico/tether-client": "0.1.0"
   }
 }

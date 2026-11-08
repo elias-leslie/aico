@@ -6,7 +6,16 @@ import { HostAdmin } from '@aico/fleet/hub/host-admin'
 import type { Hub } from '@aico/fleet/hub/hub'
 import { installedRelease } from '@aico/fleet/hub/update'
 import { isPeerRequest } from '@aico/fleet/peer-http'
+import { getWidget } from '@aico/session-engine/catalog'
+import { lifecycleStatus } from '@aico/session-engine/engine'
 import type { EventBus, TetherEvent } from '@aico/session-engine/events'
+import {
+  DEFAULT_MEMORY_POLICY,
+  KILL_ORDERS,
+  MEMORY_POLICY_BOUNDS,
+  MemoryPolicyError,
+} from '@aico/session-engine/memory-policy'
+import { createRootHandlerState, type RootHandlerState } from '@aico/session-engine/root-control'
 import type { Store, ToolPatch } from '@aico/session-engine/store'
 import {
   type AgentTool,
@@ -27,17 +36,8 @@ import { registerFileRoutes } from './files/api'
 import { HttpError, Router, readJsonObject, sendError, sendJson } from './http'
 import { registerHostAdminRoutes } from './hub/host-routes'
 import { tetherHubPorts } from './hub/ports'
-import { getWidget } from './lifecycle/catalog'
-import { lifecycleStatus } from './lifecycle/engine'
-import { createRootHandlerState, type RootHandlerState } from './lifecycle/root-control'
 import { learnProjects, registerLifecycleRoutes } from './lifecycle-api'
 import type { MemoryPolicyService } from './memory-guard'
-import {
-  DEFAULT_MEMORY_POLICY,
-  KILL_ORDERS,
-  MEMORY_POLICY_BOUNDS,
-  MemoryPolicyError,
-} from './memory-policy'
 import {
   type ProjectProvider,
   ProjectRegistrationError,

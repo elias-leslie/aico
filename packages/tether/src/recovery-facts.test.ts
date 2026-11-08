@@ -1,8 +1,8 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { isBoundedTerminalText } from '@aico/session-engine/tmux'
 import { describe, expect, it } from 'vitest'
-import { isBoundedTerminalText } from './lifecycle/tmux'
 import { decideRecovery, LOOP_WINDOW_MS, RECOVERY_WINDOW_MS } from './recovery'
 import {
   CRASH_RESULTS,

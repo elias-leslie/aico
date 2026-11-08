@@ -383,7 +383,7 @@
   },
   {
     "type": "dependency",
-    "from": "packages/tether/src/lifecycle/catalog.ts",
+    "from": "packages/session-engine/src/lifecycle/catalog.ts",
     "to": "node:sqlite",
     "unresolvedTo": "node:sqlite",
     "dependencyTypes": [
@@ -398,7 +398,7 @@
   },
   {
     "type": "dependency",
-    "from": "packages/tether/src/lifecycle/owner-retirement.test.ts",
+    "from": "packages/session-engine/src/lifecycle/owner-retirement.test.ts",
     "to": "node:sqlite",
     "unresolvedTo": "node:sqlite",
     "dependencyTypes": [
@@ -412,7 +412,7 @@
   },
   {
     "type": "dependency",
-    "from": "packages/tether/src/lifecycle/root-control.test.ts",
+    "from": "packages/session-engine/src/lifecycle/root-control.test.ts",
     "to": "node:sqlite",
     "unresolvedTo": "node:sqlite",
     "dependencyTypes": [

@@ -12,7 +12,7 @@
 // tree are window features with no stable screen contract yet): the route
 // refuses them with `rewind_unsupported`.
 
-import type { PaneKey } from './lifecycle/tmux'
+import type { PaneKey } from '@aico/session-engine/tmux'
 
 export interface RewindOperations {
   capture(): Promise<string>

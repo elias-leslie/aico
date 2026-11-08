@@ -615,8 +615,6 @@
                       "@aico/tasks/**",
                       "@aico/tether",
                       "@aico/tether/**",
-                      "@aico/tether-client",
-                      "@aico/tether-client/**",
                       "@aico/ui-kit",
                       "@aico/ui-kit/**",
                       "@aico/usage",
@@ -630,7 +628,7 @@
                       "@aico/webtools",
                       "@aico/webtools/**"
                     ],
-                    "message": "@aico/session-engine (layer 4): import only @aico/shared, @aico/context (package.json aico.imports; depcruise is the gate)"
+                    "message": "@aico/session-engine (layer 4): import only @aico/shared, @aico/context, @aico/tether-client (package.json aico.imports; depcruise is the gate)"
                   }
                 ]
               }

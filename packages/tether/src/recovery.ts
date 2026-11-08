@@ -26,6 +26,18 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import {
+  admissionOverrideFromEnv,
+  hostAdmissionPath,
+  readHostAdmission,
+} from '@aico/session-engine/agent-admission'
+import {
+  getSessionEntry,
+  getWidget,
+  listWidgets,
+  rootRequestForWidget,
+  type WidgetRow,
+} from '@aico/session-engine/catalog'
+import {
   type ContinuitySnapshot,
   currentBootId,
   findEntryProcess,
@@ -33,32 +45,6 @@ import {
   readJsonFile,
   writeJsonFile,
 } from '@aico/session-engine/continuity'
-import { entryHomeFiles, findClaudeTranscript } from '@aico/session-engine/entry-files'
-import { nodeProcFs, processTree, UUID_RE } from '@aico/session-engine/proc-fs'
-import {
-  AGENT_EXIT_ENV,
-  type AgentExitMarker,
-  isResumeSessionId,
-  parseAgentExitMarker,
-} from '@aico/session-engine/tui/launch'
-import { adapterOf, getTui } from '@aico/session-engine/tui/registry'
-import type { TuiSpec } from '@aico/session-engine/tui/spec'
-import { agentExitMarkerDir } from './config'
-import { probeEntryAgent } from './entry-agent'
-import { HttpError, type Router, readJsonObject, sendJson } from './http'
-import { type Needs, parseNeeds } from './hub/placement'
-import {
-  admissionOverrideFromEnv,
-  hostAdmissionPath,
-  readHostAdmission,
-} from './lifecycle/agent-admission'
-import {
-  getSessionEntry,
-  getWidget,
-  listWidgets,
-  rootRequestForWidget,
-  type WidgetRow,
-} from './lifecycle/catalog'
 import {
   type AbandonedScope,
   ensureSessionSerialized,
@@ -69,12 +55,30 @@ import {
   releaseCrashedSessionBinding,
   respawnAndRelaunch,
   verifiedCurrentManagedPane,
-} from './lifecycle/engine'
-import { ENTRY_MISSING_EXIT, ENTRY_RETRY_EXIT, sessionEntryHome } from './lifecycle/entries'
-import { memoryEventsPath } from './lifecycle/job-guard'
-import { isNamedProcess, processEnvironment } from './lifecycle/procfs'
-import { launchingResume, withRootPrompt } from './lifecycle/root-launch'
-import { paneExitedEventPath } from './lifecycle/tmux'
+} from '@aico/session-engine/engine'
+import {
+  ENTRY_MISSING_EXIT,
+  ENTRY_RETRY_EXIT,
+  sessionEntryHome,
+} from '@aico/session-engine/entries'
+import { probeEntryAgent } from '@aico/session-engine/entry-agent'
+import { entryHomeFiles, findClaudeTranscript } from '@aico/session-engine/entry-files'
+import { memoryEventsPath } from '@aico/session-engine/job-guard'
+import { nodeProcFs, processTree, UUID_RE } from '@aico/session-engine/proc-fs'
+import { isNamedProcess, processEnvironment } from '@aico/session-engine/procfs'
+import { launchingResume, withRootPrompt } from '@aico/session-engine/root-launch'
+import { paneExitedEventPath } from '@aico/session-engine/tmux'
+import {
+  AGENT_EXIT_ENV,
+  type AgentExitMarker,
+  isResumeSessionId,
+  parseAgentExitMarker,
+} from '@aico/session-engine/tui/launch'
+import { adapterOf, getTui } from '@aico/session-engine/tui/registry'
+import type { TuiSpec } from '@aico/session-engine/tui/spec'
+import { agentExitMarkerDir } from './config'
+import { HttpError, type Router, readJsonObject, sendJson } from './http'
+import { type Needs, parseNeeds } from './hub/placement'
 import type { LifecycleContext } from './lifecycle-context'
 import {
   CRASH_RESULTS,

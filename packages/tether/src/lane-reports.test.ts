@@ -1,3 +1,12 @@
+import {
+  adoptLineage,
+  bindCatalog,
+  clearLaunched,
+  getWidget,
+  insertWidget,
+  removeWidget,
+  setCoordinator,
+} from '@aico/session-engine/catalog'
 import { Store } from '@aico/session-engine/store'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -11,15 +20,6 @@ import {
   laneView,
   WatchRefused,
 } from './lane-reports'
-import {
-  adoptLineage,
-  bindCatalog,
-  clearLaunched,
-  getWidget,
-  insertWidget,
-  removeWidget,
-  setCoordinator,
-} from './lifecycle/catalog'
 import { WaitStore } from './waits'
 import {
   composeDelivery,

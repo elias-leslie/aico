@@ -4,6 +4,8 @@
 
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { AgentAdmissionDenied } from '@aico/session-engine/agent-admission'
+import { getWidget, listWidgets, type WidgetRow } from '@aico/session-engine/catalog'
 import {
   CHECKPOINT_PROMPT,
   type ContinuitySnapshot,
@@ -18,13 +20,6 @@ import {
   snapshotResumeId,
   writeJsonFile,
 } from '@aico/session-engine/continuity'
-import { nodeProcFs } from '@aico/session-engine/proc-fs'
-import { isResumeSessionId } from '@aico/session-engine/tui/launch'
-import { getTui } from '@aico/session-engine/tui/registry'
-import { probeEntryAgent } from './entry-agent'
-import { HttpError, type Router, readJsonObject, sendJson } from './http'
-import { AgentAdmissionDenied } from './lifecycle/agent-admission'
-import { getWidget, listWidgets, type WidgetRow } from './lifecycle/catalog'
 import {
   agentExitOf,
   ensureSessionSerialized,
@@ -33,13 +28,18 @@ import {
   verifiedCurrentManagedPane,
   verifySessionStatus,
   whenReady,
-} from './lifecycle/engine'
-import { ENTRY_RETRY_EXIT } from './lifecycle/entries'
-import { withRootPrompt } from './lifecycle/root-launch'
+} from '@aico/session-engine/engine'
+import { ENTRY_RETRY_EXIT } from '@aico/session-engine/entries'
+import { probeEntryAgent } from '@aico/session-engine/entry-agent'
+import { nodeProcFs } from '@aico/session-engine/proc-fs'
+import { withRootPrompt } from '@aico/session-engine/root-launch'
+import { pasteIntoRunningSession } from '@aico/session-engine/running-session'
+import { isResumeSessionId } from '@aico/session-engine/tui/launch'
+import { getTui } from '@aico/session-engine/tui/registry'
+import { HttpError, type Router, readJsonObject, sendJson } from './http'
 import type { LifecycleContext } from './lifecycle-context'
 import type { Recovery } from './recovery'
 import { restoreSessionReservation } from './recovery-placement'
-import { pasteIntoRunningSession } from './running-session'
 
 const OBSERVE_INTERVAL_MS = 60_000
 const RESTORE_RETRY_MS = 30_000

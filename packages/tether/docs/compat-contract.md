@@ -11,31 +11,31 @@ Only the `default` instance keeps the Aico names and adopts historical servers.
 Every other instance:
 
 - puts its name into its unit names, exit-marker directory, state directory and socket;
-- never reconciles another instance's units (`ownsTmuxServerUnit` in `src/config.ts`).
+- never reconciles another instance's units (`ownsTmuxServerUnit` in `packages/session-engine/src/paths.ts`).
 
 ## systemd units and cgroups
 
 | Contract | `default` | Instance `<i>` | Aico source |
 | --- | --- | --- | --- |
-| tmux server unit, new | `aico-tmux-server-<id>.service` | `tether-<i>-tmux-server-<id>.service` | `ownership.ts` `durableTmuxServerUnit` |
-| tmux server unit, historical | `aico-tmux-server-<id>.scope`, kept as read-only identity evidence | none | `ownership.ts` `AICO_TMUX_SERVER_UNIT_RE` |
-| Server generation id | 8–64 lowercase hex; new ones are 32 hex (16 random bytes) | same | `index.ts` `provisionManagedServerWithSession` |
-| Slice | `app.slice`; the exact control group is `/user.slice/user-<uid>.slice/user@<uid>.service/app.slice/<unit>` | same | `ownership.ts` `isOwnedTmuxServerControlGroup` |
-| Pane scope | `tmux-spawn-<uuid>.scope` under `app.slice` with an exact control-group match | same | `ownership.ts` `TMUX_SCOPE_RE`, `isOwnedPaneControlGroup` |
+| tmux server unit, new | `aico-tmux-server-<id>.service` | `tether-<i>-tmux-server-<id>.service` | `packages/session-engine/src/lifecycle/ownership.ts` `durableTmuxServerUnit` |
+| tmux server unit, historical | `aico-tmux-server-<id>.scope`, kept as read-only identity evidence | none | `packages/session-engine/src/lifecycle/ownership.ts` `AICO_TMUX_SERVER_UNIT_RE` |
+| Server generation id | 8–64 lowercase hex; new ones are 32 hex (16 random bytes) | same | `packages/session-engine/src/lifecycle/engine.ts` `provisionManagedServerWithSession` |
+| Slice | `app.slice`; the exact control group is `/user.slice/user-<uid>.slice/user@<uid>.service/app.slice/<unit>` | same | `packages/session-engine/src/lifecycle/ownership.ts` `isOwnedTmuxServerControlGroup` |
+| Pane scope | `tmux-spawn-<uuid>.scope` under `app.slice` with an exact control-group match | same | `packages/session-engine/src/lifecycle/ownership.ts` `TMUX_SCOPE_RE`, `isOwnedPaneControlGroup` |
 | Pane memory policy | Owned by host-steward, not Tether: `DefaultOOMPolicy=continue` and the per-pane cap drop-in in `~/.config/systemd/user/tmux-spawn-.scope.d/`, both installed by host-steward's installer. A kernel OOM kill then takes one process and the pane keeps running. Tether installs no pane drop-in; `tether doctor` warns when a live pane is not on `OOMPolicy=continue` or has no finite `MemoryMax`. The pane supervisor sets its own OOM score adjust to 100 before starting the agent and restores the inherited value for the fallback shell (`launch.ts` `paneCommand`), so under the cap the kernel kills a large tool at the inherited 200 before the agent. If the write fails the agent still starts, at the inherited value. The focused pane gets `MemoryLow=2G` at runtime (`pane-memory.ts`). | same | host-steward host drop-in |
 | Daemon unit | `tether@default.service` (replaces `aico-owner.service` in Phase 5) | `tether@<i>.service` | n/a |
 
-The `systemd-run` flags are part of the containment model and must be kept: `--user --quiet --collect --slice=app.slice --service-type=exec --expand-environment=no -p ExitType=cgroup`, null stdin, and journal stdout/stderr (`ownership.ts` `durableTmuxServerArgs`).
+The `systemd-run` flags are part of the containment model and must be kept: `--user --quiet --collect --slice=app.slice --service-type=exec --expand-environment=no -p ExitType=cgroup`, null stdin, and journal stdout/stderr (`packages/session-engine/src/lifecycle/ownership.ts` `durableTmuxServerArgs`).
 
 ## Filesystem and sockets
 
 | Contract | `default` | Instance `<i>` | Aico source |
 | --- | --- | --- | --- |
-| tmux server socket | `<state>/tmux/<id>/server.sock`; dirs 0700 | same | `index.ts` `createManagedServerDirectory` |
+| tmux server socket | `<state>/tmux/<id>/server.sock`; dirs 0700 | same | `packages/session-engine/src/lifecycle/engine.ts` `createManagedServerDirectory` |
 | Imported server sockets | `~/.local/state/aico/tmux/<id>/server.sock`. Rows keep their absolute `socket_path` and are never moved. Every imported row is now `phase = 'dead'` with no session bound to it; Tether never opens or stats a dead row's socket or directory, so the Aico dirs may be deleted and the rows stay as history. | none | `store.ts` `tmux_servers.socket_path` |
-| Historical shared socket | `/tmp/tmux-<uid>/aico`, adopted read-only and never respawned | none | `tmux.ts` `resolveInternalTmuxSocket` |
-| Pane-exit marker | `/run/user/<uid>/aico/pane-exited-<serverId>` | `$XDG_RUNTIME_DIR/tether/<i>/pane-exits/pane-exited-<serverId>` | `tmux.ts` `paneExitedEventPath` |
-| Pane-exit hook bytes | `set-hook -g pane-exited 'run-shell "/usr/bin/touch <marker>"'`, compared byte for byte before every launch | same form | `tmux.ts` `paneExitedHookCommand` |
+| Historical shared socket | `/tmp/tmux-<uid>/aico`, adopted read-only and never respawned | none | `packages/session-engine/src/lifecycle/tmux.ts` `resolveInternalTmuxSocket` |
+| Pane-exit marker | `/run/user/<uid>/aico/pane-exited-<serverId>` | `$XDG_RUNTIME_DIR/tether/<i>/pane-exits/pane-exited-<serverId>` | `packages/session-engine/src/lifecycle/tmux.ts` `paneExitedEventPath` |
+| Pane-exit hook bytes | `set-hook -g pane-exited 'run-shell "/usr/bin/touch <marker>"'`, compared byte for byte before every launch | same form | `packages/session-engine/src/lifecycle/tmux.ts` `paneExitedHookCommand` |
 | Tether socket | `$XDG_RUNTIME_DIR/tether/default/control.sock` | `$XDG_RUNTIME_DIR/tether/<i>/control.sock` | n/a |
 | State | `~/.local/state/tether/default/tether.db` | `~/.local/state/tether/<i>/tether.db` | n/a |
 | Aico catalog | `~/.local/state/aico/aico.db`. Aico keeps its own views and settings there; its pre-Tether tables stay as a backup after import. No other app reads it: the web app dropped its read-only reader (`A_TERM_AICO_STATE_DIR` in `utils/tmux/external.py`) when it moved to the Tether API (A-Term `e4d1f16`), and `tether import-aico` reads only the path given with `--from`. | none | none |
@@ -48,10 +48,10 @@ Removed 2026-10-24, once `st aico` and SummitFlow had moved to the Tether socket
 
 | Contract | Value | Aico source |
 | --- | --- | --- |
-| Session name | `aico-<widgetId>`. `widgetIdFromSession` and web app discovery parse it. | `tmux.ts` `sessionName` |
+| Session name | `aico-<widgetId>`. `widgetIdFromSession` and web app discovery parse it. | `packages/session-engine/src/lifecycle/tmux.ts` `sessionName` |
 | Stable targets | `$<n>` session id and `%<n>` pane id; one pane per session, and extra panes fail closed | `packages/session-engine/src/store.ts` |
-| Server global environment | exactly `AICO_OWNER=aico`, `AICO_WORKLOAD_CLASS=durable-tmux-server`, `AICO_TMUX_SERVER_ID=<id>`. These authenticate a zero-session server. | `tmux.ts` `matchesServerIdentityEnvironment` |
-| Profile | `history-limit 200000`, `mouse off`, `focus-events on`, `status off` (the resize claim requires it), `default-terminal tmux-256color`, `terminal-overrides ,xterm-256color:Tc`, `terminal-features xterm*:sync`, `NO_COLOR` unset, `COLORTERM truecolor`, `CLICOLOR 1` | `tmux.ts` `tmuxConf` |
+| Server global environment | exactly `AICO_OWNER=aico`, `AICO_WORKLOAD_CLASS=durable-tmux-server`, `AICO_TMUX_SERVER_ID=<id>`. These authenticate a zero-session server. | `packages/session-engine/src/lifecycle/tmux.ts` `matchesServerIdentityEnvironment` |
+| Profile | `history-limit 200000`, `mouse off`, `focus-events on`, `status off` (the resize claim requires it), `default-terminal tmux-256color`, `terminal-overrides ,xterm-256color:Tc`, `terminal-features xterm*:sync`, `NO_COLOR` unset, `COLORTERM truecolor`, `CLICOLOR 1` | `packages/session-engine/src/lifecycle/tmux.ts` `tmuxConf` |
 
 ## Pane environment markers
 
@@ -59,22 +59,22 @@ Set on every pane Tether creates (`src/markers.ts`):
 
 | Variable | Value | Verified in Aico |
 | --- | --- | --- |
-| `AICO_OWNER` | `aico`, on every session including web-app-created ones, because codex sync requires it | `ownership.ts` `ownershipEnvironment` |
-| `AICO_WORKLOAD_CLASS` | `durable-session` (`durable-tmux-server` on the server, `session-owner` on the daemon) | `ownership.ts`, `aico-owner.service` |
-| `AICO_WIDGET_ID` | Session id (8 hex) | `ownership.ts` |
-| `AICO_SESSION_ID` | ownership id (`aico-widget-<id>`) | `ownership.ts` |
-| `AICO_TMUX_SERVER_ID` | Server generation | `index.ts` (`new-session -e`) |
-| `AICO_PROJECT_ID` | project id, or empty | `ownership.ts` |
-| `AICO_AGENT_SLUG` | Canonical tool slug | `ownership.ts` |
-| `AICO_LIFECYCLE_VERSION` | `1` | `ownership.ts` `MANAGED_LIFECYCLE_VERSION` |
-| `ST_SESSION_ID` | Root logical session id (roots only) | `root-launch.ts` |
-| `AICO_ROOT_INITIAL_LAUNCH` | `1` or `0` (roots only) | `root-launch.ts` |
-| `AICO_ROOT_INITIAL_PROMPT` | Transient prompt (roots only). It is unset again in the agent's own environment. | `root-launch.ts` |
-| `AICO_ROOT_RESUME_SESSION_ID` | Native resume UUID or empty (roots only) | `root-launch.ts` |
-| `AICO_ROOT_FRESH_SESSION_ID` | A new UUID per launch for a tool that starts under an id Tether picks (Pi), else empty (roots only); unset again in the agent's own environment. Tether reads it back from an entry process (Tether API 20). | `root-launch.ts` |
+| `AICO_OWNER` | `aico`, on every session including web-app-created ones, because codex sync requires it | `packages/session-engine/src/lifecycle/ownership.ts` `ownershipEnvironment` |
+| `AICO_WORKLOAD_CLASS` | `durable-session` (`durable-tmux-server` on the server, `session-owner` on the daemon) | `packages/session-engine/src/lifecycle/ownership.ts`, `aico-owner.service` |
+| `AICO_WIDGET_ID` | Session id (8 hex) | `packages/session-engine/src/lifecycle/ownership.ts` |
+| `AICO_SESSION_ID` | ownership id (`aico-widget-<id>`) | `packages/session-engine/src/lifecycle/ownership.ts` |
+| `AICO_TMUX_SERVER_ID` | Server generation | `packages/session-engine/src/lifecycle/engine.ts` (`new-session -e`) |
+| `AICO_PROJECT_ID` | project id, or empty | `packages/session-engine/src/lifecycle/ownership.ts` |
+| `AICO_AGENT_SLUG` | Canonical tool slug | `packages/session-engine/src/lifecycle/ownership.ts` |
+| `AICO_LIFECYCLE_VERSION` | `1` | `packages/session-engine/src/lifecycle/ownership.ts` `MANAGED_LIFECYCLE_VERSION` |
+| `ST_SESSION_ID` | Root logical session id (roots only) | `packages/session-engine/src/lifecycle/root-launch.ts` |
+| `AICO_ROOT_INITIAL_LAUNCH` | `1` or `0` (roots only) | `packages/session-engine/src/lifecycle/root-launch.ts` |
+| `AICO_ROOT_INITIAL_PROMPT` | Transient prompt (roots only). It is unset again in the agent's own environment. | `packages/session-engine/src/lifecycle/root-launch.ts` |
+| `AICO_ROOT_RESUME_SESSION_ID` | Native resume UUID or empty (roots only) | `packages/session-engine/src/lifecycle/root-launch.ts` |
+| `AICO_ROOT_FRESH_SESSION_ID` | A new UUID per launch for a tool that starts under an id Tether picks (Pi), else empty (roots only); unset again in the agent's own environment. Tether reads it back from an entry process (Tether API 20). | `packages/session-engine/src/lifecycle/root-launch.ts` |
 | `A_TERM_SESSION_ID` | Web app session UUID, only when the web app created the session | web `agent_service.py`, `root_workloads.py` |
 
-Correction to the migration plan: `AICO_TMUX_SOCKET` is not a pane marker. Aico never sets it in panes; a live Aico pane today carries no such variable. Aico reads it as a process override of its internal socket (`tmux.ts`), so exporting it into panes would redirect any Aico started from a session. Tether does not set it. Panes find their server through tmux's own `TMUX` variable.
+Correction to the migration plan: `AICO_TMUX_SOCKET` is not a pane marker. Aico never sets it in panes; a live Aico pane today carries no such variable. Aico reads it as a process override of its internal socket (`packages/session-engine/src/lifecycle/tmux.ts`), so exporting it into panes would redirect any Aico started from a session. Tether does not set it. Panes find their server through tmux's own `TMUX` variable.
 
 ## Environment hygiene
 

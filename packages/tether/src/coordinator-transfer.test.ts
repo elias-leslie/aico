@@ -2,23 +2,23 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { type AskDelivery, AskStore, handOffAsks, transferAskNotices } from './asks'
-import { callSocket } from './client'
-import { resolvePaths, type TetherPaths } from './config'
-import { type RunningDaemon, startDaemon } from './daemon'
 import {
   getWidget,
   insertWidget,
   recordLauncher,
   setCoordinator,
   setWidgetOwnership,
-} from './lifecycle/catalog'
-import * as engine from './lifecycle/engine'
-import { generationOf } from './running-session'
+} from '@aico/session-engine/catalog'
+import * as engine from '@aico/session-engine/engine'
+import { generationOf } from '@aico/session-engine/running-session'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { type AskDelivery, AskStore, handOffAsks, transferAskNotices } from './asks'
+import { callSocket } from './client'
+import { resolvePaths, type TetherPaths } from './config'
+import { type RunningDaemon, startDaemon } from './daemon'
 
-vi.mock('./lifecycle/engine', async (original) => ({
-  ...(await original<typeof import('./lifecycle/engine')>()),
+vi.mock('@aico/session-engine/engine', async (original) => ({
+  ...(await original<typeof import('@aico/session-engine/engine')>()),
   rootManagedGateState: vi.fn(async () => 'active-workload'),
   verifySessionStatus: vi.fn(async () => 'running'),
   ensureSessionSerialized: vi.fn(),

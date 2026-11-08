@@ -243,7 +243,7 @@ def pool_name(value: str) -> str:
     return value
 
 
-# Tether's entries.json names and the per-launch argument (src/lifecycle/entries.ts).
+# Tether's entries.json names and the per-launch argument (packages/session-engine/src/lifecycle/entries.ts).
 ENTRY_NAME = r"[a-z0-9][a-z0-9-]{0,63}"
 ENTRY_ARG = r"[a-z0-9][a-z0-9-]{0,79}"
 

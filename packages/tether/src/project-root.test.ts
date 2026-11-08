@@ -3,15 +3,15 @@
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { insertWidget } from '@aico/session-engine/catalog'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { callSocket } from './client'
 import { resolvePaths, type TetherPaths } from './config'
 import { type RunningDaemon, startDaemon } from './daemon'
-import { insertWidget } from './lifecycle/catalog'
 
 // A valid create stops at linger_required: nothing is allocated, no tmux.
-vi.mock('./lifecycle/engine', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./lifecycle/engine')>()),
+vi.mock('@aico/session-engine/engine', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@aico/session-engine/engine')>()),
   lingerEnabled: () => false,
 }))
 

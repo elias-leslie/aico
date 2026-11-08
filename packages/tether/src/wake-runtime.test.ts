@@ -1,7 +1,7 @@
+import { bindCatalog, insertWidget } from '@aico/session-engine/catalog'
 import { Store } from '@aico/session-engine/store'
 import { MAIN_TURN_OVER } from '@aico/session-engine/tui/adapters/contract'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { bindCatalog, insertWidget } from './lifecycle/catalog'
 import type { LifecycleApiContext } from './lifecycle-api'
 import { WaitStore } from './waits'
 import { agentBusyReason, WakeService } from './wake-runtime'

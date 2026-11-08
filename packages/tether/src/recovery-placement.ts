@@ -1,5 +1,5 @@
+import { rootRequestForWidget } from '@aico/session-engine/catalog'
 import { LOCAL_HOST, type Needs, type Placement } from './hub/placement'
-import { rootRequestForWidget } from './lifecycle/catalog'
 
 /** Restore a booking before its agent can run; the placement owner retains needs. */
 export async function restoreSessionReservation(

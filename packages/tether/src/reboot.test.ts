@@ -1,12 +1,17 @@
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import {
+  getWidget,
+  insertWidget,
+  removeWidget,
+  reserveRootRequest,
+} from '@aico/session-engine/catalog'
 import { type RestoreReport, readJsonFile, writeJsonFile } from '@aico/session-engine/continuity'
+import { rootLaunchEnvironment } from '@aico/session-engine/root-launch'
+import { initStore } from '@aico/session-engine/testing'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Placement } from './hub/placement'
-import { getWidget, insertWidget, removeWidget, reserveRootRequest } from './lifecycle/catalog'
-import { rootLaunchEnvironment } from './lifecycle/root-launch'
-import { initStore } from './lifecycle/testing'
 import type { LifecycleApiContext } from './lifecycle-api'
 import { Continuity } from './reboot'
 
@@ -22,7 +27,7 @@ const h = vi.hoisted(() => ({
   ensure: vi.fn(),
   respawn: vi.fn(),
 }))
-vi.mock('./lifecycle/engine', () => ({
+vi.mock('@aico/session-engine/engine', () => ({
   ensureSessionSerialized: (...args: unknown[]) => h.ensure(...args),
   respawnAndRelaunch: (...args: unknown[]) => h.respawn(...args),
   lastEnsureFailure: () => undefined,
@@ -38,7 +43,7 @@ vi.mock('@aico/session-engine/continuity', async (original) => ({
       ? { pid: 7, resumeId: '3e0161b0-9591-4f68-a80a-656951537274', idle: null, blocked: false }
       : null,
 }))
-vi.mock('./entry-agent', () => ({
+vi.mock('@aico/session-engine/entry-agent', () => ({
   probeEntryAgent: async () => h.probe ?? { kind: 'unconfigured' },
 }))
 

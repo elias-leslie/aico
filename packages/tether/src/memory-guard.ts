@@ -1,23 +1,27 @@
 /**
  * Tether's agent-pane memory policy at runtime: the stored policy, the pane
- * cap drop-in and the runaway agent-job guard (src/lifecycle/job-guard.ts).
+ * cap drop-in and the runaway agent-job guard (packages/session-engine/src/lifecycle/job-guard.ts).
  * The default instance runs it; other instances only serve the policy API.
  */
 
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import type { Store } from '@aico/session-engine/store'
-import { agentProcessNames } from '@aico/session-engine/tui/registry'
-import type { TetherPaths } from './config'
-import { hostAdmissionPath } from './lifecycle/agent-admission'
-import { JobGuard, memoryEventsPath } from './lifecycle/job-guard'
+import { hostAdmissionPath } from '@aico/session-engine/agent-admission'
+import { JobGuard, memoryEventsPath } from '@aico/session-engine/job-guard'
+import {
+  applyMemoryPolicyPatch,
+  type MemoryPolicy,
+  parseStoredMemoryPolicy,
+} from '@aico/session-engine/memory-policy'
 import {
   applyPaneCapDropIn,
   type PaneCapFiles,
   type PaneCapResult,
   systemdPaneCapFiles,
-} from './lifecycle/pane-caps'
-import { applyMemoryPolicyPatch, type MemoryPolicy, parseStoredMemoryPolicy } from './memory-policy'
+} from '@aico/session-engine/pane-caps'
+import type { Store } from '@aico/session-engine/store'
+import { agentProcessNames } from '@aico/session-engine/tui/registry'
+import type { TetherPaths } from './config'
 
 const MEMORY_POLICY_KEY = 'memory_policy'
 

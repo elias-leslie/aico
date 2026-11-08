@@ -4,12 +4,17 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import {
+  getWidget,
+  insertWidget,
+  removeWidget,
+  setWidgetOwnership,
+} from '@aico/session-engine/catalog'
 import { writeJsonFile } from '@aico/session-engine/continuity'
+import type { AbandonedScope, RespawnResult } from '@aico/session-engine/engine'
+import { initStore, registerBuiltinTuis } from '@aico/session-engine/testing'
 import type { AgentExitMarker } from '@aico/session-engine/tui/launch'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, type Mock, vi } from 'vitest'
-import { getWidget, insertWidget, removeWidget, setWidgetOwnership } from './lifecycle/catalog'
-import type { AbandonedScope, RespawnResult } from './lifecycle/engine'
-import { initStore, registerBuiltinTuis } from './lifecycle/testing'
 import type { LifecycleApiContext } from './lifecycle-api'
 import { type AgentSeen, Recovery, type RecoveryEngine } from './recovery'
 

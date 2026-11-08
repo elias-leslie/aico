@@ -44,13 +44,13 @@ import {
   storageStatus,
   vmStatus,
 } from '@aico/fleet/proxmox'
-import { hostAdmissionPath } from '@aico/shared/host-admission'
 import {
   type AgentAdmissionLimits,
   admissionLimitsFromEnv,
   parseMemAvailable,
   parseMemoryPressure,
-} from '../lifecycle/agent-admission'
+} from '@aico/session-engine/agent-admission'
+import { hostAdmissionPath } from '@aico/shared/host-admission'
 
 const GIB = 1024 ** 3
 /** The host name `--host auto` asks for; hosts.json cannot use it. */
