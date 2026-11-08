@@ -4,6 +4,7 @@
 
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { buffer } from 'node:stream/consumers'
 import { transaction } from '@aico/store'
 import { routeFacts } from '@aico/usage'
 import { startedBy } from './ancestry'
@@ -564,7 +565,7 @@ function replica(db: Database, argv: string[], io: ContextCliIo): number {
     const dir = mkdtempSync(join(dirname(io.dbPath), '.context-replica-'))
     try {
       const file = join(dir, 'incoming')
-      writeFileSync(file, io.stdin ? io.stdin() : readFileSync(0), { mode: 0o600 })
+      writeFileSync(file, io.stdin?.() ?? Buffer.alloc(0), { mode: 0o600 })
       io.out(`${applyReplica(db, io.dbPath, file, from, io.now())}\n`)
       return 0
     } catch (error) {
@@ -607,6 +608,12 @@ export async function runContextCli(
         argv.slice(1),
         io,
       )
+    // Read before anything sync starts: a synchronous read of a pipe the sender is still filling
+    // fails with EAGAIN as soon as it catches up.
+    if (command === 'context' && argv[0] === 'replica' && argv[1] === 'apply' && !io.stdin) {
+      const input = await buffer(process.stdin)
+      io = { ...io, stdin: () => input }
+    }
     db = openContext(io.dbPath)
     if (command === 'memory') return memory(db, argv, io)
     if (command === 'prompt') return prompt(db, argv, io)

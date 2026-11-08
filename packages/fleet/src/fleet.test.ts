@@ -488,6 +488,22 @@ it('carries a complete signed-release-sized input and its final exec result', as
   expect(result.stdout.trim()).toBe(String(2 * 1024 * 1024))
 })
 
+it('keeps the link moving when a command exits without reading its input', async () => {
+  const p = await pair()
+  await p.fb.start()
+  await p.fa.start()
+  await vi.waitFor(() => expect(p.fa.status()[0]?.connected).toBe(true))
+  const exec = join(p.sa.peerRoot, p.b.name, 'exec.sock')
+  const died = await requestExec(
+    exec,
+    [process.execPath, '-e', 'process.exit(3)'],
+    Buffer.alloc(4 * 1024 * 1024, 120),
+  )
+  expect(died.code).toBe(3)
+  const after = await requestExec(exec, ['/usr/bin/true'], Buffer.alloc(0))
+  expect(after.code).toBe(0)
+})
+
 it('carries complete Logins responses over the real fleet link and binds worker writes to their assigned target', async () => {
   const p = await pair()
   p.setPins([

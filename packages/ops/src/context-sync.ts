@@ -67,6 +67,11 @@ export async function contextSync(argv: string[], env = process.env): Promise<nu
     try {
       theirs = JSON.parse(lastLine(asked.stdout))
     } catch {}
+    // No answer at all: the machine is off or its link is down, not failing. The next run catches it up.
+    if (unanswered(asked)) {
+      lines.push(`${peer.name}: not connected; the next run catches it up`)
+      continue
+    }
     if (asked.code !== 0 || !theirs) {
       failed = true
       lines.push(
@@ -89,6 +94,10 @@ export async function contextSync(argv: string[], env = process.env): Promise<nu
       aico(`context replica apply --from ${settings.machine}`),
       snapshot,
     )
+    if (unanswered(sent)) {
+      lines.push(`${peer.name}: the link dropped; the next run catches it up`)
+      continue
+    }
     if (sent.code !== 0) failed = true
     lines.push(
       `${peer.name}: ${lastLine(sent.code === 0 ? sent.stdout : sent.output) || `exit ${sent.code}`}`,
@@ -100,6 +109,11 @@ export async function contextSync(argv: string[], env = process.env): Promise<nu
   lines.push(...phones.lines)
   console.log(lines.join('; '))
   return failed ? 1 : 0
+}
+
+/** `requestExec` found no peer, or lost it before the command reported an exit status. */
+function unanswered(result: { code: number; output: string }): boolean {
+  return result.code === 255 && !result.output.trim()
 }
 
 /**
@@ -120,6 +134,7 @@ async function syncPhones(
   let failed = false
   for (const peer of peers) {
     const sent = await requestExec(peer.exec, aico('phones merge'), readFileSync(path))
+    if (unanswered(sent)) continue
     let merged: unknown = null
     try {
       merged = JSON.parse(lastLine(sent.stdout))

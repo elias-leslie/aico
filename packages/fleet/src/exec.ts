@@ -32,7 +32,14 @@ export function serveExec(channel: Duplex, argv: string[]): void {
   }
   const child = spawn(command, args, { stdio: ['pipe', 'pipe', 'pipe'] })
   channel.pipe(child.stdin)
-  child.stdin.on('error', () => {})
+  // A command that stopped reading can't leave its input unread: every channel shares the one link,
+  // and a channel nobody reads pauses all of them.
+  const discardInput = () => {
+    channel.unpipe(child.stdin)
+    channel.resume()
+  }
+  child.stdin.on('error', discardInput)
+  child.stdin.once('close', discardInput)
   const send = (fd: number, data: Buffer) => {
     if (!channel.write(packet(fd, data))) {
       child.stdout.pause()
