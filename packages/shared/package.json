@@ -18,6 +18,7 @@
     "./http": "./src/http.ts",
     "./secrets": "./src/secrets.ts",
     "./status-order": "./src/status-order.ts",
+    "./backup-count": "./src/backup-count.ts",
     "./suggest": "./src/suggest.ts",
     "./time": "./src/time.ts",
     "./tool-login": "./src/tool-login.ts"

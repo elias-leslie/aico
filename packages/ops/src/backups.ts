@@ -1,6 +1,7 @@
 // Aico owns the schedule, run receipts, coverage and scratch-only restore boundary.
 import { existsSync, mkdirSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
+import { countBackups } from '@aico/shared/backup-count'
 import { backupTargetName } from '@aico/shared/backup-targets'
 import { aicoDataDir } from '@aico/shared/data-dir'
 import { nearest } from '@aico/shared/suggest'
@@ -689,22 +690,14 @@ export function listText(
   // A machine that is off is not a problem Status raises: it is counted apart, with its last good copy.
   const away = live.filter((e) => e.state === 'off')
   const problems = live.filter((e) => e.state !== 'ok' && e.state !== 'off')
-  // Counted per source (a source has a copy on T7, Drive and so on), the way the web list counts, with the copies beside it.
-  const sources = new Map<string, BackupEntry[]>()
-  for (const e of list.entries) sources.set(e.source, [...(sources.get(e.source) ?? []), e])
-  const tally = { ok: 0, bad: 0, away: 0, archived: 0 }
-  for (const copies of sources.values()) {
-    const states = copies.filter((e) => e.state !== 'off').map((e) => e.state)
-    if (!states.length) tally[copies.every((e) => e.gone) ? 'archived' : 'away'] += 1
-    else if (states.every((state) => state === 'ok')) tally.ok += 1
-    else tally.bad += 1
-  }
-  const okCopies = live.length - problems.length - away.length
+  // Counted per source, the way the web list counts, with the copies beside it.
+  const { current, late, failed, archived, away: awaySources, copies } = countBackups(list.entries)
+  const bad = late + failed
   const parts = [
-    `${tally.bad ? '' : 'All '}${tally.ok} ${tally.ok === 1 ? 'source' : 'sources'} current (${okCopies} ${okCopies === 1 ? 'copy' : 'copies'})`,
-    tally.bad ? `${tally.bad} need a look` : '',
-    tally.away ? `${tally.away} on a machine that is off` : '',
-    tally.archived ? `${tally.archived} archived` : '',
+    `${bad ? '' : 'All '}${current} ${current === 1 ? 'source' : 'sources'} current (${copies} ${copies === 1 ? 'copy' : 'copies'})`,
+    bad ? `${bad} need a look` : '',
+    awaySources ? `${awaySources} on a machine that is off` : '',
+    archived ? `${archived} archived` : '',
   ].filter(Boolean)
   lines.push(`Backups on ${list.machine}: ${parts.join(', ')}.`)
   if (away.length) {
