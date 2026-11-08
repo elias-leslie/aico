@@ -31,8 +31,14 @@ export function sweepRuns(top: string, alive = running): string[] {
   })
 }
 
-/** Vitest's global setup; the run's test workers inherit TMPDIR, so os.tmpdir() answers this folder. */
-export default function setup(alive = running) {
+/** Vitest's global setup, which Vitest calls with its project as the argument: nothing it can pass
+ * reaches the sweep. */
+export default function setup() {
+  return startRun()
+}
+
+/** Starts a run; its test workers inherit TMPDIR, so os.tmpdir() answers this folder. */
+export function startRun(alive = running) {
   const before = process.env.TMPDIR
   const top = tmpdir()
   sweepRuns(top, alive)

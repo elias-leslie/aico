@@ -51,3 +51,13 @@ it('makes its own folder over a dead run’s with the same pid, and ends as it s
   expect(tmpdir()).toBe(top)
   expect(existsSync(leftover)).toBe(false)
 })
+
+it('takes what Vitest passes its global setup without sweeping by it', () => {
+  const top = sandbox()
+  vi.stubEnv('TMPDIR', top)
+  mkdirSync(join(top, 'vt-999999'))
+  const vitestSetup = setup as unknown as (project: object) => () => void
+  const done = vitestSetup({ name: 'a project' })
+  done()
+  expect(existsSync(join(top, 'vt-999999'))).toBe(false)
+})
