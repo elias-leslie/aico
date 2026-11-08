@@ -6,12 +6,20 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { type LoginCaller, LoginStore, labIdentity, loginMachine } from './logins'
+import {
+  type LoginCaller,
+  LoginStore,
+  labChildProgram,
+  labIdentity,
+  loginMachine,
+  loginPolicy,
+} from './logins'
 import { commandEnvironment, type LoginsIo, runLogins } from './logins-cli'
 import { pushLoginGrants, receiveLoginGrants } from './logins-delivery'
 import { receiveLogins, toolEnvironment } from './secrets'
@@ -23,11 +31,19 @@ vi.mock('./trust', () => ({ readPins: mocks.pins }))
 let home: string, env: NodeJS.ProcessEnv, store: LoginStore
 const owner: LoginCaller = { owner: true, role: 'owner', machine: loginMachine() }
 const hunter: LoginCaller = { role: 'hunting', machine: loginMachine(), session: 'hunt-one' }
+/** The shared login adapter as deployed under the test home: `current` links to a release. */
+let adapter: string
 beforeEach(() => {
   home = mkdtempSync(join(tmpdir(), 'aico-logins-'))
   env = { HOME: home }
   store = new LoginStore(env)
   store.list()
+  const shared = (loginPolicy.labPrograms[0] as string).slice(2).split('/current/')
+  const release = join(home, shared[0] as string, 'releases/r1')
+  adapter = join(release, shared[1] as string)
+  mkdirSync(join(adapter, '..'), { recursive: true })
+  writeFileSync(adapter, '')
+  symlinkSync(release, join(home, shared[0] as string, 'current'))
 })
 afterEach(() => {
   rmSync(home, { recursive: true, force: true })
@@ -218,6 +234,7 @@ it('binds hunter list, enrollment, refresh and selected fields to owner-assigned
         },
       ],
       hunter,
+      adapter,
     ),
   ).toEqual({
     schema_version: 1,
@@ -229,6 +246,7 @@ it('binds hunter list, enrollment, refresh and selected fields to owner-assigned
       'example-local',
       [{ reference: one.identity.reference, fields: ['constructor'] }],
       hunter,
+      adapter,
     ),
   ).toThrow('required')
   expect(() =>
@@ -236,6 +254,7 @@ it('binds hunter list, enrollment, refresh and selected fields to owner-assigned
       'another-local',
       [{ reference: one.identity.reference, fields: ['password'] }],
       hunter,
+      adapter,
     ),
   ).toThrow('outside')
   store.assign(hunter.session as string, [], owner)
@@ -244,6 +263,7 @@ it('binds hunter list, enrollment, refresh and selected fields to owner-assigned
       'example-local',
       [{ reference: one.identity.reference, fields: ['password'] }],
       hunter,
+      adapter,
     ),
   ).toThrow('unavailable')
 })
@@ -377,11 +397,62 @@ it('a lab login opens for an explicitly named role without a session, never for 
   store.grant(one.identity.name, 'role', 'agent', true, owner)
   expect(store.show(one.identity.name, job).lab?.target).toBe('school')
   const request = [{ reference: one.identity.reference, fields: ['username'] }]
-  expect(store.resolveLab('school', request, job).credentials[0].values).toEqual({
+  expect(store.resolveLab('school', request, job, adapter).credentials[0].values).toEqual({
     username: 'me@example.test',
   })
   // A different role stays out, and so does a session with no assignment.
   expect(() => store.show(one.identity.name, { ...job, role: 'review' })).toThrow('unavailable')
+})
+it('a lab login goes only to the shared adapters and the programs it declares; agents add one, logged', () => {
+  const one = lab('school', 'default')
+  store.set(one.identity.name, one.value, one.metadata, owner)
+  store.grant(one.identity.name, 'role', 'agent', true, owner)
+  const job = { role: 'agent', machine: loginMachine(), session: 'job-one' }
+  const request = [{ reference: one.identity.reference, fields: ['username'] }]
+  const script = join(home, 'tool.py')
+  writeFileSync(script, '')
+  expect(() => store.resolveLab('school', request, job, script)).toThrow(
+    `aico logins edit school --program ${script}`,
+  )
+  expect(() => store.resolveLab('school', request, job)).toThrow('program')
+  expect(() => store.edit('school', { program: script }, hunter)).toThrow('coordinator')
+  expect(() => store.edit('school', { program: 'tool.py' }, job)).toThrow('absolute')
+  expect(() => store.edit('school', { program: join(home, 'none') }, job)).toThrow('No program')
+  // An interpreter or shell runs anything, so it is never a program a login goes to.
+  expect(() => store.edit('school', { program: '/usr/bin/python3' }, job)).toThrow('interpreter')
+  expect(() => store.edit('school', { program: '/bin/sh' }, job)).toThrow('interpreter')
+  expect(() => store.edit('school', { dropProgram: script }, job)).toThrow('not one of')
+  // Declared through a link (a release's `current`), it follows the link when used.
+  const release = join(home, 'release-1')
+  mkdirSync(release)
+  writeFileSync(join(release, 'tool.py'), '')
+  symlinkSync(release, join(home, 'current'))
+  store.edit('school', { program: '~/current/tool.py' }, job)
+  expect(store.show('school', job).lab?.programs).toEqual([join(home, 'current/tool.py')])
+  expect(
+    store.resolveLab('school', request, job, join(release, 'tool.py')).credentials,
+  ).toHaveLength(1)
+  store.edit('school', { dropProgram: join(release, 'tool.py') }, job)
+  expect(store.show('school', job).lab?.programs).toBeUndefined()
+  store.edit('school', { program: join(release, 'tool.py') }, job)
+  store.edit('school', { dropProgram: '~/current/tool.py' }, job)
+  expect(store.show('school', job).lab?.programs).toBeUndefined()
+  store.edit('school', { program: script }, job)
+  expect(store.resolveLab('school', request, job, script).credentials[0].values).toEqual({
+    username: 'fixture-user',
+  })
+  expect(store.audit(owner).map((e) => [e.action, e.detail])).toEqual(
+    expect.arrayContaining([
+      ['edit', `program ${script}`],
+      ['lab use', `program ${script}`],
+    ]),
+  )
+  // Replacing the values keeps the declared programs; dropping one takes it back.
+  store.set(one.identity.name, one.value, {}, owner, true)
+  expect(store.show('school', job).lab?.programs).toEqual([script])
+  store.edit('school', { dropProgram: script }, job)
+  expect(store.show('school', job).lab?.programs).toBeUndefined()
+  expect(() => store.resolveLab('school', request, job, script)).toThrow('--program')
 })
 it('says which target to assign when a session enrolls a lab login it was not given', () => {
   const one = lab('school')
@@ -404,13 +475,35 @@ it('lab CLI preserves descriptor wire format and silences the trusted child', as
     request,
     JSON.stringify([{ reference: one.identity.reference, fields: ['password'] }]),
   )
-  expect(
-    await runLogins(
-      ['lab', 'run', '--target', 'example-local', '--request', request, '--', '/bin/true'],
+  const script = join(home, 'adapter.py')
+  writeFileSync(script, '')
+  store.edit(one.identity.name, { program: script }, owner)
+  const run = (...child: string[]) =>
+    runLogins(
+      ['lab', 'run', '--target', 'example-local', '--request', request, '--', ...child],
       env,
-      { caller: hunter, out, err, execute },
-    ),
-  ).toBe(0)
+      {
+        caller: hunter,
+        out,
+        err,
+        execute,
+      },
+    )
+  // Values go only to declared programs: any other child is refused before a value is read.
+  expect(await run('/bin/true')).toBe(1)
+  expect(err.mock.calls.join('')).toContain(`--program ${labChildProgram(['/bin/true'])}`)
+  expect(execute).not.toHaveBeenCalled()
+  for (const child of [
+    ['/usr/bin/python3', '-c', 'print(1)'],
+    ['/usr/bin/python3', '-I', '-c', 'print(1)'],
+    ['/usr/bin/python3', '-I', '-m', 'json.tool'],
+    ['/usr/bin/python3', script],
+    ['/bin/sh', '-c', 'true'],
+  ])
+    expect(await run(...child)).toBe(1)
+  expect(err.mock.calls.join('')).toContain('-I /absolute/script.py')
+  expect(execute).not.toHaveBeenCalled()
+  expect(await run('/usr/bin/python3', '-I', script, '--flag')).toBe(0)
   expect(execute.mock.calls[0]?.[1]).toEqual({
     PATH: '/usr/bin:/bin',
     AGENT_HUB_LAB_CREDENTIAL_FD: '3',
@@ -670,7 +763,7 @@ it('lets any agent fix notes, the login page on the same site and the site name,
   const renamed = store.edit('canvas-pcsb', { target: 'canvas' }, agent)
   expect(renamed.name).toBe(labIdentity('canvas', 'default').name)
   expect(existsSync(join(store.folder, identity.name))).toBe(false)
-  expect(store.assignments(owner)['a1b2c3d4']).toEqual(['canvas', 'other'])
+  expect(store.assignments(owner).a1b2c3d4).toEqual(['canvas', 'other'])
   expect(JSON.parse(store.value(renamed.name, owner).toString()).reference).toBe(
     'secret://lab/canvas/default',
   )
@@ -723,7 +816,7 @@ it('a rename keeps the old site for sessions while another login uses it; long d
   store.assign('a1b2c3d4', ['school'], owner)
   const agent = { role: 'school-check', machine: loginMachine(), session: 'a1b2c3d4' }
   store.edit(teacher.identity.name, { target: 'school2' }, agent)
-  expect(store.assignments(owner)['a1b2c3d4']).toEqual(['school', 'school2'])
+  expect(store.assignments(owner).a1b2c3d4).toEqual(['school', 'school2'])
   store.edit('school', { login_url: `https://canvas.example.test/${'a'.repeat(700)}` }, agent)
   expect(store.audit(owner).at(-1)?.detail?.length).toBe(600)
   const peer = new LoginStore({ HOME: join(home, 'peer') })
@@ -737,7 +830,7 @@ it('an unrestricted session that saves a new lab login gets its target, logged',
   const one = lab('school')
   const agent = { role: 'implementation', machine: loginMachine(), session: 'a1b2c3d4' }
   store.set(one.identity.name, one.value, one.metadata, agent)
-  expect(store.assignments(owner)['a1b2c3d4']).toEqual(['school'])
+  expect(store.assignments(owner).a1b2c3d4).toEqual(['school'])
   expect(store.audit(owner)).toContainEqual(
     expect.objectContaining({ action: 'allow', detail: 'session a1b2c3d4' }),
   )

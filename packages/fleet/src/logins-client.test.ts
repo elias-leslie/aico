@@ -13,6 +13,7 @@ vi.mock('./trust', () => ({
   readPins: (path: string) => [
     { name: loginMachine(), role: path === '/full-pins' ? 'full' : 'worker' },
     { name: 'full-peer', role: 'full' },
+    { name: 'worker-peer', role: 'worker' },
   ],
 }))
 const dirs: string[] = []
@@ -101,4 +102,30 @@ it('does not push snapshots for machine reads', async () => {
   for (let i = 0; i < 5; i++) await client.value('saved', owner, 'VM operation')
   await client.value('saved', owner)
   expect(mocks.exec).not.toHaveBeenCalled()
+})
+it('names the offline machines a change is waiting for, and only those', async () => {
+  const env = environment()
+  const config = JSON.parse((await import('node:fs')).readFileSync(fleetFile(env), 'utf8'))
+  config.allowlist = '/full-pins'
+  config.peers.push({ name: 'worker-peer', endpoint: { address: '127.0.0.1', port: 11003 } })
+  writePrivate(fleetFile(env), JSON.stringify(config))
+  let online = new Set<string>()
+  mocks.exec.mockImplementation(async (socket: string) => {
+    if ([...online].some((name) => socket.includes(`/${name}/`)))
+      return JSON.stringify({ ok: true })
+    throw new Error('fixture-offline')
+  })
+  const client = new LoginClient(env)
+  // The worker never holds this login, so only the full peer waits for it.
+  await client.set('saved', 'fixture-private-value', {}, owner)
+  expect(client.warning).toBe("full-peer is offline and gets this change when it's back")
+  await client.grant('saved', 'machine', 'worker-peer', true, owner)
+  expect(client.warning).toBe(
+    "full-peer and worker-peer are offline and get this change when they're back",
+  )
+  online = new Set(['full-peer'])
+  await client.set('other', 'fixture-private-value', {}, owner)
+  expect(client.warning).toBe('')
+  await client.edit('saved', { notes: 'n' }, owner)
+  expect(client.warning).toBe("worker-peer is offline and gets this change when it's back")
 })

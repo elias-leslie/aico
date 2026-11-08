@@ -7,6 +7,7 @@ import {
   LoginError,
   type LoginKind,
   type LoginStore,
+  labChildProgram,
   labIdentity,
   labPayload,
   loginMachine,
@@ -24,9 +25,10 @@ Logins live in Aico's private secrets folder. Values enter through hidden input 
   allow NAME [--role ROLE | --session ID] [--machine NAME]
                                       give yourself (or ROLE; a coordinator: session ID) what is missing
                                       to use NAME: machine, role or session. Logged; no owner step
-  edit NAME [--notes TEXT] [--login-url URL] [--site NAME]
-                                      fix notes, the login page (same site) or the site name; the
-                                      login page is checked for a password field. Logged
+  edit NAME [--notes TEXT] [--login-url URL] [--site NAME] [--program PATH] [--no-program PATH]
+                                      fix notes, the login page (same site), the site name or the
+                                      programs lab run may hand it to; the login page is checked
+                                      for a password field. Logged
   set NAME [--kind KIND] [--notes TEXT] hidden prompt or piped stdin
   set NAME --account --username USER --login-url URL [--notes TEXT]
                                       account login (username, password, login page); the
@@ -43,7 +45,9 @@ Logins live in Aico's private secrets folder. Values enter through hidden input 
   lab enroll|refresh|patch --target TARGET --actor ACTOR [--kind synthetic|temporary|account]
       [--expires-at ISO] [--input FILE|-]   private fields JSON; stdin by default
   lab run --target TARGET --request FILE -- /absolute/child [ARGS]
-      selected fields through AGENT_HUB_LAB_CREDENTIAL_FD; no child output
+      selected fields through AGENT_HUB_LAB_CREDENTIAL_FD; no child output. Only to the
+      shared adapters and the login's own programs (edit --program); PYTHON -I SCRIPT
+      counts as SCRIPT
 Only the username and password are the owner's: a wrong or missing one is one plain ask
 (tether ask create). Everything else agents fix themselves, logged in the login's activity
 (restricted roles get lab targets from a coordinator).`
@@ -287,12 +291,16 @@ export async function runLogins(
     }
     if (command === 'edit') {
       const [name, ...options] = rest,
-        f = flags(options, ['--notes', '--login-url', '--site'])
+        f = flags(options, ['--notes', '--login-url', '--site', '--program', '--no-program'])
       const notes = one(f, '--notes'),
         loginUrl = one(f, '--login-url'),
-        site = one(f, '--site')
-      if (!name || (notes === undefined && !loginUrl && !site))
-        throw new LoginError('edit needs a login and --notes, --login-url or --site')
+        site = one(f, '--site'),
+        program = one(f, '--program'),
+        dropProgram = one(f, '--no-program')
+      if (!name || (notes === undefined && !loginUrl && !site && !program && !dropProgram))
+        throw new LoginError(
+          'edit needs a login and --notes, --login-url, --site, --program or --no-program',
+        )
       output(
         await store.edit(
           name,
@@ -300,6 +308,8 @@ export async function runLogins(
             ...(notes !== undefined ? { notes } : {}),
             ...(loginUrl ? { login_url: loginUrl } : {}),
             ...(site ? { target: site } : {}),
+            ...(program ? { program } : {}),
+            ...(dropProgram ? { dropProgram } : {}),
           },
           io.caller,
         ),
@@ -435,13 +445,14 @@ export async function runLogins(
           request = one(f, '--request')
         if (!command[0] || !isAbsolute(command[0]) || !request)
           throw new LoginError('Lab run needs a request file and absolute child')
+        const program = labChildProgram(command)
         let selection: unknown
         try {
           selection = JSON.parse(readFileSync(request, 'utf8'))
         } catch {
           throw new LoginError('Invalid lab request file')
         }
-        const bundle = JSON.stringify(await store.resolveLab(target, selection, io.caller))
+        const bundle = JSON.stringify(await store.resolveLab(target, selection, io.caller, program))
         if (Buffer.byteLength(bundle) > loginPolicy.maxValueBytes)
           throw new LoginError('Lab handoff is too large')
         return await io.execute(

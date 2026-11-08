@@ -316,7 +316,12 @@ export function LoginsPage() {
       )
     : []
   return (
-    <section aria-label="Logins">
+    // A notice about the last change stays until the next thing the owner does on the page.
+    <section
+      aria-label="Logins"
+      onPointerDownCapture={() => message && setMessage('')}
+      onKeyDownCapture={() => message && setMessage('')}
+    >
       <SectionHead
         title="Logins"
         sub="Saved logins for you and your agents. Choose which machines, roles and lab targets may use them."

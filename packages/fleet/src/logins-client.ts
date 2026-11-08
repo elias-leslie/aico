@@ -109,7 +109,7 @@ function perform(store: LoginStore, request: LoginRequest): unknown {
     case 'audit':
       return store.audit(caller)
     case 'resolveLab':
-      return store.resolveLab(args[0] as string, args[1], caller)
+      return store.resolveLab(args[0] as string, args[1], caller, args[2])
     case 'patchLab':
       return store.patchLab(
         args[0] as string,
@@ -120,6 +120,25 @@ function perform(store: LoginStore, request: LoginRequest): unknown {
     default:
       throw new LoginError('Unknown login operation')
   }
+}
+/** Each login's revision and the machines it goes to. */
+function placements(store: LoginStore) {
+  return new Map(store.list().map((e) => [e.name, { revision: e.revision, machines: e.machines }]))
+}
+/** Whether a login on MACHINE (before or after; null: any login) changed. */
+function changedOn(
+  before: ReturnType<typeof placements>,
+  after: ReturnType<typeof placements>,
+  machine: string | null,
+) {
+  for (const name of new Set([...before.keys(), ...after.keys()])) {
+    const old = before.get(name),
+      next = after.get(name)
+    if (old && next && JSON.stringify(old.revision) === JSON.stringify(next.revision)) continue
+    if (machine === null || old?.machines.includes(machine) || next?.machines.includes(machine))
+      return true
+  }
+  return false
 }
 /** Runs only on the authority; the approved fleet channel carries the original caller metadata. */
 export async function loginRpc(input: string, env = process.env): Promise<string> {
@@ -135,22 +154,46 @@ export async function loginRpc(input: string, env = process.env): Promise<string
       throw new LoginError('Invalid login operation')
     const authority = loginPeers(env)
     if (!authority.full) throw new LoginError('Only a full peer accepts login writes')
-    const result = perform(new LoginStore(env), request)
+    const store = new LoginStore(env)
     // Machine reads never push snapshots; their collapsed records ride along with the next sync.
     const reveal =
       request.operation === 'value' &&
       loginPolicy.auditExplicitActions.includes(String(request.args[1]))
-    if ((!reads.has(request.operation) || reveal) && authority.settings) {
+    const settings = (!reads.has(request.operation) || reveal) && authority.settings
+    const before = settings ? placements(store) : undefined
+    // Read before the write, so a broken allowlist can't turn a saved change into an error.
+    const fullPeers = new Set<string>()
+    try {
+      if (settings)
+        for (const pin of readPins(settings.allowlist))
+          if (pin.role === 'full') fullPeers.add(pin.name)
+    } catch {
+      for (const peer of settings ? settings.peers : []) fullPeers.add(peer.name)
+    }
+    const result = perform(store, request)
+    if (settings && before) {
       // Each snapshot also updates target assignments. Disconnected peers catch up on their next link.
-      const settings = authority.settings
       const deliveries = await Promise.allSettled(
         settings.peers.map((peer) => pushLoginGrants(settings, peer.name, env)),
       )
-      if (deliveries.some((d) => d.status === 'rejected'))
+      const after = placements(store)
+      // Only a machine this change goes to is waiting on it: a full peer gets every change, a
+      // worker only the logins it holds (before or after) and session targets.
+      const waiting = settings.peers.flatMap((peer, i) =>
+        deliveries[i]?.status === 'rejected' &&
+        (request.operation === 'assign' ||
+          changedOn(before, after, fullPeers.has(peer.name) ? null : peer.name))
+          ? [peer.name]
+          : [],
+      )
+      if (waiting.length)
         return JSON.stringify({
           ok: true,
           value: result ?? null,
-          warning: 'Saved here. An offline machine will sync when it reconnects.',
+          warning:
+            waiting.length === 1
+              ? `${waiting[0]} is offline and gets this change when it's back`
+              : `${waiting.join(' and ')} are offline and get this change when they're back`,
         })
     }
     return JSON.stringify({ ok: true, value: result ?? null })
@@ -265,10 +308,10 @@ export class LoginClient {
   audit(caller: LoginCaller) {
     return this.request<ReturnType<LoginStore['audit']>>('audit', [], caller)
   }
-  resolveLab(target: string, selection: unknown, caller: LoginCaller) {
+  resolveLab(target: string, selection: unknown, caller: LoginCaller, program: string) {
     return this.request<ReturnType<LoginStore['resolveLab']>>(
       'resolveLab',
-      [target, selection],
+      [target, selection, program],
       caller,
     )
   }

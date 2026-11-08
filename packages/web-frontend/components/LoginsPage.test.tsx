@@ -77,8 +77,7 @@ it('shows a failed list separately from an empty store', async () => {
 it.each(['add', 'replace'])(
   'clears the %s form after a saved value even when a machine is offline',
   async (mode) => {
-    const warning =
-      'Saved here. An offline machine will sync when it reconnects.'
+    const warning = "agent-work is offline and gets this change when it's back"
     vi.stubGlobal(
       'fetch',
       vi.fn(async (_path: string, options?: RequestInit) =>
@@ -121,6 +120,9 @@ it.each(['add', 'replace'])(
         mode === 'add' ? 'Value (hidden)' : 'New value (hidden)',
       ),
     ).toBeNull()
+    // The notice goes with the next thing the owner does.
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Refresh' }))
+    expect(screen.queryByText(new RegExp(warning))).toBeNull()
   },
 )
 it('says when a login was last used once, on the row, not again in its detail', async () => {

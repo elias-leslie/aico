@@ -8,10 +8,12 @@ import {
   mkdirSync,
   openSync,
   readdirSync,
+  realpathSync,
+  statSync,
   unlinkSync,
 } from 'node:fs'
 import { hostname } from 'node:os'
-import { join } from 'node:path'
+import { basename, isAbsolute, join, resolve } from 'node:path'
 import policy from '../data/logins-policy.json' with { type: 'json' }
 import type { ToolSecret } from './secret-files'
 import {
@@ -49,6 +51,10 @@ export interface Login {
     /** Account logins only: the two non-secret fields, kept here so the page and lists can show them. */
     username?: string
     login_url?: string
+    /** Programs (absolute paths, compared by real path when used, so a `current` release link
+     * follows deploys) this login's values may go to besides the shared adapters (policy
+     * labPrograms); `lab run` refuses any other child. */
+    programs?: string[]
   }
   verifierOnly?: boolean
   source?: string
@@ -89,6 +95,9 @@ export interface LoginEdit {
   notes?: string
   login_url?: string
   target?: string
+  /** Add or drop a program (absolute path) `lab run` may hand this lab login's values to. */
+  program?: string
+  dropProgram?: string
 }
 interface Index {
   version: 1
@@ -311,6 +320,8 @@ export class LoginStore {
   ): boolean {
     const at = this.now(),
       actor = caller.session || (caller.owner ? 'owner' : caller.role)
+    // Peers refuse longer details (mergeSnapshot), so a long login page URL is cut here.
+    const text = detail && detail.length > 600 ? `${detail.slice(0, 599)}…` : detail
     if (collapse && !policy.auditExplicitActions.includes(action)) {
       const since =
         (Date.parse(at) || Date.now()) -
@@ -318,11 +329,15 @@ export class LoginStore {
       for (let i = index.audit.length - 1; i >= 0; i--) {
         const event = index.audit[i]
         if (Date.parse(event.at) < since) break
-        if (event.action === action && event.name === name && event.actor === actor) return false
+        if (
+          event.action === action &&
+          event.name === name &&
+          event.actor === actor &&
+          event.detail === text
+        )
+          return false
       }
     }
-    // Peers refuse longer details (mergeSnapshot), so a long login page URL is cut here.
-    const text = detail && detail.length > 600 ? `${detail.slice(0, 599)}…` : detail
     index.audit.push({
       id: randomUUID(),
       at,
@@ -653,6 +668,7 @@ export class LoginStore {
         fields: Object.keys(p.values),
         ...(p.kind === 'account' && p.values.username ? { username: p.values.username } : {}),
         ...(p.kind === 'account' && p.values.login_url ? { login_url: p.values.login_url } : {}),
+        ...(old?.lab?.programs?.length ? { programs: old.lab.programs } : {}),
       }
     }
     writePrivate(join(this.folder, entry.file), value)
@@ -836,6 +852,27 @@ export class LoginStore {
         entry.notes = patch.notes
         changed.push('notes')
       }
+      for (const [path, add] of [
+        [patch.program, true],
+        [patch.dropProgram, false],
+      ] as const) {
+        if (path === undefined) continue
+        if (typeof path !== 'string') throw new LoginError('Invalid program')
+        if (!entry.lab) throw new LoginError('Only account and lab logins go to programs')
+        const programs = entry.lab.programs || []
+        const program = add
+          ? labProgramPath(path, this.env)
+          : programs.find(
+              (p) =>
+                p === declared(path, this.env) || sameFile(p, realFile(path, this.env), this.env),
+            )
+        if (!program) throw new LoginError(`${path} is not one of ${loginLabel(entry)}'s programs`)
+        if (programs.includes(program) === add) continue
+        const next = add ? [...programs, program] : programs.filter((p) => p !== program)
+        entry.lab = { ...entry.lab, programs: next }
+        if (!next.length) delete entry.lab.programs
+        changed.push(`${add ? 'program' : 'no program'} ${program}`)
+      }
       if (patch.login_url !== undefined || patch.target !== undefined) {
         const lab = entry.lab
         if (!lab)
@@ -870,7 +907,7 @@ export class LoginStore {
           changed.push(`site name ${lab.target} to ${patch.target}`)
           target = patch.target
         }
-        if (changed.some((c) => c !== 'notes')) {
+        if (changed.some((c) => c.startsWith('login page') || c.startsWith('site name'))) {
           const identity = labIdentity(target, lab.actor)
           writePrivate(
             join(this.folder, identity.name),
@@ -1063,6 +1100,13 @@ export class LoginStore {
         labPayload(value, entry.lab.target, entry.lab.actor, true)
         if (entry.name !== labIdentity(entry.lab.target, entry.lab.actor).name)
           throw new LoginError('Lab login identity mismatch')
+        const programs: unknown = entry.lab.programs
+        if (
+          programs !== undefined &&
+          (!Array.isArray(programs) ||
+            programs.some((p) => typeof p !== 'string' || !/^(\/|~\/)/.test(p)))
+        )
+          throw new LoginError('Invalid login snapshot')
       }
       seen.add(entry.name)
     }
@@ -1260,8 +1304,12 @@ export class LoginStore {
     })
   }
 
-  resolveLab(target: string, requests: unknown, caller: LoginCaller) {
+  /** The values PROGRAM (the code `lab run` starts, see labChildProgram) may have: only the shared
+   * adapters (policy labPrograms) and the programs each login declares get them. */
+  resolveLab(target: string, requests: unknown, caller: LoginCaller, program?: unknown) {
     labIdentity(target, 'default')
+    if (typeof program !== 'string' || !program.startsWith('/'))
+      throw new LoginError('Lab run needs the program it hands the values to')
     if (!Array.isArray(requests) || !requests.length)
       throw new LoginError('Lab selection must be a nonempty list')
     let recorded = false
@@ -1289,6 +1337,12 @@ export class LoginStore {
           )
             throw new LoginError('Invalid lab field selection')
           const entry = this.require(index, labIdentity(target, match[2]).name, caller)
+          if (!labPrograms(entry).some((p) => sameFile(p, program, this.env)))
+            throw new LoginError(
+              policy.restrictedRoles.includes(caller.role) && !caller.owner
+                ? `${loginLabel(entry)} does not go to ${program}; a coordinator adds it: aico logins edit ${loginLabel(entry)} --program ${program}`
+                : `${loginLabel(entry)} does not go to ${program}. If that program should get it: aico logins edit ${loginLabel(entry)} --program ${program}`,
+            )
           const p = labPayload(
             privateFile(join(this.folder, entry.file)).toString(),
             target,
@@ -1308,7 +1362,7 @@ export class LoginStore {
         for (const item of resolved) {
           const actor = item.reference.split('/').pop() as string
           const name = labIdentity(target, actor).name
-          if (this.record(index, caller, 'lab use', name, true)) {
+          if (this.record(index, caller, 'lab use', name, true, `program ${program}`)) {
             this.require(index, name, caller).lastUsed = this.now()
             recorded = true
           }
@@ -1319,6 +1373,79 @@ export class LoginStore {
       () => recorded,
     )
   }
+}
+
+/** The programs a lab login's values may go to: the shared adapters, then the login's own. */
+export function labPrograms(entry: Pick<Login, 'lab'>): string[] {
+  return [...policy.labPrograms, ...(entry.lab?.programs || [])]
+}
+
+/** A declared program as an absolute path: `~/` is the store's home. */
+function declared(value: string, env: NodeJS.ProcessEnv): string {
+  if (typeof value !== 'string') throw new LoginError('Invalid program')
+  const path = value.startsWith('~/') ? join(env.HOME || '', value.slice(2)) : value
+  if (!isAbsolute(path)) throw new LoginError('A program is an absolute path')
+  return resolve(path)
+}
+
+/** A declared program's real path now, or '' when it is gone. */
+function realFile(path: string, env: NodeJS.ProcessEnv): string {
+  try {
+    return realpathSync(declared(path, env))
+  } catch {
+    return ''
+  }
+}
+
+/** Whether declared program PATH is, by real path now, the file REAL. */
+function sameFile(path: string, real: string, env: NodeJS.ProcessEnv): boolean {
+  return !!real && realFile(path, env) === real
+}
+
+/** Interpreters and shells run whatever they are told, so one is never a program a login goes to. */
+function interpreter(real: string): boolean {
+  return new RegExp(policy.labInterpreters).test(basename(real))
+}
+
+/** A program a login may go to, as declared (an existing file, never an interpreter or shell). */
+export function labProgramPath(value: string, env: NodeJS.ProcessEnv = process.env): string {
+  const path = declared(value, env)
+  let real: string
+  try {
+    real = realpathSync(path)
+    if (!statSync(real).isFile()) throw new Error('not a file')
+  } catch {
+    throw new LoginError(`No program at ${value}`)
+  }
+  if (interpreter(real))
+    throw new LoginError(
+      `${value} is an interpreter or shell and would run anything; name the script it runs (PYTHON -I SCRIPT)`,
+    )
+  return path
+}
+
+/** The code a `lab run` child runs, by real path: an `INTERPRETER -I SCRIPT` child (the adapters'
+ * Python form) runs SCRIPT, anything else its own executable. Another interpreter form is refused. */
+export function labChildProgram(command: string[]): string {
+  const [executable, flag, script] = command
+  if (!executable || !isAbsolute(executable))
+    throw new LoginError('Lab run needs a request file and absolute child')
+  const real = (path: string) => {
+    try {
+      return realpathSync(path)
+    } catch {
+      throw new LoginError(`No program at ${path}`)
+    }
+  }
+  const program = real(executable)
+  if (!interpreter(program)) return program
+  const python = /^python/.test(basename(program))
+  if (python && flag === '-I' && script && isAbsolute(script)) return real(script)
+  throw new LoginError(
+    python
+      ? `${executable} would run anything; start the script as ${executable} -I /absolute/script.py`
+      : `${executable} would run anything; run the program itself (or a Python script as PYTHON -I SCRIPT)`,
+  )
 }
 
 /** A login page agents may set: https, or http on this machine (a local test page). */
