@@ -325,6 +325,13 @@
       "max_output_tokens": 65536
     },
     {
+      "id": "gemini-4-argon",
+      "name": "Gemini 4 Argon",
+      "provider": "gemini",
+      "family": "gemini-argon",
+      "aliases": ["argon"]
+    },
+    {
       "id": "kimi-code/kimi-for-coding",
       "name": "Kimi Code",
       "provider": "kimi-code",
