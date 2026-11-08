@@ -2,8 +2,9 @@
 
 Port of space_guard in ns/housekeeping.py, same behavior:
 - while free space is under SummitFlow's reserve plus the capture peak, a ladder, safest first, each tier
-  re-measured and the ladder stopped once the line is restored: T0 release the disk's ballast, T1 SummitFlow's
-  reclaim commands as the owner (agent temp, caches, scratch retention, snapshot thinning), T2 the journal.
+  re-measured and the ladder stopped once the line is restored: first what reclaim_first names (scratch's own
+  snapshots), T0 release the disk's ballast, T1 SummitFlow's reclaim commands as the owner (agent temp, caches,
+  scratch retention, snapshot thinning), T2 the journal.
   Models and work directories are never touched here;
 - bounded data balances (never a full balance, never profile/device/snapshot changes) toward the allocation
   target once unallocated space drops below the trigger; with too little room the released ballast buys one pass;
@@ -352,11 +353,13 @@ def keep_ballast(
 # ------------------------------------------------------------------------------------------- reclaim tiers
 
 
-def reclaim_commands(cfg: dict[str, Any], path: str, target_gib: float) -> list[list[str]]:
+def reclaim_commands(
+    cfg: dict[str, Any], path: str, target_gib: float, key: str = "reclaim_commands"
+) -> list[list[str]]:
     """The reclaim commands for one disk: a plain list applies to every disk, {"cmd": [...], "paths": [...]} only to
     the disks named; {path} and {target_gib} are filled in (the disk and the free space to restore)."""
     out = []
-    for item in cfg.get("reclaim_commands") or []:
+    for item in cfg.get(key) or []:
         cmd, paths = (
             (item.get("cmd"), item.get("paths")) if isinstance(item, dict) else (item, None)
         )
@@ -371,13 +374,17 @@ def reclaim_commands(cfg: dict[str, Any], path: str, target_gib: float) -> list[
 
 
 def owner_reclaim(
-    env: Env, disk: dict[str, Any], ctx: dict[str, Any], pressured: Callable[[], bool]
+    env: Env,
+    disk: dict[str, Any],
+    ctx: dict[str, Any],
+    pressured: Callable[[], bool],
+    key: str = "reclaim_commands",
 ) -> str | None:
     """T1: the configured reclaim commands for this disk as the owner, in order while the disk stays
     pressured, each at most once per run. A command the owner's tools do not have is skipped."""
     done = ctx.setdefault("reclaim_ran", set())
     notes = []
-    for cmd in reclaim_commands(env.cfg, disk["path"], disk["lines"].crit):
+    for cmd in reclaim_commands(env.cfg, disk["path"], disk["lines"].crit, key):
         if tuple(cmd) in done or not pressured():
             continue
         done.add(tuple(cmd))
@@ -431,6 +438,8 @@ def tiers_for(
         return disk["lines"].pressured(env.free(disk["path"]) / GIB)
 
     tiers: list[tuple[str, Callable[[], str | None]]] = []
+    if env.cfg.get("reclaim_first"):
+        tiers.append(("first", lambda: owner_reclaim(env, disk, ctx, pressured, "reclaim_first")))
     if device and env.cfg.get("ballast_gib"):
         tiers.append(("ballast", lambda: release_ballast(env, disk)))
     if env.cfg.get("reclaim_commands"):

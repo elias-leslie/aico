@@ -381,22 +381,19 @@ def test_space_guard_dry_run_under_pressure_lists_the_ladder_and_changes_nothing
     _env, result = run_guard(tmp_path, fake, free_gib=20)
     assert fake.changes() == []  # no mount, no sync, no balance, no runuser, no vacuum
     would = result["would"]
-    assert would[0].startswith("release the 6.0 GiB ballast")
+    assert would[0].endswith("aico backups run snapshots --pressure --scratch-only")
+    assert would[1].startswith("release the 6.0 GiB ballast")
     assert not any("st cleanup" in w or "st autosnap" in w for w in would)
     assert any(w.endswith("aico backups run snapshots --pressure") for w in would)
     assert "vacuum the journal to 1G" in would
     assert any(w.startswith("balance data chunks on / (usage 0%") for w in would)
     assert result["filesystems"][0]["pressured"] and result["filesystems"][0]["ladder"][
         "tiers"
-    ] == ["ballast", "reclaim", "journal"]
+    ] == ["first", "ballast", "reclaim", "journal"]
     state, text = space_guard.row_text(result, False)
     assert state == "ok"
-    assert (
-        text.startswith(
-            "Dry run: / is under the free-space line; would release the 6.0 GiB ballast"
-        )
-        and "would release the 6.0 GiB ballast" in text
-    )
+    assert text.startswith("Dry run: / is under the free-space line; would run as")
+    assert "release the 6.0 GiB ballast" in text
 
 
 def test_space_guard_live_thins_snapshots_as_the_owner_then_balances_and_vacuums(tmp_path):
@@ -413,7 +410,9 @@ def test_space_guard_live_thins_snapshots_as_the_owner_then_balances_and_vacuums
     result = space_guard.space_guard(env, {})
     calls = fake.calls
     owner = [c for c in calls if c[0] == "runuser"]
-    assert len(owner) == 1 and owner[0][-5:] == ["aico", "backups", "run", "snapshots", "--pressure"]
+    # Scratch's own snapshots first, then the work points.
+    assert [c[-1] for c in owner] == ["--scratch-only", "--pressure"]
+    assert owner[1][-5:] == ["aico", "backups", "run", "snapshots", "--pressure"]
     assert any(c[:3] == ["btrfs", "balance", "start"] and "-dusage=0,limit=16" in c for c in calls)
     assert any(c[0] == "journalctl" for c in calls)
     assert result["would"] == []
@@ -815,6 +814,30 @@ def test_scratch_sweep_takes_only_old_untouched_unused_entries(tmp_path):
     assert "old-run" not in names and "link" not in names
     assert {"models", "st-keep", "held", "fresh", "deep", "outside"} <= names
     assert (target).is_dir()  # A link goes, what it points at stays.
+
+
+def test_scratch_sweep_counts_nothing_freed_while_a_snapshot_holds_it(tmp_path):
+    now = time.time()
+    old = now - 30 * 86400
+    root = tmp_path / "scratch"
+    root.mkdir()
+    store = tmp_path / "snaps"
+    store.mkdir()
+    cfg = {**scratch_cfg(root), "scratch_snapshots": str(store)}
+
+    def entry(name):
+        (root / name).mkdir()
+        (root / name / "f").write_text("x" * 4096)
+        os.utime(root / name / "f", (old, old))
+        os.utime(root / name, (old, old))
+
+    entry("gone")
+    assert housekeeping.sweep_scratch(cfg, acts.Actor(True, run=Fake()), now, [], set()) > 0
+    (store / "20261108T000000Z-00000000").mkdir()
+    entry("held")
+    notes = []
+    assert housekeeping.sweep_scratch(cfg, acts.Actor(True, run=Fake()), now, notes, set()) == 0
+    assert not (root / "held").exists() and "age out" in notes[0]
 
 
 def test_scratch_sweep_ignores_a_clock_ahead_of_the_world(tmp_path):

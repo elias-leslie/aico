@@ -82,6 +82,10 @@ git -C /srv/scratch/PROJECT-wip checkout -b restored refs/wip/stash/BRANCH   # o
 
 The limits (repo size, uncommitted size, how much the peer may hold, how much disk it keeps free) and the skip list are `packages/ops/data/wip-mirror.json`. A repo that is skipped or failing shows in Status as its own row (`Repo copy: PROJECT`) with the reason.
 
+## Get a deleted file back from scratch
+
+`/srv/scratch` is replaceable and not backed up, but it keeps a snapshot a day for about three days (the first thing dropped when the disk runs short). Find the newest point that still has it and copy it out: `ls /srv/workspaces/.snapshots/scratch/projects/scratch/`, then `cp -a --reflink=auto /srv/workspaces/.snapshots/scratch/projects/scratch/POINT/PATH /srv/scratch/NEW_FOLDER/`.
+
 ## Damaged repository
 
 Run `recover check --repository /LOCAL/REPO --password-file /PRIVATE/password` first. All source inspection/restoration uses `--no-lock --no-cache`: it never unlocks, prunes, forgets, repairs or deletes anything in the original repository. Drive authentication is copied to private scratch before use so token refresh cannot rewrite the owner's auth file.

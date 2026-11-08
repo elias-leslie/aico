@@ -60,6 +60,14 @@
       "settleIoPressure": 10,
       "settlePollSeconds": 5
     },
+    "scratch": {
+      "source": "/srv/scratch",
+      "root": "/srv/workspaces",
+      "store": "scratch/projects/scratch",
+      "keep": 3,
+      "everyHours": 24,
+      "stopBelowGib": 40
+    },
     "btrbk": [
       "snapshot_preserve_min latest",
       "snapshot_preserve no",

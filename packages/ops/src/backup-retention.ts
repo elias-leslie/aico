@@ -8,6 +8,7 @@ import {
   readFileSync,
   realpathSync,
   renameSync,
+  statfsSync,
   statSync,
   writeFileSync,
 } from 'node:fs'
@@ -189,6 +190,72 @@ function driveRetentionArgs(cfg: BackupConfig): string[] {
   ]
 }
 
+const pointId = (at: string) =>
+  at.replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z') + '-' + randomBytes(4).toString('hex')
+const SCRATCH_POINT = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z-[0-9a-f]{8}$/
+const freeBytes = (path: string) => {
+  const disk = statfsSync(path)
+  return disk.bavail * disk.bsize
+}
+/**
+ * The scratch disk's few daily read-only points, so a mistaken delete there can be undone. They are a
+ * convenience, not a backup: this looks only in its own folder, and failing or skipping never fails
+ * the routine. Short of free space, or under the space guard's pressure, they all go and none is taken.
+ * Returns how many it removed.
+ */
+export async function scratchSnapshots(
+  rt: Runtime,
+  scheduled: boolean,
+  pressure = false,
+  free = freeBytes,
+): Promise<number> {
+  const policy = rt.cfg.retention.scratch
+  let deleted = 0
+  try {
+    const store = join(policy.root, '.snapshots', policy.store)
+    let points = existsSync(store)
+      ? readdirSync(store, { withFileTypes: true })
+          .filter((entry) => entry.isDirectory() && SCRATCH_POINT.test(entry.name))
+          .map((entry) => entry.name)
+          .sort()
+          .reverse()
+      : []
+    const short = pressure || free(policy.source) < policy.stopBelowGib * 1024 ** 3
+    if (!short) {
+      const newest = points[0]
+      const taken = newest
+        ? Date.parse(newest.replace(SCRATCH_POINT, '$1-$2-$3T$4:$5:$6Z'))
+        : Number.NEGATIVE_INFINITY
+      if (rt.now().getTime() - taken >= policy.everyHours * 3600000) {
+        const id = pointId(rt.now().toISOString())
+        mkdirSync(store, { recursive: true })
+        await checked(rt.run, [
+          'btrfs',
+          'subvolume',
+          'snapshot',
+          '-r',
+          policy.source,
+          join(store, id),
+        ])
+        points = [id, ...points]
+      }
+      if (!scheduled) return 0
+    }
+    for (const name of points.slice(short ? 0 : policy.keep)) {
+      await deleteWorkPoint(rt, join(store, name), policy.root)
+      deleted++
+    }
+    // The cleaner frees the space a moment later: wait, so the space guard measures it, not the old figure.
+    if (short && deleted)
+      await rt.run(['sudo', '-n', 'btrfs', 'subvolume', 'sync', policy.source], {
+        timeout: rt.cfg.retention.snapshot.settleMaxSeconds * 1000,
+      })
+  } catch (error) {
+    console.error(`Scratch snapshots left as they are: ${(error as Error).message}`)
+  }
+  return deleted
+}
+
 /** One physical workspace point per sweep; project views share it. Protected projects are never inspected. */
 export async function captureWorkspace(
   rt: Runtime,
@@ -269,7 +336,7 @@ export async function captureWorkspace(
   )
     return registeredIds
   const now = rt.now().toISOString(),
-    id = now.replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z') + '-' + randomBytes(4).toString('hex')
+    id = pointId(now)
   const parent = join(root, '.snapshots', 'aico-autosnap', 'projects', 'workspace'),
     path = join(parent, id)
   mkdirSync(parent, { recursive: true })

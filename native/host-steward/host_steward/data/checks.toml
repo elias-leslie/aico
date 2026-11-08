@@ -320,6 +320,8 @@ scratch_root = "/srv/scratch"
 scratch_older_days = 21
 scratch_max_per_run = 40
 scratch_holds = ".scratch-holds"
+# A sweep frees nothing while a scratch snapshot still holds the entry: its space comes back when they age out.
+scratch_snapshots = "/srv/workspaces/.snapshots/scratch/projects/scratch"
 scratch_keep = ["models", "cache", "tmp", "briefs", "latest", "aico-backups", "restic*", "st-*", "passive*", "traffic*", "*redteam*", ".*"]
 # Untagged image layers no container uses, older than a week. Tagged images stay.
 image_prune = [
@@ -339,6 +341,11 @@ ballast_subvol = "@nightshift-ballast"
 ballast_file = "ballast"
 top_mounts = "/run/host-steward-ballast"
 ballast_recheck_h = 24
+# Before everything else on the ladder: scratch's own snapshots only hold replaceable data. (Their routine
+# already drops them at the warning line, reserve + warn_margin; this is for a disk that fills between its runs.)
+reclaim_first = [
+  { cmd = ["aico", "backups", "run", "snapshots", "--pressure", "--scratch-only"], paths = ["/"] },
+]
 # Reclaim commands, run in order as the owner while a disk is under the line. {path} is the disk,
 # {target_gib} the free space to restore; a {cmd, paths} entry only applies to those disks. Work
 # snapshots live under /srv/workspaces on the system disk: thin them to the newest few, as SF did.
