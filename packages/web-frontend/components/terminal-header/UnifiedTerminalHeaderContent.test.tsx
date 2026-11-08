@@ -40,11 +40,22 @@ vi.mock('../ModeToggle', () => ({
 }))
 
 vi.mock('../PaneOverflowMenu', () => ({
-  PaneOverflowMenu: ({ onRename }: { onRename?: () => void }) => (
+  PaneOverflowMenu: ({
+    onRename,
+    onNotes,
+  }: {
+    onRename?: () => void
+    onNotes?: () => void
+  }) => (
     <div data-testid="pane-overflow-menu">
       <button type="button" onClick={onRename}>
         Rename
       </button>
+      {onNotes && (
+        <button type="button" onClick={onNotes}>
+          Menu Notes
+        </button>
+      )}
     </div>
   ),
 }))
@@ -277,18 +288,20 @@ describe('UnifiedTerminalHeaderContent', () => {
     expect(openNotes).toHaveBeenLastCalledWith(null)
   })
 
-  it('uses icon buttons for Notes and Capture on a phone', () => {
+  it('keeps Notes in the session menu and Capture as an icon on a phone, so the bar fits', () => {
     render(
       <UnifiedTerminalHeaderContent
         slot={makeProjectSlot('a', 'Alpha')}
         isMobile
       />,
     )
-    expect(screen.getByRole('button', { name: /^Notes/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Notes/ })).toBeNull()
     expect(screen.getByTestId('capture-mock')).toHaveAttribute(
       'data-variant',
       'touch',
     )
+    fireEvent.click(screen.getByRole('button', { name: 'Menu Notes' }))
+    expect(openNotes).toHaveBeenCalledWith('a-project')
   })
 
   it('labels the files action Files on desktop, with a tooltip', () => {

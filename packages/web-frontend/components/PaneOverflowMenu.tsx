@@ -8,6 +8,7 @@ import {
   RefreshCw,
   RotateCcw,
   Square,
+  StickyNote,
   Type,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -24,6 +25,8 @@ export interface PaneOverflowMenuProps {
   onRefresh?: () => void
   onReset?: () => void
   onUpload?: () => void
+  /** Notes on this session's project: in the menu on a phone, where the bar has no room for its icon. */
+  onNotes?: () => void
   onRename?: () => void
   /** The session "Check in later" sets check-ins on; hidden without it. */
   checkInSessionId?: string | null
@@ -47,6 +50,7 @@ export function PaneOverflowMenu({
   onRefresh,
   onReset,
   onUpload,
+  onNotes,
   onRename,
   checkInSessionId,
   checkInUnavailable,
@@ -124,6 +128,14 @@ export function PaneOverflowMenu({
             />
           ) : (
             <>
+              {onNotes && (
+                <MenuItemButton
+                  icon={<StickyNote className={ICON} strokeWidth={1.7} />}
+                  label="Notes"
+                  onClick={run(onNotes)}
+                  isMobile={isMobile}
+                />
+              )}
               {onUpload && (
                 <MenuItemButton
                   icon={<Paperclip className={ICON} strokeWidth={1.7} />}

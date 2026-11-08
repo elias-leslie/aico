@@ -74,6 +74,7 @@ export const UnifiedTerminalHeaderContent = memo(
       !!onRefresh ||
       !!onReset ||
       !!onCloseSession ||
+      isMobile ||
       canRename
 
     return (
@@ -148,17 +149,8 @@ export const UnifiedTerminalHeaderContent = memo(
             </button>
           )}
 
-          {/* Notes opens on this session's project; Capture sends a photo or files. Icon only on a phone and under 760px. */}
-          {isMobile ? (
-            <HeaderIconButton
-              icon={
-                <StickyNote className="h-[18px] w-[18px]" strokeWidth={1.7} />
-              }
-              onClick={() => openNotes(notesProject)}
-              tooltip="Notes: opens in its own window"
-              isMobile={isMobile}
-            />
-          ) : (
+          {/* Notes opens on this session's project. Icon only under 760px; on a phone it is in the session menu, where the bar has no room for another 44px target. */}
+          {!isMobile && (
             <button
               type="button"
               onClick={() => openNotes(notesProject)}
@@ -214,6 +206,7 @@ export const UnifiedTerminalHeaderContent = memo(
               onRefresh={onRefresh}
               onReset={onReset}
               onUpload={onUpload}
+              onNotes={isMobile ? () => openNotes(notesProject) : undefined}
               fontSize={fontSize}
               onFontSizeChange={onFontSizeChange}
               isMobile={isMobile}

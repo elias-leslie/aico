@@ -52,6 +52,18 @@ describe('PaneOverflowMenu', () => {
     ).toBe('End session: stop its process everywhere it is open.')
   })
 
+  it('offers Notes first when the bar has no room for its icon', () => {
+    const onNotes = vi.fn()
+    render(<PaneOverflowMenu onNotes={onNotes} onUpload={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Session menu' }))
+    expect(
+      screen.getAllByRole('menuitem').map((item) => item.textContent),
+    ).toEqual(['Notes', 'Upload a file'])
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Notes' }))
+    expect(onNotes).toHaveBeenCalledTimes(1)
+    expect(screen.queryByTestId('pane-overflow-menu-items')).toBeNull()
+  })
+
   it('invokes the selected action and closes the menu', () => {
     const onUpload = vi.fn()
 
