@@ -4,7 +4,7 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { clsx } from 'clsx'
 import { Search } from 'lucide-react'
 import { type ReactNode, useMemo, useState } from 'react'
-import { pickerSuffix, quotaGlances, toolGlance } from '@/lib/frame/quota'
+import { pickerGlance, pickerSuffix, quotaGlances } from '@/lib/frame/quota'
 import { type AgentTool, useAgentTools } from '@/lib/hooks/use-agent-tools'
 import {
   HOST_STATE_LABELS,
@@ -73,7 +73,7 @@ function AgentChoices({
 }) {
   const glances = quotaGlances(useUsage().report)
   return tools.map((t) => {
-    const glance = toolGlance(glances, [t.slug, ...t.aliases])
+    const glance = pickerGlance(glances, [t.slug, ...t.aliases])
     const suffix = glance && pickerSuffix(glance)
     return (
       <button

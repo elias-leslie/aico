@@ -106,20 +106,25 @@ export function scheduleText(routine: Routine): string {
   const named = `${text} ${zoneLabel(routine.tz, at)}`
   return routine.nextRun === null
     ? named
-    : `${named} (${timeOfDay(scheduledAt(text, routine.tz, routine.nextRun))} here)`
+    : `${named} (${timeOfDay(routine.source === 'systemd' ? scheduledAt(text, routine.tz, routine.nextRun) : routine.nextRun)} here)`
 }
 
 const DAY_MIN = 24 * 60
 
-/** The scheduled time behind a next run, which a timer's random delay can put minutes after it. */
+/** The scheduled time behind a systemd timer's next run, which its random delay can put minutes after it. */
 function scheduledAt(text: string, tz: string, nextRun: number): number {
   const [, hour, minute] = text.match(/(\d{1,2}):(\d\d)/) ?? []
-  const clock = new Intl.DateTimeFormat('en-US', {
-    timeZone: tz,
-    hourCycle: 'h23',
-    hour: 'numeric',
-    minute: 'numeric',
-  }).formatToParts(nextRun)
+  let clock: Intl.DateTimeFormatPart[]
+  try {
+    clock = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      hourCycle: 'h23',
+      hour: 'numeric',
+      minute: 'numeric',
+    }).formatToParts(nextRun)
+  } catch {
+    return nextRun // A zone this browser doesn't know.
+  }
   const part = (type: string) =>
     Number(clock.find((item) => item.type === type)?.value)
   const late =

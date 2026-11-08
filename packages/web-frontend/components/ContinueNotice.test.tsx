@@ -28,7 +28,6 @@ vi.mock('@/lib/hooks/use-terminal-panes', () => ({
 const glance = (id: string, state: QuotaGlance['state']) =>
   ({
     id,
-    names: [id],
     name: id === 'claude' ? 'Claude' : 'Codex',
     state,
     left: state === 'left' ? 50 : 0,
@@ -57,6 +56,20 @@ const slot = (over: Partial<ProjectSlot> = {}): ProjectSlot =>
   }) as ProjectSlot
 
 describe('continueTargets', () => {
+  it('leaves Pi out: it can run on another provider than the subscription that lists it', () => {
+    const PI = tool('pi', 'Pi')
+    const opencode = { ...glance('opencode-go', 'used_up'), tools: ['pi'] }
+    expect(continueTargets('pi', [opencode], [PI, CODEX])).toEqual([])
+    const open = { ...glance('opencode-go', 'left'), tools: ['pi'] }
+    expect(
+      continueTargets(
+        'claude',
+        [glance('claude', 'used_up'), open],
+        [CLAUDE, PI],
+      ),
+    ).toEqual([])
+  })
+
   it('offers the other tools whose subscription has room, only when this one is used up', () => {
     const used = [glance('claude', 'used_up'), glance('codex', 'left')]
     expect(continueTargets('claude', used, [CLAUDE, CODEX])).toEqual([CODEX])

@@ -13,8 +13,8 @@ export interface QuotaGlance {
   id: string
   /** The subscription's name: "Claude", "OpenCode Go". */
   name: string
-  /** What tools call it: its id and any tool that runs on it under another name. */
-  names: string[]
+  /** Agent tools that usually run on it under another name (`pi`); they can run elsewhere too. */
+  tools: string[]
   state: QuotaState
   /** Percent left in its tightest window; 0 when used up, null when not known. */
   left: number | null
@@ -148,7 +148,7 @@ function glanceOf(provider: UsageProvider, now: number): QuotaGlance {
   return {
     id: provider.id,
     name: provider.name,
-    names: [provider.id, ...(provider.tools ?? [])],
+    tools: provider.tools ?? [],
     state,
     left,
     gone: gone === null ? null : Math.round(gone * 100),
@@ -170,13 +170,22 @@ function glanceOf(provider: UsageProvider, now: number): QuotaGlance {
   }
 }
 
-/** The subscription a tool runs on: they share a name (`claude`, `codex`) in the tool's slug or aliases, or the subscription lists the tool (`pi` on OpenCode Go). */
+/** The subscription a tool runs on: they share a name (`claude`, `codex`) in the tool's slug or aliases. */
 export function toolGlance(
   glances: readonly QuotaGlance[],
   names: readonly string[],
 ): QuotaGlance | undefined {
-  return glances.find((glance) =>
-    glance.names.some((name) => names.includes(name)),
+  return glances.find((glance) => names.includes(glance.id))
+}
+
+/** For the agent picker, also the subscription a tool usually runs on under another name. */
+export function pickerGlance(
+  glances: readonly QuotaGlance[],
+  names: readonly string[],
+): QuotaGlance | undefined {
+  return (
+    toolGlance(glances, names) ??
+    glances.find((glance) => glance.tools.some((tool) => names.includes(tool)))
   )
 }
 

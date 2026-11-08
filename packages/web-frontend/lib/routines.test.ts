@@ -27,6 +27,7 @@ describe('scheduleText', () => {
   const schedule = {
     schedule: 'sundays at 05:15',
     tz: 'Pacific/Kiritimati',
+    source: 'systemd',
   } as Routine
   const here = (utc: string) =>
     new Date(utc).toLocaleTimeString('en-US', {
@@ -39,6 +40,20 @@ describe('scheduleText', () => {
     expect(scheduleText({ ...schedule, nextRun: delayed })).toContain(
       `(${here('2026-11-14T15:15:00Z')} here)`,
     )
+  })
+
+  it('trusts the scheduler’s own next run, which has no delay', () => {
+    const run = Date.parse('2026-11-14T15:38:00Z')
+    expect(
+      scheduleText({ ...schedule, source: 'built-in', nextRun: run }),
+    ).toContain(`(${here('2026-11-14T15:38:00Z')} here)`)
+  })
+
+  it('falls back to the next run when the browser doesn’t know the zone', () => {
+    const run = Date.parse('2026-11-14T15:38:00Z')
+    expect(
+      scheduleText({ ...schedule, tz: 'Mars/Olympus', nextRun: run }),
+    ).toContain(`(${here('2026-11-14T15:38:00Z')} here)`)
   })
 
   it('counts a delay across midnight the short way', () => {
