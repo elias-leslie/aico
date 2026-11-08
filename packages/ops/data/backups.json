@@ -137,6 +137,7 @@
     "lockWait": "5m"
   },
   "webUrl": "http://127.0.0.1:3002",
+  "coverageReadSeconds": 3,
   "statusPublish": {
     "attempts": 6,
     "waitMs": 5000,

@@ -153,7 +153,7 @@ every_min = 15
 slack_min = 10
 # The owning live API computes per-source data age, failures and offline-unchanged coverage.
 aico_status_command = ["curl", "--fail", "--silent", "--show-error", "--noproxy", "*", "http://127.0.0.1:3002/api/backups"]
-# Read each configured Drive owner's receipts over Aico's existing fleet link, as the backup owner.
+# Read owner receipts over the fleet link; backups.json owns the 3s peer budget within this 5s read.
 fleet_status_command = ["runuser", "-u", "kasadis", "--", "/home/kasadis/.local/bin/aico", "backups", "list", "--fleet", "--json"]
 # Status's shown machine state includes deliberate power-off and planned outages.
 machine_status_command = ["curl", "--fail", "--silent", "--show-error", "--noproxy", "*", "http://127.0.0.1:3002/api/status?kind=machine"]

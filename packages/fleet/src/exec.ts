@@ -99,14 +99,16 @@ export async function runExec(socketPath: string, argv: string[]): Promise<numbe
  */
 const STDOUT_KEPT = 4 * 1024 * 1024
 
-/** Buffered input is written to the encrypted channel, never command arguments. */
+/** Buffered input is written to the encrypted channel, never command arguments.
+ * A caller may abort its read; this closes its channel, not the remote command. */
 export async function requestExec(
   socketPath: string,
   argv: string[],
   input: Buffer,
+  signal?: AbortSignal,
 ): Promise<{ code: number; stdout: string; output: string; ended: boolean }> {
   return new Promise((resolve) => {
-    const socket = createConnection({ path: socketPath, allowHalfOpen: true })
+    const socket = createConnection({ path: socketPath, allowHalfOpen: true, signal })
     let pending: Buffer = Buffer.alloc(0)
     let code = 255
     let ended = false

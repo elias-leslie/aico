@@ -1,5 +1,5 @@
 import { mkdtempSync, rmSync } from 'node:fs'
-import { createServer } from 'node:net'
+import { createServer, type Socket } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, it } from 'vitest'
@@ -35,6 +35,33 @@ it('keeps a whole JSON list a command prints, not only its last 4096 characters'
     expect(result).toMatchObject({ code: 0, ended: true })
     expect(JSON.parse(result.stdout.trim())).toEqual(phones)
   } finally {
+    server.close()
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+it('lets a caller abort an accepted but silent read without waiting for the peer', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'exec-abort-'))
+  const socketPath = join(dir, 'exec.sock')
+  let peer: Socket | undefined
+  const server = createServer({ allowHalfOpen: true }, (socket) => {
+    peer = socket
+    socket.on('data', () => {})
+  })
+  await new Promise<void>((resolve) => server.listen(socketPath, resolve))
+  let watchdog: NodeJS.Timeout | undefined
+  try {
+    const result = await Promise.race([
+      requestExec(socketPath, ['read-only-fixture'], Buffer.alloc(0), AbortSignal.timeout(50)),
+      new Promise<null>((resolve) => {
+        watchdog = setTimeout(() => resolve(null), 300)
+      }),
+    ])
+    expect(peer).toBeDefined()
+    expect(result).toMatchObject({ ended: false, code: 255 })
+  } finally {
+    clearTimeout(watchdog)
+    peer?.destroy()
     server.close()
     rmSync(dir, { recursive: true, force: true })
   }

@@ -27,7 +27,7 @@ it('keeps a moved source in its original repository only in the coverage read', 
   const active = entries(state, cfg, cfg.workstation, now)
   expect(active.find((item) => item.source === source && item.target === 'drive')).toBeUndefined()
   expect(backupRows(active).find((row) => row.id.endsWith(`drive/${source}`))).toBeUndefined()
-  const owner = localBackupCoverage(state, cfg, cfg.workstation, active, now)
+  const owner = localBackupCoverage(state, cfg, cfg.workstation, now)
   expect(owner.repository).not.toBe(cfg.driveClients.aico.repository)
   expect(owner.retained).toEqual([
     expect.objectContaining({
@@ -39,16 +39,28 @@ it('keeps a moved source in its original repository only in the coverage read', 
   ])
   const currentCfg = config({ AICO_BACKUP_MACHINE: 'aico' })
   const currentState = emptyState()
-  const current = localBackupCoverage(
-    currentState,
-    currentCfg,
-    'aico',
-    entries(currentState, currentCfg, 'aico', now),
-    now,
-  )
+  const current = localBackupCoverage(currentState, currentCfg, 'aico', now)
   expect(current.entries.find((item) => item.source === source)?.snapshot).toBeNull()
   expect(current.retained).toEqual([])
   expect(state).toEqual(before)
+})
+
+it('does not treat an old retained offline receipt as proof the source is still off', () => {
+  const cfg = config({ AICO_BACKUP_MACHINE: 'davion-sidarli' })
+  const state = emptyState()
+  state.copies[copyKey(source, 'drive')] = {
+    source,
+    target: 'drive',
+    observed: 'offline',
+    dataAt: new Date(now - 72 * 3600000).toISOString(),
+    snapshot: 'a'.repeat(64),
+  }
+  const owner = localBackupCoverage(state, cfg, cfg.workstation, now)
+  expect(owner.retained[0]?.state).toBe('warn')
+  expect(state.copies[copyKey(source, 'drive')]?.observed).toBe('offline')
+  const currentCfg = config({ AICO_BACKUP_MACHINE: 'aico' })
+  const current = localBackupCoverage(state, currentCfg, 'aico', now)
+  expect(current.entries.find((item) => item.source === source)?.state).toBe('warn')
 })
 
 function configuredFleet() {
@@ -70,21 +82,9 @@ function configuredFleet() {
   vi.mocked(readPins).mockReturnValue([{ name: 'aico', role: 'full', publicKey: 'fixture' }])
   const cfg = config({ AICO_BACKUP_MACHINE: 'davion-sidarli' })
   const state = emptyState()
-  const local = localBackupCoverage(
-    state,
-    cfg,
-    cfg.workstation,
-    entries(state, cfg, cfg.workstation, now),
-    now,
-  )
+  const local = localBackupCoverage(state, cfg, cfg.workstation, now)
   const peerCfg = config({ AICO_BACKUP_MACHINE: 'aico' })
-  const peer = localBackupCoverage(
-    state,
-    peerCfg,
-    'aico',
-    entries(state, peerCfg, 'aico', now),
-    now,
-  )
+  const peer = localBackupCoverage(state, peerCfg, 'aico', now)
   return { cfg, local, peer }
 }
 
@@ -99,8 +99,23 @@ it('reads each configured owner once over the existing fleet exec route without 
   expect((await fleetBackupCoverage(local, cfg)).owners).toEqual([local, peer])
   expect(requestExec).toHaveBeenCalledExactlyOnceWith(
     '/fleet/aico/exec.sock',
-    ['sh', '-c', expect.stringContaining('backups list --fleet --local --json')],
+    [
+      'systemd-run',
+      '--user',
+      '--no-ask-password',
+      '--quiet',
+      '--wait',
+      '--collect',
+      '--pipe',
+      '--service-type=exec',
+      `--property=RuntimeMaxSec=${cfg.coverageReadSeconds}s`,
+      '--property=KillMode=control-group',
+      'sh',
+      '-c',
+      expect.stringContaining('backups list --fleet --local --json'),
+    ],
     Buffer.alloc(0),
+    expect.any(AbortSignal),
   )
 })
 

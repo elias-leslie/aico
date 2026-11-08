@@ -13,6 +13,7 @@ import {
   driveSourceOwner,
   driveSources,
   driveTarget,
+  entries,
   entry,
   migrated,
 } from './backup-plan'
@@ -49,23 +50,39 @@ export function localBackupCoverage(
   state: BackupState,
   cfg: BackupConfig,
   machine: string,
-  items: BackupEntry[],
   now = Date.now(),
 ): ReadBackupOwner {
+  // Saved power observations are not evidence that a guest is still off. This read avoids
+  // live jobs/SSH probes, so it evaluates copy dates and keeps current power unverified.
+  const observed = {
+    ...state,
+    copies: Object.fromEntries(
+      Object.entries(state.copies).map(([key, copy]) => [
+        key,
+        copy.target === 'drive' && copy.observed === 'offline'
+          ? { ...copy, observed: undefined }
+          : copy,
+      ]),
+    ),
+  }
+  const items = entries(observed, cfg, machine, now).filter((item) => item.target === 'drive')
   const retained: BackupEntry[] = []
   for (const source of migrated.sources) {
     if (driveSourceOwner(cfg, source.id) === machine) continue
-    const copy = state.copies[copyKey(source.id, 'drive')]
+    const copy = observed.copies[copyKey(source.id, 'drive')]
     if (!copy?.snapshot || !copy.dataAt) continue
     // An old controller's last attempt does not invalidate its last verified artifact.
     retained.push(
       entry(source.id, source.name, 'drive', { ...copy, error: undefined }, cfg, machine, now),
     )
   }
+  for (const item of [...items, ...retained])
+    if (state.copies[copyKey(item.source, 'drive')]?.observed === 'offline')
+      item.meaning = 'The last copy date is shown. The source’s current power has not been checked.'
   return {
     ...ownerRepository(cfg, machine),
     state: 'read',
-    entries: items.filter((item) => item.target === 'drive'),
+    entries: items,
     retained,
     runs: state.runs,
   }
@@ -109,6 +126,9 @@ export async function fleetBackupCoverage(
   cfg: BackupConfig,
   env = process.env,
 ): Promise<{ owners: BackupCoverageOwner[] }> {
+  const seconds = cfg.coverageReadSeconds
+  if (!Number.isFinite(seconds) || seconds <= 0)
+    throw new Error('The backup coverage read budget must be a positive number of seconds.')
   let settings: ReturnType<typeof readSettings> = null
   let trusted: string[] = []
   try {
@@ -130,8 +150,25 @@ export async function fleetBackupCoverage(
       const socket = linkPaths(join(settings.peerRoot, machine)).control
       const answer = await requestExec(
         socket,
-        ['sh', '-c', `cd "$HOME" && ${syncConfig.peerAico} backups list --fleet --local --json`],
+        // The same owning budget bounds this socket and a manager-owned remote read service.
+        // It leaves room for CLI startup inside host-steward's existing five-second outer read.
+        [
+          'systemd-run',
+          '--user',
+          '--no-ask-password',
+          '--quiet',
+          '--wait',
+          '--collect',
+          '--pipe',
+          '--service-type=exec',
+          `--property=RuntimeMaxSec=${seconds}s`,
+          '--property=KillMode=control-group',
+          'sh',
+          '-c',
+          `cd "$HOME" && exec ${syncConfig.peerAico} backups list --fleet --local --json`,
+        ],
         Buffer.alloc(0),
+        AbortSignal.timeout(Math.ceil(seconds * 1000)),
       )
       if (answer.ended && answer.code === 0)
         try {

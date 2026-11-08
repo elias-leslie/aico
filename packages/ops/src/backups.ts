@@ -561,19 +561,19 @@ async function listCommand(
   env = process.env,
 ): Promise<number> {
   const { cfg } = rt
-  const list = {
-    machine,
-    entries: await scheduledEntries(state, cfg, machine, rt.run),
-    runs: state.runs,
-  }
   if (args.includes('--fleet')) {
-    const local = localBackupCoverage(state, cfg, machine, list.entries)
+    const local = localBackupCoverage(state, cfg, machine)
     console.log(
       JSON.stringify(
         args.includes('--local') ? { owners: [local] } : await fleetBackupCoverage(local, cfg, env),
       ),
     )
     return 0
+  }
+  const list = {
+    machine,
+    entries: await scheduledEntries(state, cfg, machine, rt.run),
+    runs: state.runs,
   }
   console.log(args.includes('--json') ? JSON.stringify(list) : listText(list, Date.now()))
   return 0
