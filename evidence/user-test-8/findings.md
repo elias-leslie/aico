@@ -25,7 +25,7 @@ None.
 - Machines "runs past the sidebar": the wheel scrolls it (500 px measured).
 - "readme.md still showing during a find": rows narrow once the find's short pause is over (about 0.4 s).
 - "No notes yet" under Groceries, and "add" in login activity: the helper's.
-- "Weekly container trim" last run Saturday: it was set up that day.
+- "Weekly container trim" last run Saturday: not the timer, whose next run is Monday. The run came minutes after the timer moved into the registry that evening, so most likely a hand run; not confirmed.
 - A hold on "Hide team" hitting the list behind it: a real long press shows the tip and clicks nothing.
 
 ## Left as they are
