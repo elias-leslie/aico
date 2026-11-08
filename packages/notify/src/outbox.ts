@@ -20,6 +20,7 @@ export const GIVE_UP_MS = 24 * 3600_000
 const STUCK_MS = 10 * 60_000
 const DAY_MS = 24 * 3600_000
 const HOLD_MAX_MS = 3 * 60_000
+const PASS_ROWS = 20
 
 export function backoff(attempts: number): number {
   return Math.min(FIRST_BACKOFF_MS * 2 ** Math.max(0, attempts), MAX_BACKOFF_MS)
@@ -88,16 +89,20 @@ export class Outbox {
     const { store, sender } = this.options
     const hold = this.options.holding?.()
     if (hold?.firm) return 0
-    const rows = store.claimDue(
-      this.now(),
-      undefined,
-      hold ? this.now() - (this.options.holdMaxMs ?? HOLD_MAX_MS) : undefined,
-    )
-    if (rows.length === 0) return 0
+    // One row at a time, right before its send: `sending` always means really in flight, so a
+    // restart only ever leaves one unsure row, never a queue that didn't go.
+    const claim = () =>
+      store.claimDue(
+        this.now(),
+        1,
+        hold ? this.now() - (this.options.holdMaxMs ?? HOLD_MAX_MS) : undefined,
+      )[0]
+    let row = claim()
+    if (!row) return 0
     const paired = sender.devices()
     const devices = new Map((paired ?? []).map((device) => [device.id, device]))
     let sent = 0
-    for (const row of rows) {
+    for (let taken = 0; row && taken < PASS_ROWS; taken++, row = claim()) {
       const stored = store.get(row.noticeId)
       const device = devices.get(row.device)
       const now = this.now()
@@ -126,6 +131,7 @@ export class Outbox {
       }
       if (store.alreadyPushed(stored.id)) {
         store.dropOutboxRow(row.id)
+        store.recordAlreadyPushed(stored.id, now)
         continue
       }
       if (phoneSilenced(notice, this.options.choices ?? NO_CHOICES)) {

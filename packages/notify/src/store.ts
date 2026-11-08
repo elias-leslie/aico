@@ -113,6 +113,8 @@ export function notifyDbPath(dataDir: string): string {
 export type Via = 'local' | 'ominull'
 
 export interface StoredNotice {
+  /** It reached this list from another Aico (the last write to its row came from there). */
+  fromElsewhere: boolean
   id: string
   receivedAt: number
   via: Via
@@ -145,6 +147,7 @@ export interface Accepted {
 }
 
 interface NoticeRow {
+  origin: string
   id: string
   received_at: number
   via: Via
@@ -288,7 +291,7 @@ export class NotifyStore {
         .get(id) as { n: number }
       if (
         Number(queuedHere.n) > 0 ||
-        this.hasSend(id) ||
+        this.settledHere(id) ||
         now - Number(row.received_at) > QUEUE_KEPT_MS
       )
         continue
@@ -307,8 +310,23 @@ export class NotifyStore {
     return queued
   }
 
-  private hasSend(id: string): boolean {
-    return !!this.db.prepare('SELECT 1 FROM notice_sends WHERE notice_id = ?').get(id)
+  /** This Aico already settled it, or someone got it to the phone. */
+  private settledHere(id: string): boolean {
+    return !!this.db
+      .prepare(
+        `SELECT 1 FROM notice_sends WHERE notice_id = ? AND (sent_by = ? OR state IN ('sent', 'unsure'))`,
+      )
+      .get(id, this.hostName)
+  }
+
+  /** What's on record says this entry went to the phone, from this Aico or another. */
+  private pushRecorded(id: string): boolean {
+    return !!this.db
+      .prepare(
+        `SELECT 1 FROM notice_sends WHERE notice_id = ? AND state IN ('sent', 'unsure')
+         UNION ALL SELECT 1 FROM outbox WHERE notice_id = ? AND state IN ('sent', 'unsure') LIMIT 1`,
+      )
+      .get(id, id)
   }
 
   /** Another Aico settled it. Its failure settles nothing: this one's route may still work. */
@@ -320,7 +338,7 @@ export class NotifyStore {
       .get(id, this.hostName)
   }
 
-  /** Another entry for this open problem came first and is headed for the phone. */
+  /** Another entry for this open problem came first and went to the phone. */
   private sameEventEarlier(
     id: string,
     row: { received_at: number; source: string; key: string | null },
@@ -329,7 +347,7 @@ export class NotifyStore {
     if (!row.key || notice.severity === 'ok') return false
     const earlier = this.db
       .prepare(
-        `SELECT doc FROM notices WHERE source = ? AND key = ? AND id != ? AND received_at > ?
+        `SELECT id, doc FROM notices WHERE source = ? AND key = ? AND id != ? AND received_at > ?
          AND (received_at < ? OR (received_at = ? AND id < ?))
          ORDER BY received_at DESC, id DESC LIMIT 1`,
       )
@@ -341,10 +359,9 @@ export class NotifyStore {
         row.received_at,
         row.received_at,
         id,
-      ) as { doc: string } | undefined
+      ) as { id: string; doc: string } | undefined
     if (!earlier) return false
-    const doc = JSON.parse(earlier.doc) as Notice
-    return doc.severity !== 'ok' && doc.push === 'phone'
+    return (JSON.parse(earlier.doc) as Notice).severity !== 'ok' && this.pushRecorded(earlier.id)
   }
 
   /**
@@ -372,12 +389,8 @@ export class NotifyStore {
       doc: string
     }[]
     const isOk = (doc: string) => (JSON.parse(doc) as Notice).severity === 'ok'
-    const pushed = this.db.prepare(
-      `SELECT 1 FROM notice_sends WHERE notice_id = ? AND state IN ('sent', 'unsure')
-       UNION ALL SELECT 1 FROM outbox WHERE notice_id = ? AND state IN ('sent', 'unsure') LIMIT 1`,
-    )
     return others.some((other) => {
-      if (isOk(other.doc) || !pushed.get(other.id, other.id)) return false
+      if (isOk(other.doc) || !this.pushRecorded(other.id)) return false
       // A recovery between them makes this one news.
       const [from, to] = [Number(other.received_at), at].sort((x, y) => x - y) as [number, number]
       return !others.some(
@@ -494,6 +507,7 @@ export class NotifyStore {
         result: `${send.state} by ${send.sent_by}`,
       })
     return {
+      fromElsewhere: row.origin !== '' && row.origin !== this.hostName,
       id: row.id,
       receivedAt: row.received_at,
       via: row.via,
@@ -514,16 +528,21 @@ export class NotifyStore {
    */
   claimDue(now: number, limit = 20, receivedBy = Number.MAX_SAFE_INTEGER): OutboxRow[] {
     return this.tx(() => {
+      // Word that another Aico got it there may have come while this one's row was in flight.
+      this.db
+        .prepare(
+          `DELETE FROM outbox WHERE state = 'pending' AND notice_id IN (SELECT notice_id
+           FROM notice_sends WHERE sent_by != ? AND state IN ('sent', 'unsure'))`,
+        )
+        .run(this.hostName)
       const rows = this.db
         .prepare(
           `SELECT o.id, o.notice_id, o.device, o.attempts, n.received_at FROM outbox o
            JOIN notices n ON n.id = o.notice_id
            WHERE o.state = 'pending' AND o.next_at <= ? AND n.received_at <= ?
-           AND NOT EXISTS (SELECT 1 FROM notice_sends s WHERE s.notice_id = o.notice_id
-             AND s.sent_by != ? AND s.state IN ('sent', 'unsure'))
            ORDER BY o.next_at, o.id LIMIT ?`,
         )
-        .all(now, receivedBy, this.hostName, limit) as {
+        .all(now, receivedBy, limit) as {
         id: number
         notice_id: string
         device: string
@@ -607,6 +626,11 @@ export class NotifyStore {
     const has = (state: OutboxState) => rows.some((row) => row.state === state)
     if (has('pending') || has('sending')) return
     this.writeSend(noticeId, has('sent') ? 'sent' : has('unsure') ? 'unsure' : 'failed', now)
+  }
+
+  /** The phone has it from another entry: tell the Aicos still holding this one. */
+  recordAlreadyPushed(noticeId: string, now: number): void {
+    this.writeSend(noticeId, 'sent', now)
   }
 
   /** Sent stays sent, whichever Aico says otherwise later. */

@@ -254,7 +254,17 @@ describe('the one list', () => {
     tetherCalls.length = 0
     const { afterApply } = hub.syncHandle()
     const ok = { ...alert, severity: 'ok' }
-    const row = { id: 'gem-ok', source: 'ominull', key: alert.key, doc: JSON.stringify(ok) }
+    const row = {
+      id: 'gem-ok',
+      source: 'ominull',
+      key: alert.key,
+      doc: JSON.stringify(ok),
+      received_at: Date.now() + 1000,
+    }
+    // A recovery from before this problem came up leaves its ask alone.
+    afterApply?.([{ table: 'notices', row: { ...row, received_at: 1 } }])
+    await settle()
+    expect(tetherCalls).toEqual([])
     afterApply?.([{ table: 'notices', row }])
     await settle()
     expect(tetherCalls.map((c) => c.path)).toEqual([expect.stringContaining('/v1/asks/ask1')])

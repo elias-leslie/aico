@@ -33,9 +33,9 @@ export interface SyncTable {
   clock?: string
   /**
    * `row` (default): the row rules and tombstones above. `{ max }`: no clock and
-   * no tombstones; the larger value of that column wins (`session_seen`).
+   * no tombstones; the larger value of that column wins (`session_seen`), after `rank` if set.
    */
-  merge?: 'row' | { max: string }
+  merge?: 'row' | { max: string; rank?: { column: string; order: readonly string[] } }
   /** Text columns whose losing value is kept as a `conflict` revision. */
   text?: string[]
   /** Columns that must stay unique across rows; the loser's value gets `~<key>` appended. */
@@ -348,8 +348,15 @@ function applyRow(
 ): Outcome {
   const local = readRow(handle, table, remote)
   if (isMax(table)) {
-    const column = (table.merge as { max: string }).max
-    if (local && Number(local[column]) >= Number(remote[column])) return 'skipped'
+    const { max: column, rank } = table.merge as Exclude<SyncTable['merge'], 'row' | undefined>
+    // A rank (later in its order is higher) decides first, so every host lands on the same row.
+    const ranked = (row: SyncRow) => (rank ? rank.order.indexOf(String(row[rank.column])) : 0)
+    if (
+      local &&
+      (ranked(local) > ranked(remote) ||
+        (ranked(local) === ranked(remote) && Number(local[column]) >= Number(remote[column])))
+    )
+      return 'skipped'
     write(handle, table, remote, touched)
     return 'applied'
   }

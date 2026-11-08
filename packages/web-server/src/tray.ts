@@ -66,8 +66,6 @@ interface Action {
 }
 
 export interface TrayInput {
-  /** This Aico's name in the shared notification list. */
-  hostName?: string
   /** Epoch ms. */
   now: number
   publicHost: string | null
@@ -338,10 +336,7 @@ export function buildTray(input: TrayInput): Record<string, unknown> {
     // silenced stays in the log marked quiet: it counts as unread and never shows a card.
     // One that reached this list late (another Aico raised it while this machine was off) is news
     // for the list, not for a card: coming back on must not pop a pile of them.
-    const stale =
-      notice.raised_by !== undefined &&
-      notice.raised_by !== input.hostName &&
-      now - stored.receivedAt > LATE_CARD_MS
+    const stale = stored.fromElsewhere && now - stored.receivedAt > LATE_CARD_MS
     // Off when it came means no card for it, even after the switch is turned back on.
     const card = notice.desktop_card !== false && desktopCard(notice, choices) && !stale
     if ((!card && !popsUp(notice)) || log.length >= LOG_MAX) continue
@@ -513,7 +508,6 @@ export function registerTrayRoutes(router: Router, deps: TrayDeps): void {
     const approvals = await deps.asks.approvals().catch(() => null)
     return buildTray({
       now: now(),
-      hostName: deps.hostName,
       publicHost: deps.publicHost,
       status: deps.status.read(),
       notices: deps.notify.list(200),

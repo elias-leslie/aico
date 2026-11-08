@@ -1,6 +1,14 @@
 'use client'
 
-import { Info, Lock, Monitor, Radio, Smartphone } from 'lucide-react'
+import {
+  FolderGit2,
+  Info,
+  Lock,
+  Monitor,
+  Radio,
+  Server,
+  Smartphone,
+} from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { shortWhen } from '@/lib/short-when'
 import { Notice, Quiet, SectionHead, Switch } from './kit'
@@ -133,6 +141,11 @@ function Recent({ type }: { type: string }) {
           <div className={styles.recentAbout}>
             {item.machine && (
               <span className={styles.chip} title={`About ${item.machine}`}>
+                <Server
+                  className="h-3 w-3"
+                  strokeWidth={1.7}
+                  aria-label="Machine"
+                />
                 {item.machine}
               </span>
             )}
@@ -141,6 +154,11 @@ function Recent({ type }: { type: string }) {
                 className={styles.chip}
                 title={`About the project ${item.project}`}
               >
+                <FolderGit2
+                  className="h-3 w-3"
+                  strokeWidth={1.7}
+                  aria-label="Project"
+                />
                 {item.project}
               </span>
             )}

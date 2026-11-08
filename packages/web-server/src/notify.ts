@@ -310,7 +310,7 @@ export class NotifyHub {
       outbox: this.outbox,
       needsYou: this.needsYou,
       choices: deps.choices,
-      raisedBy: deps.hostName,
+      raisedBy: deps.machine,
       machine: deps.machine,
     })
   }
@@ -343,7 +343,7 @@ export class NotifyHub {
     }
   }
 
-  /** A recovery from another Aico ends the problem here too: this machine's asks for it close. */
+  /** A recovery from another Aico ends the problem here too: asks filed here before it close. */
   private withdrawOwnAsks(touched: readonly { table: string; row: SyncRow }[]): void {
     for (const { table, row } of touched) {
       if (table !== 'notices' || !row.key) continue
@@ -351,7 +351,7 @@ export class NotifyHub {
       if (doc.severity !== 'ok') continue
       const asked = this.store
         .forKey(String(row.source), String(row.key))
-        .filter((stored) => stored.askId)
+        .filter((stored) => stored.askId && stored.receivedAt <= Number(row.received_at))
       // After the sync's transaction: this calls Tether.
       setImmediate(() => {
         for (const stored of asked)

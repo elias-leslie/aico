@@ -69,7 +69,7 @@ function aico(host: string, device: string) {
       )
     },
   }
-  return { host, store, outbox, pushes, state, handle, device }
+  return { host, store, outbox, sender, pushes, state, handle, device }
 }
 type Aico = ReturnType<typeof aico>
 
@@ -170,6 +170,97 @@ describe('one list across Aicos', () => {
     expect(ws.pushes).toEqual([one.id])
   })
 
+  /** Each store marked so its next raise under the key differs: a list from before the sync. */
+  const unsynced = (who: Aico) => who.handle.db.exec('UPDATE notices SET seq = 0')
+
+  it('the sender failing for good, learned together with the notice: this Aico still tries', async () => {
+    const ws = aico('workstation', 'phone-1')
+    const gem = aico('gem', 'proxmox')
+    const { id } = raise(ws)
+    const [row] = ws.store.claimDue(T0)
+    if (!row) throw new Error('no row')
+    ws.store.finish(row.id, { state: 'failed', result: 'rejected:403' }, T0)
+    await sync(ws, gem)
+    gem.state.now += SYNC_SETTLE_MS + 1
+    expect(await gem.outbox.pass()).toBe(1)
+    expect(gem.pushes).toEqual([id])
+  })
+
+  it('a row is claimed only right before its send, so a restart leaves one unsure at most', async () => {
+    const ws = aico('workstation', 'phone-1')
+    raise(ws, { title: 'One' })
+    raise(ws, { title: 'Two' })
+    const inFlight: number[] = []
+    const send = ws.sender.send
+    ws.sender.send = async (...args) => {
+      const { n } = ws.handle.db
+        .prepare(`SELECT COUNT(*) AS n FROM outbox WHERE state = 'sending'`)
+        .get() as { n: number }
+      inFlight.push(Number(n))
+      return send(...args)
+    }
+    expect(await ws.outbox.pass()).toBe(2)
+    expect(inFlight).toEqual([1, 1])
+  })
+
+  it('an earlier entry still retrying is no word; once one goes, the other stands down everywhere', async () => {
+    const ws = aico('workstation', 'phone-1')
+    const gem = aico('gem', 'proxmox')
+    const key = { key: 'status-sustained:a/backup' }
+    const first = raise(ws, key)
+    const [row] = ws.store.claimDue(T0)
+    if (!row) throw new Error('no row')
+    ws.store.finish(row.id, { retryAt: T0 + 60_000, result: 'retry' }, T0)
+    unsynced(ws)
+    gem.state.holding = { by: 'workstation' }
+    gem.state.now = T0 + 60_000
+    const later = raise(gem, key)
+    await sync(ws, gem)
+    expect(gem.store.get(later.id)?.deliveries[0]?.state).toBe('pending')
+    ws.state.now = T0 + 60_000 + SYNC_SETTLE_MS + 1
+    expect(await ws.outbox.pass()).toBe(1)
+    expect(ws.pushes).toEqual([first.id])
+    await sync(ws, gem)
+    gem.state.holding = null
+    gem.state.now += 10 * 60_000
+    expect(await gem.outbox.pass()).toBe(0)
+    expect(gem.pushes).toEqual([])
+  })
+
+  it('word arriving mid-send: a retry after it is dropped, not stuck', async () => {
+    const ws = aico('workstation', 'phone-1')
+    const gem = aico('gem', 'proxmox')
+    const { id } = raise(gem)
+    await sync(ws, gem)
+    ws.state.now += SYNC_SETTLE_MS + 1
+    const [row] = ws.store.claimDue(ws.state.now)
+    if (!row) throw new Error('no row')
+    await gem.outbox.pass()
+    await sync(ws, gem)
+    ws.store.finish(row.id, { retryAt: ws.state.now, result: 'retry' }, ws.state.now)
+    expect(await ws.outbox.pass()).toBe(0)
+    expect(ws.store.outboxSummary(0).pending).toBe(0)
+    expect(gem.pushes).toEqual([id])
+    expect(ws.pushes).toEqual([])
+  })
+
+  it("sent stays sent when another Aico's failure comes later", async () => {
+    const ws = aico('workstation', 'phone-1')
+    const gem = aico('gem', 'proxmox')
+    const { id } = raise(ws)
+    gem.store.accept(phone(), 'local', ['proxmox'], T0)
+    await ws.outbox.pass()
+    const [row] = gem.store.claimDue(T0)
+    if (!row) throw new Error('no row')
+    gem.store.finish(row.id, { state: 'failed', result: 'rejected:403' }, T0 + 5_000)
+    await sync(ws, gem)
+    await sync(ws, gem)
+    const said = (who: Aico) =>
+      who.handle.db.prepare('SELECT state, sent_by FROM notice_sends WHERE notice_id = ?').get(id)
+    expect({ ...said(ws) }).toEqual({ state: 'sent', sent_by: 'workstation' })
+    expect({ ...said(gem) }).toEqual({ state: 'sent', sent_by: 'workstation' })
+  })
+
   it('a keyed event is one entry whatever the minute', async () => {
     const ws = aico('workstation', 'phone-1')
     const gem = aico('gem', 'proxmox')
@@ -182,9 +273,6 @@ describe('one list across Aicos', () => {
     expect(ws.pushes).toEqual([first.id])
     expect(gem.store.since(0)).toHaveLength(1)
   })
-
-  /** Each store marked so its next raise under the key differs: a list from before the sync. */
-  const unsynced = (who: Aico) => who.handle.db.exec('UPDATE notices SET seq = 0')
 
   it('an earlier entry the other Aico lacks: the raiser of the later one never pushes it', async () => {
     const ws = aico('workstation', 'phone-1')

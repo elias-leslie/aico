@@ -96,7 +96,6 @@ function read(
     approvals?: Approval[] | null
     rowAsks?: string[]
     choices?: NoticeChoices
-    hostName?: string
   } = {},
 ) {
   return buildTray({
@@ -110,7 +109,6 @@ function read(
     rowAsks: new Set(extra.rowAsks ?? []),
     approvals: extra.approvals === undefined ? [] : extra.approvals,
     ...(extra.choices ? { choices: extra.choices } : {}),
-    ...(extra.hostName ? { hostName: extra.hostName } : {}),
     // biome-ignore lint/suspicious/noExplicitAny: the tray's JSON is read by field in these tests
   }) as any
 }
@@ -137,7 +135,8 @@ describe('the tray read', () => {
     const fresh = from('gem', 'Fresh', NOW - 60_000)
     const old = from('gem', 'Old', NOW - 11 * 60_000)
     const mine = from('here', 'Mine', NOW - 11 * 60_000)
-    const tray = read({ hostName: 'here' })
+    notify.syncParts().db.exec(`UPDATE notices SET origin = 'gem' WHERE id != '${mine}'`)
+    const tray = read()
     const entry = (id: string) =>
       (tray.read_marks.pushes as { id: string; push: { quiet?: boolean } }[]).find(
         (one) => one.id === id,

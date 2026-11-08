@@ -35,5 +35,10 @@ export const NOTIFY_SYNC_TABLES: readonly SyncTable[] = [
   },
   { name: 'notice_reads', keys: ['notice_id'], merge: { max: 'read_at' } },
   { name: 'marks', keys: ['name'], merge: { max: 'at' } },
-  { name: 'notice_sends', keys: ['notice_id'], merge: { max: 'at' } },
+  // A phone that got it stays got, whichever Aico's failure came later.
+  {
+    name: 'notice_sends',
+    keys: ['notice_id'],
+    merge: { max: 'at', rank: { column: 'state', order: ['failed', 'unsure', 'sent'] } },
+  },
 ]
