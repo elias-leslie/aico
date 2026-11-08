@@ -282,6 +282,11 @@ function failureOf(result: RunResult, what: string): string {
   return `${what}: ${tail(result, 2).replace(/\s+/g, ' ')}`
 }
 
+/** Whether a step that just failed failed because the peer is gone: its link no longer answers. */
+async function linkGone(peer: Peer): Promise<boolean> {
+  return (await peer.exec('true')).code === 255
+}
+
 /** One run over every project. Pure of Status and of the process: the caller prints and posts. */
 export async function mirror(deps: WipDeps): Promise<WipReport> {
   const { cfg, git, machine } = deps
@@ -319,6 +324,17 @@ export async function mirror(deps: WipDeps): Promise<WipReport> {
       disks.set(peer.name, disk)
       targets.push(peer)
     }
+  }
+  // A peer switched off partway through is off like one that was off at the start, not a failed
+  // copy: the rest of this run skips it and the next run catches up.
+  const wentOff = (peer: Peer) => {
+    targets.splice(targets.indexOf(peer), 1)
+    report.problems.push({
+      key: `peer-${peer.name}`,
+      what: `Repo copy to ${peer.name}`,
+      state: 'off',
+      reason: `${peer.name} stopped answering during the copy`,
+    })
   }
   const projects = deps.projects()
   for (const project of projects) {
@@ -458,6 +474,10 @@ export async function mirror(deps: WipDeps): Promise<WipReport> {
           `git init --bare -q ${sq(rel)} && git -C ${sq(rel)} config gc.pruneExpire 1.day.ago`,
         )
         if (init.code) {
+          if (init.code === 255) {
+            wentOff(peer)
+            continue
+          }
           note(
             'failed',
             `${peer.name}: could not prepare the mirror (${init.out.trim().split('\n').at(-1)})`,
@@ -470,6 +490,10 @@ export async function mirror(deps: WipDeps): Promise<WipReport> {
           env: gitEnv,
         })
         if (listed.code) {
+          if (await linkGone(peer)) {
+            wentOff(peer)
+            continue
+          }
           note('failed', failureOf(listed, `${peer.name}: could not read the mirror`))
           continue
         }
@@ -488,6 +512,10 @@ export async function mirror(deps: WipDeps): Promise<WipReport> {
           { env: gitEnv },
         )
         if (pushed.code) {
+          if (await linkGone(peer)) {
+            wentOff(peer)
+            continue
+          }
           note('failed', failureOf(pushed, `${peer.name}: push failed`))
           continue
         }
@@ -594,8 +622,10 @@ async function keepStandby(
   let ran = false
   for (const peer of peers) {
     if (entry.pushed[peer.name] !== fingerprint || entry.standby?.[peer.name] === print) continue
-    ran = true
     const done = await peer.exec(standbyScript(cfg, project, root, rel, machine, branch))
+    // Went off between the copy and this: nothing is wrong and the next run asks again.
+    if (done.code === 255) continue
+    ran = true
     const last = done.out.trim().split('\n').at(-1) ?? ''
     if (done.code || !last.startsWith('standby: ')) {
       failed = true

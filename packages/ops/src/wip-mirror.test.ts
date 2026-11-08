@@ -242,6 +242,50 @@ describe('wip mirror', () => {
     expect(summary(report, 'home', 1)).toContain('Skipped: gem did not answer')
   })
 
+  it('a peer that goes off partway through a run is off, and a real failure still fails', async () => {
+    const root = repo('app')
+    const second = repo('other')
+    const peer = fakePeer('gem')
+    let up = true
+    const dropping: Peer = {
+      ...peer,
+      exec: async (script) => {
+        if (script.includes('init --bare')) up = false
+        return up ? peer.exec(script) : { code: 255, out: '' }
+      },
+    }
+    const projects = [
+      { id: 'app', root },
+      { id: 'other', root: second },
+    ]
+    const report = await mirror(deps(projects, {}, {}, [dropping]))
+    expect(report.problems).toEqual([expect.objectContaining({ key: 'peer-gem', state: 'off' })])
+    expect(summary(report, 'home', 1)).not.toMatch(/failed/i)
+
+    // The push itself breaks and the link is gone: off. The link still answers: a real failure.
+    const pushBreaks = (linkAlive: boolean) => {
+      const failing: WipDeps['git'] = (cmd, args, opts) =>
+        args.includes('push')
+          ? { code: 128, out: '', err: 'the remote end hung up' }
+          : run(cmd, args, opts)
+      return mirror(
+        deps([{ id: 'app', root }], { git: failing }, {}, [
+          {
+            ...peer,
+            exec: async (script) =>
+              script === 'true' && !linkAlive ? { code: 255, out: '' } : peer.exec(script),
+          },
+        ]),
+      )
+    }
+    expect((await pushBreaks(false)).problems).toEqual([
+      expect.objectContaining({ key: 'peer-gem', state: 'off' }),
+    ])
+    expect((await pushBreaks(true)).problems).toEqual([
+      expect.objectContaining({ key: 'app', state: 'failed' }),
+    ])
+  })
+
   it('does nothing and says so plainly when there is no peer', async () => {
     const root = repo('app')
     const report = await mirror(
