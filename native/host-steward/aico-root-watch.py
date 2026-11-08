@@ -2990,6 +2990,19 @@ def retired_window_verb(argv: list[str]) -> bool:
                            or (argv[0] == "root" and argv[1:2] in (["position"], ["show"])))
 
 
+COMMANDS = ("create", "wait", "waits", "roots", "root", "sessions", "watch", "unwatch", "wake",
+            "nudge", "widget", "placement", "admin")
+
+
+def unknown_command(verb: str) -> int:
+    """Bare or mistyped `st aico X`: list the commands instead of the raw watch flags."""
+    import difflib
+    near = difflib.get_close_matches(verb, COMMANDS, n=1) if verb else []
+    hint = f"unknown command {verb}" + (f" (did you mean {near[0]}?)" if near else "") + "\n" if verb else ""
+    print(f"{hint}Usage: st aico {'|'.join(COMMANDS)} ...   each takes --help", file=sys.stderr)
+    return 2
+
+
 def main(argv: list[str] | None = None) -> int:
 
     argv = list(sys.argv[1:] if argv is None else argv)
@@ -3020,6 +3033,8 @@ def main(argv: list[str] | None = None) -> int:
         return nudge_main(argv[1:])
     if argv and argv[0] == "placement":
         return placement_main(argv[1:])
+    if not argv or not argv[0].startswith("-"):
+        return unknown_command(argv[0] if argv else "")
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("root", "owner", "tmux"):
         parser.add_argument(f"--{name}-socket", required=True, type=socket_path)

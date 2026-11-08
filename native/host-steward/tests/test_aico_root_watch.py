@@ -1092,3 +1092,11 @@ def test_group_is_shells_needs_a_listing_of_only_shells():
     assert watcher.group_is_shells("4242 -bash\n4243 sh\n")
     assert not watcher.group_is_shells("4242 bash\n4251 claude\n")
     assert not watcher.group_is_shells("")
+
+
+@pytest.mark.parametrize("argv, hint", [([], ""), (["hosts"], "did you mean roots?")])
+def test_bare_or_unknown_command_lists_commands_not_watch_flags(capsys, argv, hint):
+    assert watcher.main(argv) == 2
+    err = capsys.readouterr().err
+    assert "Usage: st aico create|" in err and hint in err
+    assert "--root-socket" not in err
