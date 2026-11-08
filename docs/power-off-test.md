@@ -15,6 +15,8 @@ Proves that each host comes back on its own after a power cut, that the other ho
 
 ## Away and start
 
+`aico power on|off|state davion-sidarli` is the workstation's own power from either Aico, and it's what the Machines page's Power on and Shut down use. On: its plug socket if the plug answers, and always the Wake-on-LAN packet (MAC and broadcast in `power`, data/ops.json). Off: runs on the workstation (over ssh from the standby): sessions save their place (`tether reboot prepare`), the outage is marked on every Aico, then a clean poweroff. It needs no plug and no `away.enabled`, and nothing cuts the power. The standby's Tether entry for the workstation (`~/.config/tether/hosts.json` on CT 190) names `aico power on` and `aico power state`, so the standby shows it off and can start it. `aico power units` and `aico power restart UNIT [--on MACHINE]` are the services on the same page.
+
 `aico away MACHINE... | --all [--dry-run]` shuts the hosts down cleanly and cuts their power; the Machines page has the same as **Shut down all**. Start them again from the Kasa app (socket on); the BIOS setting above boots each host by itself.
 
 For each host, davion-gem first and the computer you run it on last (settings: `away` in ops.json):

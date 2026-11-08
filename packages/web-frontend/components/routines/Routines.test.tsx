@@ -86,6 +86,18 @@ const view = (ui = <RoutinesBody />) =>
   )
 
 describe('Routines', () => {
+  it('offers no Run or Pause for a routine whose machine is out of reach', async () => {
+    list = [routine({ kind: 'far', unreadable: 'ssh timed out' })]
+    view()
+    const row = await screen.findByTestId('routine-far')
+    const head = row.querySelector('button') as HTMLElement
+    if (head.getAttribute('aria-expanded') === 'false') fireEvent.click(head)
+    const run = within(row).getByRole('button', { name: /Run now/ })
+    expect(run).toBeDisabled()
+    expect(run.title).toContain('can’t be reached')
+    expect(within(row).getByRole('button', { name: /Pause/ })).toBeDisabled()
+  })
+
   it('lists failed first with chips, schedule and next run, and opens the failed one', async () => {
     view()
     const rows = await screen.findAllByRole('listitem')

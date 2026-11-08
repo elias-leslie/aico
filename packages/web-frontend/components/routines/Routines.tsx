@@ -72,6 +72,8 @@ function Note({
   )
 }
 
+const OUT_OF_REACH = 'The machine that holds it can’t be reached from here.'
+
 /** The row's one line after its name: what it is doing, or when it runs next (always the next run;
  * the chip is how the last one went). `next` marks a time, which wears the clock icon. */
 function whenLine(
@@ -241,11 +243,7 @@ function Row({ routine }: { routine: Routine }) {
               type="button"
               className="lantern-btn small"
               disabled={busy || routine.running || !!routine.unreadable}
-              title={
-                routine.unreadable
-                  ? `Can’t run from here: ${routine.unreadable}`
-                  : undefined
-              }
+              title={routine.unreadable ? OUT_OF_REACH : undefined}
               onClick={() => act(routine.kind, 'run')}
             >
               <Play
@@ -258,7 +256,8 @@ function Row({ routine }: { routine: Routine }) {
             <button
               type="button"
               className="lantern-btn small"
-              disabled={busy}
+              disabled={busy || !!routine.unreadable}
+              title={routine.unreadable ? OUT_OF_REACH : undefined}
               onClick={() =>
                 act(routine.kind, routine.paused ? 'resume' : 'pause')
               }
