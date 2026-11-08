@@ -382,9 +382,7 @@ describe('--until finished and background shells', () => {
     )
     expect(
       waitLine({ ...base, cursor: { ...base.cursor, detail: null } }, 'until', 1, 'All done.'),
-    ).toBe(
-      '[Ready] session "TEST lane" (req test-lane) finished its turn · st aico root report test-lane · says: All done.',
-    )
+    ).toBe('[Ready] session "TEST lane" (req test-lane) finished its turn · says: All done.')
   })
 })
 

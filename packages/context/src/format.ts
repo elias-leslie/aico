@@ -49,9 +49,14 @@ export function formatMemoryList(memories: Memory[], next: number | null): strin
     lines.push(`  ${memory.id.slice(0, 8)} [${memory.tier}] summary=${memory.summary || '-'}`)
     const meta = metaLine(memory)
     if (meta) lines.push(`    ${meta}`)
-    lines.push(`    ${memory.content}`)
+    lines.push(`    ${clipped(memory.content)}`)
   }
   return lines.join('\n')
+}
+
+/** A list row's text: enough to pick one; `st memory get ID` reads it whole. */
+function clipped(text: string, max = 160): string {
+  return text.length > max ? `${text.slice(0, max)}…` : text
 }
 
 export function formatSearch(query: string, found: Found[]): string {

@@ -20,6 +20,7 @@ import {
   laneLine,
   laneTitle,
   laneView,
+  saysTail,
   WatchRefused,
 } from './lane-reports'
 import { WaitStore } from './waits'
@@ -1182,8 +1183,15 @@ describe("a finished lane's last message", () => {
     step(reporter, { state: 'working', stateAgentAt: 99, requestId: 'burn-l1' })
     step(reporter, { stateAgentAt: 100, requestId: 'burn-l1' }, SETTLE)
     expect(delivered[0].line).toBe(
-      '[Ready] lane "TEST" (req burn-l1) finished its turn · st aico root report burn-l1 · says: Done. Commits: abc and def',
+      '[Ready] lane "TEST" (req burn-l1) finished its turn · says: Done. Commits: abc and def',
     )
+  })
+
+  it('names the report only when the message was cut', () => {
+    expect(saysTail('st aico root report r', 'All done.')).toBe('says: All done.')
+    expect(saysTail('st aico root report r', 'Long…')).toBe('st aico root report r · says: Long…')
+    const wide = '界'.repeat(600)
+    expect(saysTail('st aico root report r', wide)).toBe(`st aico root report r · says: ${wide}`)
   })
 
   it('is cut to the policy, and a reader with nothing to say changes nothing', () => {

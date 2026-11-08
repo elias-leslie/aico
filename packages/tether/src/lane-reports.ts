@@ -61,7 +61,8 @@
 //   open a turn of work) during the turn that just ended, so it heard from the
 //   lane already (the explicit message carries the report path).
 // - A finished line carries the lane's last message, cleaned and cut to
-//   `laneClosingMaxChars`, so the coordinator needn't go and read the lane.
+//   `laneClosingMaxChars`, so the coordinator needn't go and read the lane. It
+//   names `st aico root report` only when the message was cut.
 //
 // Each report is one event line queued on the receiver's delivery queue
 // (wakes, kind `event`): pasted once the agent is idle, nobody is typing and
@@ -212,7 +213,7 @@ export function laneLine(
           : 'ended'
   const { name, look, report } = lineNames(lane)
   if (outcome === 'finished' && extra.closing)
-    return `[Ready] lane ${name} ${what} · ${report} · says: ${extra.closing}`
+    return `[Ready] lane ${name} ${what} · ${saysTail(report, extra.closing)}`
   return `[Ready] lane ${name} ${what} · ${look}`
 }
 
@@ -230,6 +231,14 @@ export function closingWords(text: string | null | undefined, max: number): stri
   if (!flat) return null
   const chars = [...flat]
   return chars.length > max ? `${chars.slice(0, max).join('')}…` : flat
+}
+
+/** A line's end when it quotes the agent: a message that arrived whole needs no pointer to the
+ * rest of it, which would only cost the receiver a turn. The byte check covers a line the delivery
+ * could still cut. */
+export function saysTail(report: string, closing: string): string {
+  const whole = !closing.endsWith('…') && Buffer.byteLength(closing, 'utf8') <= 1500
+  return whole ? `says: ${closing}` : `${report} · says: ${closing}`
 }
 
 /** The one line a model switch gets (src/model-switch.ts). */

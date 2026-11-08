@@ -82,6 +82,28 @@ Commands:
 
 The instance defaults to $TETHER_INSTANCE or "default". tether COMMAND --help shows one command.`
 
+/** What `tether --help` prints: every command once. `USAGE` keeps the detail `tether COMMAND --help` picks from. */
+const OVERVIEW = `Usage: tether [--instance NAME] [--json] <command>   tether COMMAND --help shows one command
+
+Sessions
+  sessions list|get|create|end|attach|diagnostics   live sessions; create starts one
+  roots list|show             coordinator sessions started from a request
+  history list|show|events    what past sessions of Claude Code, Codex and Pi said and did
+  recovery status|resume      crash recoveries: waiting, recovered or held
+  reboot prepare|status       ask agents to checkpoint; restore results since the last boot
+  tools                       the tools a new session can start
+
+The owner
+  ask create|get|list|done|withdraw   put a question to the owner in Aico and read the answer
+  share PATH... | list | remove       show the owner files or folders in Aico (Files > Shared)
+  capture list|get|file               the owner's photos and files saved in Aico
+  note list|get|add|item|groceries    the owner's notes and Groceries list
+
+Machines and the daemon
+  projects, hosts, fleet identity|enroll|approve|exec, serve, doctor, version, import-aico
+
+The instance defaults to $TETHER_INSTANCE or "default".`
+
 /** The usage lines of one command, or of one command and subcommand ("sessions create"). */
 function commandUsage(command: string, sub?: string): string {
   const pick = (prefix: string) => {
@@ -456,7 +478,7 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
   }
   const [command, sub, ...rest] = parsed.args
   if (!command || command === 'help' || command === '--help' || command === '-h') {
-    io.out(USAGE)
+    io.out(OVERVIEW)
     return command ? 0 : 2
   }
   let paths: TetherPaths

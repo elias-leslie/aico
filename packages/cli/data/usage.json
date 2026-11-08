@@ -67,7 +67,7 @@
     "cmd": "st check --quick --changed-only",
     "when": "iterate on a failing check; st commit already runs the quick check",
     "precautions": [
-      "never raw pytest/vitest/biome/tsc/ruff/sqlfluff/squawk",
+      "one tool: st check vitest -- FILE; never raw pytest/vitest/biome/tsc/ruff/sqlfluff/squawk",
       "st check codeql: GitHub CodeQL alert state after code-scanning work"
     ]
   },

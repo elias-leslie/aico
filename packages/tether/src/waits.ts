@@ -28,7 +28,14 @@ import { randomBytes } from 'node:crypto'
 import type { Db } from '@aico/session-engine/store'
 import { BACKGROUND_SHELLS } from '@aico/session-engine/tui/adapters/contract'
 import { HttpError, onlyFields, type Router, readJsonObject, sendJson } from '@aico/shared/http'
-import { BLOCKING_DETAILS, closingWords, type LaneView, laneTitle, lineNames } from './lane-reports'
+import {
+  BLOCKING_DETAILS,
+  closingWords,
+  type LaneView,
+  laneTitle,
+  lineNames,
+  saysTail,
+} from './lane-reports'
 import {
   isPullKind,
   PULL_KINDS,
@@ -572,7 +579,7 @@ export function waitLine(
     head = `[Wait timed out] session ${name} ${words.not} after ${spanLabel(now - wait.armedAt)}${state}`
   }
   const note = wait.note ? ` · re: "${laneTitle(wait.note, NOTE_MAX_CHARS)}"` : ''
-  if (closing) return `${head}${note} · ${report} · says: ${closing}`
+  if (closing) return `${head}${note} · ${saysTail(report, closing)}`
   return `${head}${note} · ${look}`
 }
 

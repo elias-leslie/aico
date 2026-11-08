@@ -1520,10 +1520,16 @@ def create_parser() -> argparse.ArgumentParser:
         "Start one agent session and print its receipt as one JSON line. REQUEST_ID is a name you pick; "
         "a retry uses the same ID and the same options. Read it with st aico root report REQUEST_ID, "
         "end it with st aico root end REQUEST_ID."))
+    # `--help` covers a normal launch; `--help-all` also explains what few launches use.
+    full = "--help-all" in sys.argv
+    rare = lambda text: text if full else argparse.SUPPRESS
+    parser.epilog = None if full else (
+        "Less common: --work-role-name --resume-session --daybreak --blank-slate --instructions --host --needs "
+        "--pool --entry (--help-all explains them).")
+    parser.add_argument("--help-all", action="help", help=argparse.SUPPRESS)
     parser.add_argument("request_id")
     parser.add_argument("prompt", nargs="?", help=(
-        f"short sanitized initial/recovery prompt (<={PROMPT_BYTES} UTF-8 bytes); put a longer brief "
-        "in a file and name its path here"))
+        f"short prompt (<={PROMPT_BYTES} UTF-8 bytes); put a longer brief in a file and name its path here"))
     parser.add_argument("--stdin", action="store_true", help=f"read prompt from stdin instead (same {PROMPT_BYTES}-byte limit)")
     parser.add_argument("--project", help="project id; required unless --blank-slate")
     parser.add_argument("--project-root", help="its folder; required unless --blank-slate")
@@ -1534,33 +1540,32 @@ def create_parser() -> argparse.ArgumentParser:
         "required: claude-code, codex or pi; aico-agent runs Aico's own harness."))
     parser.add_argument("--role", default="portfolio-root", help=argparse.SUPPRESS)
     parser.add_argument("--work-role",
-                        help="required for a new session: a work role Aico knows (coordinator, implementation, design, research, review, recon, hunting, operations, selection, verification, reporting, mapping or other; st models route lists them); fixed including resume. It also picks the launch defaults")
-    parser.add_argument("--work-role-name", help="optional display name (1-128 characters)")
+                        help="required for a new session: coordinator, implementation, design, research, review, recon, hunting, operations, selection, verification, reporting, mapping or other; it picks the launch defaults")
+    parser.add_argument("--work-role-name", help=rare("optional display name (1-128 characters)"))
     parser.add_argument("--lead-root", help=argparse.SUPPRESS)
     parser.add_argument("--facet", help=argparse.SUPPRESS)
-    parser.add_argument("--resume-session", help="exact native session ID: Claude/Codex/Pi UUID; owner adapter validates format/support")
-    parser.add_argument("--model", help="per-launch model; Pi requires provider/model, Codex a bare name from its catalog (gpt-6.1-sol), Claude Code an alias or full name (claude-haiku-5-5). "
-                        "Default: Aico's launch table for the work role and tool (st models route --role ROLE --tool TOOL), with its effort and Daybreak. "
-                        "Create prints what it filled in (launchDefault.applied, retryWith): on a retry pass those values explicitly so the request digest stays the same")
+    parser.add_argument("--resume-session", help=rare("exact native session ID: Claude/Codex/Pi UUID; owner adapter validates format/support"))
+    parser.add_argument("--model", help="default: the launch table (st models route --role ROLE --tool TOOL). Pi needs provider/model, Codex a catalog name (gpt-6.1-sol), Claude Code an alias or full name. "
+                        "Create prints what it filled in; a retry passes those values (retryWith)")
     parser.add_argument("--reasoning-effort", choices=EFFORTS)
-    parser.add_argument("--daybreak", choices=("on", "off"), help="Daybreak for this launch; leaves shared defaults alone. Codex: only models its catalog lists with "
+    parser.add_argument("--daybreak", choices=("on", "off"), help=rare("Daybreak for this launch; leaves shared defaults alone. Codex: only models its catalog lists with "
                         "Daybreak for this account (on any other, create refuses and names the ones that have it); "
-                        "Pi: openai/gpt-6-sol only")
-    parser.add_argument("--blank-slate", action="store_true", help=(
+                        "Pi: openai/gpt-6-sol only"))
+    parser.add_argument("--blank-slate", action="store_true", help=rare(
         "fresh session in a new empty workspace with no project, memory, skill, plugin, MCP or "
         "context hook; only the harness's own prompt and yours (claude-code, codex, pi; docs/root-control.md)"))
-    parser.add_argument("--instructions", metavar="PROMPT[@REVISION]", help=(
+    parser.add_argument("--instructions", metavar="PROMPT[@REVISION]", help=rare(
         "add this prompt revision to the agent's instructions, kept for the session's restarts; "
         "default revision: the prompt's current one. A Blank Slate session gets only these"))
-    parser.add_argument("--host", help=(
+    parser.add_argument("--host", help=rare(
         "start it on this host from ~/.config/tether/hosts.json (powered on if off); --project-root is the "
         "host's path. auto: Tether picks one with room for --needs (st aico placement shows them)"))
-    parser.add_argument("--needs", metavar="mem=6G,cpu=2[,cap=live-ready]", help=(
+    parser.add_argument("--needs", metavar="mem=6G,cpu=2[,cap=live-ready]", help=rare(
         "with --host: what the session needs, held for it on that host until it ends; no room answers at_capacity"))
-    parser.add_argument("--pool", type=pool_name, metavar="NAME", help=(
+    parser.add_argument("--pool", type=pool_name, metavar="NAME", help=rare(
         "with --host auto: pick only from this placement pool (placement.json pools, e.g. neri-hunt); "
         "default: the default pool"))
-    parser.add_argument("--entry", type=entry_spec, metavar="NAME:ARG", help=(
+    parser.add_argument("--entry", type=entry_spec, metavar="NAME:ARG", help=rare(
         "run the agent through the program the host's ~/.config/tether/entries.json names NAME, with ARG; "
         "not with --instructions"))
     parser.add_argument("--root-socket", type=socket_path, help=argparse.SUPPRESS)

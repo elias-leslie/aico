@@ -33,9 +33,7 @@
       "tier": "guardrail",
       "cmd": "st ui inspect <id>",
       "when": "desktop controls; windows lists IDs, run batches actions",
-      "precautions": [
-        "Use IDs; inspect after changes; never replay partial batches. On Wayland, windows/shot/grab/ocr/gif/click/move/resize/close/activate use the desktop bridge extension (wl: ids; ax_id joins AT-SPI); without it only inspect/act/run/type/key work and position/stack are unknown."
-      ]
+      "precautions": ["Use IDs; inspect after changes; never replay partial batches."]
     },
     {
       "surface": "st.ui.run",

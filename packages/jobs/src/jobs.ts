@@ -78,6 +78,11 @@ const ordinal = (n: number) =>
 export const localZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone
 
 /** A run's time as the job lists print it, in the zone given (else this machine's), its zone named. */
+/** A last-run result in a list of everything: enough to spot a problem. `list KIND` shows it whole. */
+export function clippedMeaning(meaning: string, max = 90): string {
+  return meaning.length > max ? `${meaning.slice(0, max)}…` : meaning
+}
+
 export function runTime(ms: number | null, tz: string = localZone()): string {
   if (ms === null) return '-'
   const at = new Date(ms)

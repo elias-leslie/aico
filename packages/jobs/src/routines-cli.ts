@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import { peerDir } from '@aico/fleet/hosts'
 import type { StatusRow } from '@aico/status'
 import { LOG_LINES, remoteAuthority } from './fleet-leases'
-import { type JobDef, resumeAt, runTime, schedule } from './jobs'
+import { clippedMeaning, type JobDef, resumeAt, runTime, schedule } from './jobs'
 import type { JobState, JobStore } from './leases'
 import { type EitherHosts, newRoutine, type RoutineInput } from './routines'
 import { jobRow, type LeaseAuthority } from './runner'
@@ -362,7 +362,7 @@ export async function routinesCommand(
             ? `  state unreadable: ${view.unreadable}`
             : view.lastRun === null
               ? `  not run yet${view.started ? '' : ' (the scheduler has not picked it up)'}`
-              : `  last ${time(view.lastRun, view.tz)} on ${view.lastMachine ?? '-'}: ${view.lastState}: ${view.lastMeaning}`,
+              : `  last ${time(view.lastRun, view.tz)} on ${view.lastMachine ?? '-'}: ${view.lastState}: ${wanted ? view.lastMeaning : clippedMeaning(view.lastMeaning ?? '')}`,
         )
       }
     return 0

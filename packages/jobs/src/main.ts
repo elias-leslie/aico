@@ -16,7 +16,7 @@ import {
 } from '@aico/status'
 import { act, postJob, selfArgv, systemdUnits, unitInFlight, whereOf } from './act'
 import { remoteAuthority, serveLeases } from './fleet-leases'
-import { type JobDef, runTime } from './jobs'
+import { clippedMeaning, type JobDef, runTime } from './jobs'
 import { type JobState, JobStore, jobsDbPath } from './leases'
 import { loadJobs, readEither } from './routines'
 import { routinesCommand } from './routines-cli'
@@ -75,6 +75,7 @@ const time = (ms: number | null) => runTime(ms)
 async function list(
   jobs: readonly JobDef[],
   authority: (job: JobDef) => LeaseAuthority,
+  whole = false,
 ): Promise<void> {
   for (const job of jobs) {
     let state: JobState | null
@@ -94,7 +95,7 @@ async function list(
     const held = state.leaseId ? `  held by ${state.holder} (lease ${state.fence})` : ''
     console.log(`${job.kind}  home ${job.home}  next ${time(state.nextRun)}${held}`)
     console.log(
-      `  last ${time(state.lastRun)} on ${state.lastMachine ?? '-'}: ${row.state}: ${row.meaning}`,
+      `  last ${time(state.lastRun)} on ${state.lastMachine ?? '-'}: ${row.state}: ${whole ? row.meaning : clippedMeaning(row.meaning)}`,
     )
   }
 }
@@ -156,7 +157,7 @@ export async function main(argv: string[], env = process.env): Promise<number> {
         }
       }
       console.log(JSON.stringify(result))
-    } else await list(shown, authority)
+    } else await list(shown, authority, Boolean(wanted))
     store.close()
     return 0
   }
