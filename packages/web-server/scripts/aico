@@ -22,16 +22,33 @@ aico_hook_bin() { command -v aico-hook || echo "$HOME/.local/bin/aico-hook"; }
 
 . "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/lib/aico-web.sh"
 
-# The checks bundle; rebuilt when its sources (or the packages it bundles) are newer.
+# Builds a package's bundle when it's missing, or older than the sources of that package or of any
+# @aico package it depends on (its package.json, followed down).
+aico_ensure_bundle() {
+  local root="$AICO_REPO_ROOT/packages" bundle="$AICO_REPO_ROOT/packages/$1/dist/aico-$1.mjs" node="$2"
+  local -A seen=()
+  local queue=("$1") name dep folders=()
+  while [ "${#queue[@]}" -gt 0 ]; do
+    name="${queue[0]}"
+    queue=("${queue[@]:1}")
+    [ -z "${seen[$name]:-}" ] || continue
+    seen[$name]=1
+    folders+=("$root/$name/src" "$root/$name/data")
+    for dep in $(grep -o '"@aico/[a-z-]*"' "$root/$name/package.json" | tr -d '"'); do
+      queue+=("${dep#@aico/}")
+    done
+  done
+  if [ ! -r "$bundle" ] || [ -n "$(find "${folders[@]}" \( -name '*.ts' -o -name '*.json' \) -newer "$bundle" -print -quit 2>/dev/null)" ]; then
+    PATH="$(dirname "$node"):$PATH" npm --prefix "$root/$1" run --silent build >&2
+  fi
+}
+
+# The checks bundle.
 aico_checks() {
   local checks_dir="$AICO_REPO_ROOT/packages/checks" node
   local checks_bundle="$checks_dir/dist/aico-checks.mjs"
   node="$(aico_web_node)"
-  if [ ! -r "$checks_bundle" ] || [ -n "$(find "$checks_dir/src" "$checks_dir/data" "$AICO_REPO_ROOT/packages/tasks/src" "$AICO_REPO_ROOT/packages/tasks/data" \
-    "$AICO_REPO_ROOT/packages/tether-client/src" "$AICO_REPO_ROOT/packages/status/src" "$AICO_REPO_ROOT/packages/store/src" \
-    \( -name '*.ts' -o -name '*.json' \) -newer "$checks_bundle" -print -quit 2>/dev/null)" ]; then
-    PATH="$(dirname "$node"):$PATH" npm --prefix "$checks_dir" run --silent build >&2
-  fi
+  aico_ensure_bundle checks "$node"
   case "$*" in
     'check --help' | 'check -h' | 'commit --help' | 'commit -h' | 'nightly --help' | 'nightly -h')
       exec "$node" --disable-warning=ExperimentalWarning "$checks_bundle" "$@" ;;
@@ -101,28 +118,21 @@ aico_ops() {
   AICO_REPO_ROOT="$AICO_REPO_ROOT" exec "$node" --disable-warning=ExperimentalWarning "$ops_bundle" "$@"
 }
 
-# The webtools bundle; rebuilt when its sources (or the packages it bundles) are newer.
+# The webtools bundle.
 aico_webtools() {
   local web_dir="$AICO_REPO_ROOT/packages/webtools" node
   local web_bundle="$web_dir/dist/aico-webtools.mjs"
   node="$(aico_web_node)"
-  if [ ! -r "$web_bundle" ] || [ -n "$(find "$web_dir/src" "$AICO_REPO_ROOT/packages/status/src" \
-    "$AICO_REPO_ROOT/packages/store/src" -name '*.ts' -newer "$web_bundle" -print -quit 2>/dev/null)" ]; then
-    PATH="$(dirname "$node"):$PATH" npm --prefix "$web_dir" run --silent build >&2
-  fi
+  aico_ensure_bundle webtools "$node"
   AICO_REPO_ROOT="$AICO_REPO_ROOT" exec "$node" --disable-warning=ExperimentalWarning "$web_bundle" "$@"
 }
 
-# The video bundle; rebuilt when its sources (or the packages it bundles) are newer.
+# The video bundle.
 aico_video() {
   local video_dir="$AICO_REPO_ROOT/packages/video" node
   local video_bundle="$video_dir/dist/aico-video.mjs"
   node="$(aico_web_node)"
-  if [ ! -r "$video_bundle" ] || [ -n "$(find "$video_dir/src" "$video_dir/data" "$AICO_REPO_ROOT/packages/fleet/src" \
-    "$AICO_REPO_ROOT/packages/fleet/data" "$AICO_REPO_ROOT/packages/store/src" "$AICO_REPO_ROOT/packages/status/src" \
-    "$AICO_REPO_ROOT/packages/shared/src" \( -name '*.ts' -o -name '*.json' \) -newer "$video_bundle" -print -quit 2>/dev/null)" ]; then
-    PATH="$(dirname "$node"):$PATH" npm --prefix "$video_dir" run --silent build >&2
-  fi
+  aico_ensure_bundle video "$node"
   exec "$node" --disable-warning=ExperimentalWarning "$video_bundle" "$@"
 }
 
@@ -138,20 +148,14 @@ case "${1:-}" in
     jobs_dir="$AICO_REPO_ROOT/packages/jobs"
     jobs_bundle="$jobs_dir/dist/aico-jobs.mjs"
     node="$(aico_web_node)"
-    if [ ! -r "$jobs_bundle" ] || [ -n "$(find "$jobs_dir/src" "$AICO_REPO_ROOT/packages/status/src" \
-      "$AICO_REPO_ROOT/packages/store/src" -name '*.ts' -newer "$jobs_bundle" -print -quit 2>/dev/null)" ]; then
-      PATH="$(dirname "$node"):$PATH" npm --prefix "$jobs_dir" run --silent build >&2
-    fi
+    aico_ensure_bundle jobs "$node"
     exec "$node" --disable-warning=ExperimentalWarning "$jobs_bundle" "$@"
     ;;
   projects | pulse)
     tasks_dir="$AICO_REPO_ROOT/packages/tasks"
     tasks_bundle="$tasks_dir/dist/aico-tasks.mjs"
     node="$(aico_web_node)"
-    if [ ! -r "$tasks_bundle" ] || [ -n "$(find "$tasks_dir/src" "$tasks_dir/data" "$AICO_REPO_ROOT/packages/tether-client/src" \
-      "$AICO_REPO_ROOT/packages/status/src" "$AICO_REPO_ROOT/packages/store/src" \( -name '*.ts' -o -name '*.json' \) -newer "$tasks_bundle" -print -quit 2>/dev/null)" ]; then
-      PATH="$(dirname "$node"):$PATH" npm --prefix "$tasks_dir" run --silent build >&2
-    fi
+    aico_ensure_bundle tasks "$node"
     exec "$node" --disable-warning=ExperimentalWarning "$tasks_bundle" "$@"
     ;;
   agent | prompt-model)
@@ -159,11 +163,7 @@ case "${1:-}" in
     agent_dir="$AICO_REPO_ROOT/packages/agent"
     agent_bundle="$agent_dir/dist/aico-agent.mjs"
     node="$(aico_web_node)"
-    if [ ! -r "$agent_bundle" ] || [ -n "$(find "$agent_dir/src" "$agent_dir/data" "$AICO_REPO_ROOT/packages/context/src" "$AICO_REPO_ROOT/packages/tether-client/src" \
-      "$AICO_REPO_ROOT/packages/context/data" "$AICO_REPO_ROOT/packages/store/src" \( -name '*.ts' -o -name '*.json' \) \
-      -newer "$agent_bundle" -print -quit 2>/dev/null)" ]; then
-      PATH="$(dirname "$node"):$PATH" npm --prefix "$agent_dir" run --silent build >&2
-    fi
+    aico_ensure_bundle agent "$node"
     exec "$node" --disable-warning=ExperimentalWarning "$agent_bundle" "$@"
     ;;
   lease)
