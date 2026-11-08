@@ -6,6 +6,8 @@
   "sensor_label": "Tctl",
   "boot_id_path": "/proc/sys/kernel/random/boot_id",
   "delivery_machine": "aico",
+  "machine": "davion-gem",
+  "sender_config": "/etc/aico/pve-sender.json",
   "sample_s": 15,
   "stale_s": 45,
   "hot_c": 85,

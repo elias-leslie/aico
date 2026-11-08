@@ -7,12 +7,14 @@ import fcntl
 import json
 import math
 import os
+import queue
 import signal
 import subprocess
 import sys
 import threading
 import time
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 
 from .state import write
@@ -107,8 +109,7 @@ def decide(cfg: dict, state: dict, temperature: float | None, now: float) -> dic
     episode = dict(state.get("episode", {}))
     if mode in ("hot", "critical", "unavailable"):
         if not episode or episode.get("ended_at") is not None:
-            episode = {"id": "sensor:" + boot_id(cfg) if mode == "unavailable" else uuid.uuid4().hex,
-                       "started_at": now, "peak_mode": mode}
+            episode = {"id": uuid.uuid4().hex, "started_at": now, "peak_mode": mode}
         elif mode == "critical" or (mode == "hot" and episode.get("peak_mode") == "unavailable"):
             episode["peak_mode"] = mode
     elif mode == "normal" and episode and episode.get("ended_at") is None:
@@ -129,7 +130,7 @@ def set_quota(cfg: dict, mode: str, *, run=subprocess.run) -> None:
 
 
 def tick(cfg: dict, state: dict, *, now: float | None = None, temperature=None,
-         sample=cpu_temperature, enforce=set_quota, starting=False) -> dict:
+         sample=cpu_temperature, enforce=set_quota, starting=False, publish=None) -> dict:
     now = time.time() if now is None else now
     if temperature is None:
         temperature = sample(cfg)
@@ -153,14 +154,23 @@ def tick(cfg: dict, state: dict, *, now: float | None = None, temperature=None,
         write(Path(cfg["state_dir"]) / "state.json", persistent(result))
     # Heartbeat lives in tmpfs, never the journal or persistent storage.
     write(Path(cfg["runtime_dir"]) / "status.json", snapshot)
+    if publish is not None and (result.get("episode"), result["mode"]) != (state.get("episode"), state.get("mode")):
+        try:
+            publish(status_row(cfg, snapshot, now))
+        except Exception:  # noqa: BLE001 -- failed status delivery never stops local protection
+            print("aico-backup-guard: status publication failed; periodic checks will reconcile.", file=sys.stderr)
     return result
 
 
-def admission(cfg: dict, snapshot: dict, now: float) -> None:
+def fresh(cfg: dict, snapshot: dict, now: float) -> bool:
     observed = snapshot.get("observed_at")
-    fresh = (isinstance(observed, int | float) and not isinstance(observed, bool)
-             and math.isfinite(observed) and 0 <= now - observed <= cfg["stale_s"])
-    if not fresh or snapshot.get("boot_id") != boot_id(cfg):
+    return (isinstance(observed, int | float) and not isinstance(observed, bool)
+            and math.isfinite(observed) and 0 <= now - observed <= cfg["stale_s"]
+            and snapshot.get("boot_id") == boot_id(cfg))
+
+
+def admission(cfg: dict, snapshot: dict, now: float) -> None:
+    if not fresh(cfg, snapshot, now):
         raise Deferred("Backup waits for a fresh local temperature check.")
     if not snapshot.get("admission_open") or snapshot.get("mode") != "normal":
         raise Deferred("Backup waits for the host to cool and its CPU sensor to be available.")
@@ -207,33 +217,108 @@ def budget(cfg: dict, *, now=None) -> dict:
     return {"quotaPercent": value, "admit": allowed, "sampleSeconds": cfg["sample_s"]}
 
 
-def notice_payload(cfg: dict, snapshot: dict, now: float) -> dict | None:
-    """Typed metadata for the existing status row transport; never a native phone send."""
+def _notice_payload(cfg: dict, snapshot: dict, now: float, previous: dict) -> tuple[dict | None, dict]:
     current = True
     try:
         admission(cfg, snapshot, now)
     except Deferred:
         current = False
-    observed = snapshot.get("observed_at", 0)
-    fresh = (isinstance(observed, int | float) and not isinstance(observed, bool)
-             and math.isfinite(observed) and 0 <= now - observed <= cfg["stale_s"]
-             and snapshot.get("boot_id") == boot_id(cfg))
+    current_sample = fresh(cfg, snapshot, now)
     episode = snapshot.get("episode", {})
-    phase = snapshot.get("mode") if fresh else "unavailable"
+    phase = snapshot.get("mode") if current_sample else "unavailable"
     if phase == "normal":
-        if not episode or "ended_at" not in episode:
-            return None
+        if (not episode or "ended_at" not in episode) and (not previous or previous["phase"] == "recovered"):
+            return None, previous
         phase = "recovered"
     elif phase not in ("hot", "critical", "unavailable"):
-        return None
-    active = episode and "ended_at" not in episode
-    episode_id = episode["id"] if active or phase == "recovered" else "sensor:" + boot_id(cfg)
+        return None, previous
+    source_id = episode.get("id") if current_sample else None
+    same_source = source_id and source_id == previous.get("source_id")
+    continuing = previous and previous["phase"] != "recovered" and (
+        source_id is None or same_source or previous.get("fallback")
+    )
+    episode_id = (previous["episode_id"] if same_source or continuing
+                  else source_id or uuid.uuid4().hex)
+    metadata = {"episode_id": episode_id, "source_id": source_id, "phase": phase,
+                "fallback": source_id is None}
     return {
         "episode_id": episode_id, "phase": phase,
-        "temperature_c": snapshot.get("temperature_c") if fresh else None,
+        "temperature_c": snapshot.get("temperature_c") if current_sample else None,
         "cpu_quota_percent": snapshot.get("cpu_quota_percent", cfg["normal_cpu_percent"]),
         "admission_open": current, "delivery_machine": cfg["delivery_machine"],
-    }
+    }, metadata
+
+
+def notice_payload(cfg: dict, snapshot: dict, now: float) -> dict | None:
+    """Persist identity only on incident phase changes, shared by both local producers."""
+    directory = Path(cfg["state_dir"])
+    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with (directory / "notice.lock").open("a") as stream:
+        fcntl.flock(stream, fcntl.LOCK_EX)
+        path = directory / "notice.json"
+        previous = load(path)
+        payload, metadata = _notice_payload(cfg, snapshot, now, previous)
+        if metadata != previous:
+            write(path, metadata)
+        return payload
+
+
+def status_row(cfg: dict, snapshot: dict, now: float, machine: str | None = None) -> dict:
+    """One guard row for immediate transitions and the existing periodic reconciliation."""
+    machine = machine or cfg["machine"]
+    payload = notice_payload(cfg, snapshot, now)
+    phase = payload["phase"] if payload else "normal"
+    temperature = snapshot.get("temperature_c") if phase != "unavailable" else None
+    cpu = payload["cpu_quota_percent"] if payload else snapshot["cpu_quota_percent"]
+    condition = "CPU temperature unavailable." if temperature is None else f"CPU {temperature:g} C."
+    allowed = payload["admission_open"] if payload else snapshot.get("admission_open", False)
+    meaning = f"{condition} {'Backups may start' if allowed else 'New backups wait'}; CPU limit {cpu:g}%."
+    sender_cfg = load(Path(cfg["sender_config"]))
+    deadline = sum(sender_cfg.get(key, 0) for key in ("tick_s", "status_relay_s", "slack_s"))
+    row = {"id": f"{machine}/check-backup-guard", "what": "Backup thermal guard", "kind": "check",
+           "machine": machine, "state": "failed" if phase == "critical" else "warn"
+           if phase in ("hot", "unavailable") else "ok", "meaning": meaning,
+           "last_run": datetime.fromtimestamp(now, UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+           "next_run": datetime.fromtimestamp(now + max(deadline, cfg["stale_s"]), UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+           "actions": [{"kind": "log", "ref": "journalctl -u aico-backup-guard.service"}]}
+    if payload is not None:
+        row["guard"] = payload
+    return row
+
+
+def publish_row(cfg: dict, row: dict, *, run=subprocess.run) -> bool:
+    """Reuse the PVE sender's existing loopback transport; no probes or phone route."""
+    sender_cfg = load(Path(cfg["sender_config"]))
+    result = run(sender_cfg["status_command"], input=json.dumps([row]), text=True,
+                 capture_output=True, timeout=30, check=False)
+    return result.returncode == 0
+
+
+class Publisher:
+    """A phase queue keeps both critical and recovery while the sensor loop stays local."""
+
+    def __init__(self, cfg: dict, publish=publish_row):
+        self.items = queue.Queue()
+        self.cfg, self.publish = cfg, publish
+        self.thread = threading.Thread(target=self.work, daemon=True, name="backup-guard-status")
+        self.thread.start()
+
+    def __call__(self, row: dict) -> None:
+        self.items.put(row)
+
+    def work(self) -> None:
+        while True:
+            row = self.items.get()
+            try:
+                if row is None:
+                    return
+                try:
+                    if not self.publish(self.cfg, row):
+                        raise OSError("Status transport refused the row.")
+                except Exception:  # noqa: BLE001 -- delivery is independent of enforcement
+                    print("aico-backup-guard: status publication failed; periodic checks will reconcile.", file=sys.stderr)
+            finally:
+                self.items.task_done()
 
 
 def daemon(cfg: dict) -> int:
@@ -243,6 +328,7 @@ def daemon(cfg: dict) -> int:
         subprocess.run(["systemctl", "--no-ask-password", "start", cfg["slice"]],
                        check=True, capture_output=True, text=True)
         state = persistent(load(Path(cfg["state_dir"]) / "state.json"))
+        publisher = Publisher(cfg)
         stopping = threading.Event()
 
         def stop(_signal, _frame):
@@ -254,12 +340,13 @@ def daemon(cfg: dict) -> int:
         try:
             while not stopping.is_set():
                 started = time.monotonic()
-                state = tick(cfg, state, starting=first)
+                state = tick(cfg, state, starting=first, publish=publisher)
                 first = False
                 # Signals interrupt this wait without killing an export or extra timer wakeups.
                 stopping.wait(max(0, started + cfg["sample_s"] - time.monotonic()))
         finally:
             (directory / "status.json").unlink(missing_ok=True)
+            publisher.items.put(None)
     return 0
 
 

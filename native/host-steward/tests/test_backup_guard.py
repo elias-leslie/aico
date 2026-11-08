@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -19,7 +20,8 @@ ROOT = Path(__file__).resolve().parents[3]
 def cfg(tmp_path):
     value = guard.config(ROOT / "native/pve-sender/backup-guard.json")
     value.update(runtime_dir=str(tmp_path / "run"), state_dir=str(tmp_path / "state"),
-                 hwmon_root=str(tmp_path / "hwmon"), boot_id_path=str(tmp_path / "boot-id"))
+                 hwmon_root=str(tmp_path / "hwmon"), boot_id_path=str(tmp_path / "boot-id"),
+                 sender_config=str(ROOT / "native/pve-sender/config.json"))
     Path(value["boot_id_path"]).write_text("this-boot")
     return value
 
@@ -73,7 +75,7 @@ def test_missing_sensor_blocks_admission_but_retains_existing_cpu_ceiling(cfg):
     calls = []
     state = sample(cfg, {}, None, 100, calls, starting=True)
     assert state["mode"] == "unavailable" and snapshot(cfg)["cpu_quota_percent"] == 50
-    assert state["episode"]["id"] == "sensor:this-boot"
+    assert len(state["episode"]["id"]) == 32
     with pytest.raises(guard.Deferred):
         guard.admission(cfg, snapshot(cfg), 100)
     state = sample(cfg, state, 90, 115, calls)
@@ -211,15 +213,15 @@ def test_budget_is_read_only_and_keeps_last_ceiling_for_running_guest_when_stale
     assert not (Path(cfg["runtime_dir"]) / "export.lock").exists()
 
 
-def test_notice_payload_has_one_heat_episode_and_boot_scoped_missing_sensor(cfg):
+def test_notice_payload_keeps_one_identity_from_fallback_sensor_outage_through_heat_recovery(cfg):
     unavailable = guard.notice_payload(cfg, {}, 100)
-    assert unavailable == {"episode_id": "sensor:this-boot", "phase": "unavailable",
+    assert unavailable == {"episode_id": unavailable["episode_id"], "phase": "unavailable",
                            "temperature_c": None, "cpu_quota_percent": 50,
                            "admission_open": False, "delivery_machine": "aico"}
     state = sample(cfg, {}, 90, 100, [], starting=True)
     hot = guard.notice_payload(cfg, snapshot(cfg), 100)
     assert hot["phase"] == "critical" and hot["temperature_c"] == 90
-    assert hot["episode_id"] == state["episode"]["id"]
+    assert hot["episode_id"] == unavailable["episode_id"]
     stale = guard.notice_payload(cfg, snapshot(cfg), 200)
     assert stale["episode_id"] == hot["episode_id"] and stale["phase"] == "unavailable"
     assert stale["temperature_c"] is None
@@ -229,7 +231,7 @@ def test_notice_payload_has_one_heat_episode_and_boot_scoped_missing_sensor(cfg)
     assert recovered["episode_id"] == hot["episode_id"]
 
 
-def test_guard_episode_uses_existing_validated_local_thermal_row(cfg, tmp_path, monkeypatch):
+def test_guard_episode_uses_shared_validated_guard_row(cfg, tmp_path, monkeypatch):
     from pve_sender import watch
 
     policy = tmp_path / "policy.json"
@@ -241,7 +243,7 @@ def test_guard_episode_uses_existing_validated_local_thermal_row(cfg, tmp_path, 
     state = sample(cfg, {}, 92, 100, [], starting=True)
     checks = {}
     rows = watch.local_rows(checks, 100, "davion-gem")
-    row = next(item for item in rows if item["id"] == "davion-gem/check-thermal")
+    row = next(item for item in rows if item["id"] == "davion-gem/check-backup-guard")
     assert row["guard"] == {
         "episode_id": state["episode"]["id"], "phase": "critical", "temperature_c": 92,
         "cpu_quota_percent": 10, "admission_open": False, "delivery_machine": "aico",
@@ -261,6 +263,125 @@ def test_guard_episode_uses_existing_validated_local_thermal_row(cfg, tmp_path, 
     quiet = next(item for item in watch.local_rows(missing_state, 103, "davion-gem")
                  if item["id"] == row["id"])
     assert "guard" not in quiet
+
+
+def test_new_sensor_outages_get_unique_persisted_ids_on_same_boot_then_heat(cfg):
+    first = sample(cfg, {}, None, 100, [], starting=True)
+    first_payload = guard.notice_payload(cfg, snapshot(cfg), 100)
+    recovered = sample(cfg, first, 60, 115, [])
+    guard.notice_payload(cfg, snapshot(cfg), 115)
+    reopened = sample(cfg, recovered, None, 130, [])
+    assert reopened["episode"]["id"] != first["episode"]["id"]
+    second_payload = guard.notice_payload(cfg, snapshot(cfg), 130)
+    assert second_payload["episode_id"] != first_payload["episode_id"]
+    saved = guard.load(Path(cfg["state_dir"]) / "state.json")
+    restarted = sample(cfg, saved, None, 145, [], starting=True)
+    assert restarted["episode"]["id"] == reopened["episode"]["id"]
+    heated = sample(cfg, restarted, 90, 160, [])
+    assert heated["episode"]["id"] == reopened["episode"]["id"]
+    assert guard.notice_payload(cfg, snapshot(cfg), 160)["episode_id"] == second_payload["episode_id"]
+
+
+def test_stale_fallback_after_recovery_opens_unique_id_and_recovers_after_restart(cfg):
+    state = sample(cfg, {}, 90, 100, [], starting=True)
+    first = guard.notice_payload(cfg, snapshot(cfg), 100)
+    sample(cfg, state, 60, 115, [])
+    recovered_snapshot = snapshot(cfg)
+    guard.notice_payload(cfg, recovered_snapshot, 115)
+    stale = guard.notice_payload(cfg, recovered_snapshot, 200)
+    assert stale["episode_id"] != first["episode_id"]
+    assert guard.notice_payload(dict(cfg), recovered_snapshot, 215)["episode_id"] == stale["episode_id"]
+    # The daemon resumes with the old recovered episode, without reopening that old ID.
+    resumed = {**recovered_snapshot, "observed_at": 220}
+    recovered = guard.notice_payload(dict(cfg), resumed, 220)
+    assert recovered["phase"] == "recovered" and recovered["episode_id"] == stale["episode_id"]
+    again = guard.notice_payload(dict(cfg), resumed, 300)
+    assert again["episode_id"] not in (first["episode_id"], stale["episode_id"])
+
+
+def test_brief_critical_and_recovery_each_publish_without_waiting_for_periodic_watch(cfg):
+    import aico_status
+
+    rows, quotas = [], []
+    state = sample(cfg, {}, 60, 100, quotas, starting=True)
+    for now, temperature in ((115, 90), (130, 89), (145, 60), (160, 65)):
+        state = sample(cfg, state, temperature, now, quotas, publish=rows.append)
+    assert [row["guard"]["phase"] for row in rows] == ["critical", "recovered"]
+    assert rows[0]["guard"]["episode_id"] == rows[1]["guard"]["episode_id"]
+    assert quotas == ["normal", "critical", "normal"]
+    assert all(aico_status.check_row(row) == row for row in rows)
+
+
+def test_slow_and_failed_publisher_never_blocks_enforcement_or_drops_next_phase(cfg, capsys):
+    entered, release = threading.Event(), threading.Event()
+    attempted = []
+
+    def post(_cfg, row):
+        attempted.append(row["guard"]["phase"])
+        if row["guard"]["phase"] == "critical":
+            entered.set()
+            assert release.wait(2)
+            raise OSError("transport offline")
+        return True
+
+    publisher = guard.Publisher(cfg, publish=post)
+    try:
+        quotas = []
+        state = sample(cfg, {}, 60, 100, quotas, starting=True)
+        state = sample(cfg, state, 90, 115, quotas, publish=publisher)
+        assert entered.wait(2)
+        # First post is still blocked while the local loop restores the CPU ceiling.
+        sample(cfg, state, 60, 130, quotas, publish=publisher)
+        assert quotas == ["normal", "critical", "normal"]
+        assert snapshot(cfg)["admission_open"]
+        release.set()
+        publisher.items.join()
+        assert attempted == ["critical", "recovered"]
+        assert "status publication failed" in capsys.readouterr().err
+    finally:
+        release.set()
+        publisher.items.put(None)
+        publisher.thread.join(2)
+
+
+def test_publish_reuses_only_existing_status_command(cfg):
+    rows = []
+    state = sample(cfg, {}, 90, 100, [], starting=True, publish=rows.append)
+    calls = []
+
+    def run(argv, **kwargs):
+        calls.append((argv, kwargs))
+        return SimpleNamespace(returncode=0)
+
+    assert state["mode"] == "critical"
+    assert guard.publish_row(cfg, rows[0], run=run)
+    assert calls[0][0] == json.loads(Path(cfg["sender_config"]).read_text())["status_command"]
+    assert json.loads(calls[0][1]["input"]) == rows
+
+
+def test_fresh_cpu_guard_owns_cpu_notice_while_other_hot_sensors_and_cpu_fallback_remain(cfg, tmp_path, monkeypatch):
+    from pve_sender import watch
+
+    policy = tmp_path / "policy.json"
+    policy.write_text(json.dumps(cfg))
+    monkeypatch.setattr(guard, "DEFAULT_CONFIG", policy)
+    sensors = "T k10temp Tctl 95000 0 0\n"
+    monkeypatch.setattr(watch.core, "run_command", lambda *_a, **_k: watch.core.Result(
+        0, "===NS hwmon\n" + sensors + "===NS end\n", ""
+    ))
+    sample(cfg, {}, 95, 100, [], starting=True)
+    rows = watch.local_rows({}, 100, "davion-gem")
+    failed = [row for row in rows if row["state"] == "failed" and "temperature" in row["what"].lower()]
+    assert failed == []
+    dedicated = next(row for row in rows if row["id"].endswith("/check-backup-guard"))
+    assert dedicated["state"] == "failed" and dedicated["guard"]["phase"] == "critical"
+    sensors += "T nvme Composite 85000 70000 80000\n"
+    other = next(row for row in watch.local_rows({}, 100, "davion-gem") if row["id"].endswith("/check-thermal"))
+    assert other["state"] == "failed" and "NVMe 85C" in other["meaning"]
+    assert "CPU" not in other["meaning"]
+    sensors = "T k10temp Tctl 95000 0 0\n"
+    stale = next(row for row in watch.local_rows({}, 200, "davion-gem") if row["id"].endswith("/check-thermal"))
+    assert stale["state"] == "failed" and "CPU 95C" in stale["meaning"]
 
 
 def test_cli_budget_and_deferred_export(cfg, tmp_path, capsys, monkeypatch):

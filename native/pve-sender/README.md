@@ -37,15 +37,22 @@ and only then publishes a heartbeat. A saved hot or critical limit remains until
 a fresh recovery reading; downtime never counts as cooling evidence. Mode and heat
 episode identity survive restarts. An episode is opened at the first hot/critical
 transition or unavailable sensor and records its peak level and recovery time.
-An unavailable sensor starts a boot-scoped sensor episode; returning heat or
-recovery readings retain its identity so pending notices can close.
+Every new sensor or heat incident gets a unique persisted episode ID, including
+repeated outages on the same boot. Returning heat or recovery readings retain
+that identity so pending notices can close. Shared notice metadata also preserves
+fallback sensor episodes detected while the daemon is absent or stale.
 
 The runtime snapshot contains `mode`, `limit_mode`, `temperature_c`, `observed_at`,
 `boot_id`, `admission_open`, `cpu_quota_percent`, `policy` and optional
-`episode: {id, started_at, peak_mode, ended_at?}`. Aico's existing PVE status transport
-can carry that episode for its notification routing and deduplication. There is no
-new path to a phone. The PVE sender also evaluates the existing thermal monitor
-against its already collected local hwmon section, without a workstation probe.
+`episode: {id, started_at, peak_mode, ended_at?}`. Each incident phase change queues
+one dedicated `check-backup-guard` row to a lightweight publisher thread using the
+existing PVE sender `status_command`. Critical and recovery rows are both kept
+even if the incident ends between five-minute checks. A blocked or failed post
+does not delay local enforcement; the existing periodic sender reconciles the
+same row. There are no every-sample posts, remote probes or new phone path.
+The PVE sender evaluates other thermal sensors against its already collected
+local hwmon section. Fresh valid guard evidence owns CPU notices; when that
+evidence is unavailable or stale, the ordinary CPU thermal check remains active.
 `aico-backup-guard budget` returns `{quotaPercent, admit, sampleSeconds}` without
 claiming a slot. A guest monitor reads the runtime snapshot locally and changes
 only its named guest export scope when the CPU budget changes; it must not SSH on
