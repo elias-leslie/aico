@@ -4,6 +4,7 @@
 import { readFileSync } from 'node:fs'
 import { basename, isAbsolute, resolve } from 'node:path'
 import type { TetherPaths } from '@aico/session-engine/paths'
+import { nearest } from '@aico/shared/suggest'
 import { callSocket } from './client'
 
 export const ASK_USAGE = `Usage:
@@ -349,7 +350,14 @@ export async function runAsk(
       path = `/v1/asks/${id}/${sub}`
     }
   } else {
-    io.err(ASK_USAGE)
+    const subs = ['create', 'get', 'list', 'done', 'withdraw']
+    if (sub && !subs.includes(sub)) {
+      const near = nearest(sub, subs)
+      io.err(
+        `tether ask: unknown command ${sub}${near ? ` (did you mean ${near}?)` : ''}; tether ask --help shows how`,
+      )
+    } else if (sub) io.err(`tether ask ${sub} takes one ask id; tether ask --help shows how`)
+    else io.err(ASK_USAGE)
     return 2
   }
 

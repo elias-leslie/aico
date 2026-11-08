@@ -157,3 +157,30 @@ describe('tether ask <sub> --help', () => {
     }
   })
 })
+
+describe('tether ask with a wrong command', () => {
+  it('names the mistake in one line instead of printing the whole usage', async () => {
+    const paths = { socket: '/nonexistent/tether.sock', instance: 'test' } as TetherPaths
+    const err = async (...args: string[]) => {
+      const lines: string[] = []
+      const code = await runAsk(
+        { out: () => {}, err: (text) => lines.push(text) },
+        paths,
+        false,
+        args,
+        {},
+        '/tmp',
+      )
+      return { code, text: lines.join('\n') }
+    }
+    expect(await err('show', 'abc')).toEqual({
+      code: 2,
+      text: 'tether ask: unknown command show; tether ask --help shows how',
+    })
+    expect((await err('gte', 'abc')).text).toContain('(did you mean get?)')
+    expect((await err('get')).text).toBe(
+      'tether ask get takes one ask id; tether ask --help shows how',
+    )
+    expect((await err()).text).toBe(ASK_USAGE)
+  })
+})

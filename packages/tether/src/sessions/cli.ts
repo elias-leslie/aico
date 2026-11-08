@@ -9,7 +9,7 @@ import type { EventPage, SearchPage, SessionDetail, SessionSummary, Tokens } fro
 import type { SessionEvent } from './types'
 
 export const HISTORY_USAGE = `Usage:
-  aico recent list [--tool T] [--project P] [--limit N] [--json]
+  aico recent list [--tool T] [--project P] [--limit N (20)] [--json]
       Recent sessions of Claude Code, Codex, Pi and the Aico agent, newest first,
       each named by the tool's own name for it, else its first prompt.
   aico recent search TEXT [--tool T] [--project P] [--limit N] [--json]
@@ -155,6 +155,8 @@ export async function runHistory(
       const value = flag(rest, `--${name}`)
       if (value) query.set(name, value)
     }
+    // An agent usually wants the last few; the daemon's own default (50) fills a screen.
+    if (!query.has('limit')) query.set('limit', '20')
   } else if (sub === 'search') {
     const text = rest
       .filter((arg, index) => !arg.startsWith('--') && !isFlagValue(rest, index))
