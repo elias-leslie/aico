@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { AppFrame } from '@/components/frame/AppFrame'
+import { TouchTips } from '@/components/frame/TouchTips'
 import { LANTERN_RIM } from '@/lib/constants/lantern'
 import {
   PRODUCT_DESCRIPTION,
@@ -58,6 +59,7 @@ export default function RootLayout({
       <body>
         <Providers>
           <AppFrame>{children}</AppFrame>
+          <TouchTips />
         </Providers>
       </body>
     </html>

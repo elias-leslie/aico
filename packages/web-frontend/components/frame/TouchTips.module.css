@@ -1,0 +1,18 @@
+/* A title's text for a finger: the popover surface, above everything, never in the way of a tap. */
+.tip {
+  position: fixed;
+  z-index: 10010;
+  width: max-content;
+  max-width: min(280px, calc(100vw - 24px));
+  padding: 8px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: rgb(var(--umber-rgb));
+  box-shadow: var(--shadow-soft);
+  color: var(--bone);
+  font-size: 12.5px;
+  line-height: 1.4;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
