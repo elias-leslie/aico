@@ -351,6 +351,7 @@ export function mergePhones(
   lastSync: number,
   confirmedIds?: ReadonlySet<string>,
   knownPairs?: ReadonlyMap<string, string | null>,
+  receivedPairs?: ReadonlyMap<string, string | null>,
 ): Phone[] {
   const mine = new Map(ours.map((phone) => [phone.id, phone]))
   const merged = theirs.map((sent) => {
@@ -363,7 +364,10 @@ export function mergePhones(
       // pairing against an unchanged sender copy; otherwise the sender's new pairing wins.
       // State from another pairing (including old acknowledgements and FCM tokens) is not merged.
       const senderUnchanged = knownPairs?.has(sent.id) && knownPairs.get(sent.id) === sentPairing
-      return { ...(senderUnchanged ? here : sent) }
+      const localAcknowledged = knownPairs?.has(sent.id) && knownPairs.get(sent.id) === localPairing
+      const localReceived =
+        receivedPairs?.has(sent.id) && receivedPairs.get(sent.id) === localPairing
+      return { ...(senderUnchanged && !localAcknowledged && !localReceived ? here : sent) }
     }
     const keep: Phone = { ...sent }
     if ((here.token_at ?? 0) > (sent.token_at ?? 0)) {
@@ -401,6 +405,7 @@ export function mergePhones(
       const pairing = phone.pairing_id ?? null
       // A received or confirmed pairing is already known to the sender. A genuinely new local
       // registration has another generation, even for the same device in the same second.
+      if (receivedPairs?.has(phone.id) && receivedPairs.get(phone.id) === pairing) return false
       if (knownPairs?.has(phone.id)) return knownPairs.get(phone.id) !== pairing
       return (
         pairing !== null ||
@@ -423,23 +428,30 @@ export async function mergePhonesFile(path: string, sent: Phone[], now: number):
     // Phones received from the sender are governed by its list immediately, even if the reply
     // never arrives there. Only a phone paired on this receiver gets the unconfirmed-pairing rule.
     const knownPairs = new Map(Object.entries(cursor.known_pairs ?? {}))
+    const receivedPairs = new Map(Object.entries(cursor.received_pairs ?? {}))
     const merged = mergePhones(
       sent,
       readPhones(path) ?? [],
       cursor.at,
       cursor.ids === undefined ? undefined : new Set(cursor.ids),
       knownPairs,
+      receivedPairs,
     )
-    // Resolve conflicts against the prior common baseline before recording this request's facts.
-    for (const phone of sent) knownPairs.set(phone.id, phone.pairing_id ?? null)
+    // Received provenance is not an acknowledgement: a failed list write must leave the common
+    // baseline unchanged. Decide conflicts first, then remember which generations the sender has.
+    for (const phone of sent) receivedPairs.set(phone.id, phone.pairing_id ?? null)
     mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
     // Save origin before copying sender phones: a cut between writes must not turn a received
     // phone into a locally paired one when the sender retries with that phone removed.
+    const received = { ...cursor, received_pairs: Object.fromEntries(receivedPairs) }
+    writeFileDurable(syncFile, JSON.stringify(received), { mode: 0o600 })
+    writeFileDurable(path, JSON.stringify(merged), { mode: 0o600 })
+    // Only a stored list can become a reply awaiting acknowledgement. If either write fails,
+    // nothing in the common acknowledged baseline advances and a retry uses that same baseline.
     writeFileDurable(
       syncFile,
       JSON.stringify({
-        ...cursor,
-        known_pairs: Object.fromEntries(knownPairs),
+        ...received,
         pending: now,
         pending_ids: merged.map((phone) => phone.id),
         pending_pairs: Object.fromEntries(
@@ -450,7 +462,6 @@ export async function mergePhonesFile(path: string, sent: Phone[], now: number):
         mode: 0o600,
       },
     )
-    writeFileDurable(path, JSON.stringify(merged), { mode: 0o600 })
     return merged
   })
 }
@@ -459,7 +470,8 @@ export async function mergePhonesFile(path: string, sent: Phone[], now: number):
 export async function confirmPhonesMerge(path: string): Promise<void> {
   return withFileLock(path, () => {
     const syncFile = `${path}.sync.json`
-    const { at, pending, pending_ids, known_pairs, pending_pairs } = readSync(syncFile)
+    const { at, pending, pending_ids, known_pairs, pending_pairs, received_pairs } =
+      readSync(syncFile)
     if (pending === undefined || pending < at) return
     // Confirm only phones in that reply. A pairing after the merge, even in the same second,
     // stays new until a later reply actually carries it. Old cursors retain their time fallback.
@@ -468,6 +480,7 @@ export async function confirmPhonesMerge(path: string): Promise<void> {
       JSON.stringify({
         at: pending,
         ...(pending_ids === undefined ? {} : { ids: pending_ids }),
+        ...(received_pairs === undefined ? {} : { received_pairs }),
         ...(known_pairs === undefined && pending_pairs === undefined
           ? {}
           : {
@@ -489,6 +502,7 @@ interface PhoneSync {
   pending_ids?: string[]
   known_pairs?: Record<string, string | null>
   pending_pairs?: Record<string, string | null>
+  received_pairs?: Record<string, string | null>
 }
 
 function readSync(file: string): PhoneSync {
@@ -509,6 +523,7 @@ function readSync(file: string): PhoneSync {
       ...(ids(raw.pending_ids) ? { pending_ids: raw.pending_ids } : {}),
       ...(pairs(raw.known_pairs) ? { known_pairs: raw.known_pairs } : {}),
       ...(pairs(raw.pending_pairs) ? { pending_pairs: raw.pending_pairs } : {}),
+      ...(pairs(raw.received_pairs) ? { received_pairs: raw.received_pairs } : {}),
     }
   } catch {
     /* First sync: nothing has been paired here since. */

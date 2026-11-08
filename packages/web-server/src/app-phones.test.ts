@@ -197,10 +197,11 @@ it('keeps sender origin and the last whole list when the list write fails after 
     mergePhonesFile(file, [phone('kept'), phone('sent-new', { added_at: 150 })], 200),
   ).rejects.toThrow('list write interrupted')
   expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual(ours)
-  expect(JSON.parse(readFileSync(`${file}.sync.json`, 'utf8')).known_pairs).toEqual({
+  expect(JSON.parse(readFileSync(`${file}.sync.json`, 'utf8')).received_pairs).toEqual({
     kept: null,
     'sent-new': null,
   })
+  expect(JSON.parse(readFileSync(`${file}.sync.json`, 'utf8'))).not.toHaveProperty('pending')
   failed.mockRestore()
   // No reply was produced, so there is no confirm. A retry with the sender phone removed is safe.
   expect((await mergePhonesFile(file, [phone('kept')], 300)).map((phone) => phone.id)).toEqual([
@@ -261,6 +262,48 @@ it('takes a new sender pairing over the receiver copy of an acknowledged old pai
   await confirmPhonesMerge(file)
   expect(await mergePhonesFile(file, [], 400)).toEqual([])
 })
+
+it.each(['phone list', 'reply cursor'])(
+  'does not advance the acknowledged pairing when a new sender %s write fails',
+  async (stage) => {
+    const dir = mkdtempSync(join(tmpdir(), 'aico-phone-sender-write-failure-'))
+    dirs.push(dir)
+    const file = join(dir, 'phones.json')
+    const old = phone('same-phone', { pairing_id: 'old-pair', auth: 'old-auth' })
+    const fresh = phone('same-phone', { pairing_id: 'new-pair', auth: 'new-auth' })
+    await mergePhonesFile(file, [old], 200)
+    await confirmPhonesMerge(file)
+    const write = durableFile.writeFileDurable
+    let cursorWrites = 0
+    const failed = vi
+      .spyOn(durableFile, 'writeFileDurable')
+      .mockImplementation((path, data, options) => {
+        if (path === `${file}.sync.json`) cursorWrites++
+        if (
+          (stage === 'phone list' && path === file) ||
+          (stage === 'reply cursor' && path === `${file}.sync.json` && cursorWrites === 2)
+        )
+          throw new Error('merge write failed')
+        write(path, data, options)
+      })
+    await expect(mergePhonesFile(file, [fresh], 300)).rejects.toThrow('merge write failed')
+    failed.mockRestore()
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual([stage === 'phone list' ? old : fresh])
+    const interrupted = JSON.parse(readFileSync(`${file}.sync.json`, 'utf8'))
+    expect(interrupted.known_pairs).toEqual({ 'same-phone': 'old-pair' })
+    expect(interrupted.received_pairs).toEqual({ 'same-phone': 'new-pair' })
+    expect(interrupted).not.toHaveProperty('pending')
+    // Retry the same request: the unchanged old local record must not be mistaken for a fresh pairing.
+    expect(await mergePhonesFile(file, [fresh], 400)).toEqual([fresh])
+    expect(JSON.parse(readFileSync(`${file}.sync.json`, 'utf8')).known_pairs).toEqual({
+      'same-phone': 'old-pair',
+    })
+    await confirmPhonesMerge(file)
+    expect(JSON.parse(readFileSync(`${file}.sync.json`, 'utf8')).known_pairs).toEqual({
+      'same-phone': 'new-pair',
+    })
+  },
+)
 
 it('an empty or broken phone list refuses pairing and never reads as no phones', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'aico-phones-empty-'))
