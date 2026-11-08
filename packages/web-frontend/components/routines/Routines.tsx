@@ -107,7 +107,13 @@ function whenTip(routine: Routine): string {
 /** "Daily at 03:30 UTC · next Nov 8, 3:30 AM UTC": the schedule and the next run in one zone. */
 function scheduleLine(routine: Routine): string {
   const schedule = scheduleText(routine)
-  if (!routine.started || routine.paused || routine.nextRun === null)
+  // While it runs, nextRun is the start of this run, not the next one.
+  if (
+    !routine.started ||
+    routine.paused ||
+    routine.running ||
+    routine.nextRun === null
+  )
     return schedule
   const delay = timerDelay(routine)
   const notes = [
@@ -246,7 +252,13 @@ function Row({ routine }: { routine: Routine }) {
               type="button"
               className="lantern-btn small"
               disabled={busy || routine.running || !!routine.unreadable}
-              title={routine.unreadable ? OUT_OF_REACH : undefined}
+              title={
+                routine.unreadable
+                  ? OUT_OF_REACH
+                  : routine.running
+                    ? 'It’s running now. It can run again when it finishes.'
+                    : undefined
+              }
               onClick={() => act(routine.kind, 'run')}
             >
               <Play
@@ -254,7 +266,11 @@ function Row({ routine }: { routine: Routine }) {
                 strokeWidth={1.7}
                 aria-hidden="true"
               />
-              {mine('run') ? 'Starting…' : 'Run now'}
+              {mine('run')
+                ? 'Starting…'
+                : routine.running
+                  ? 'Running…'
+                  : 'Run now'}
             </button>
             <button
               type="button"

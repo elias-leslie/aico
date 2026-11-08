@@ -111,6 +111,19 @@ describe('Routines', () => {
     expect(screen.queryByText(/not known/)).toBeNull()
   })
 
+  it('says why Run now is greyed while it runs, and gives no next time', async () => {
+    list = [routine({ kind: 'busy', running: true })]
+    view()
+    const row = await screen.findByTestId('routine-busy')
+    const head = row.querySelector('button') as HTMLElement
+    if (head.getAttribute('aria-expanded') === 'false') fireEvent.click(head)
+    const run = within(row).getByRole('button', { name: /Running…/ })
+    expect(run).toBeDisabled()
+    expect(run.title).toContain('running now')
+    expect(row.textContent).toContain('Daily at 19:00')
+    expect(row.textContent).not.toContain('· next')
+  })
+
   it('offers no Run or Pause for a routine whose machine is out of reach', async () => {
     list = [routine({ kind: 'far', unreadable: 'ssh timed out' })]
     view()
