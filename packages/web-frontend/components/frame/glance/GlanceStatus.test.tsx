@@ -197,7 +197,7 @@ describe('useStatusGlance', () => {
       </QueryClientProvider>,
     )
 
-  it('calls warnings alone notes in a muted chip, and carries what needs the owner', async () => {
+  it('gives warnings alone a muted chip, and carries what needs the owner', async () => {
     const warn = (id: string) =>
       row({ id, what: id, shown: 'warn', state: 'warn' })
     const quiet = view([warn('a'), warn('b'), warn('c'), warn('d')])
@@ -206,7 +206,7 @@ describe('useStatusGlance', () => {
     quiet.summary.worst = 'warn'
     api.view = quiet
     const first = mount()
-    expect(await screen.findByText('4 notes|off')).toBeVisible()
+    expect(await screen.findByText('4 problems|off')).toBeVisible()
     first.unmount()
     const loud = view([failing('a')])
     loud.summary.needs = 1

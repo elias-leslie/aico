@@ -65,13 +65,22 @@
   white-space: nowrap;
 }
 .when {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   flex: 0 1 auto;
+  min-width: 0;
   max-width: 55%;
-  overflow: hidden;
   color: var(--mist);
   font-size: 12px;
-  text-overflow: ellipsis;
   white-space: nowrap;
+}
+.when > svg {
+  flex: none;
+}
+.whenText {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .chevron {
   flex: none;

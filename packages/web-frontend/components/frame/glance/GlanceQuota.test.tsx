@@ -128,7 +128,7 @@ describe('useQuotaGlance', () => {
     expect(screen.getByTestId('head')).toHaveAttribute('data-tone', 'warn')
   })
 
-  it('is quiet when there is plenty left, and counts those used up', () => {
+  it('is quiet when there is plenty left, and names the one used up', () => {
     const { rerender } = render(<Head />)
     expect(screen.getByTestId('head')).toHaveTextContent('73% left')
     expect(screen.getByTestId('head')).toHaveAttribute('data-tone', '')
@@ -140,7 +140,7 @@ describe('useQuotaGlance', () => {
       }),
     ])
     rerender(<Head />)
-    expect(screen.getByTestId('head')).toHaveTextContent('1 used up')
+    expect(screen.getByTestId('head')).toHaveTextContent('B used up')
     expect(screen.getByTestId('head')).toHaveAttribute('data-tone', 'warn')
   })
 

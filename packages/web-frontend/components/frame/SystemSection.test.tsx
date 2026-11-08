@@ -99,12 +99,12 @@ describe('SystemSection', () => {
     )
   })
 
-  it('stays shut for warnings: a muted "4 notes" chip, not an amber problem', () => {
-    heads.status = { value: '4 notes', tone: 'off', problems: 4, needs: 0 }
+  it('stays shut for warnings: a muted "4 problems" chip, not an amber problem', () => {
+    heads.status = { value: '4 problems', tone: 'off', problems: 4, needs: 0 }
     render(<SystemSection />)
     const row = screen.getByRole('button', { name: /^System/ })
     expect(row).toHaveAttribute('aria-expanded', 'false')
-    expect(row).toHaveTextContent('4 notes')
+    expect(row).toHaveTextContent('4 problems')
     expect(row).not.toHaveTextContent('All OK')
     expect(row.querySelector('.status-chip.off')).not.toBeNull()
     expect(row.querySelector('.status-chip.warn')).toBeNull()
@@ -131,13 +131,13 @@ describe('SystemSection', () => {
   })
 
   it('says the same on its line as the Status row does', () => {
-    heads.status = { value: '4 notes', tone: 'off', problems: 4, needs: 0 }
+    heads.status = { value: '4 problems', tone: 'off', problems: 4, needs: 0 }
     render(<SystemSection />)
     fireEvent.click(screen.getByRole('button', { name: /^System/ }))
     const statusRow = screen.getByRole('button', { name: /^Status/ })
-    expect(statusRow).toHaveTextContent('4 notes')
+    expect(statusRow).toHaveTextContent('4 problems')
     expect(screen.getByRole('button', { name: /^System/ })).toHaveTextContent(
-      '4 notes',
+      '4 problems',
     )
   })
 

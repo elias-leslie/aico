@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Routine } from '@/lib/routines'
 import { RoutinesBody, useRoutinesHead } from './Routines'
@@ -233,6 +239,25 @@ describe('Routines', () => {
     const when = row.querySelector('button')?.textContent ?? ''
     expect(when).toMatch(/\d:\d\d (AM|PM)/)
     expect(when).not.toMatch(/GMT|UTC|[A-Z][a-z]{2} \d/)
+  })
+
+  it('always shows the next run in the row, marked with the clock; next and last in full on hover', async () => {
+    list = [
+      routine({
+        kind: 'late',
+        what: 'Late one',
+        nextRun: Date.now() - 60_000,
+        lastRun: Date.parse('2026-11-07T22:11:00'),
+        lastMachine: 'aico',
+      }),
+    ]
+    view()
+    const row = await screen.findByTestId('routine-late')
+    expect(row.querySelector('button')).toHaveTextContent('due now')
+    expect(within(row).getByLabelText('Next run')).toBeInTheDocument()
+    expect(
+      row.querySelector('[title^="Next run"]')?.getAttribute('title'),
+    ).toMatch(/^Next run .+\. Last run Nov 7, 10:11 PM on aico\.$/)
   })
 
   it('groups by machine, groups with a problem first (by name), with the failed count in the head', async () => {

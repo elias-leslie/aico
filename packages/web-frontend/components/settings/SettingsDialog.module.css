@@ -122,17 +122,23 @@
     border-bottom: 1px solid var(--line);
     overflow: auto hidden;
   }
+  /* Every place fits at 390 with its name under its icon: a touch has no tooltip to name it. */
   .item {
-    flex: none;
+    flex: 1 1 0;
+    min-width: 0;
+    flex-direction: column;
     justify-content: center;
-    min-width: 44px;
-    min-height: 44px;
-    padding: 0 12px;
+    gap: 3px;
+    min-height: 48px;
+    padding: 4px 2px;
+    font-size: 11px;
+    line-height: 1.1;
     white-space: nowrap;
   }
-  /* Every place fits at 390: the open one is named, the others are their icon (name in the tooltip). */
-  .item:not([aria-current="page"]) .label {
-    display: none;
+  .label {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .pane {
     padding: 12px 14px calc(24px + env(safe-area-inset-bottom));

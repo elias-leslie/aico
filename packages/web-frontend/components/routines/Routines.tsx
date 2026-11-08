@@ -1,6 +1,13 @@
 'use client'
 
-import { ChevronDown, ChevronRight, Pause, Play, RefreshCw } from 'lucide-react'
+import {
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  Pause,
+  Play,
+  RefreshCw,
+} from 'lucide-react'
 import { useState } from 'react'
 import {
   type RoutineAction,
@@ -62,13 +69,33 @@ function Note({
   )
 }
 
-/** The row's one line after its name: what it is doing, or when it runs next. */
-function whenLine(routine: Routine): string {
-  if (routine.unreadable) return 'state not known'
-  if (routine.running) return 'running now'
-  if (routine.paused) return 'paused'
-  if (!routine.started) return 'waiting for the scheduler'
-  return routine.nextRun === null ? '' : soonIn(routine, routine.nextRun)
+/** The row's one line after its name: what it is doing, or when it runs next (always the next run;
+ * the chip is how the last one went). `next` marks a time, which wears the clock icon. */
+function whenLine(
+  routine: Routine,
+  now = Date.now(),
+): { text: string; next: boolean } {
+  if (routine.unreadable) return { text: 'state not known', next: false }
+  if (routine.running) return { text: 'running now', next: false }
+  if (routine.paused) return { text: 'paused', next: false }
+  if (!routine.started)
+    return { text: 'waiting for the scheduler', next: false }
+  if (routine.nextRun === null) return { text: '', next: false }
+  if (routine.nextRun <= now) return { text: 'due now', next: true }
+  return { text: soonIn(routine, routine.nextRun, now), next: true }
+}
+
+/** The time's tooltip: next and last run in full. */
+function whenTip(routine: Routine): string {
+  const next =
+    routine.nextRun === null
+      ? 'No next run scheduled.'
+      : `Next run ${whenIn(routine, routine.nextRun)}.`
+  const last =
+    routine.lastRun === null
+      ? 'Not run yet.'
+      : `Last run ${whenIn(routine, routine.lastRun)}${routine.lastMachine ? ` on ${routine.lastMachine}` : ''}.`
+  return `${next} ${last}`
 }
 
 /** "Daily at 03:30 UTC · next Nov 8, 3:30 AM UTC": the schedule and the next run in one zone. */
@@ -105,6 +132,7 @@ function Row({ routine }: { routine: Routine }) {
   const [log, setLog] = useState<{ text: string; bad: boolean } | null>(null)
   const [reading, setReading] = useState(false)
   const { chip, word } = chipOf(routine)
+  const when = whenLine(routine)
   const Chevron = open ? ChevronDown : ChevronRight
   const mine = (action: RoutineAction) =>
     pending?.kind === routine.kind && pending.action === action
@@ -147,7 +175,16 @@ function Row({ routine }: { routine: Routine }) {
           <span className={styles.name} title={routine.what}>
             {routine.what}
           </span>
-          <span className={styles.when}>{whenLine(routine)}</span>
+          <span className={styles.when} title={whenTip(routine)}>
+            {when.next && (
+              <Clock
+                className="h-3 w-3"
+                strokeWidth={1.7}
+                aria-label="Next run"
+              />
+            )}
+            <span className={styles.whenText}>{when.text}</span>
+          </span>
           <Chevron
             className={`${styles.chevron} h-3.5 w-3.5`}
             strokeWidth={1.7}

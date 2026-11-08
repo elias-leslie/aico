@@ -79,7 +79,7 @@ function QuotaRow({
   )
 }
 
-/** Quota for the heading: the lowest amount left across subscriptions, or how many are used up; amber when low. */
+/** Quota for the heading: the lowest amount left across subscriptions, or which are used up; amber when low. */
 export function useQuotaGlance(): GlanceHead {
   const { report, loading, failed } = useUsage()
   const glances = quotaGlances(report)
@@ -89,12 +89,20 @@ export function useQuotaGlance(): GlanceHead {
       : failed
         ? { value: 'Couldn’t read', tone: 'failed' }
         : { value: 'No reports yet', tone: null }
-  const usedUp = glances.filter((glance) => glance.state === 'used_up').length
+  const usedUp = glances.filter((glance) => glance.state === 'used_up')
   const unknown = glances.filter((glance) => glance.state === 'unknown').length
   const lefts = glances.flatMap((glance) =>
     glance.state === 'left' && glance.left !== null ? [glance.left] : [],
   )
-  if (usedUp) return { value: `${usedUp} used up`, tone: 'warn' }
+  // One by name ("OpenCode Go used up"); more as a count of subscriptions.
+  if (usedUp.length)
+    return {
+      value:
+        usedUp.length === 1
+          ? `${usedUp[0]?.name} used up`
+          : `${usedUp.length} subscriptions used up`,
+      tone: 'warn',
+    }
   if (lefts.length) {
     const low = Math.min(...lefts)
     return {
