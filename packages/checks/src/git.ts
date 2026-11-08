@@ -43,7 +43,7 @@ export function changedFiles(root: string, pathspecs: string[] = []): string[] {
   const specs = pathspecs.length ? ['--', ...literal(root, pathspecs)] : []
   const hasHead = gitOk(root, ['rev-parse', '-q', '--verify', 'HEAD'])
   const tracked = hasHead
-    ? nul(git(root, ['diff', '--name-only', '-z', 'HEAD', ...specs]))
+    ? nul(git(root, ['diff', '--name-only', '--no-renames', '-z', 'HEAD', ...specs]))
     : nul(git(root, ['ls-files', '-z', ...specs]))
   const untracked = nul(git(root, ['ls-files', '--others', '--exclude-standard', '-z', ...specs]))
   return [...new Set([...tracked, ...untracked])].sort()

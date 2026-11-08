@@ -170,7 +170,15 @@ export async function commit(config: Config, options: CommitOptions): Promise<Co
     if (blocked) throw new CommitError(blocked)
     checkedCandidate &&=
       head() === checkedBase && changedFiles(root).every((file) => files.includes(file))
-    git(root, ['add', '-A', '--', ...files.map((file) => `:(literal)${file}`)])
+    // A deletion already staged (git rm, git mv) is in neither the tree nor the index: git add
+    // refuses its path, and git commit --only takes it as it is.
+    const indexed = new Set(
+      git(root, ['ls-files', '-z', '--', ...files.map((file) => `:(literal)${file}`)])
+        .split('\0')
+        .filter(Boolean),
+    )
+    const stage = files.filter((file) => indexed.has(file) || existsSync(join(root, file)))
+    if (stage.length) git(root, ['add', '-A', '--', ...stage.map((file) => `:(literal)${file}`)])
     git(
       root,
       ['commit', '--only', '-q', '-F', '-', '--', ...files.map((file) => `:(literal)${file}`)],

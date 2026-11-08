@@ -474,6 +474,26 @@ describe('commit', () => {
     expect(git(root, 'rev-list', '--count', 'HEAD')).toBe('1')
   })
 
+  it('commits a staged deletion, a rename and a deleted folder', async () => {
+    const root = repo('')
+    write(root, 'src/gone.ts', 'gone\n')
+    write(root, 'src/old.ts', 'moved\n')
+    write(root, 'src/dir/a.ts', 'a\n')
+    git(root, 'add', '-A')
+    git(root, 'commit', '-qm', 'files')
+    git(root, 'rm', '-q', 'src/gone.ts')
+    git(root, 'mv', 'src/old.ts', 'src/new.ts')
+    rmSync(join(root, 'src/dir'), { recursive: true })
+    const run = (paths: string[]) =>
+      commit(config(root), { message: 'm', paths, noCheck: true, coordination: coordination() })
+    await run(['src/gone.ts'])
+    expect(git(root, 'show', '--name-status', '--format=', 'HEAD')).toBe('D\tsrc/gone.ts')
+    await run(['src/old.ts', 'src/new.ts'])
+    await run(['src/dir'])
+    expect(git(root, 'show', '--name-status', '--format=', 'HEAD')).toBe('D\tsrc/dir/a.ts')
+    expect(git(root, 'status', '--porcelain')).toBe('')
+  })
+
   it('keeps spaces in an explicitly named CLI path', async () => {
     const root = repo('')
     write(root, 'src/with space.ts', 'new\n')
