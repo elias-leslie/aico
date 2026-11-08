@@ -40,7 +40,7 @@ setup=[["alembic","upgrade","head"]]
 image="postgres:16"
 env={POSTGRES_USER="fixture",POSTGRES_DB="test"}
 `
-function host(fail?: 'run' | 'exec') {
+function host(fail?: 'run' | 'port' | 'exec') {
   const calls: string[][] = []
   let now = 0
   const runtime: FixtureRuntime = {
@@ -49,9 +49,11 @@ function host(fail?: 'run' | 'exec') {
     run: async (argv) => {
       calls.push(argv)
       const command = argv[1]
-      return { code: command === fail ? 1 : 0, output: '' }
+      return {
+        code: command === fail ? 1 : 0,
+        output: command === 'port' ? '127.0.0.1:31415\n' : '',
+      }
     },
-    freePort: async () => 31415,
     now: () => now,
     pause: async () => {
       now += 61_000
@@ -83,12 +85,12 @@ it('keeps declared pytest argv, setup and clean env while rewriting only the dis
     },
     fake.runtime,
   )
-  expect(fake.calls.map((argv) => argv[1])).toEqual(['run', 'exec', 'rm'])
-  expect(fake.calls[0]).toContain('127.0.0.1:31415:5432')
+  expect(fake.calls.map((argv) => argv[1])).toEqual(['run', 'port', 'exec', 'rm'])
+  expect(fake.calls[0]).toContain('127.0.0.1::5432')
   expect(fake.calls[0]).toContain('--tmpfs')
 })
 
-it.each(['run', 'exec'] as const)(
+it.each(['run', 'port', 'exec'] as const)(
   'removes partially started service containers after %s failure',
   async (fail) => {
     const root = repo(service)

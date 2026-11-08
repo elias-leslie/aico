@@ -3,7 +3,6 @@
 import { spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { accessSync, constants, existsSync, mkdirSync, readdirSync, symlinkSync } from 'node:fs'
-import { createServer } from 'node:net'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { type Config, ConfigError, type Planned, toolBinary } from './plan'
@@ -26,7 +25,6 @@ interface CommandResult {
 export interface FixtureRuntime {
   which(name: string): string | undefined
   run(argv: string[], env: NodeJS.ProcessEnv): Promise<CommandResult>
-  freePort(): Promise<number>
   now(): number
   pause(): Promise<void>
   dockerAvailable?(): boolean
@@ -108,19 +106,6 @@ const runtime: FixtureRuntime = {
       })
       child.on('error', () => resolveResult({ code: null, output: '' }))
       child.on('close', (code) => resolveResult({ code, output }))
-    }),
-  freePort: () =>
-    new Promise((resolvePort, reject) => {
-      const socket = createServer()
-      socket.on('error', reject)
-      socket.listen(0, '127.0.0.1', () => {
-        const address = socket.address()
-        socket.close(() =>
-          typeof address === 'object' && address
-            ? resolvePort(address.port)
-            : reject(new ConfigError('Cannot allocate test service port')),
-        )
-      })
     }),
   now: () => Date.now(),
   pause: () => new Promise((resolvePause) => setTimeout(resolvePause, 500)),
@@ -287,7 +272,6 @@ export async function withAcceptanceFixture<T>(
         throw new ConfigError(
           'docker or a prepared podman service is required for the acceptance database',
         )
-      const port = await host.freePort()
       const container = `aico-check-${name.replace(/[^A-Za-z0-9_.-]/g, '-')}-${randomBytes(4).toString('hex')}`
       const image =
         engine[0] === podman && !/^[^/]+[.:][^/]*\//.test(spec.image)
@@ -308,7 +292,7 @@ export async function withAcceptanceFixture<T>(
           '--name',
           container,
           '-p',
-          `127.0.0.1:${port}:5432`,
+          '127.0.0.1::5432',
           '--tmpfs',
           '/var/lib/postgresql/data',
           ...serviceEnv,
@@ -317,6 +301,11 @@ export async function withAcceptanceFixture<T>(
         base,
       )
       if (launched.code !== 0) throw new ConfigError(`Acceptance service ${name} did not start`)
+      // The engine picks the host port as it binds, so nothing can take it in between.
+      const mapped = await host.run([...engine, 'port', container, '5432/tcp'], base)
+      const port =
+        mapped.code === 0 ? /^127\.0\.0\.1:(\d+)\s*$/m.exec(mapped.output)?.[1] : undefined
+      if (!port) throw new ConfigError(`Acceptance service ${name} did not report its port`)
       const user = spec.env.POSTGRES_USER ?? 'postgres'
       const database = spec.env.POSTGRES_DB ?? user
       const deadline = host.now() + 60_000 // Same readiness bound as the existing local CI fixture.
@@ -346,7 +335,7 @@ export async function withAcceptanceFixture<T>(
         await host.pause()
       }
       env.PGHOST = '127.0.0.1'
-      env.PGPORT = String(port)
+      env.PGPORT = port
       for (const [key, value] of Object.entries(env))
         if (value !== undefined)
           env[key] = value.replace(/(?<=@)(localhost|127\.0\.0\.1):5432\b/g, `127.0.0.1:${port}`)
