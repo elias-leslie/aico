@@ -78,6 +78,8 @@ export interface HubDeps {
   log?(message: string): void
   now?(): number
   random?(): number
+  /** The peer links' shortest retry backoff (tests shorten it). */
+  retryMinMs?: number
   /** How a create wakes a host and checks it is ready (tests replace it). */
   gate?: Partial<GateRuntime>
   /** How a host whose Tether is on an older API gets this release
@@ -313,6 +315,7 @@ export class Hub {
           log: this.log,
           now: this.now,
           random: this.deps.random ?? Math.random,
+          retryMinMs: this.deps.retryMinMs,
           poweredOff: (host) => this.poweredOff(host),
           kick: (host) => this.gate.kick(host),
           checked: (peer) => this.checkRelease(peer),

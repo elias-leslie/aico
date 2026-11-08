@@ -252,6 +252,8 @@ export function makeTestHub(ctx: TestHubContext, overrides: Partial<HubDeps> = {
       ctx.local.has(id) ? { coordinatorId: id, coordinatorColor: '#6fa8ff', parentId: id } : null,
     log: () => {},
     random: () => 0,
+    // A dropped link comes back in milliseconds, not the real one-second floor.
+    retryMinMs: 20,
     gate: { kick: () => {}, linkGraceMs: 200 },
     // Never an ssh from a test: a host on an older API fails its update.
     update: async () => ({ code: 1, stdout: '', output: 'no release in tests' }),

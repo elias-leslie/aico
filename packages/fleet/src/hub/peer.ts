@@ -53,6 +53,8 @@ export interface PeerDeps {
   log(message: string): void
   now(): number
   random(): number
+  /** The shortest retry backoff (tests shorten it; the real one is RETRY_MIN_MS). */
+  retryMinMs?: number
   /** Whether the host is powered off, from its hosts.json `status` command;
    * null when there is none or it could not tell. */
   poweredOff?(entry: HostEntry): Promise<boolean | null>
@@ -119,8 +121,8 @@ export function downReason(name: string, state: string): string {
 }
 
 /** Jittered, capped exponential retry delay. */
-function retryDelay(attempt: number, random: () => number): number {
-  const ceiling = Math.min(RETRY_MAX_MS, RETRY_MIN_MS * 2 ** Math.max(0, attempt))
+function retryDelay(attempt: number, random: () => number, minMs = RETRY_MIN_MS): number {
+  const ceiling = Math.min(RETRY_MAX_MS, minMs * 2 ** Math.max(0, attempt))
   return Math.round(ceiling / 2 + (random() * ceiling) / 2)
 }
 
@@ -464,7 +466,7 @@ export class Peer {
       if (signal.aborted) return
       const stable = up.at !== null && this.deps.now() - up.at >= STABLE_MS
       attempt = stable ? 0 : attempt + 1
-      await this.waitRetry(retryDelay(attempt, this.deps.random), signal)
+      await this.waitRetry(retryDelay(attempt, this.deps.random, this.deps.retryMinMs), signal)
     }
   }
 
