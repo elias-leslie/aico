@@ -9,6 +9,7 @@ import {
   type GrantItem,
   type GrantsView,
   grantsLine,
+  grantUseLine,
   splitGrants,
 } from '@/lib/grants'
 import { useClock } from '@/lib/hooks/use-clock'
@@ -25,7 +26,6 @@ import {
 const GRANTS_KEY = ['grants']
 /** A request can arrive or run out while the page is open. */
 const GRANTS_POLL_MS = 15_000
-const USES_SHOWN = 8
 
 const CHIP: Record<GrantItem['kind'], string> = {
   open: 'ok',
@@ -51,7 +51,6 @@ export function GrantsPage() {
     refetchInterval: GRANTS_POLL_MS,
     retry: 1,
   })
-  const [allUses, setAllUses] = useState(false)
   const [revoking, setRevoking] = useState('')
   const [revokeError, setRevokeError] = useState('')
   const revoke = useMutation({
@@ -84,8 +83,7 @@ export function GrantsPage() {
 
   const data = query.data
   const split = data ? splitGrants(data, now) : null
-  const uses = data ? data.uses.filter((u) => u.event === 'use') : []
-  const shownUses = allUses ? uses : uses.slice(0, USES_SHOWN)
+  const uses = data?.uses ?? []
 
   return (
     <section aria-label="Grants">
@@ -101,7 +99,7 @@ export function GrantsPage() {
       >
         <button
           type="button"
-          className="lantern-btn ghost small"
+          className="lantern-btn small"
           disabled={query.isFetching}
           onClick={() => void query.refetch()}
         >
@@ -148,6 +146,7 @@ export function GrantsPage() {
                   key={item.request.id}
                   item={item}
                   busy={revoking === item.request.id}
+                  used={grantUseLine(item, uses, now)}
                   onEnd={() => void end(item)}
                 />
               ))
@@ -163,38 +162,12 @@ export function GrantsPage() {
                   key={item.request.id}
                   item={item}
                   busy={false}
+                  used={grantUseLine(item, uses, now)}
                   onEnd={() => undefined}
                 />
               ))
             )}
           </Group>
-
-          <Group title="Recent use" count={uses.length}>
-            {uses.length === 0 ? (
-              <Quiet>No access has been used yet.</Quiet>
-            ) : (
-              shownUses.map((u) => (
-                <Row
-                  key={`${u.at}-${u.id}`}
-                  name={data?.labels[u.kind] ?? u.kind}
-                  meta={
-                    <time dateTime={new Date(u.at * 1000).toISOString()}>
-                      Used {formatWhen(u.at * 1000, now)}
-                    </time>
-                  }
-                />
-              ))
-            )}
-          </Group>
-          {uses.length > USES_SHOWN && (
-            <button
-              type="button"
-              className="lantern-btn ghost small"
-              onClick={() => setAllUses((v) => !v)}
-            >
-              {allUses ? 'Show fewer' : `Show all ${uses.length}`}
-            </button>
-          )}
         </>
       )}
     </section>
@@ -205,10 +178,13 @@ export function GrantsPage() {
 function GrantRow({
   item,
   busy,
+  used,
   onEnd,
 }: {
   item: GrantItem
   busy: boolean
+  /** How it was used, folded into one line. */
+  used: string | null
   onEnd: () => void
 }) {
   const { request } = item
@@ -222,6 +198,7 @@ function GrantRow({
       defaultOpen={item.live}
     >
       {request.reason && <p>{request.reason}</p>}
+      {used && <small>{used}</small>}
       {item.live ? (
         <Actions>
           <button
@@ -238,7 +215,7 @@ function GrantRow({
           </button>
         </Actions>
       ) : (
-        !request.reason && <small>No reason was given.</small>
+        !request.reason && !used && <small>No reason was given.</small>
       )}
     </Row>
   )

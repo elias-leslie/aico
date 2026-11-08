@@ -292,6 +292,11 @@ button.rowHead:focus-visible {
 .form summary {
   cursor: pointer;
   min-height: 28px;
+  border-radius: 6px;
+  transition: color 0.16s var(--ease-arrival);
+}
+.form summary:hover {
+  color: var(--lantern);
 }
 .form summary:focus-visible {
   outline: 2px solid var(--lantern);

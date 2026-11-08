@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { grantsLine, splitGrants, statement } from './grants'
+import { grantsLine, grantUseLine, splitGrants, statement } from './grants'
 
 const NOW = Date.parse('2026-11-06T12:00:00') // local time
 const s = (offsetMin: number) => NOW / 1000 + offsetMin * 60
@@ -82,5 +82,38 @@ describe('splitGrants', () => {
 describe('statement', () => {
   it('turns a question into a name', () => {
     expect(statement('Open test access?')).toBe('Test access')
+  })
+})
+
+describe('grantUseLine', () => {
+  const item = (state: string, expires: number) =>
+    splitGrants({ requests: [req('g1', state, expires)], uses: [] }, NOW)
+  const use = (id: string, offsetMin: number) => ({
+    at: s(offsetMin),
+    event: 'use',
+    id,
+    kind: 'owner-chrome',
+    uid: 1000,
+  })
+
+  it("folds a grant's heartbeats into one span and a count", () => {
+    const [ended] = item('expired', s(-1)).history
+    const uses = Array.from({ length: 58 }, (_, i) => use('g1', -60 + i * 0.5))
+    uses.push(use('other', -10))
+    const line = grantUseLine(ended as never, uses, NOW)
+    expect(line).toMatch(/^Used .+ to .+ \(58 checks\)\.$/)
+  })
+
+  it('says once for a single use, and nothing used for an ended grant with none', () => {
+    const [ended] = item('approved', s(-5)).history
+    expect(grantUseLine(ended as never, [use('g1', -20)], NOW)).toMatch(
+      /^Used once, at /,
+    )
+    expect(grantUseLine(ended as never, [], NOW)).toBe('Nothing used it.')
+  })
+
+  it('says nothing for a request nobody approved', () => {
+    const [expired] = item('pending', s(-5)).history
+    expect(grantUseLine(expired as never, [], NOW)).toBeNull()
   })
 })

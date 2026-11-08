@@ -97,7 +97,7 @@ export function RecoveryPage() {
         sub="Sessions that stopped on their own, and what came back."
       >
         <button
-          className="lantern-btn ghost small"
+          className="lantern-btn small"
           type="button"
           disabled={refreshing}
           onClick={() => void refetch()}
@@ -144,7 +144,9 @@ export function RecoveryPage() {
             <Notice>
               Status reports lost work this page can’t list, because no session
               stopped: {withSessionNames(lost.meaning, sessions.names)}{' '}
-              <Link href="/status">Open Status</Link>
+              <Link className="lantern-btn small" href="/status">
+                Open Status
+              </Link>
             </Notice>
           )}
           {view.partial && (

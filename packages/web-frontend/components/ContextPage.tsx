@@ -485,20 +485,21 @@ export function ContextPage({ memory }: { memory?: ReactNode }) {
         }
       >
         <button
-          className="lantern-icon-btn compact"
+          className="lantern-btn small"
           type="button"
           aria-label="Refresh context"
           title="Refresh context"
           disabled={query.isFetching}
           onClick={() => void query.refetch()}
         >
-          <RefreshCw size={16} />
+          <RefreshCw size={14} aria-hidden="true" />
+          Refresh
         </button>
       </SectionHead>
       <nav className={kit.tabs} aria-label="Context">
         {TABS.map((t) => (
           <button
-            className={`lantern-btn small ${tab === t ? 'primary' : 'ghost'}`}
+            className={`lantern-btn small ${tab === t ? 'primary' : ''}`}
             aria-pressed={tab === t}
             type="button"
             key={t}

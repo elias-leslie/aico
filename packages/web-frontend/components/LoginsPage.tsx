@@ -164,7 +164,7 @@ export function LoginsPage() {
       >
         <button
           type="button"
-          className="lantern-btn ghost small"
+          className="lantern-btn small"
           onClick={() => void load()}
         >
           Refresh
@@ -184,7 +184,7 @@ export function LoginsPage() {
           actions={
             <button
               type="button"
-              className="lantern-btn ghost small"
+              className="lantern-btn small"
               onClick={() => void load()}
             >
               Try again
@@ -279,7 +279,7 @@ export function LoginsPage() {
             actions={
               <button
                 type="button"
-                className="lantern-btn ghost small"
+                className="lantern-btn small"
                 onClick={() => void hostState.refetch()}
               >
                 Try again
@@ -506,13 +506,13 @@ function LoginRow({
       chipText={entry.state}
     >
       {entry.notes && <p>{entry.notes}</p>}
-      <small>Last used: {when(entry.lastUsed)}</small>
+      {entry.lab && <small>Last used: {when(entry.lastUsed)}</small>}
       <Actions>
         {!entry.verifierOnly && (
           <>
             <button
               type="button"
-              className="lantern-btn ghost small"
+              className="lantern-btn small"
               disabled={busy}
               onClick={() =>
                 value === null ? void run(() => reveal()) : setValue(null)
@@ -522,7 +522,7 @@ function LoginRow({
             </button>
             <button
               type="button"
-              className="lantern-btn ghost small"
+              className="lantern-btn small"
               disabled={busy}
               onClick={() => void run(() => reveal(true))}
             >
@@ -530,7 +530,7 @@ function LoginRow({
             </button>
             <button
               type="button"
-              className="lantern-btn ghost small"
+              className="lantern-btn small"
               disabled={readOnly}
               onClick={() => toggle('replace')}
             >
@@ -541,7 +541,7 @@ function LoginRow({
         {entry.lab && (
           <button
             type="button"
-            className="lantern-btn ghost small"
+            className="lantern-btn small"
             disabled={readOnly}
             onClick={() => toggle('edit')}
           >
@@ -550,7 +550,7 @@ function LoginRow({
         )}
         <button
           type="button"
-          className="lantern-btn ghost small"
+          className="lantern-btn small"
           disabled={readOnly}
           onClick={() => toggle('grants')}
         >
@@ -686,7 +686,7 @@ function LoginRow({
           <Actions>
             <button
               type="button"
-              className="lantern-btn ghost small"
+              className="lantern-btn small"
               onClick={() => setPanel(null)}
             >
               Cancel

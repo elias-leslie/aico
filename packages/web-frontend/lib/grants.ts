@@ -1,6 +1,6 @@
 // The Grants page's words: which requests are live (Active) and which are over (History).
 
-import { formatWhen } from './capture-format'
+import { formatClock, formatWhen } from './capture-format'
 
 export interface GrantRequest {
   id: string
@@ -154,4 +154,33 @@ export function grantsLine(active: GrantItem[]): string {
   const open = active.length - waiting
   if (!active.length) return 'Nothing open or waiting.'
   return `${waiting ? `${waiting} waiting for your tap` : 'Nothing waiting'} · ${open ? `${open} open` : 'none open'}`
+}
+
+/**
+ * What a grant's own use looked like, in a sentence for its open row. Agents check in every
+ * half minute or so while a grant is open, so the raw uses fold into one line: the span and the count.
+ * Null when the use isn't worth saying (a request nobody approved).
+ */
+export function grantUseLine(
+  item: GrantItem,
+  uses: readonly GrantUse[],
+  now: number,
+): string | null {
+  const mine = uses
+    .filter((u) => u.event === 'use' && u.id === item.request.id)
+    .map((u) => u.at * 1000)
+  if (mine.length === 0) {
+    return item.kind === 'open' || item.kind === 'ended'
+      ? 'Nothing used it.'
+      : null
+  }
+  const first = Math.min(...mine)
+  const last = Math.max(...mine)
+  if (mine.length === 1) return `Used once, at ${formatWhen(first, now)}.`
+  const sameDay =
+    new Date(first).toDateString() === new Date(last).toDateString()
+  const span = sameDay
+    ? `${formatClock(first)} to ${formatClock(last)}`
+    : `${formatWhen(first, now)} to ${formatWhen(last, now)}`
+  return `Used ${span} (${mine.length} checks).`
 }

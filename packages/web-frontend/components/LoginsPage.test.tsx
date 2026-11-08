@@ -120,3 +120,48 @@ it.each(['add', 'replace'])(
     ).toBeNull()
   },
 )
+it('says when a login was last used once, on the row, not again in its detail', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (path: string) =>
+      Response.json(
+        path.endsWith('/sessions')
+          ? { sessions: [] }
+          : path.endsWith('/audit')
+            ? { events: [] }
+            : {
+                entries: [{ ...entry, lastUsed: '2026-11-05T11:15:00Z' }],
+                assignments: {},
+                revealSeconds: 30,
+              },
+      ),
+    ),
+  )
+  render(<LoginsPage />)
+  fireEvent.click(await screen.findByRole('button', { name: /scratch/ }))
+  expect(screen.getAllByText(/Last used:/)).toHaveLength(1)
+  expect(screen.getByText('Scratch entry')).toBeInTheDocument()
+})
+it('keeps every action a button with a border, not bare text', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (path: string) =>
+      Response.json(
+        path.endsWith('/sessions')
+          ? { sessions: [] }
+          : path.endsWith('/audit')
+            ? { events: [] }
+            : { entries: [entry], assignments: {}, revealSeconds: 30 },
+      ),
+    ),
+  )
+  const { container } = render(<LoginsPage />)
+  fireEvent.click(await screen.findByRole('button', { name: /scratch/ }))
+  expect(container.querySelector('.lantern-btn.ghost')).toBeNull()
+  expect(screen.getByRole('button', { name: 'Refresh' })).toHaveClass(
+    'lantern-btn',
+  )
+  expect(screen.getByRole('button', { name: 'Copy' })).toHaveClass(
+    'lantern-btn',
+  )
+})

@@ -66,7 +66,7 @@ export function PhoneAppSection() {
         sub="Install Aico on your Android phone to get alerts and answer requests."
       >
         <button
-          className="lantern-btn ghost small"
+          className="lantern-btn small"
           type="button"
           onClick={() => void load()}
         >

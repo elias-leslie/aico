@@ -77,6 +77,41 @@ describe('GrantsPage', () => {
     expect(screen.getByText(/Nightshift or Aico tray/)).toBeInTheDocument()
   })
 
+  it("folds a grant's heartbeat uses into its history row and lists no raw uses", async () => {
+    const id = 'c'.repeat(32)
+    api.view = view({
+      requests: [request(id, 'expired', nowS - 600)],
+      uses: [
+        {
+          at: nowS - 3000,
+          event: 'approved',
+          id,
+          kind: 'owner-chrome',
+          uid: 1,
+        },
+        ...Array.from({ length: 40 }, (_, i) => ({
+          at: nowS - 2900 + i * 30,
+          event: 'use',
+          id,
+          kind: 'owner-chrome',
+          uid: 1,
+        })),
+      ],
+    })
+    const { container } = renderPage()
+    const history = await screen.findByRole('region', { name: /History/ })
+    fireEvent.click(
+      within(history).getByRole('button', { name: /Your main Chrome/ }),
+    )
+    expect(within(history).getByText(/\(40 checks\)/)).toBeInTheDocument()
+    expect(screen.queryByText(/Recent use/)).toBeNull()
+    expect(screen.queryByRole('button', { name: /Show all/ })).toBeNull()
+    expect(container.querySelector('.lantern-btn.ghost')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Refresh' })).toHaveClass(
+      'lantern-btn',
+    )
+  })
+
   it('withdraws a waiting request', async () => {
     api.view = view({
       requests: [request('a'.repeat(32), 'pending', nowS + 600)],
