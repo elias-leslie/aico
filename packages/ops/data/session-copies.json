@@ -1,9 +1,9 @@
 {
   "copiesDir": {
-    "davion-sidarli": "/srv/scratch/aico/session-copies",
+    "davion-sidarli": "/srv/scratch/.aico-session-copies",
     "*": "~/.cache/aico/session-copies"
   },
-  "state": "~/.local/state/aico/session-copies-sent.json",
+  "state": "~/.cache/aico/session-copies-sent.json",
   "continuity": "~/.local/state/tether/default/continuity.json",
   "tetherBin": "~/.local/lib/tether/bin/tether",
   "peerAico": "$HOME/.local/bin/aico",

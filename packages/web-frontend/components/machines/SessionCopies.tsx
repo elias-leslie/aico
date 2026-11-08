@@ -26,11 +26,13 @@ const megabytes = (bytes: number) =>
     ? `${Math.round(bytes / (1024 * 1024))} MB`
     : `${Math.ceil(bytes / 1024)} KB`
 
-/** What was running on a machine when this Aico last heard from it, from the copies it holds: nothing
+/** What was running on a machine at its last change, from the copies this Aico holds: nothing
  * when it holds none. Read-only; picking a session up here isn't built yet, so nothing offers it. */
 export function SessionCopies({ machine }: { machine: Machine }) {
   const { machines, failed } = useSessionCopies()
   const held = machines?.find((entry) => entry.machine === machine.key)
+  // Copies of sessions that already ended stay readable by `aico shift show`; this list is what was running.
+  const running = held?.sessions.filter((session) => !session.endedAt) ?? []
   // Couldn't read isn't the same as holding none, on the machine a copy would be of.
   if (failed && !machines && machine.sessionHost && !machine.here)
     return (
@@ -41,15 +43,15 @@ export function SessionCopies({ machine }: { machine: Machine }) {
         Sessions unknown
       </span>
     )
-  if (!held?.sessions.length) return null
+  if (!held || !running.length) return null
   const now = Date.now()
   const heard = at(held.at, now)
-  const waiting = held.sessions.filter((session) => session.needsYou).length
-  const count = held.sessions.length
+  const waiting = running.filter((session) => session.needsYou).length
+  const count = running.length
   return (
     <details className={mine.services} data-testid="session-copies">
       <summary
-        title={`${count} ${count === 1 ? 'session was' : 'sessions were'} running on ${machine.name} when this Aico last heard from it, ${heard}. Its conversations and a short state are kept here.`}
+        title={`${count} ${count === 1 ? 'session was' : 'sessions were'} running on ${machine.name} at its last change, ${heard}; nothing is sent while nothing changes. Their conversations and a short state are kept here.`}
       >
         Sessions
         <span
@@ -60,13 +62,13 @@ export function SessionCopies({ machine }: { machine: Machine }) {
         >
           {count}
         </span>
-        <span className={mine.heardAt} aria-label={`Last heard ${heard}`}>
+        <span className={mine.heardAt} aria-label={`Last change ${heard}`}>
           <Clock size={12} aria-hidden="true" />
           {heard}
         </span>
       </summary>
       <ul className={mine.serviceList}>
-        {held.sessions.map((session) => (
+        {running.map((session) => (
           <CopyRow key={session.id} session={session} now={now} />
         ))}
       </ul>

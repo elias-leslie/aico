@@ -177,6 +177,8 @@ export interface CopySession {
   lastOwner: CopySaid | null
   lastAgent: CopySaid | null
   git: { branch: string; head: string; dirty: number } | null
+  /** When it left its machine's list; null while it was still there. */
+  endedAt?: number | null
   copy: { bytes: number; files: number; cut: boolean } | null
 }
 

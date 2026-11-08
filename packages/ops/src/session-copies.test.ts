@@ -376,12 +376,148 @@ test('an ended copy goes after its time, counted only on a pass from its own mac
   expect(pruneCopies(options, null)).toEqual([])
   expect(pruneCopies(options, 'other')).toEqual([])
   expect(existsSync(copyOf('conv-1'))).toBe(true)
-  // It came back and that session is over: the copy goes.
+  // It came back and that session is over: the time starts now, however old the copy is.
+  await sendPass(deps(config, peer, { sessions: () => [] }))
+  expect(existsSync(copyOf('conv-1'))).toBe(true)
+  expect(readHeld(held)[0]?.sessions[0]).toMatchObject({ id: 'aaaa1111', endedAt: now })
+  // Its time is up: the next word from that machine takes it.
   now += 2 * 3_600_000
-  const later = await sendPass(deps(config, peer, { sessions: () => [] }))
+  const later = await sendPass(deps(config, peer, { sessions: () => [record({ id: 'bbbb2222' })] }))
   expect(later.lines.join()).toContain('removed')
   expect(existsSync(copyOf('conv-1'))).toBe(false)
+  expect(readHeld(held)[0]?.sessions.map((session) => session.id)).toEqual(['bbbb2222'])
   expect(readFileSync(join(held, 'removed.log'), 'utf8')).toContain('ended more than 1 hours ago')
+})
+
+test('a session that comes back to the list stops its time', async () => {
+  writeClaude('conv-1', 'line one\n')
+  const config = cfg({ keepEndedHours: 1 })
+  const peer = link(config)
+  await sendPass(deps(config, peer))
+  await sendPass(deps(config, peer, { sessions: () => [] }))
+  now += 2 * 3_600_000
+  await sendPass(deps(config, peer))
+  expect(existsSync(copyOf('conv-1'))).toBe(true)
+  expect(readHeld(held)[0]?.sessions[0]?.endedAt).toBeNull()
+})
+
+test('roles unreadable: no pass at all, so no session looks ended and nothing is removed', async () => {
+  writeClaude('conv-1', 'line one\n')
+  const config = cfg({ keepEndedHours: 0 })
+  const peer = link(config)
+  await sendPass(
+    deps(config, peer, {
+      sessions: () => [record({ rootRequestId: 'r1' })],
+      roles: () => new Map([['r1', 'developer']]),
+    }),
+  )
+  peer.calls.length = 0
+  now += 3_600_000
+  const pass = await sendPass(
+    deps(config, peer, { sessions: () => [record({ rootRequestId: 'r1' })], roles: () => null }),
+  )
+  expect(pass).toMatchObject({ failed: false, contacted: false })
+  expect(peer.calls).toEqual([])
+  expect(existsSync(copyOf('conv-1'))).toBe(true)
+})
+
+test('a helper of a hunter stays home however it was launched; where the chain ends unread, too', () => {
+  const roles = new Map<string, string | null>([
+    ['r-hunt', 'hunting'],
+    ['r-work', 'implementation'],
+  ])
+  const ids = (list: LiveRecord[]) => list.map((entry) => entry.id)
+  const all = [
+    record({ id: 'hunter', rootRequestId: 'r-hunt' }),
+    record({ id: 'its-helper', parentId: 'hunter' }),
+    record({ id: 'helper-of-helper', coordinatorId: 'its-helper' }),
+    record({ id: 'neri-lead', projectId: 'neri' }),
+    record({ id: 'neri-helper', projectId: 'aico', parentId: 'neri-lead' }),
+    record({ id: 'under-gone', parentId: 'nobody-now' }),
+    record({ id: 'unknown-root', rootRequestId: 'r-unknown' }),
+    record({ id: 'lead', rootRequestId: 'r-work' }),
+    record({ id: 'lead-helper', parentId: 'lead' }),
+    record({ id: 'under-root', parentId: 'r-work' }),
+    record({ id: 'loop-a', parentId: 'loop-b' }),
+    record({ id: 'loop-b', parentId: 'loop-a' }),
+    record({ id: 'owner-opened' }),
+  ]
+  expect(ids(eligibleSessions(all, roles, cfg()))).toEqual([
+    'lead',
+    'lead-helper',
+    'under-root',
+    'owner-opened',
+  ])
+})
+
+test('a very long line at the cut keeps what fits rather than leaving the copy empty', async () => {
+  const config = cfg({ maxSessionMb: 2 })
+  const peer = link(config)
+  // Over the cap, with more than 1 MB without a line end right where a cut falls.
+  writeClaude('conv-1', `${'a'.repeat(MB + 100)}\n${'b'.repeat(MB + MB / 2)}\nlast\n`)
+  await sendPass(deps(config, peer))
+  expect(readFileSync(copyOf('conv-1'), 'utf8')).toContain('last')
+  // The cut on the receiver's side, with the same long line.
+  const big = claudeFile('conv-1')
+  writeFileSync(big, `${readFileSync(big, 'utf8')}${'c'.repeat(MB + MB / 4)}\nnewest\n`)
+  await sendPass(deps(config, peer))
+  expect(readFileSync(copyOf('conv-1'), 'utf8')).toContain('newest')
+  expect(statSync(copyOf('conv-1')).size).toBeLessThanOrEqual(2 * MB)
+})
+
+test('a database too big for a pass stays home without asking the peer on every pass', async () => {
+  const db = join(home, '.gemini/antigravity-cli/conversations/conv-9.db')
+  mkdirSync(join(db, '..'), { recursive: true })
+  writeFileSync(db, Buffer.alloc(2 * MB))
+  const config = cfg({ maxPassMb: 1 })
+  const peer = link(config)
+  const agy = {
+    sessions: () => [record({ tool: 'agy' })],
+    resumeIds: () => new Map([['aaaa1111', 'conv-9']]),
+  }
+  await sendPass(deps(config, peer, agy))
+  expect(readHeld(held)[0]?.sessions[0]?.copy).toBeNull()
+  peer.calls.length = 0
+  await sendPass(deps(config, peer, agy))
+  expect(peer.calls).toEqual([])
+})
+
+test('a peer cut off mid-command is off, not failing', async () => {
+  writeClaude('conv-1', 'line one\n')
+  const config = cfg()
+  const peer = link(config)
+  const real = peer.peer.call
+  let cut = true
+  peer.peer.call = async (args, input) => {
+    if (cut) {
+      cut = false
+      return { code: 1, stdout: '', output: 'signal', ended: true }
+    }
+    peer.up = false
+    return real(args, input)
+  }
+  const pass = await sendPass(deps(config, peer))
+  expect(pass.failed).toBe(false)
+  expect(pass.lines.join()).toContain('not connected')
+})
+
+test('a session title holding a key is masked before it leaves', async () => {
+  writeClaude('conv-1', 'line one\n')
+  const config = cfg()
+  const peer = link(config)
+  const key = `sk-ant-${'a'.repeat(40)}`
+  await sendPass(deps(config, peer, { sessions: () => [record({ displayTitle: `paste ${key}` })] }))
+  expect(readHeld(held)[0]?.sessions[0]?.title).not.toContain(key)
+})
+
+test('the copies live where the scratch sweep leaves them, and the sent state outside backups', () => {
+  const checks = readFileSync(
+    join(import.meta.dirname, '../../../native/host-steward/host_steward/data/checks.toml'),
+    'utf8',
+  )
+  expect(checks).toMatch(/^scratch_keep = \[.*"\.\*"/m)
+  expect(copiesConfig.copiesDir['davion-sidarli']).toMatch(/^\/srv\/scratch\/\.[^/]+$/)
+  expect(copiesConfig.state).toMatch(/^~\/\.cache\//)
 })
 
 test('with the disk low only the list goes and the sender says so; old ended copies go first', async () => {

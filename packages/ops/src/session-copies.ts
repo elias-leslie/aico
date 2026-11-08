@@ -91,7 +91,7 @@ export interface CopySession {
   git: { branch: string; head: string; dirty: number } | null
 }
 
-interface Snapshot {
+interface CopySnapshot {
   v: 1
   machine: string
   at: number
@@ -100,6 +100,8 @@ interface Snapshot {
 
 /** A session as `aico shift list` reads it: the snapshot's facts and what this machine holds of it. */
 export interface HeldSession extends CopySession {
+  /** When it left its machine's list; null while it was still there at the last pass. */
+  endedAt: number | null
   copy: { bytes: number; files: number; cut: boolean; newest: number | null; path: string } | null
 }
 
@@ -123,6 +125,8 @@ export interface LiveRecord {
   projectId?: string | null
   projectRoot?: string | null
   rootRequestId?: string | null
+  parentId?: string | null
+  coordinatorId?: string | null
   state?: string | null
   stateAt?: number | null
   stateDetail?: string | null
@@ -134,8 +138,9 @@ export interface LiveRecord {
 
 /**
  * The sessions that may leave this machine: agents running here (not ones another machine runs and
- * Tether only lists), never a shell, never a Neri project or a hunting role. A session with a role
- * Tether couldn't name stays home: `roles` null means roles couldn't be read.
+ * Tether only lists), never a shell, never a Neri project or a hunting role, and never a helper of
+ * one: the rule follows a session up through whoever launched it. Where that chain can't be read to
+ * its end the session stays home; `roles` null means roles couldn't be read.
  */
 export function eligibleSessions(
   records: LiveRecord[],
@@ -143,16 +148,33 @@ export function eligibleSessions(
   cfg: CopiesConfig,
 ): LiveRecord[] {
   const rolePattern = new RegExp(cfg.exclude.rolePattern, 'i')
+  const byId = new Map(records.map((record) => [record.id, record]))
+  const excludedHere = (record: LiveRecord) => {
+    if (record.projectId && cfg.exclude.projects.includes(record.projectId)) return true
+    const segments = (record.projectRoot ?? '').split('/')
+    return cfg.exclude.pathSegments.some((segment) => segments.includes(segment))
+  }
+  const huntingRoot = (root: string) => !roles?.has(root) || rolePattern.test(roles.get(root) ?? '')
+  const allowed = (record: LiveRecord) => {
+    const seen = new Set<string>()
+    let at: LiveRecord | undefined = record
+    while (at) {
+      if (seen.has(at.id) || excludedHere(at)) return false
+      seen.add(at.id)
+      if (at.rootRequestId && huntingRoot(at.rootRequestId)) return false
+      const up: string | null | undefined = at.parentId ?? at.coordinatorId
+      if (!up) return true
+      at = byId.get(up)
+      // Launched by something that isn't listed any more: only a root we can name lets it through.
+      if (!at) return !huntingRoot(up)
+    }
+    return false
+  }
   return records.filter((record) => {
     if (record.host) return false
     if (!cfg.liveStatuses.includes(record.status)) return false
     if (cfg.exclude.tools.includes(record.tool)) return false
-    if (record.projectId && cfg.exclude.projects.includes(record.projectId)) return false
-    const segments = (record.projectRoot ?? '').split('/')
-    if (cfg.exclude.pathSegments.some((segment) => segments.includes(segment))) return false
-    if (!record.rootRequestId) return true
-    if (!roles) return false
-    return !rolePattern.test(roles.get(record.rootRequestId) ?? '')
+    return allowed(record)
   })
 }
 
@@ -415,14 +437,13 @@ function keepTail(path: string, keep: number): number {
   try {
     const size = fstatSync(fd).size
     let from = Math.max(0, size - keep)
-    if (from > 0) {
-      const chunk = Buffer.alloc(Math.min(1024 * 1024, size - from))
-      const got = readSync(fd, chunk, 0, chunk.length, from)
-      const newline = chunk.subarray(0, got).indexOf(10)
-      from = newline >= 0 ? from + newline + 1 : size
-    }
-    const kept = Buffer.alloc(size - from)
+    let kept = Buffer.alloc(size - from)
     readSync(fd, kept, 0, kept.length, from)
+    if (from > 0) {
+      const newline = kept.indexOf(10)
+      kept = newline >= 0 ? kept.subarray(newline + 1) : kept.subarray(kept.length)
+      from = size - kept.length
+    }
     writeFileSync(`${path}.tmp`, kept, { mode: 0o600 })
     renameSync(`${path}.tmp`, path)
     return from
@@ -431,9 +452,36 @@ function keepTail(path: string, keep: number): number {
   }
 }
 
-function readSnapshot(path: string): Snapshot | null {
+/** The copies whose session is gone from its machine's list: since when, and what was last known of it. */
+type EndedRecords = Record<string, { at: number; session: CopySession | null }>
+function readEnded(machineRoot: string): EndedRecords {
   try {
-    const value = JSON.parse(readFileSync(path, 'utf8')) as Snapshot
+    return JSON.parse(readFileSync(join(machineRoot, 'ended.json'), 'utf8')) as EndedRecords
+  } catch {
+    return {}
+  }
+}
+
+/** A new list from a machine: a copy whose session left it starts its time now; one that came back stops. */
+function noteEnded(machineRoot: string, next: CopySnapshot, now: number): void {
+  const before = readSnapshot(join(machineRoot, 'snapshot.json'))
+  const known = new Map(before?.sessions.map((session) => [session.id, session]))
+  const live = new Set(next.sessions.map((session) => session.id))
+  const held = listDir(join(machineRoot, 'sessions'))
+  const was = readEnded(machineRoot)
+  const ended: EndedRecords = {}
+  for (const id of held) {
+    if (live.has(id)) continue
+    ended[id] = was[id] ?? { at: now, session: known.get(id) ?? null }
+  }
+  const path = join(machineRoot, 'ended.json')
+  writeFileSync(`${path}.tmp`, JSON.stringify(ended), { mode: 0o600 })
+  renameSync(`${path}.tmp`, path)
+}
+
+function readSnapshot(path: string): CopySnapshot | null {
+  try {
+    const value = JSON.parse(readFileSync(path, 'utf8')) as CopySnapshot
     return value && Array.isArray(value.sessions) ? value : null
   } catch {
     return null
@@ -441,10 +489,10 @@ function readSnapshot(path: string): Snapshot | null {
 }
 
 /**
- * The rule that keeps the copies bounded. A session its machine no longer runs goes after keepEndedHours,
- * counted only on a pass from that machine: a machine that is off keeps its last copy however long it stays
- * off. Over maxTotalMb, or with the disk under minFreeMb, the ended copies go oldest first; only the total
- * cap may then take a live session's copy. Everything removed is logged.
+ * The rule that keeps the copies bounded. A session its machine no longer runs goes keepEndedHours after it
+ * left that machine's list, counted only on a pass from that machine: a machine that is off keeps its last
+ * copy however long it stays off. Over maxTotalMb, or with the disk under minFreeMb, the ended copies go
+ * oldest first; only the total cap may then take a live session's copy. Everything removed is logged.
  */
 export function pruneCopies(options: HeldOptions, from: string | null): Removal[] {
   const { dir, cfg, now } = options
@@ -455,14 +503,14 @@ export function pruneCopies(options: HeldOptions, from: string | null): Removal[
     path: string
     bytes: number
     newest: number
-    live: boolean
+    /** When it left its machine's list; null while it hasn't. */
+    endedAt: number | null
   }
   let held: Held[] = []
   for (const machine of listDir(dir)) {
     if (!MACHINE.test(machine)) continue
     const root = join(dir, machine, 'sessions')
-    const snapshot = readSnapshot(join(dir, machine, 'snapshot.json'))
-    const live = new Set(snapshot?.sessions.map((session) => session.id) ?? [])
+    const ended = readEnded(join(dir, machine))
     for (const session of listDir(root)) {
       const path = join(root, session)
       const files = walkFiles(path)
@@ -472,7 +520,7 @@ export function pruneCopies(options: HeldOptions, from: string | null): Removal[
         path,
         bytes: files.reduce((sum, file) => sum + file.size, 0),
         newest: files.reduce((newest, file) => Math.max(newest, file.mtime), 0),
-        live: live.has(session),
+        endedAt: ended[session]?.at ?? null,
       })
     }
   }
@@ -488,18 +536,20 @@ export function pruneCopies(options: HeldOptions, from: string | null): Removal[
   }
   const keepMs = cfg.keepEndedHours * 3_600_000
   held = held.filter((entry) => {
-    if (entry.live || entry.machine !== from || now - entry.newest <= keepMs) return true
+    if (entry.endedAt === null || entry.machine !== from || now - entry.endedAt <= keepMs)
+      return true
     remove(entry, `ended more than ${cfg.keepEndedHours} hours ago`)
     return false
   })
-  held.sort((a, b) => Number(a.live) - Number(b.live) || a.newest - b.newest)
+  const live = (entry: Held) => entry.endedAt === null
+  held.sort((a, b) => Number(live(a)) - Number(live(b)) || a.newest - b.newest)
   let total = held.reduce((sum, entry) => sum + entry.bytes, 0)
   const cap = cfg.maxTotalMb * MB
   let freed = 0
   const floor = cfg.minFreeMb * MB
   for (const entry of held) {
     const overCap = total > cap
-    const lowDisk = !entry.live && freeOf(options) + freed < floor
+    const lowDisk = !live(entry) && freeOf(options) + freed < floor
     if (!overCap && !lowDisk) continue
     remove(
       entry,
@@ -575,14 +625,26 @@ export function receiveBatch(input: Buffer, options: HeldOptions): ReceiveAnswer
   const header = JSON.parse(input.subarray(0, newline).toString('utf8')) as {
     from: string
     files: FileEntry[]
-    snapshot?: Snapshot
+    snapshot?: CopySnapshot
   }
   prepareDir(dir)
   const machineRoot = machineDir(dir, header.from)
   privateDir(machineRoot)
   privateDir(join(machineRoot, 'sessions'))
   const answer: ReceiveAnswer = { written: 0, skipped: 0, removed: [], lowDisk: false }
-  answer.removed.push(...pruneCopies(options, header.from))
+  // Logged as they go: a later refusal in this batch mustn't lose what was already removed.
+  const removedNow = (removals: Removal[]) => {
+    logRemovals(dir, removals)
+    answer.removed.push(...removals)
+  }
+  // The list first: a copy's time runs on the machine's newest word, and a session back on it keeps its copy.
+  if (header.snapshot) {
+    noteEnded(machineRoot, header.snapshot, now)
+    const path = join(machineRoot, 'snapshot.json')
+    writeFileSync(`${path}.tmp`, JSON.stringify(header.snapshot), { mode: 0o600 })
+    renameSync(`${path}.tmp`, path)
+  }
+  removedNow(pruneCopies(options, header.snapshot ? header.from : null))
   answer.lowDisk = freeOf(options) < cfg.minFreeMb * MB
   let at = newline + 1
   const touched = new Set<string>()
@@ -625,15 +687,8 @@ export function receiveBatch(input: Buffer, options: HeldOptions): ReceiveAnswer
     answer.written += entry.length
     touched.add(entry.session)
   }
-  for (const session of touched)
-    answer.removed.push(...trimSession(dir, header.from, session, cfg, now))
-  if (header.snapshot) {
-    const path = join(machineRoot, 'snapshot.json')
-    writeFileSync(`${path}.tmp`, JSON.stringify(header.snapshot), { mode: 0o600 })
-    renameSync(`${path}.tmp`, path)
-    answer.removed.push(...pruneCopies(options, header.from))
-  }
-  logRemovals(dir, answer.removed)
+  for (const session of touched) removedNow(trimSession(dir, header.from, session, cfg, now))
+  if (header.snapshot) removedNow(pruneCopies(options, header.from))
   return answer
 }
 
@@ -644,25 +699,31 @@ export function readHeld(dir: string): HeldMachine[] {
     if (!MACHINE.test(machine)) continue
     const snapshot = readSnapshot(join(dir, machine, 'snapshot.json'))
     if (!snapshot) continue
+    const heldOf = (session: CopySession, endedAt: number | null): HeldSession => {
+      const root = join(dir, machine, 'sessions', session.id, 'files')
+      const files = walkFiles(root)
+      if (!files.length) return { ...session, endedAt, copy: null }
+      const bases = readBases(join(dir, machine, 'sessions', session.id))
+      return {
+        ...session,
+        endedAt,
+        copy: {
+          bytes: files.reduce((sum, file) => sum + file.size, 0),
+          files: files.length,
+          cut: Object.values(bases).some((base) => base > 0),
+          newest: files.reduce((newest, file) => Math.max(newest, file.mtime), 0),
+          path: root,
+        },
+      }
+    }
+    // A copy still kept of a session that ended is still readable: it may be what the owner is after.
+    const ended = Object.values(readEnded(join(dir, machine))).flatMap((entry) =>
+      entry.session ? [heldOf(entry.session, entry.at)].filter((held) => held.copy) : [],
+    )
     machines.push({
       machine,
       at: snapshot.at,
-      sessions: snapshot.sessions.map((session) => {
-        const root = join(dir, machine, 'sessions', session.id, 'files')
-        const files = walkFiles(root)
-        if (!files.length) return { ...session, copy: null }
-        const bases = readBases(join(dir, machine, 'sessions', session.id))
-        return {
-          ...session,
-          copy: {
-            bytes: files.reduce((sum, file) => sum + file.size, 0),
-            files: files.length,
-            cut: Object.values(bases).some((base) => base > 0),
-            newest: files.reduce((newest, file) => Math.max(newest, file.mtime), 0),
-            path: root,
-          },
-        }
-      }),
+      sessions: [...snapshot.sessions.map((session) => heldOf(session, null)), ...ended],
     })
   }
   return machines.sort((a, b) => b.at - a.at)
@@ -736,8 +797,14 @@ interface Planned {
   mode: FileEntry['mode']
 }
 
+/** Empty when the file went away since it was listed: the tool removed it, not a failure. */
 function readRange(path: string, from: number, length: number): Buffer {
-  const fd = openSync(path, 'r')
+  let fd: number
+  try {
+    fd = openSync(path, 'r')
+  } catch {
+    return Buffer.alloc(0)
+  }
   try {
     const chunk = Buffer.alloc(length)
     const got = readSync(fd, chunk, 0, length, from)
@@ -751,8 +818,7 @@ function readRange(path: string, from: number, length: number): Buffer {
 function cutPoint(file: SourceFile, cap: number): number {
   if (file.size <= cap) return 0
   const start = file.size - cap
-  const chunk = readRange(file.abs, start, Math.min(MB, cap))
-  const newline = chunk.indexOf(10)
+  const newline = readRange(file.abs, start, cap).indexOf(10)
   return newline >= 0 ? start + newline + 1 : file.size
 }
 
@@ -790,8 +856,16 @@ export async function sendPass(deps: SendDeps): Promise<PassReport> {
       failed: false,
       contacted: false,
     }
+  const roles = deps.roles()
+  // Without roles the hunting rule can't be read, and a session leaving the list looks like it ended.
+  if (!roles)
+    return {
+      lines: [`${machine}: roles couldn't be read; the next run catches up`],
+      failed: false,
+      contacted: false,
+    }
   const state = readSent(deps.statePath)
-  const live = eligibleSessions(records, deps.roles(), cfg)
+  const live = eligibleSessions(records, roles, cfg)
   const resume = deps.resumeIds()
   const windowMs = cfg.activeWindowMin * 60_000
   const facts = live.map((record) => {
@@ -837,12 +911,12 @@ export async function sendPass(deps: SendDeps): Promise<PassReport> {
       id: record.id,
       tool: record.tool,
       resumeId,
-      title: record.displayTitle || record.label || record.name || record.id,
+      title: maskSecrets(record.displayTitle || record.label || record.name || record.id),
       project: record.projectId ?? null,
       cwd: root,
       state: record.state ?? 'unknown',
       detail: record.stateDetail ? maskSecrets(record.stateDetail) : null,
-      doing: record.doing ? maskSecrets(clip(record.doing, cfg.messageChars)) : null,
+      doing: record.doing ? clip(maskSecrets(record.doing), cfg.messageChars) : null,
       waitingOn: typeof record.waitingOn === 'string' ? maskSecrets(record.waitingOn) : null,
       needsYou: record.state === 'blocked' || (record.asks?.length ?? 0) > 0,
       lastActivity: main ? Math.round(main.mtime) : (record.stateAt ?? null),
@@ -852,9 +926,11 @@ export async function sendPass(deps: SendDeps): Promise<PassReport> {
       git: root ? deps.git(root) : null,
     }
   })
-  const snapshot: Snapshot = { v: 1, machine, at: now, sessions }
+  const snapshot: CopySnapshot = { v: 1, machine, at: now, sessions }
   const liveIds = new Set(facts.map(({ record }) => record.id))
   for (const id of Object.keys(state.said)) if (!liveIds.has(id)) delete state.said[id]
+  for (const key of Object.keys(state.sent))
+    if (!liveIds.has(key.split('\n')[1] ?? '')) delete state.sent[key]
 
   const report: PassReport = { lines: [], failed: false, contacted: true }
   let reached = false
@@ -870,9 +946,14 @@ export async function sendPass(deps: SendDeps): Promise<PassReport> {
     if (state.sizes[record.id] === size) continue
     if (record.projectId && PROJECT.test(record.projectId)) active.push(record.projectId)
   }
-  state.sizes = Object.fromEntries(
-    facts.map(({ record, files }) => [record.id, files.reduce((sum, file) => sum + file.size, 0)]),
-  )
+  // Unreached, these still count as moved: the uncommitted work goes once the peer answers.
+  if (reached)
+    state.sizes = Object.fromEntries(
+      facts.map(({ record, files }) => [
+        record.id,
+        files.reduce((sum, file) => sum + file.size, 0),
+      ]),
+    )
   writeSent(deps.statePath, state)
   if (reached && active.length) deps.wip([...new Set(active)])
   return report
@@ -882,7 +963,7 @@ async function sendToPeer(
   deps: SendDeps,
   peer: CopyPeer,
   facts: { record: LiveRecord; files: SourceFile[] }[],
-  snapshot: Snapshot,
+  snapshot: CopySnapshot,
   state: SentState,
   signature: string,
 ): Promise<{ line: string; failed: boolean; reached: boolean }> {
@@ -908,10 +989,19 @@ async function sendToPeer(
       failed: false,
       reached: false,
     }
+  // A command cut off by the machine going down reports an exit too: it only counts if the peer still answers.
+  const stillThere = async () =>
+    (
+      await peer.call(
+        ['sizes', '--from', machine],
+        Buffer.from(JSON.stringify({ from: machine, files: [] })),
+      )
+    ).ended
   let theirs: SizesAnswer | null = null
   try {
     theirs = JSON.parse(lastLine(asked.stdout)) as SizesAnswer
   } catch {}
+  if ((asked.code !== 0 || !theirs) && !(await stillThere())) return offLine
   if (asked.code !== 0 || !theirs)
     return {
       line: `couldn't read its copies (${lastLine(asked.output) || `exit ${asked.code}`})`,
@@ -931,7 +1021,8 @@ async function sendToPeer(
       // Long idle and never copied: its conversation stays home until it moves again.
       if (!held && now - file.mtime > windowMs) continue
       if (file.kind === 'sqlite') {
-        if (file.size > cap) continue
+        // A database goes whole: one too big for a pass or the cap stays home, and isn't retried each pass.
+        if (file.size > Math.min(cap, cfg.maxPassMb * MB)) continue
         room -= file.size
         if (!held || state.sent[lookKey] !== look)
           planned.push({ session: record.id, file, from: 0, mode: 'replace' })
@@ -961,6 +1052,8 @@ async function sendToPeer(
   let sent = 0
   let incomplete = lowDisk && planned.length > 0
   let removed = 0
+  let notCopied = 0
+  let refused = false
   let entries: FileEntry[] = []
   let parts: Buffer[] = []
   let batchBytes = 0
@@ -985,11 +1078,18 @@ async function sendToPeer(
     try {
       parsed = JSON.parse(lastLine(answered.stdout)) as ReceiveAnswer
     } catch {}
+    if ((answered.code !== 0 || !parsed) && !(await stillThere())) {
+      dropped = true
+      return null
+    }
     if (answered.code !== 0 || !parsed)
       return `couldn't take the copy (${lastLine(answered.output) || `exit ${answered.code}`})`
     sent += parsed.written
     removed += parsed.removed.length
-    if (parsed.skipped) incomplete = true
+    if (parsed.skipped) {
+      incomplete = true
+      refused = true
+    }
     return null
   }
   for (const item of planned) {
@@ -999,12 +1099,14 @@ async function sendToPeer(
     }
     if (item.file.kind === 'sqlite') {
       const copy = sqliteCopy(item.file.abs)
+      // Copied again when it next changes, not on every pass.
       if ('error' in copy) {
-        incomplete = true
+        notCopied++
         continue
       }
       if (copy.bytes.length > budget) {
-        incomplete = true
+        if (copy.bytes.length <= cfg.maxPassMb * MB) incomplete = true
+        else notCopied++
         continue
       }
       entries.push({
@@ -1057,12 +1159,14 @@ async function sendToPeer(
   const failure = await flush(true)
   if (failure) return { line: failure, failed: true, reached: true }
   if (dropped) return { ...offLine, line: 'the link dropped; the next run catches it up' }
-  for (const [key, look] of looks) state.sent[key] = look
+  // Under the disk floor the peer may have skipped a database: only what surely landed counts as sent.
+  if (!refused) for (const [key, look] of looks) state.sent[key] = look
   if (!incomplete) state.peers[peer.name] = signature
   const said = [
     `${snapshot.sessions.length} session${snapshot.sessions.length === 1 ? '' : 's'}, ${sizeWord(sent)} sent`,
   ]
   if (removed) said.push(`${removed} old cop${removed === 1 ? 'y' : 'ies'} removed`)
+  if (notCopied) said.push(`${notCopied} database${notCopied === 1 ? '' : 's'} couldn't be copied`)
   if (lowDisk) said.push(`its disk is under ${cfg.minFreeMb} MB free, only the list went`)
   else if (incomplete) said.push('the rest goes next run')
   return { line: said.join(', '), failed: false, reached: true }
@@ -1098,7 +1202,7 @@ export function saidFromEvents(
 ): { owner: Said | null; agent: Said | null } {
   const shown = (event: { at: number | null; text: string }) => ({
     at: event.at,
-    text: maskSecrets(clip(event.text.trim().replace(/\s+/g, ' '), chars)),
+    text: clip(maskSecrets(event.text.trim().replace(/\s+/g, ' ')), chars),
   })
   let owner: Said | null = null
   let agent: Said | null = null
@@ -1215,7 +1319,7 @@ function copiesDirFor(machine: string, cfg: CopiesConfig = copiesConfig): string
 // ---- the command ----------------------------------------------------------------------------
 
 const USAGE = `Usage:
-  aico shift list [--json]      what was running on the other machines when last heard from
+  aico shift list [--json]      what was running on the other machines at their last change
   aico shift show ID [--json]   one of those sessions: what it was doing, where its copy is
   aico shift run                send what changed to the other full machines (runs by itself)
 Limits and exclusions: packages/ops/data/session-copies.json. Never a shell or a Neri session.`
@@ -1227,15 +1331,18 @@ const age = (ms: number) => {
   return hours < 48 ? `${hours} h` : `${Math.round(hours / 24)} d`
 }
 
+const running = (machine: HeldMachine) =>
+  machine.sessions.filter((session) => !session.endedAt).length
+
 export function heldLines(held: HeldMachine[], now: number): string[] {
   if (!held.length) return ['No copies of another machine’s sessions here.']
   const lines: string[] = []
   for (const machine of held) {
     lines.push(
-      `${machine.machine}  last heard ${localTime(machine.at)} (${age(now - machine.at)} ago)  ${machine.sessions.length} session${machine.sessions.length === 1 ? '' : 's'}`,
+      `${machine.machine}  as of ${localTime(machine.at)} (${age(now - machine.at)} ago)  ${running(machine)} session${running(machine) === 1 ? '' : 's'}`,
     )
     for (const session of machine.sessions) {
-      const state = session.needsYou ? 'needs-you' : session.state
+      const state = session.endedAt ? 'ended' : session.needsYou ? 'needs-you' : session.state
       const copy = session.copy
         ? `copy ${sizeWord(session.copy.bytes)}${session.copy.cut ? ' (latest part)' : ''}`
         : 'no copy'
@@ -1252,7 +1359,9 @@ export function showLines(machine: HeldMachine, session: HeldSession): string[] 
   const lines = [
     `${session.title} (${session.id}) on ${machine.machine}, as of ${localTime(machine.at)}`,
     `tool ${session.tool}${session.resumeId ? ` conversation ${session.resumeId}` : ''}`,
-    `state ${session.needsYou ? 'needs-you' : session.state}${session.detail ? `: ${session.detail}` : ''}`,
+    session.endedAt
+      ? `ended ${localTime(session.endedAt)}; before that ${session.state}`
+      : `state ${session.needsYou ? 'needs-you' : session.state}${session.detail ? `: ${session.detail}` : ''}`,
     `project ${session.project ?? '-'}  ${session.cwd ?? ''}`.trimEnd(),
   ]
   if (session.lastActivity) lines.push(`last activity ${localTime(session.lastActivity)}`)

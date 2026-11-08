@@ -13,3 +13,9 @@ Moving live processes. Automatic takeover on a crash: a machine that only looks 
 
 ## State
 Update this section at each verified step, so the next agent, on any tool, can continue.
+
+### Level 1 (2026-11-08)
+Code: `packages/ops/src/session-copies.ts` (`aico shift list|show|run`), limits and exclusions in `packages/ops/data/session-copies.json`, web `GET /api/machines/session-copies`, Machines page `SessionCopies.tsx`.
+Committed: sender, receiver, CLI, Machines view. Jobs `session-copies-*` are NOT in `packages/jobs/data/jobs.json` until a real run both ways is proven; without them nothing runs by itself.
+Where copies live: workstation `/srv/scratch/.aico-session-copies` (hidden so the scratch sweep leaves it), standby `~/.cache/aico/session-copies`. Sender state `~/.cache/aico/session-copies-sent.json`.
+To finish if this stops here: deploy (`st service rebuild aico --detach`), check `ssh aico-gem` has `aico shift`, run `aico shift run` on both, read back with `aico shift list` on the other, then add the two jobs (every_min 3, command `["../../web-server/scripts/aico","shift","run"]`, lease_s 300) and deploy.
