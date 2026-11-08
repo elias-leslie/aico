@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   guestAction,
   guestPower,
+  guestTask,
   listGuests,
   onbootOf,
   parseGuestPower,
@@ -135,11 +136,39 @@ describe('Proxmox through the API', () => {
       guestAction(denied.call, { vmid: 200, type: 'qemu', node: 'gem' }, 'shutdown'),
     ).rejects.toThrow('403')
     await expect(
-      guestAction(call, { vmid: 200, type: 'qemu', node: 'gem' }, 'stop' as never),
+      guestAction(call, { vmid: 200, type: 'qemu', node: 'gem' }, 'destroy' as never),
     ).rejects.toThrow('No guest action')
     await expect(
       guestAction(call, { vmid: 200, type: 'qemu', node: 'a/../b' }, 'start'),
     ).rejects.toThrow('node')
+  })
+  it('queues a hard stop and reads how a queued task ended', async () => {
+    const { call, sent } = fakePve({})
+    await guestAction(call, { vmid: 200, type: 'qemu', node: 'gem' }, 'stop')
+    expect(sent).toEqual([['POST', '/nodes/gem/qemu/200/status/stop', undefined]])
+    const task = 'UPID:gem:0001:0002:0003:qmshutdown:200:root@pam:'
+    const path = `/nodes/gem/tasks/${encodeURIComponent(task)}/status`
+    const status =
+      (data: unknown): PveRequest =>
+      async () =>
+        data
+    const guest = { node: 'gem' }
+    expect(await guestTask(status({ status: 'running' }), guest, task)).toEqual({
+      state: 'running',
+    })
+    expect(await guestTask(status({ status: 'stopped', exitstatus: 'OK' }), guest, task)).toEqual({
+      state: 'ok',
+    })
+    expect(
+      await guestTask(
+        status({ status: 'stopped', exitstatus: 'VM quit/powerdown failed - got timeout' }),
+        guest,
+        task,
+      ),
+    ).toEqual({ state: 'failed', reason: 'VM quit/powerdown failed - got timeout' })
+    const seen: string[] = []
+    await guestTask(async (_m, p) => (seen.push(p), { status: 'running' }), guest, task)
+    expect(seen).toEqual([path])
   })
   it('writes autostart as a config PUT and surfaces a refusal', async () => {
     const { call, sent } = fakePve({})

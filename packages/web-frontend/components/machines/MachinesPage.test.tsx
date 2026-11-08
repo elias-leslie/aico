@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { HostChoice } from '@/lib/hooks/use-hosts'
 import type { StatusRow, StatusView } from '@/lib/status'
@@ -305,6 +311,7 @@ describe('MachinesPage', () => {
       state: 'running',
       since: null,
       busy: null,
+      failed: null,
       autostart: true,
       intent: 'always',
       powerable: true,
@@ -335,6 +342,49 @@ describe('MachinesPage', () => {
         expect(data.machinePower).toHaveBeenCalledWith(
           'ominull-hub',
           'restart',
+          true,
+        ),
+      )
+    })
+
+    it('shows a failed shutdown as a badge, lets the owner retry, and offers Force off only then', async () => {
+      withGuests(guest({}))
+      renderPage()
+      expect(
+        within(screen.getByTestId('machine-ominull-hub')).queryByRole(
+          'button',
+          {
+            name: 'Force off',
+          },
+        ),
+      ).toBeNull()
+      cleanup()
+      withGuests(
+        guest({
+          failed: {
+            action: 'shutdown',
+            reason: 'VM quit/powerdown failed - got timeout',
+            at: '2026-11-08T10:00:00Z',
+          },
+        }),
+      )
+      renderPage()
+      const hub = within(screen.getByTestId('machine-ominull-hub'))
+      expect(hub.getByText('Didn’t shut down')).toHaveAttribute(
+        'title',
+        expect.stringContaining('got timeout'),
+      )
+      // Not stuck: the row is no longer shutting down and Shut down is available again.
+      expect(hub.queryByText('Shutting down')).toBeNull()
+      expect(hub.getByRole('button', { name: 'Shut down' })).toBeEnabled()
+      fireEvent.click(hub.getByRole('button', { name: 'Force off' }))
+      expect(screen.getByText('Force off ominull-hub?')).toBeInTheDocument()
+      expect(data.machinePower).not.toHaveBeenCalled()
+      fireEvent.click(screen.getByRole('button', { name: 'Force off' }))
+      await vi.waitFor(() =>
+        expect(data.machinePower).toHaveBeenCalledWith(
+          'ominull-hub',
+          'stop',
           true,
         ),
       )

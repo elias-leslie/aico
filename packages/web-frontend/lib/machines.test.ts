@@ -297,6 +297,7 @@ const guest = (over: Partial<MachineGuest>): MachineGuest => ({
   state: 'stopped',
   since: null,
   busy: null,
+  failed: null,
   autostart: false,
   intent: 'on-demand',
   powerable: true,

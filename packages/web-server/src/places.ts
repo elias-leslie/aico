@@ -1,26 +1,30 @@
 // Where projects run, and the power buttons: a poller reads Proxmox (through the fleet's SSH
 // alias) for each place's power state, and the page's start / shutdown / restart go through the
-// same route. Shutdown and restart are clean (guest shutdown / reboot); there is no hard stop.
+// same route. Shutdown and restart are clean (guest shutdown / reboot); a hard stop is offered
+// only after one of them failed (Proxmox's task ended with an error).
 // Every reading is also fed to Status as the machine's observed power (setObservedPower), so an
 // on-demand machine is expected off while stopped and on while running, however it was started
 // or shut down (aico vm, Proxmox, the page). A shutdown from the page also records the machine
 // as owner-stopped first, so an always-on one shows off instead of paging (show.ts).
 
-import type { Guest, GuestAction } from '@aico/fleet/power'
+import type { Guest, GuestAction, GuestTask } from '@aico/fleet/power'
 import type { StatusStore } from '@aico/status'
 import type { Place } from '@aico/tasks'
 import { HttpError } from './tether'
 
 const PLACE_STATES = ['running', 'stopped', 'down', 'starting', 'unknown'] as const
 export type PlaceState = (typeof PLACE_STATES)[number]
+/** What the Projects page may ask for. */
 export const POWER_ACTIONS = ['start', 'shutdown', 'restart'] as const
-export type PowerAction = (typeof POWER_ACTIONS)[number]
+/** Plus the hard stop, which only the Machines page offers, after a clean shutdown or restart failed. */
+export type PowerAction = (typeof POWER_ACTIONS)[number] | 'stop'
 
 /** The Proxmox guest action behind each button. */
 const GUEST_ACTION: Record<PowerAction, GuestAction> = {
   start: 'start',
   shutdown: 'shutdown',
   restart: 'reboot',
+  stop: 'stop',
 }
 
 export interface PlaceView extends Place {
@@ -29,15 +33,27 @@ export interface PlaceView extends Place {
   since: string | null
   /** When the state was last read (RFC 3339); null before the first reading. */
   asOf: string | null
-  /** A power action the page started and Proxmox has not finished, else null. */
-  busy: PowerAction | null
+  /** A power action the page started and Proxmox has not finished, else null (a hard stop reads as a shutdown). */
+  busy: Exclude<PowerAction, 'stop'> | null
+  /** The last power action Proxmox ran and failed, until the next action or the guest reaching the wanted state. */
+  failed: PowerFailure | null
   /** Why the state is unknown, when it is. */
   note?: string
 }
 
+export interface PowerFailure {
+  action: Exclude<PowerAction, 'stop'>
+  /** Proxmox's own words for why. */
+  reason: string
+  at: string
+}
+
 export interface GuestSource {
   list(): Promise<Guest[]>
-  act(guest: Guest, action: GuestAction): Promise<void>
+  /** Queues the action; returns Proxmox's task id when it gave one. */
+  act(guest: Guest, action: GuestAction): Promise<string | null | undefined>
+  /** How a queued task ended; absent when the source cannot say. */
+  task?(guest: Guest, task: string): Promise<GuestTask>
   /** Writes Proxmox's start-at-boot setting. */
   setOnboot(guest: Guest, on: boolean): Promise<void>
 }
@@ -63,7 +79,14 @@ export interface PlacesOptions {
 interface Pending {
   action: PowerAction
   at: number
+  task?: string
+  /** Puts back the owner-stopped mark taken before the action, when the action failed. */
+  undo?: () => void
 }
+
+/** What the page shows for an action: a hard stop is a shutdown that was forced. */
+const shown = (action: PowerAction): Exclude<PowerAction, 'stop'> =>
+  action === 'stop' ? 'shutdown' : action
 
 const iso = (ms: number) => new Date(ms).toISOString()
 
@@ -72,6 +95,7 @@ export class Places {
   private readAt: number | null = null
   private failure: string | null = null
   private readonly pending = new Map<number, Pending>()
+  private readonly failures = new Map<number, PowerFailure>()
   private timer: NodeJS.Timeout | null = null
   private reading: Promise<void> | null = null
   private readonly now: () => number
@@ -122,7 +146,7 @@ export class Places {
       this.readAt = at
       this.failure = null
       this.observe(at)
-      this.settle(at)
+      await this.settle(at)
     } catch (error) {
       this.failure = `Proxmox did not answer (${(error as Error).message.split('\n')[0]}).`
     }
@@ -147,17 +171,30 @@ export class Places {
   }
 
   /** Ends finished power actions and owner-stopped marks that a later start has made moot. */
-  private settle(at: number): void {
+  private async settle(at: number): Promise<void> {
+    for (const [vmid, failure] of this.failures)
+      if (this.snapshot?.get(vmid)?.status === (failure.action === 'start' ? 'running' : 'stopped'))
+        this.failures.delete(vmid)
     for (const [vmid, pending] of this.pending) {
       const guest = this.snapshot?.get(vmid)
       const rebooted = guest !== undefined && guest.uptime < (at - pending.at) / 1000
       const done =
-        pending.action === 'shutdown'
+        pending.action === 'shutdown' || pending.action === 'stop'
           ? guest?.status === 'stopped'
           : pending.action === 'start'
             ? guest?.status === 'running'
             : rebooted && guest?.status === 'running'
-      if (done || at - pending.at > this.options.busyMs) this.pending.delete(vmid)
+      if (done || at - pending.at > this.options.busyMs) {
+        this.pending.delete(vmid)
+        continue
+      }
+      // Proxmox's task ending in an error is the answer, so the row stops waiting and says so.
+      const reason = guest ? await this.taskFailure(guest, pending) : null
+      if (reason !== null) {
+        this.pending.delete(vmid)
+        pending.undo?.()
+        this.failures.set(vmid, { action: shown(pending.action), reason, at: iso(at) })
+      }
     }
     const rows = this.options.status.rows()
     for (const m of this.options.status.intents()) {
@@ -171,6 +208,18 @@ export class Places {
       // one (show.ts); a machine with no row of its own would stay off forever, so end it here.
       const reports = rows.some((r) => r.row.kind === 'machine' && r.row.machine === m.machine)
       if (!reports) this.options.status.markStopped(m.machine, null)
+    }
+  }
+
+  /** Why a queued task failed, or null while it runs, finished well, or cannot be read. */
+  private async taskFailure(guest: Guest, pending: Pending): Promise<string | null> {
+    const { guests } = this.options
+    if (!pending.task || !guests?.task) return null
+    try {
+      const task = await guests.task(guest, pending.task)
+      return task.state === 'failed' ? task.reason : null
+    } catch {
+      return null
     }
   }
 
@@ -239,13 +288,14 @@ export class Places {
   }
 
   view(place: Place): PlaceView {
-    const base = { ...place, busy: null as PowerAction | null }
+    const base = { ...place, busy: null as PlaceView['busy'], failed: null as PowerFailure | null }
     if (place.kind === 'host') return this.hostView(base)
     const asOf = this.readAt === null ? null : iso(this.readAt)
     const pending = place.id === undefined ? undefined : this.pending.get(place.id)
-    const busy = pending?.action ?? null
+    const busy = pending ? shown(pending.action) : null
+    const failed = place.id === undefined ? null : (this.failures.get(place.id) ?? null)
     if (this.failure)
-      return { ...base, state: 'unknown', since: null, asOf, busy, note: this.failure }
+      return { ...base, state: 'unknown', since: null, asOf, busy, failed, note: this.failure }
     const guest = place.id === undefined ? undefined : this.snapshot?.get(place.id)
     if (!guest)
       return {
@@ -254,15 +304,23 @@ export class Places {
         since: null,
         asOf,
         busy,
+        failed,
         note: this.snapshot ? 'Proxmox does not list this guest.' : 'Not read yet.',
       }
     const readAt = this.readAt as number
     if (guest.status === 'running') {
       const since = iso(readAt - guest.uptime * 1000)
-      return { ...base, state: busy === 'start' ? 'starting' : 'running', since, asOf, busy }
+      return {
+        ...base,
+        state: busy === 'start' ? 'starting' : 'running',
+        since,
+        asOf,
+        busy,
+        failed,
+      }
     }
     if (guest.status === 'stopped') {
-      if (busy === 'start') return { ...base, state: 'starting', since: null, asOf, busy }
+      if (busy === 'start') return { ...base, state: 'starting', since: null, asOf, busy, failed }
       const offSince = place.machine
         ? this.options.status.expectedOff().get(place.machine)
         : undefined
@@ -273,8 +331,9 @@ export class Places {
             since: offSince === undefined ? null : iso(offSince),
             asOf,
             busy,
+            failed,
           }
-        : { ...base, state: 'down', since: null, asOf, busy }
+        : { ...base, state: 'down', since: null, asOf, busy, failed }
     }
     return {
       ...base,
@@ -282,11 +341,12 @@ export class Places {
       since: null,
       asOf,
       busy,
+      failed,
       note: `Proxmox says ${guest.status}.`,
     }
   }
 
-  private hostView(base: Place & { busy: PowerAction | null }): PlaceView {
+  private hostView(base: Place & Pick<PlaceView, 'busy' | 'failed'>): PlaceView {
     const at = iso(this.now())
     if (base.machine === undefined || base.machine === this.options.machine)
       return { ...base, state: 'running', since: iso(this.startedAt), asOf: at }
@@ -337,7 +397,7 @@ export class Places {
     const running = guest.status === 'running'
     const at = this.now()
     if (action === 'start' && running) return this.view(place)
-    if (action === 'restart' && !running)
+    if ((action === 'restart' || action === 'stop') && !running)
       throw new HttpError(409, `${place.label} is not running; start it instead.`)
     const machine = place.machine
     const before = machine ? status.intents().find((m) => m.machine === machine) : undefined
@@ -347,7 +407,7 @@ export class Places {
       // page. Starting an always-on place ends its stop; a place that is not always on needs no
       // mark for a start (the poller sees it run); a restart of an always-on place is a short
       // stop its next report ends.
-      if (action === 'shutdown') status.markStopped(machine, at)
+      if (action === 'shutdown' || action === 'stop') status.markStopped(machine, at)
       else if (action === 'start') status.markStopped(machine, null)
       else if (place.intent === 'always') status.markStopped(machine, at)
     }
@@ -356,8 +416,9 @@ export class Places {
       return this.view(place)
     }
     mark()
+    let task: string | undefined
     try {
-      await guests.act(guest, GUEST_ACTION[action])
+      task = (await guests.act(guest, GUEST_ACTION[action])) || undefined
     } catch (error) {
       if (machine && before) status.markStopped(machine, before.stoppedAt)
       throw new HttpError(
@@ -365,7 +426,13 @@ export class Places {
         `${place.label}: Proxmox refused ${action} (${(error as Error).message.split('\n')[0]}).`,
       )
     }
-    this.pending.set(place.id, { action, at })
+    this.failures.delete(place.id)
+    this.pending.set(place.id, {
+      action,
+      at,
+      ...(task ? { task } : {}),
+      ...(machine && before ? { undo: () => status.markStopped(machine, before.stoppedAt) } : {}),
+    })
     void this.refresh()
     return this.view(place)
   }

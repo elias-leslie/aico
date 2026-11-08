@@ -78,6 +78,7 @@ const guest = (over: Record<string, unknown> = {}) => ({
   state: 'running',
   since: null,
   busy: null,
+  failed: null,
   autostart: true,
   intent: 'always',
   powerable: true,

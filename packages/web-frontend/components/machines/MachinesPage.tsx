@@ -273,6 +273,16 @@ function MachineRow({
         <span className={`status-chip ${UP_CHIP[machine.up]}`}>
           {UP_WORD[machine.up]}
         </span>
+        {guest?.failed && (
+          <span
+            className="status-chip failed"
+            title={`Proxmox couldn’t ${guest.failed.action === 'restart' ? 'restart' : 'shut down'} ${name} cleanly: ${guest.failed.reason}. It is still ${guest.state === 'running' ? 'running' : 'in its earlier state'}; try again${guest.state === 'running' ? ', or force it off' : ''}.`}
+          >
+            {guest.failed.action === 'restart'
+              ? 'Didn’t restart'
+              : 'Didn’t shut down'}
+          </span>
+        )}
       </div>
       <div className={styles.main}>
         <div className={styles.title}>

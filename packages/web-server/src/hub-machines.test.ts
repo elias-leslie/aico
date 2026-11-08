@@ -18,6 +18,7 @@ function guest(
     state,
     since: state === 'running' ? AT : null,
     busy: null,
+    failed: null,
     autostart: null,
     intent,
     powerable: true,

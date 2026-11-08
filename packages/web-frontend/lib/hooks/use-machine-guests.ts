@@ -14,6 +14,8 @@ export interface MachineGuest {
   since: string | null
   /** A power action Aico started that Proxmox has not finished. */
   busy: 'start' | 'shutdown' | 'restart' | null
+  /** A clean shutdown or restart that Proxmox ran and failed, in Proxmox's words; null otherwise. */
+  failed: { action: 'shutdown' | 'restart'; reason: string; at: string } | null
   note?: string
   /** Proxmox's start-at-boot; null when it could not be read. */
   autostart: boolean | null
@@ -90,13 +92,13 @@ const machineUrl = (machine: string, rest: string) =>
 
 export const powerMachine = (
   machine: string,
-  action: 'on' | 'off' | 'restart',
+  action: 'on' | 'off' | 'restart' | 'stop',
   force = false,
 ) =>
   post(
     machineUrl(machine, 'power'),
     force ? { action, force } : { action },
-    `Couldn’t ${action === 'on' ? 'power on' : action === 'off' ? 'shut down' : 'restart'} ${machine}`,
+    `Couldn’t ${action === 'on' ? 'power on' : action === 'off' ? 'shut down' : action === 'stop' ? 'force off' : 'restart'} ${machine}`,
   )
 
 export const setAutostart = (machine: string, on: boolean) =>

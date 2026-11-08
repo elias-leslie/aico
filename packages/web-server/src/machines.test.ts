@@ -1,5 +1,5 @@
 import { createServer, type Server } from 'node:http'
-import type { Guest } from '@aico/fleet/power'
+import type { Guest, GuestTask } from '@aico/fleet/power'
 import { StatusStore } from '@aico/status'
 import type { Place, Project } from '@aico/tasks'
 import type { TetherClient } from '@aico/tether-client'
@@ -53,13 +53,23 @@ function setup(link?: { state: string; sessions: number; canSleep?: boolean }) {
     guest(9000, 'ubuntu-cloud', { template: true }),
   ]
   const calls: string[] = []
-  const source: GuestSource & { down?: boolean; refuse?: boolean; stuck?: boolean } = {
+  const source: GuestSource & {
+    down?: boolean
+    refuse?: boolean
+    stuck?: boolean
+    outcome: GuestTask
+  } = {
+    outcome: { state: 'running' },
+    async task() {
+      return source.outcome
+    },
     async list() {
       if (source.down) throw new Error('ssh: connect timed out')
       return list.map((g) => ({ ...g }))
     },
     async act(g, action) {
       calls.push(`${g.vmid}:${action}`)
+      return `UPID:gem:${calls.length}`
     },
     async setOnboot(g, on) {
       if (source.refuse) throw new Error('permission denied')
@@ -225,6 +235,22 @@ describe('MachinesService.power', () => {
       expect.anything(),
     )
     expect(calls).toEqual([])
+  })
+
+  it('shows a failed shutdown on the guest and force-offs it through Proxmox', async () => {
+    const { service, places, calls, source } = setup()
+    source.outcome = { state: 'failed', reason: 'VM quit/powerdown failed - got timeout' }
+    await places.refresh()
+    await service.power('ominull-hub', 'off', false)
+    await places.refresh()
+    await places.refresh()
+    expect(service.guests().items.find((i) => i.machine === 'ominull-hub')).toMatchObject({
+      state: 'running',
+      busy: null,
+      failed: { action: 'shutdown', reason: 'VM quit/powerdown failed - got timeout' },
+    })
+    await service.power('ominull-hub', 'stop', false)
+    expect(calls).toEqual(['150:shutdown', '150:stop'])
   })
 
   it('warns before a restart takes sessions down, and restarts through Proxmox once forced', async () => {

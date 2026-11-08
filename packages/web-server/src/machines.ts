@@ -1,7 +1,7 @@
 // The Machines page's Proxmox side: each guest's power, autostart (Proxmox's `onboot`), size and
 // the projects that run on it, and the buttons that act on them.
 //   GET  /api/machines/guests                  the guests and when Proxmox was read (or why not)
-//   POST /api/machines/:machine/power          {action: on | off | restart, force?}
+//   POST /api/machines/:machine/power          {action: on | off | restart | stop, force?}  (stop = force off, after a clean shutdown failed)
 //   POST /api/machines/:machine/autostart      {on: true | false}
 //   GET  /api/machines/services                each full Aico's services and their state (aico power units)
 //   POST /api/machines/:machine/restart-service {unit}
@@ -16,7 +16,7 @@ import type { Place, Project } from '@aico/tasks'
 import { hostPower, type TetherClient } from '@aico/tether-client'
 import { hostCall } from './hosts'
 import { objectBody, type Router } from './http'
-import type { PlaceState, Places, PowerAction } from './places'
+import type { PlaceState, Places, PlaceView, PowerFailure } from './places'
 import { HttpError } from './tether'
 
 export interface MachineGuest {
@@ -26,7 +26,9 @@ export interface MachineGuest {
   kind: 'vm' | 'ct'
   state: PlaceState
   since: string | null
-  busy: PowerAction | null
+  busy: PlaceView['busy']
+  /** The last clean shutdown or restart Proxmox ran and failed, with Proxmox's reason; null otherwise. */
+  failed: PowerFailure | null
   /** Why the state is unknown. */
   note?: string
   /** Proxmox's start-at-boot; null when it could not be read. */
@@ -98,6 +100,7 @@ export class MachinesService {
         state: view.state,
         since: view.since,
         busy: view.busy,
+        failed: view.failed,
         ...(view.note ? { note: view.note } : {}),
         autostart: guest.onboot ?? null,
         intent: mine.length ? place.intent : null,
@@ -128,7 +131,7 @@ export class MachinesService {
     return item
   }
 
-  async power(machine: string, action: 'on' | 'off' | 'restart', force: boolean) {
+  async power(machine: string, action: 'on' | 'off' | 'restart' | 'stop', force: boolean) {
     await this.places.refresh()
     const { place } = this.find(machine)
     if (!place.power) throw new HttpError(422, `${machine} is not powered from the page.`)
@@ -136,19 +139,24 @@ export class MachinesService {
       .hosts()
       .then((hosts) => hosts.find((host) => host.name === machine))
       .catch(() => undefined)
-    if (link && link.canSleep !== false && action !== 'restart') {
+    if (link && link.canSleep !== false && action !== 'restart' && action !== 'stop') {
       // Tether's own on / off: it ends the sessions (409 until forced) and follows the start.
       await hostCall(() => hostPower(this.tether, machine, action, force))
       void this.places.refresh()
     } else {
-      if (action === 'restart' && link?.state === 'connected' && (link.sessions ?? 0) > 0 && !force)
+      if (
+        (action === 'restart' || action === 'stop') &&
+        link?.state === 'connected' &&
+        (link.sessions ?? 0) > 0 &&
+        !force
+      )
         throw new HttpError(
           409,
           `${link.sessions} session${link.sessions === 1 ? '' : 's'} running on ${machine}`,
         )
       await this.places.power(
         place,
-        action === 'on' ? 'start' : action === 'off' ? 'shutdown' : 'restart',
+        action === 'on' ? 'start' : action === 'off' ? 'shutdown' : action,
       )
     }
     return this.item(machine)
@@ -227,8 +235,13 @@ export function registerMachineRoutes(
   router.on('POST', '/api/machines/:machine/power', async (ctx) => {
     const machine = machineName(ctx.params.machine)
     const body = objectBody(await ctx.body())
-    if (body.action !== 'on' && body.action !== 'off' && body.action !== 'restart')
-      throw new HttpError(400, 'action must be on, off or restart')
+    if (
+      body.action !== 'on' &&
+      body.action !== 'off' &&
+      body.action !== 'restart' &&
+      body.action !== 'stop'
+    )
+      throw new HttpError(400, 'action must be on, off, restart or stop')
     return service.power(machine, body.action, body.force === true)
   })
   router.on('POST', '/api/machines/:machine/autostart', async (ctx) => {

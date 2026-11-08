@@ -2,7 +2,7 @@
 // failed reading must never turn a broken link into a healthy one.
 import { readFileSync } from 'node:fs'
 import type { StatusRow } from '@aico/status'
-import { guestConfig, PveError, type PveRequest, setOnboot } from './proxmox'
+import { guestConfig, isUpid, PveError, type PveRequest, setOnboot } from './proxmox'
 import { type FleetSettings, fleetFile } from './settings'
 
 export function parseGuestPower(value: unknown): Map<string, string> {
@@ -131,24 +131,48 @@ export async function listGuests(call: PveRequest): Promise<Guest[]> {
 }
 
 /**
- * The power actions the Projects page may ask for: start, a clean shutdown and a clean reboot.
- * There is no hard stop here on purpose.
+ * The power actions the Machines page may ask for: start, a clean shutdown and a clean reboot,
+ * and a hard stop that the page offers only after a clean shutdown or reboot failed.
  */
-export const GUEST_ACTIONS = ['start', 'shutdown', 'reboot'] as const
+export const GUEST_ACTIONS = ['start', 'shutdown', 'reboot', 'stop'] as const
 export type GuestAction = (typeof GUEST_ACTIONS)[number]
 
-/** Queue one power action; Proxmox runs the task and callers watch the guest's state. A refusal
- * (permission, bad state) throws, so a failed request is never reported as done. */
+/** Queue one power action and return its task id (null when Proxmox gave none); Proxmox runs the
+ * task and callers watch the guest's state and `guestTask`. A refusal (permission, bad state)
+ * throws, so a failed request is never reported as done. */
 export async function guestAction(
   call: PveRequest,
   guest: Pick<Guest, 'vmid' | 'type' | 'node'>,
   action: GuestAction,
-): Promise<void> {
+): Promise<string | null> {
   if (!(GUEST_ACTIONS as readonly string[]).includes(action))
     throw new Error(`No guest action ${action}`)
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(guest.node)) throw new PveError('Bad Proxmox node name')
   if (guest.type !== 'qemu' && guest.type !== 'lxc') throw new PveError('Bad Proxmox guest type')
-  await call('POST', `/nodes/${guest.node}/${guest.type}/${guest.vmid}/status/${action}`)
+  const task = await call(
+    'POST',
+    `/nodes/${guest.node}/${guest.type}/${guest.vmid}/status/${action}`,
+  )
+  return isUpid(task) ? task : null
+}
+
+/** How a queued task stands: still running, finished well, or failed with Proxmox's exit status. */
+export type GuestTask = { state: 'running' | 'ok' } | { state: 'failed'; reason: string }
+
+export async function guestTask(
+  call: PveRequest,
+  guest: Pick<Guest, 'node'>,
+  task: string,
+): Promise<GuestTask> {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(guest.node)) throw new PveError('Bad Proxmox node name')
+  const status = (await call(
+    'GET',
+    `/nodes/${guest.node}/tasks/${encodeURIComponent(task)}/status`,
+  )) as { status?: string; exitstatus?: string } | null
+  if (status?.status !== 'stopped') return { state: 'running' }
+  return status.exitstatus === 'OK'
+    ? { state: 'ok' }
+    : { state: 'failed', reason: status.exitstatus ?? 'unknown' }
 }
 
 export async function setGuestOnboot(

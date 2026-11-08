@@ -16,20 +16,25 @@ import mine from './MachinesPage.module.css'
 export const messageOf = (failure: unknown, fallback: string) =>
   failure instanceof Error && failure.message ? failure.message : fallback
 
-type Action = 'on' | 'off' | 'restart' | 'trust'
+type Action = 'on' | 'off' | 'restart' | 'stop' | 'trust'
 type Busy = Action | 'autostart' | null
 
 interface Confirm {
-  kind: 'off' | 'restart' | 'trust'
+  kind: 'off' | 'restart' | 'stop' | 'trust'
   message: string
   confirmText: string
 }
 
-const ACTION_LABEL = { off: 'Shut down', restart: 'Restart' } as const
+const ACTION_LABEL = {
+  off: 'Shut down',
+  restart: 'Restart',
+  stop: 'Force off',
+} as const
 const ACTION_WORD = {
   on: 'power on',
   off: 'shut down',
   restart: 'restart',
+  stop: 'force off',
 } as const
 
 /**
@@ -70,7 +75,7 @@ export function useMachineControls(machine: Machine, onChanged: () => void) {
           : `Couldn’t ${ACTION_WORD[action]} ${name}.`
       if (inDialog) setConfirmError(messageOf(failure, fallback))
       else if (
-        (action === 'off' || action === 'restart') &&
+        (action === 'off' || action === 'restart' || action === 'stop') &&
         failure instanceof HostCallError &&
         failure.status === 409
       )
@@ -103,8 +108,27 @@ export function useMachineControls(machine: Machine, onChanged: () => void) {
 
   const sessionsNow = machine.sessions && machine.sessions > 0
   const keepsOn = guest?.intent === 'always'
-  const ask = (kind: 'off' | 'restart') => {
+  const ask = (kind: 'off' | 'restart' | 'stop') => {
     setConfirmError(null)
+    if (kind === 'stop') {
+      // Only offered after a clean shutdown or restart failed: cutting power can lose unsaved work.
+      setConfirm({
+        kind,
+        message: [
+          machine.here
+            ? 'This is the Aico you’re using: this page stops, and only Proxmox can start it again.'
+            : '',
+          machine.sessions && machine.sessions > 0
+            ? `${plural(machine.sessions, 'session')} running on ${name} will end.`
+            : '',
+          `${name} is cut off without a clean shutdown, so anything unsaved is lost. It stays off until someone starts it.`,
+        ]
+          .filter(Boolean)
+          .join(' '),
+        confirmText: ACTION_LABEL.stop,
+      })
+      return
+    }
     const sessions = sessionsNow
       ? `${plural(machine.sessions ?? 0, 'session')} running on ${name} will end.`
       : ''
@@ -174,6 +198,8 @@ export function useMachineControls(machine: Machine, onChanged: () => void) {
     guest.state === 'running' &&
     machine.up !== 'off' &&
     !working
+  // A clean shutdown or restart that Proxmox ran and failed: only then can the guest be cut off.
+  const canForceOff = canStop && !!guest?.failed
   const progress =
     busy === 'on' || machine.up === 'starting'
       ? 'Starting…'
@@ -190,6 +216,7 @@ export function useMachineControls(machine: Machine, onChanged: () => void) {
     confirmError,
     canStart,
     canStop,
+    canForceOff,
     working,
     progress,
     goingDown,
@@ -219,6 +246,7 @@ export function PowerButtons({
     busy,
     canStart,
     canStop,
+    canForceOff,
     goingDown,
     working,
     progress,
@@ -253,6 +281,16 @@ export function PowerButtons({
                 Shut down
               </button>
             </>
+          )}
+          {canForceOff && (
+            <button
+              type="button"
+              className={`${size} danger`}
+              title="Cut it off without a clean shutdown"
+              onClick={() => ask('stop')}
+            >
+              Force off
+            </button>
           )}
           {working && progress && (
             <button type="button" className={size} disabled>
@@ -357,7 +395,9 @@ export function PowerConfirm({ controls }: { controls: MachineControls }) {
           ? 'Trust this machine?'
           : confirm?.kind === 'restart'
             ? `Restart ${machine.name}?`
-            : `Shut down ${machine.name}?`
+            : confirm?.kind === 'stop'
+              ? `Force off ${machine.name}?`
+              : `Shut down ${machine.name}?`
       }
       message={confirm?.message ?? ''}
       confirmText={confirm?.confirmText ?? 'Shut down'}
@@ -366,10 +406,17 @@ export function PowerConfirm({ controls }: { controls: MachineControls }) {
           ? 'Trusting…'
           : confirm?.kind === 'restart'
             ? 'Restarting…'
-            : 'Shutting down…'
+            : confirm?.kind === 'stop'
+              ? 'Forcing off…'
+              : 'Shutting down…'
       }
       variant={confirm?.kind === 'trust' ? 'warning' : 'danger'}
-      isPending={busy === 'off' || busy === 'restart' || busy === 'trust'}
+      isPending={
+        busy === 'off' ||
+        busy === 'restart' ||
+        busy === 'stop' ||
+        busy === 'trust'
+      }
       error={confirmError}
       onConfirm={() => void run(confirm?.kind ?? 'off', true, true)}
       onCancel={cancelConfirm}

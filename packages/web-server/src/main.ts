@@ -4,7 +4,7 @@
 
 import { join } from 'node:path'
 import { agentDbPath, ChatSessions, openAgentDb, tetherPush } from '@aico/agent'
-import { guestAction, listGuests, proxmoxFrom, setGuestOnboot } from '@aico/fleet/power'
+import { guestAction, guestTask, listGuests, proxmoxFrom, setGuestOnboot } from '@aico/fleet/power'
 import { pveRequest } from '@aico/fleet/proxmox'
 import { loadCaptureTypes } from '@aico/notes/capture-types'
 import { execRunner, PreviewJobs } from '@aico/notes/heic'
@@ -249,6 +249,7 @@ function serve(): void {
       ? {
           list: () => listGuests(proxmox),
           act: (guest, action) => guestAction(proxmox, guest, action),
+          task: (guest, task) => guestTask(proxmox, guest, task),
           setOnboot: (guest, on) => setGuestOnboot(proxmox, guest, on),
         }
       : null,

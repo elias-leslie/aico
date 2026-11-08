@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { Guest } from '@aico/fleet/power'
+import type { Guest, GuestTask } from '@aico/fleet/power'
 import { parseRow, type ShownRow, StatusStore } from '@aico/status'
 import { openTasksDb, type Place, Registry } from '@aico/tasks'
 import { describe, expect, it } from 'vitest'
@@ -228,7 +228,14 @@ function guests(initial: Partial<Guest> = {}) {
     },
   ]
   const calls: string[] = []
-  const source: GuestSource & { fail?: boolean; down?: boolean } = {
+  const source: GuestSource & {
+    fail?: boolean
+    down?: boolean
+    outcome: GuestTask
+    tasks: string[]
+  } = {
+    outcome: { state: 'running' } as GuestTask,
+    tasks: [],
     async list() {
       if (source.down) throw new Error('ssh: connect timed out')
       return list
@@ -236,6 +243,11 @@ function guests(initial: Partial<Guest> = {}) {
     async act(guest, action) {
       if (source.fail) throw new Error('boom')
       calls.push(`${guest.vmid}:${action}`)
+      return `UPID:gem:${calls.length}`
+    },
+    async task(_guest, task) {
+      source.tasks.push(task)
+      return source.outcome
     },
     async setOnboot() {},
   }
@@ -285,6 +297,44 @@ describe('Places power', () => {
     expect(g.calls).toEqual(['191:shutdown', '191:start'])
     expect(p.view(CT).state).toBe('starting')
     expect(status.intents()[0]).toMatchObject({ stoppedAt: null })
+  })
+
+  it('clears the busy state when Proxmox ends the shutdown in an error, says why, and lets the owner force it off', async () => {
+    const g = guests()
+    const { p, status } = places(g.source, { now: T0 }, ALWAYS)
+    await p.refresh()
+    await p.power(ALWAYS, 'shutdown')
+    expect(p.view(ALWAYS)).toMatchObject({ busy: 'shutdown', failed: null })
+    // Still running and the task still going: waiting is right.
+    await p.refresh()
+    expect(p.view(ALWAYS)).toMatchObject({ busy: 'shutdown', failed: null })
+    expect(status.intents()[0]).toMatchObject({ stoppedAt: T0 })
+    g.source.outcome = { state: 'failed', reason: 'VM quit/powerdown failed - got timeout' }
+    await p.refresh()
+    expect(p.view(ALWAYS)).toMatchObject({
+      state: 'running',
+      busy: null,
+      failed: { action: 'shutdown', reason: 'VM quit/powerdown failed - got timeout' },
+    })
+    // The owner-stopped mark is put back: the guest is still up.
+    expect(status.intents()[0]).toMatchObject({ stoppedAt: null })
+    // Retrying is not blocked; a new action clears the failure.
+    g.source.outcome = { state: 'running' }
+    await p.power(ALWAYS, 'restart')
+    expect(p.view(ALWAYS)).toMatchObject({ busy: 'restart', failed: null })
+    g.source.outcome = { state: 'failed', reason: 'got timeout' }
+    await p.refresh() // joins the read the action started
+    await p.refresh()
+    expect(p.view(ALWAYS)).toMatchObject({ busy: null, failed: { action: 'restart' } })
+    // Force off is a hard stop, shown as a shutdown while it runs.
+    g.source.outcome = { state: 'running' }
+    expect((await p.power(ALWAYS, 'stop')).busy).toBe('shutdown')
+    expect(g.calls.at(-1)).toBe('191:stop')
+    g.list[0]!.status = 'stopped'
+    g.list[0]!.uptime = 0
+    await p.refresh()
+    await p.refresh()
+    expect(p.view(ALWAYS)).toMatchObject({ busy: null, failed: null })
   })
 
   it('reads an always-on place that is off as down, and a stopped one the owner shut as stopped', async () => {
