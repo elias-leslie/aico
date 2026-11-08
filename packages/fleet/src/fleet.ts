@@ -123,6 +123,9 @@ export class Fleet {
       this.server?.once('error', reject)
       this.server?.listen(s.listen.port, s.listen.address, () => {
         this.server?.off('error', reject)
+        // Port 0 takes any free port; record it so peers configured in this process can reach it.
+        const bound = this.server?.address()
+        if (s.listen.port === 0 && bound && typeof bound === 'object') s.listen.port = bound.port
         resolve()
       })
     })

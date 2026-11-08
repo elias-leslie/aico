@@ -22,13 +22,6 @@ afterEach(async () => {
   for (const close of cleanup.reverse()) await close()
   cleanup.length = 0
 })
-async function port(): Promise<number> {
-  const server = createServer()
-  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
-  const p = (server.address() as { port: number }).port
-  await new Promise<void>((r) => server.close(() => r()))
-  return p
-}
 async function pair(
   reporting?: {
     postRows: NonNullable<import('./fleet').FleetOptions['postRows']>
@@ -44,19 +37,21 @@ async function pair(
     { name: a.name, publicKey: a.publicKey, role: 'full' },
     { name: b.name, publicKey: b.publicKey, role: 'full' },
   ]
-  const aPort = await port()
-  const bPort = await port()
+  // Each hub listens on port 0 and records the port it got in its own listen endpoint, which is
+  // the same object as its peer's endpoint, so no free port is picked and then lost to a race.
+  const aListen = { address: '127.0.0.1', port: 0 }
+  const bListen = { address: '127.0.0.1', port: 0 }
   const settings = (
     name: string,
-    listenPort: number,
+    listen: typeof aListen,
     other: string,
-    peerPort: number,
+    peer: typeof aListen,
   ): FleetSettings => ({
     machine: name,
     stateDir: join(root, name),
     allowlist: '',
-    listen: { address: '127.0.0.1', port: listenPort },
-    peers: [{ name: other, endpoint: { address: '127.0.0.1', port: peerPort } }],
+    listen,
+    peers: [{ name: other, endpoint: peer }],
     controlSocket: join(root, `${name}.sock`),
     syncSocket: join(root, `${name}-sync.sock`),
     peerRoot: join(root, name),
@@ -66,8 +61,8 @@ async function pair(
     statusMs: 25,
     statusUrl: 'http://127.0.0.1:1',
   })
-  const sa = settings(a.name, aPort, b.name, bPort)
-  const sb = settings(b.name, bPort, a.name, aPort)
+  const sa = settings(a.name, aListen, b.name, bListen)
+  const sb = settings(b.name, bListen, a.name, aListen)
   const makeA = () =>
     new Fleet({
       settings: sa,
@@ -105,6 +100,7 @@ async function pair(
       return fb
     },
     replaceB() {
+      bListen.port = 0
       fb = makeB()
       return fb
     },
@@ -590,7 +586,7 @@ it('lends a loopback port to a worker over the link, only while hosts.json lists
 it('forwards a full-peer merge to an already-connected downstream worker', async () => {
   const p = await pair(),
     c = loadIdentity(join(p.root, 'c'), 'peer-c'),
-    cPort = await port()
+    cListen = { address: '127.0.0.1', port: 0 }
   const pins: Pin[] = [
     { name: p.a.name, publicKey: p.a.publicKey, role: 'full' },
     { name: p.b.name, publicKey: p.b.publicKey, role: 'full' },
@@ -598,14 +594,14 @@ it('forwards a full-peer merge to an already-connected downstream worker', async
   ]
   p.setPins(pins)
   const pinReader = vi.spyOn(trust, 'readPins').mockImplementation(() => pins)
-  p.sb.peers.push({ name: c.name, endpoint: { address: '127.0.0.1', port: cPort } })
+  p.sb.peers.push({ name: c.name, endpoint: cListen })
   const sc: FleetSettings = {
     ...p.sb,
     mode: 'worker',
     machine: c.name,
     stateDir: join(p.root, 'c'),
     peerRoot: join(p.root, 'peer-c'),
-    listen: { address: '127.0.0.1', port: cPort },
+    listen: cListen,
     peers: [{ name: p.b.name, endpoint: p.sb.listen }],
   }
   const fc = new Fleet({
