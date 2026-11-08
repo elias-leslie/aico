@@ -153,7 +153,14 @@ function pageOf(ctx: RequestContext): BrowseOptions {
     const value = Number(ctx.query.get(name))
     return ctx.query.get(name) !== null && Number.isFinite(value) ? value : undefined
   }
-  return { ...ANYWHERE, offset: number('offset'), limit: number('limit') }
+  return {
+    ...ANYWHERE,
+    offset: number('offset'),
+    limit: number('limit'),
+    sort: ctx.query.get('sort') === 'modified' ? 'modified' : 'name',
+    // Dotfiles show unless the page asks to hide them.
+    hidden: ctx.query.get('hidden') !== '0',
+  }
 }
 
 export interface FilePlace {

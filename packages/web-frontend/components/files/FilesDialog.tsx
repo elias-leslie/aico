@@ -11,7 +11,13 @@ import {
 import type { FilesRequest } from '@/lib/files-opener'
 import { useFilePlaces, useProjectRoot } from '@/lib/hooks/use-pane-files'
 import { FileBrowser, type FileChoice } from './FileBrowser'
-import { Breadcrumb, PlaceBar } from './PlaceBar'
+import {
+  defaultSort,
+  readShowHidden,
+  type SortBy,
+  saveShowHidden,
+} from './listing'
+import { Breadcrumb, ListControls, PlaceBar } from './PlaceBar'
 import { SharedFiles } from './SharedFiles'
 
 type View =
@@ -64,6 +70,13 @@ export function FilesDialog({
 }) {
   const [view, setView] = useState<View>(() => initialView(request, project))
   const opening = useRef(0)
+  // The owner's pick of order holds across folders; until then each folder has its own default.
+  const [sortPick, setSortPick] = useState<SortBy | null>(null)
+  const [showHidden, setShowHiddenState] = useState(readShowHidden)
+  const setShowHidden = (show: boolean) => {
+    setShowHiddenState(show)
+    saveShowHidden(show)
+  }
   const places = useFilePlaces()
   const projectRoot = useProjectRoot(project)
   const home = places.data?.places?.[0]?.path ?? null
@@ -122,6 +135,15 @@ export function FilesDialog({
     if (next.kind === 'opening') void openPath(next.path, false)
   }, [request, isOpen])
 
+  const sort =
+    sortPick ??
+    (view.kind === 'place'
+      ? defaultSort(
+          view.root,
+          places.data?.places,
+          projectRoot.data?.root ?? null,
+        )
+      : 'name')
   const tab = view.kind === 'project' ? 'project' : 'everywhere'
   const here = view.kind === 'place' ? view.root : null
   const insert = (path: string) => {
@@ -158,7 +180,7 @@ export function FilesDialog({
           </div>
           {project && (
             <div className="flex-none px-[18px] pt-1 pb-2.5">
-              <fieldset aria-label="Show" className="lantern-seg">
+              <fieldset aria-label="Show" className="lantern-seg compact">
                 <button
                   type="button"
                   aria-pressed={tab === 'project'}
@@ -259,12 +281,19 @@ export function FilesDialog({
                       onGo={(path) => goFolder(path)}
                     />
                   </div>
+                  <ListControls
+                    sort={sort}
+                    onSort={setSortPick}
+                    showHidden={showHidden}
+                    onShowHidden={setShowHidden}
+                  />
                   <FileBrowser
                     key={`at:${view.root}:${view.select?.path ?? ''}`}
                     source={{ kind: 'location', root: view.root }}
                     initialSelected={view.select}
                     onInsertPath={insert}
                     shared={view.fromShared}
+                    view={{ sort, showHidden }}
                   />
                 </>
               ) : null}

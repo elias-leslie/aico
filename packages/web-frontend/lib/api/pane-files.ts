@@ -11,6 +11,8 @@ export interface PaneFileTreeEntry {
   is_symlink?: boolean
   link_target?: string
   link_broken?: boolean
+  /** When it last changed (ms since the epoch); only listings of any folder carry it. */
+  modified?: number
 }
 
 export interface PaneFileTreeResponse {
@@ -32,6 +34,12 @@ export interface PaneFileContentResponse {
   is_binary: boolean
   language: string | null
   truncated: boolean
+}
+
+/** How a listing of any folder is ordered and filtered. */
+export interface ListingView {
+  sort: 'name' | 'modified'
+  showHidden: boolean
 }
 
 /** Where the browser reads: a tab's or a session's working folder, or any folder by its path (a share or a clicked path). */
@@ -62,6 +70,7 @@ function filesUrl(
   route: 'tree' | 'content',
   path: string | undefined,
   offset?: number,
+  view?: ListingView,
 ): string {
   const query = buildQueryString({ path })
   if (source.kind === 'pane')
@@ -72,6 +81,8 @@ function filesUrl(
     root: source.root,
     path,
     offset: offset ? String(offset) : undefined,
+    sort: view?.sort === 'modified' ? 'modified' : undefined,
+    hidden: view && !view.showHidden ? '0' : undefined,
   })}`
 }
 
@@ -86,9 +97,10 @@ export function fetchFileTree(
   source: FilesSource,
   path = '',
   offset = 0,
+  view?: ListingView,
 ): Promise<PaneFileTreeResponse> {
   return apiFetch<PaneFileTreeResponse>(
-    filesUrl(source, 'tree', path || undefined, offset),
+    filesUrl(source, 'tree', path || undefined, offset, view),
     undefined,
     "Couldn't load the files",
   )

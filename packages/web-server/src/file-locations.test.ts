@@ -5,6 +5,7 @@ import {
   realpathSync,
   rmSync,
   symlinkSync,
+  utimesSync,
   writeFileSync,
 } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
@@ -47,6 +48,45 @@ afterEach(async () => {
 })
 
 describe('file locations', () => {
+  it('lists newest first with times when asked, and leaves dotfiles out when asked', async () => {
+    const dir = join(top, 'recent')
+    mkdirSync(dir)
+    for (const [name, secs] of [
+      ['old.txt', 1_000],
+      ['new.txt', 3_000],
+      ['.hidden', 4_000],
+      ['mid.txt', 2_000],
+    ] as const) {
+      writeFileSync(join(dir, name), name)
+      utimesSync(join(dir, name), secs, secs)
+    }
+    const list = async (extra: string) =>
+      (await (await fetch(`${server.base}/api/files/tree?${query(dir)}${extra}`)).json()) as {
+        entries: { name: string; modified?: number; size?: number }[]
+        total: number
+      }
+    const byTime = await list('&sort=modified')
+    expect(byTime.entries.map((entry) => entry.name)).toEqual([
+      '.hidden',
+      'new.txt',
+      'mid.txt',
+      'old.txt',
+    ])
+    expect(byTime.entries[1]).toMatchObject({ modified: 3_000_000, size: 7 })
+    const visible = await list('&sort=modified&hidden=0')
+    expect(visible.entries.map((entry) => entry.name)).toEqual(['new.txt', 'mid.txt', 'old.txt'])
+    expect(visible.total).toBe(3)
+    // By name stays the default, with the time on each row.
+    const byName = await list('')
+    expect(byName.entries.map((entry) => entry.name)).toEqual([
+      '.hidden',
+      'mid.txt',
+      'new.txt',
+      'old.txt',
+    ])
+    expect(byName.entries.every((entry) => typeof entry.modified === 'number')).toBe(true)
+  })
+
   it('lists a folder and reads a file where it is, leaving secrets out', async () => {
     const tree = (await (await get('tree', join(top, 'work'))).json()) as {
       entries: { name: string }[]

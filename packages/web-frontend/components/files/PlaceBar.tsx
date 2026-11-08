@@ -1,8 +1,9 @@
 'use client'
 
-import { ChevronRight, Home } from 'lucide-react'
+import { ArrowRight, ChevronRight, Eye, EyeOff, Home } from 'lucide-react'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import type { FilePlace } from '@/lib/api/pane-files'
+import type { SortBy } from './listing'
 
 /** A folder path as breadcrumb parts: each with the folder it opens. */
 function crumbsOf(path: string): { name: string; path: string }[] {
@@ -124,6 +125,11 @@ export function PlaceBar({
           disabled={!typed.trim()}
         >
           Go
+          <ArrowRight
+            aria-hidden="true"
+            className="h-3.5 w-3.5"
+            strokeWidth={1.7}
+          />
         </button>
       </form>
       <div className="files-chips" role="group" aria-label="Shortcuts">
@@ -154,6 +160,57 @@ export function PlaceBar({
           <span className="files-chip-note">Shortcuts didn’t load</span>
         ) : null}
       </div>
+    </div>
+  )
+}
+
+/** How a folder of Everywhere is listed: the order, and whether dotfiles show. */
+export function ListControls({
+  sort,
+  onSort,
+  showHidden,
+  onShowHidden,
+}: {
+  sort: SortBy
+  onSort: (sort: SortBy) => void
+  showHidden: boolean
+  onShowHidden: (show: boolean) => void
+}) {
+  return (
+    <div className="files-tools">
+      <fieldset aria-label="Sort by" className="lantern-seg compact">
+        <button
+          type="button"
+          aria-pressed={sort === 'name'}
+          onClick={() => onSort('name')}
+        >
+          Name
+        </button>
+        <button
+          type="button"
+          aria-pressed={sort === 'modified'}
+          onClick={() => onSort('modified')}
+        >
+          Modified
+        </button>
+      </fieldset>
+      <button
+        type="button"
+        className="lantern-btn small"
+        aria-pressed={showHidden}
+        onClick={() => onShowHidden(!showHidden)}
+      >
+        {showHidden ? (
+          <Eye aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={1.7} />
+        ) : (
+          <EyeOff
+            aria-hidden="true"
+            className="h-3.5 w-3.5"
+            strokeWidth={1.7}
+          />
+        )}
+        Show hidden
+      </button>
     </div>
   )
 }

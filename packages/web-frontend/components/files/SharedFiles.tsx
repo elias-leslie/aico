@@ -106,7 +106,7 @@ export function SharedFiles({
               {share.host ? null : (
                 <button
                   type="button"
-                  className="lantern-btn ghost h-8! flex-none px-2! text-xs! max-md:h-10!"
+                  className="lantern-btn small flex-none"
                   aria-label={`Remove ${
                     share.title ??
                     (share.kind === 'url' ? 'link' : baseName(share.paths[0]))
@@ -159,7 +159,7 @@ export function SharedFiles({
                       </a>
                       <button
                         type="button"
-                        className="lantern-btn ghost h-8! flex-none px-2! text-xs! max-md:h-10!"
+                        className="lantern-btn small flex-none"
                         aria-label={`View source of ${baseName(path)}`}
                         onClick={() => onOpenPath(path)}
                       >

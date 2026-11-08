@@ -7,6 +7,7 @@ import {
   closeSync,
   constants,
   type Dirent,
+  lstatSync,
   openSync,
   readdirSync,
   readlinkSync,
@@ -239,6 +240,10 @@ export interface BrowseOptions {
   anywhere?: boolean
   offset?: number
   limit?: number
+  /** Anywhere listings: by name (folders first) or by last change, newest first. */
+  sort?: 'name' | 'modified'
+  /** Anywhere listings: false leaves out names that start with a dot. */
+  hidden?: boolean
 }
 
 export const DEFAULT_PAGE = 500
@@ -289,6 +294,8 @@ export interface TreeEntry {
   is_symlink?: boolean
   /** What the link says it points at. */
   link_target?: string
+  /** When it last changed (ms since the epoch); anywhere listings only. */
+  modified?: number
   /** The link leads nowhere. */
   link_broken?: boolean
 }
@@ -352,10 +359,28 @@ function direntIsDirectory(dirent: Dirent, path: string): boolean {
   return dirent.isSymbolicLink() ? isDirectory(path) : dirent.isDirectory()
 }
 
+/** When a path last changed (a link: what it leads to, else the link); undefined when unreadable. */
+function modifiedAt(path: string): number | undefined {
+  try {
+    return statSync(path).mtimeMs
+  } catch {}
+  try {
+    return lstatSync(path).mtimeMs
+  } catch {
+    return undefined
+  }
+}
+
 /** One listed entry of an anywhere listing: size and kind, and what a symlink leads to. */
-function anywhereEntry(dirent: Dirent, logicalPath: string, real: string): TreeEntry {
+function anywhereEntry(
+  dirent: Dirent,
+  logicalPath: string,
+  real: string,
+  modified: number | undefined,
+): TreeEntry {
   const isDir = direntIsDirectory(dirent, real)
   const data: TreeEntry = { name: dirent.name, path: logicalPath, is_directory: isDir }
+  if (modified !== undefined) data.modified = modified
   if (dirent.isSymbolicLink()) {
     data.is_symlink = true
     try {
@@ -397,24 +422,38 @@ function listAnywhere(rootPath: string, relativePath: string, options: BrowseOpt
   }
   const listed = dirents
     .filter((dirent) => !isDenied(dirent.name))
+    .filter((dirent) => options.hidden !== false || !dirent.name.startsWith('.'))
     .map((dirent) => ({
       dirent,
       name: dirent.name,
       real: join(target, dirent.name),
       isDir: direntIsDirectory(dirent, join(target, dirent.name)),
+      modified: undefined as number | undefined,
     }))
     // A link to a secret is left out like the secret.
     .filter(({ dirent, real }) => {
       if (!dirent.isSymbolicLink()) return true
       return !parts(realpathLoose(real)).some((part) => isDenied(part))
     })
-    .sort(compareEntries)
+  // Newest first needs every entry's time, not only the page's.
+  if (options.sort === 'modified') {
+    for (const item of listed) item.modified = modifiedAt(item.real)
+    listed.sort(
+      (a, b) =>
+        (b.modified ?? Number.NEGATIVE_INFINITY) - (a.modified ?? Number.NEGATIVE_INFINITY) ||
+        compareEntries(a, b),
+    )
+  } else {
+    listed.sort(compareEntries)
+  }
   const offset = Math.max(0, Math.floor(options.offset ?? 0))
   const limit = Math.min(MAX_PAGE, Math.max(1, Math.floor(options.limit ?? DEFAULT_PAGE)))
   const base = parts(relativePath).join('/')
   const entries = listed
     .slice(offset, offset + limit)
-    .map(({ dirent, real, name }) => anywhereEntry(dirent, base ? `${base}/${name}` : name, real))
+    .map(({ dirent, real, name, modified }) =>
+      anywhereEntry(dirent, base ? `${base}/${name}` : name, real, modified ?? modifiedAt(real)),
+    )
   return { entries, path: relativePath || '', total: listed.length, offset }
 }
 

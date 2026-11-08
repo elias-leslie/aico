@@ -1342,6 +1342,49 @@ div.xterm .xterm-viewport {
   white-space: nowrap;
 }
 
+.files-tools {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 18px 8px;
+}
+
+.files-tools .lantern-btn[aria-pressed="true"] {
+  border-color: var(--lantern);
+  background: var(--paper-veil);
+}
+
+/* Sort and the project switch: a segmented control as wide as its labels. */
+.lantern-seg.compact {
+  display: inline-grid;
+  grid-auto-columns: auto;
+  width: fit-content;
+}
+
+.lantern-seg.compact button {
+  height: 28px;
+  padding: 0 12px;
+  font-size: 12px;
+  transition:
+    background 0.15s var(--ease-arrival),
+    color 0.15s var(--ease-arrival);
+}
+
+.lantern-seg.compact button:hover:not([aria-pressed="true"]) {
+  background: var(--paper);
+  color: var(--bone);
+}
+
+.lantern-file-row .s.meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+
 .files-pathrow {
   display: flex;
   flex: none;
@@ -1405,6 +1448,13 @@ div.xterm .xterm-viewport {
   padding: 0 18px 8px;
   color: var(--mist);
   font-size: 12px;
+}
+
+@media (max-width: 1023px), (pointer: coarse) {
+  .lantern-seg.compact button {
+    height: 44px;
+    padding: 0 16px;
+  }
 }
 
 @media (pointer: coarse) {

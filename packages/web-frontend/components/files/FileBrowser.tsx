@@ -18,12 +18,14 @@ import { useCallback, useMemo, useState } from 'react'
 import {
   type FilesSource,
   isHtmlPath,
+  type ListingView,
   type PaneFileTreeEntry,
   rawFileUrl,
   sharedPageUrl,
 } from '@/lib/api/pane-files'
 import { isPermanentRefusal } from '@/lib/api-fetch'
 import { useFileContent, useFileTree } from '@/lib/hooks/use-pane-files'
+import { modifiedLabel } from './listing'
 
 const CODE_EXTENSIONS = new Set([
   '.ts',
@@ -86,6 +88,7 @@ interface TreeNodeProps {
   depth: number
   selectedPath: string | null
   onSelect: (entry: PaneFileTreeEntry) => void
+  view?: ListingView
 }
 
 function TreeNode({
@@ -94,6 +97,7 @@ function TreeNode({
   depth,
   selectedPath,
   onSelect,
+  view,
 }: TreeNodeProps) {
   const [expanded, setExpanded] = useState(false)
   const isSelected = selectedPath === entry.path
@@ -101,6 +105,7 @@ function TreeNode({
     source,
     entry.path,
     expanded && entry.is_directory,
+    view,
   )
   const FileIcon = getFileIcon(entry)
 
@@ -150,7 +155,15 @@ function TreeNode({
             </span>
           ) : null}
         </span>
-        <span className="s">
+        <span className="s meta">
+          {entry.modified !== undefined ? (
+            <span
+              className="when"
+              title={new Date(entry.modified).toLocaleString()}
+            >
+              {modifiedLabel(entry.modified)}
+            </span>
+          ) : null}
           {entry.is_directory ? (
             <ChevronRight
               aria-hidden="true"
@@ -160,7 +173,7 @@ function TreeNode({
               )}
             />
           ) : entry.size !== undefined ? (
-            formatSize(entry.size)
+            <span className="size">{formatSize(entry.size)}</span>
           ) : null}
         </span>
       </button>
@@ -191,6 +204,7 @@ function TreeNode({
                   depth={depth + 1}
                   selectedPath={selectedPath}
                   onSelect={onSelect}
+                  view={view}
                 />
               ))}
               {!childTree.entries?.length && (
@@ -263,6 +277,7 @@ export function FileBrowser({
   initialSelected = null,
   onInsertPath,
   shared = false,
+  view,
 }: {
   source: FilesSource
   initialSelected?: FileChoice | null
@@ -270,8 +285,10 @@ export function FileBrowser({
   onInsertPath?: (path: string) => void
   /** A shared or attached folder: a web page's Open shows it rendered. */
   shared?: boolean
+  /** Order and dotfiles of a listing of any folder. */
+  view?: ListingView
 }) {
-  const tree = useFileTree(source, '')
+  const tree = useFileTree(source, '', true, view)
   const [selected, setSelected] = useState<FileChoice | null>(initialSelected)
 
   return (
@@ -308,6 +325,7 @@ export function FileBrowser({
                 depth={0}
                 selectedPath={selected?.path ?? null}
                 onSelect={setSelected}
+                view={view}
               />
             ))}
             <MoreRow tree={tree} indent={10} />
@@ -463,7 +481,7 @@ export function FilePreview({
                   href={pageUrl ?? rawUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="lantern-btn h-8! px-2.5! text-xs!"
+                  className="lantern-btn small"
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
                   {pageUrl
@@ -477,7 +495,7 @@ export function FilePreview({
                 <button
                   type="button"
                   onClick={handleInsertPath}
-                  className="lantern-btn primary h-8! px-2.5! text-xs!"
+                  className="lantern-btn small primary"
                 >
                   Insert path
                 </button>
@@ -485,7 +503,7 @@ export function FilePreview({
               <button
                 type="button"
                 onClick={() => handleCopy('path')}
-                className="lantern-btn h-8! px-2.5! text-xs!"
+                className="lantern-btn small"
               >
                 {copiedThing === 'path' ? (
                   <Check className="h-3.5 w-3.5" />
@@ -498,7 +516,7 @@ export function FilePreview({
                 <button
                   type="button"
                   onClick={() => handleCopy('content')}
-                  className="lantern-btn h-8! px-2.5! text-xs!"
+                  className="lantern-btn small"
                 >
                   {copiedThing === 'content' ? (
                     <Check className="h-3.5 w-3.5" />

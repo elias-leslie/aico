@@ -148,9 +148,19 @@ function treeRoots(): string[] {
     .map((url) => url.searchParams.get('root') ?? '')
 }
 
+/** The last listing the browser asked for, as its query. */
+function lastTree(): URLSearchParams {
+  const urls = vi
+    .mocked(fetch)
+    .mock.calls.map(([url]) => new URL(String(url), 'http://aico.test'))
+    .filter((url) => url.pathname === '/api/files/tree')
+  return urls[urls.length - 1].searchParams
+}
+
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+  window.localStorage.clear()
 })
 
 describe('FilesDialog', () => {
@@ -344,6 +354,88 @@ describe('FilesDialog', () => {
     ).toBeVisible()
     // The box stays to try another path.
     expect(screen.getByRole('textbox', { name: 'Go to a path' })).toBeVisible()
+  })
+
+  it('sorts Home and /tmp by Modified and project folders by Name, and the pick holds', async () => {
+    renderDialog(null, { kind: 'session', sessionId: 'ab12cd34' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Everywhere' }))
+    await screen.findByText('tmp-file.txt')
+    expect(lastTree().get('root')).toBe('/srv/work')
+    expect(lastTree().get('sort')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Name' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    fireEvent.click(screen.getByRole('button', { name: '/tmp' }))
+    await waitFor(() => expect(lastTree().get('root')).toBe('/tmp'))
+    await waitFor(() => expect(lastTree().get('sort')).toBe('modified'))
+    expect(screen.getByRole('button', { name: 'Modified' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Name' }))
+    await waitFor(() => expect(lastTree().get('sort')).toBeNull())
+    fireEvent.click(screen.getByRole('button', { name: /Home/ }))
+    await waitFor(() => expect(lastTree().get('root')).toBe('/home/me'))
+    expect(lastTree().get('sort')).toBeNull()
+  })
+
+  it('hides dotfiles in Everywhere until Show hidden, and remembers the choice', async () => {
+    window.localStorage.clear()
+    renderDialog(null, null)
+    await screen.findByText('tmp-file.txt')
+    expect(lastTree().get('hidden')).toBe('0')
+    const toggle = screen.getByRole('button', { name: 'Show hidden' })
+    expect(toggle).toHaveAttribute('aria-pressed', 'false')
+    fireEvent.click(toggle)
+    await waitFor(() => expect(lastTree().get('hidden')).toBeNull())
+    expect(window.localStorage.getItem('aico-files-show-hidden')).toBe('1')
+    cleanup()
+    renderDialog(null, null)
+    await screen.findByText('tmp-file.txt')
+    expect(lastTree().get('hidden')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Show hidden' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  })
+
+  it('works when storage is out of reach', async () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('blocked')
+    })
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('blocked')
+    })
+    renderDialog(null, null)
+    await screen.findByText('tmp-file.txt')
+    fireEvent.click(screen.getByRole('button', { name: 'Show hidden' }))
+    await waitFor(() => expect(lastTree().get('hidden')).toBeNull())
+    vi.restoreAllMocks()
+  })
+
+  it('shows when each entry changed and how big a file is', async () => {
+    const modified = Date.now() - 4 * 60_000
+    renderDialog(null, null, (url) =>
+      new URL(url, 'http://aico.test').pathname === '/api/files/tree'
+        ? json({
+            entries: [
+              {
+                name: 'report.md',
+                path: 'report.md',
+                is_directory: false,
+                size: 2048,
+                extension: '.md',
+                modified,
+              },
+            ],
+            path: '',
+            total: 1,
+          })
+        : serve(url),
+    )
+    expect(await screen.findByText('4 min ago')).toBeVisible()
+    expect(screen.getByText('2.0 KB')).toBeVisible()
   })
 
   it('jumps to a shortcut folder and to Shared', async () => {

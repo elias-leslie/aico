@@ -5,6 +5,7 @@ import {
   fetchFilePlaces,
   fetchFileTree,
   fetchProjectRoot,
+  type ListingView,
   type PaneFileContentResponse,
   type PaneFileTreeEntry,
   type PaneFileTreeResponse,
@@ -15,8 +16,15 @@ import { isPermanentRefusal } from '@/lib/api-fetch'
 
 const fileQueryKeys = {
   all: ['pane-files'] as const,
-  tree: (source: FilesSource, path: string) =>
-    [...fileQueryKeys.all, 'tree', sourceKey(source), path] as const,
+  tree: (source: FilesSource, path: string, view?: ListingView) =>
+    [
+      ...fileQueryKeys.all,
+      'tree',
+      sourceKey(source),
+      path,
+      view?.sort ?? '',
+      view?.showHidden ?? '',
+    ] as const,
   content: (source: FilesSource, path: string) =>
     [...fileQueryKeys.all, 'content', sourceKey(source), path] as const,
 }
@@ -28,7 +36,12 @@ function retryFiles(failures: number, error: Error): boolean {
 }
 
 /** A folder's entries, a page at a time: `loadMore` fetches the next page. */
-export function useFileTree(source: FilesSource, path = '', enabled = true) {
+export function useFileTree(
+  source: FilesSource,
+  path = '',
+  enabled = true,
+  view?: ListingView,
+) {
   const query = useInfiniteQuery<
     PaneFileTreeResponse,
     Error,
@@ -36,8 +49,8 @@ export function useFileTree(source: FilesSource, path = '', enabled = true) {
     readonly unknown[],
     number
   >({
-    queryKey: fileQueryKeys.tree(source, path),
-    queryFn: ({ pageParam }) => fetchFileTree(source, path, pageParam),
+    queryKey: fileQueryKeys.tree(source, path, view),
+    queryFn: ({ pageParam }) => fetchFileTree(source, path, pageParam, view),
     initialPageParam: 0,
     getNextPageParam: (last) => {
       const next = (last.offset ?? 0) + last.entries.length
