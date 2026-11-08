@@ -197,6 +197,12 @@ describe('loop protection', () => {
     })
   })
 
+  it('does not settle after a tmux server death that left no memory to settle', () => {
+    expect(
+      decideRecovery([], { diedAt: DIED, agentWasHog: false, nothingToSettle: true }, now),
+    ).toEqual({ notBefore: now, attempt: 1 })
+  })
+
   it('spaces the second recovery at least 10 minutes after the first', () => {
     const history = [
       { id: 'a', diedAt: DIED - 3600_000, recoveredAt: now - 11 * 60_000, agentWasHog: false },

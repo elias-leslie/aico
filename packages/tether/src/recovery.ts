@@ -29,6 +29,7 @@ import { type Needs, parseNeeds } from '@aico/fleet/hub/placement'
 import { admissionOverrideFromEnv } from '@aico/session-engine/agent-admission'
 import {
   getSessionEntry,
+  getTmuxServer,
   getWidget,
   listWidgets,
   rootRequestForWidget,
@@ -197,7 +198,7 @@ export type RecoveryDecision = { hold: string } | { notBefore: number; attempt: 
  * automatic recoveries. */
 export function decideRecovery(
   history: RecoveryAttempt[],
-  crash: { diedAt: number; agentWasHog: boolean },
+  crash: { diedAt: number; agentWasHog: boolean; nothingToSettle?: boolean },
   now: number,
 ): RecoveryDecision {
   const recent = history.filter((attempt) => now - attempt.recoveredAt < RECOVERY_WINDOW_MS)
@@ -210,7 +211,10 @@ export function decideRecovery(
   if (crash.agentWasHog && recent.some((attempt) => attempt.agentWasHog))
     return { hold: 'its own process was the memory hog again' }
   return {
-    notBefore: Math.max(now + ADMIT_SETTLE_MS, last ? last + LOOP_WINDOW_MS : 0),
+    notBefore: Math.max(
+      crash.nothingToSettle ? now : now + ADMIT_SETTLE_MS,
+      last ? last + LOOP_WINDOW_MS : 0,
+    ),
     attempt: automatic.length + 1,
   }
 }
@@ -703,6 +707,21 @@ export class Recovery {
       if (event.serverDead && event.serverUnit)
         server = await this.journalUnit(event.serverUnit, event.serverInvocationId, until)
     }
+    // A dying server hangs up on the agent, which may still be exiting. Reconcile sees a dead
+    // server within seconds now, so a `started` marker that early does not yet mean it was killed.
+    let exitMarker = this.engine.agentExitMarker(event.scopeUnit)
+    for (
+      let poll = 1;
+      poll < CLASSIFY_POLLS &&
+      event.serverDead &&
+      exitMarker?.marker?.state === 'started' &&
+      pane.endedAt === null;
+      poll += 1
+    ) {
+      await this.sleep(CLASSIFY_POLL_MS)
+      pane = await this.journalUnit(event.scopeUnit, event.scopeInvocationId, until)
+      exitMarker = this.engine.agentExitMarker(event.scopeUnit)
+    }
     const kernel = await this.kernelVictims(event.at - LOOP_WINDOW_MS, this.now())
     const victim = victimsInScope(kernel, event.scopeUnit).at(-1) ?? null
     const serverVictim =
@@ -723,7 +742,6 @@ export class Recovery {
     // So does an agent the owner started again by hand in the fallback shell
     // (seen running after the supervisor wrote its exit) when systemd logged
     // the SIGKILL: nothing rewrites the marker for that agent.
-    const exitMarker = this.engine.agentExitMarker(event.scopeUnit)
     const marker = exitMarker?.marker ?? null
     const sigkillAt =
       pane.kills.find((kill) => kill.signal === 'SIGKILL' && kill.at <= event.at)?.at ?? null
@@ -927,7 +945,14 @@ export class Recovery {
         ? { notBefore: now, attempt: 0 }
         : decideRecovery(
             this.history.filter((attempt) => attempt.id === crash.id),
-            { diedAt: crash.diedAt, agentWasHog },
+            {
+              diedAt: crash.diedAt,
+              agentWasHog,
+              // A tmux server that ended with no memory kill left no memory to settle. The launch
+              // still waits for host admission to have been open for a minute (admissionSettled).
+              nothingToSettle:
+                crash.kind === 'server-died' && !crash.victim && crash.cause !== 'oom-kill',
+            },
             now,
           )
     const resumeId = this.resumeIdFor(crash.id)
@@ -1002,6 +1027,19 @@ export class Recovery {
     return this.admitSince !== null && now - this.admitSince >= ADMIT_SETTLE_MS
   }
 
+  /** A viewer's reattach finds a dead tmux server within a second. Its sessions need not wait up to
+   * a minute for the observer's next pass to the same reconcile (inspect). */
+  private async reconcileDeadServerSessions(now: number): Promise<void> {
+    for (const row of listWidgets()) {
+      if (!row.tmuxServerId || !row.scopeUnit || row.launchState !== 'dispatched') continue
+      if (!getTui(row.tool)?.command.length) continue
+      if (getTmuxServer(row.tmuxServerId)?.phase !== 'dead') continue
+      if (now - (this.lastReconcile.get(row.id) ?? 0) < RECONCILE_EVERY_MS) continue
+      this.lastReconcile.set(row.id, now)
+      await this.engine.reconcile(row.id).catch(() => {})
+    }
+  }
+
   /** One serialized step: recover the earliest due session, if any. */
   async tick(): Promise<void> {
     if (this.busy) return
@@ -1009,6 +1047,7 @@ export class Recovery {
     try {
       const now = this.now()
       if (now - this.lastMarkerSweep >= MARKER_SWEEP_MS) this.sweepExitMarkers()
+      await this.reconcileDeadServerSessions(now)
       const settled = await this.admissionSettled(now)
       const due = [...this.records.values()]
         .filter((record) => record.state === 'waiting' && record.notBefore <= now)

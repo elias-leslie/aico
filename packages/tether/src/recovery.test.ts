@@ -5,8 +5,11 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
+  activateTmuxServer,
   getWidget,
+  insertProvisioningTmuxServer,
   insertWidget,
+  markTmuxServerDead,
   removeWidget,
   setWidgetOwnership,
 } from '@aico/session-engine/catalog'
@@ -63,6 +66,7 @@ interface Harness {
   markers: Map<string, number>
   respawn: Mock<(id: string) => Promise<RespawnResult>>
   ensure: Mock<(id: string) => Promise<boolean>>
+  reconcile: Mock<(id: string) => Promise<void>>
   sleep: (ms: number) => Promise<void>
   /** Runs inside the engine's conversation scan, while recovery awaits it. */
   duringScan: (() => Promise<void>) | null
@@ -98,6 +102,7 @@ function harness(): Harness {
     markers: new Map<string, number>(),
     respawn: vi.fn(async (_id: string): Promise<RespawnResult> => ({ status: 'replaced' })),
     ensure: vi.fn(async (_id: string) => true),
+    reconcile: vi.fn(async (_id: string) => {}),
     sleep: async (ms: number) => {
       h.clock.now += ms
     },
@@ -106,7 +111,7 @@ function harness(): Harness {
     currentPane: async () => h.pane,
     agentIn: () => h.agent,
     agentExit: () => h.exit,
-    reconcile: async () => {},
+    reconcile: (rowId) => h.reconcile(rowId),
     release: async () => h.release,
     ensure: (rowId) => h.ensure(rowId),
     respawn: (rowId) => h.respawn(rowId),
@@ -230,6 +235,37 @@ describe('crash recovery', () => {
   let h: Harness
   beforeEach(() => {
     h = harness()
+  })
+
+  it('reconciles sessions of a server already found dead on the next tick, once a minute', async () => {
+    await h.recovery.tick()
+    expect(h.reconcile).not.toHaveBeenCalled()
+    const server = 'c'.repeat(32)
+    const scopeUnit = `aico-tmux-server-${server}.service`
+    insertProvisioningTmuxServer({
+      id: server,
+      socketPath: join(dir, 'server.sock'),
+      scopeUnit,
+      createdAt: h.clock.now,
+    })
+    activateTmuxServer(server, {
+      controlGroup: `/user.slice/test/${scopeUnit}`,
+      invocationId: INVOCATION,
+      serverPid: 1234,
+      procStartTime: '987654',
+    })
+    catalog.db
+      .prepare(
+        `UPDATE sessions SET tmux_server_id = ?, tmux_allocation_state = 'bound',
+           launch_state = 'dispatched', launch_nonce = 'n' WHERE id = ?`,
+      )
+      .run(server, h.id)
+    await h.recovery.tick()
+    expect(h.reconcile).not.toHaveBeenCalled()
+    expect(markTmuxServerDead(server, h.clock.now)).toBe(true)
+    await h.recovery.tick()
+    await h.recovery.tick()
+    expect(h.reconcile.mock.calls).toEqual([[h.id]])
   })
 
   it('holds a terminal entry exit with the supported same-session resume action', async () => {
@@ -477,6 +513,38 @@ describe('crash recovery', () => {
     h.systemState = 'running'
     await h.recovery.onAbandoned(abandoned(h, server))
     expect(sessions(h)).toMatchObject([{ kind: 'server-died', cause: 'lost', state: 'waiting' }])
+  })
+
+  it('skips the memory settle only for a server that ended without a memory kill', async () => {
+    h.pane = null
+    const serverUnit = `aico-tmux-server-${SERVER}.service`
+    await h.recovery.inspect(row(h), 'running', PANE_PID, 5)
+    await h.recovery.onAbandoned(abandoned(h, { serverDead: true, serverUnit }))
+    expect(sessions(h)).toMatchObject([{ kind: 'server-died', not_before: h.clock.now }])
+  })
+
+  it('keeps the memory settle when only the unit result says oom-kill', async () => {
+    h.pane = null
+    const serverUnit = `aico-tmux-server-${SERVER}.service`
+    h.journal = unitResult(serverUnit, 'oom-kill', h.clock.now)
+    await h.recovery.inspect(row(h), 'running', PANE_PID, 5)
+    await h.recovery.onAbandoned(abandoned(h, { serverDead: true, serverUnit }))
+    expect(sessions(h)).toMatchObject([
+      { kind: 'server-died', cause: 'oom-kill', not_before: h.clock.now + 60_000 },
+    ])
+  })
+
+  it('gives an agent the dead server hung up on time to record its exit', async () => {
+    h.pane = null
+    const serverUnit = `aico-tmux-server-${SERVER}.service`
+    h.journal = unitResult(serverUnit, 'signal', h.clock.now)
+    h.marker = { marker: { state: 'started' }, at: h.clock.now - 3600_000 }
+    h.sleep = async () => {
+      h.marker = { marker: { state: 'signal', signal: 'HUP' }, at: h.clock.now }
+    }
+    await h.recovery.inspect(row(h), 'running', PANE_PID, 5)
+    await h.recovery.onAbandoned(abandoned(h, { serverDead: true, serverUnit }))
+    expect(sessions(h)).toMatchObject([{ kind: 'server-died', state: 'waiting' }])
   })
 
   it('reads a pane whose every process was SIGKILLed while the agent ran as a crash', async () => {
