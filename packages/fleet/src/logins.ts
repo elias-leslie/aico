@@ -534,6 +534,15 @@ export class LoginStore {
   show(name: string, caller: LoginCaller): Login {
     return structuredClone(this.require(this.read(), name, caller))
   }
+  /** What `aico logins show` prints: the login, its state and its latest changes, never a value. */
+  details(name: string, caller: LoginCaller) {
+    const index = this.read()
+    const entry = this.require(index, name, caller)
+    const activity = this.trim(index.audit)
+      .filter((event) => event.name === entry.name)
+      .slice(-policy.showActivity)
+    return { ...structuredClone(entry), state: this.state(entry), activity }
+  }
   state(entry: Login) {
     if (entry.lab?.expires_at && Date.parse(entry.lab.expires_at) <= Date.now()) return 'Expired'
     return !existsSync(join(this.folder, entry.file))
@@ -618,7 +627,8 @@ export class LoginStore {
     const kind = old?.kind || metadata.kind || 'API key'
     if (kind === 'lab login' && !old?.lab && !metadata.lab)
       throw new LoginError('Use lab enroll for a scoped lab login')
-    if (!LOGIN_KINDS.includes(kind)) throw new LoginError('Invalid login kind')
+    if (!LOGIN_KINDS.includes(kind))
+      throw new LoginError(`Invalid login kind; use one of: ${LOGIN_KINDS.join(', ')}`)
     const entry: Login = {
       revision: this.revision(index),
       name,

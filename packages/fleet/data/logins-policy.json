@@ -16,6 +16,7 @@
   "labInterpreters": "^(python[0-9.]*[a-z]*(-dbg)?|pypy[0-9.]*|node[0-9]*|nodejs|deno|bun|tsx|ts-node|bash|sh|dash|zsh|fish|ksh|csh|tcsh|env|perl[0-9.]*|ruby[0-9.]*|php[0-9.]*|lua[0-9.]*|luajit|tclsh[0-9.]*|wish|java[0-9]*|Rscript|R|awk|gawk|mawk|sed|find|xargs|timeout|nice|nohup|setsid|stdbuf|flock|chrt|taskset|ionice|unshare|nsenter|systemd-run|sudo|su|doas|ssh|make|uv|uvx|npx|pnpm|npm|yarn|busybox|script|watch|expect|gdb)$",
   "maxRpcBytes": 4194304,
   "auditMaxEntries": 2000,
+  "showActivity": 5,
   "auditMaxDays": 90,
   "auditCollapseSeconds": 3600,
   "auditExplicitActions": ["reveal"],

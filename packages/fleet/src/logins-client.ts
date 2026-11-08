@@ -18,6 +18,7 @@ import { readPins } from './trust'
 type Operation =
   | 'list'
   | 'show'
+  | 'details'
   | 'value'
   | 'set'
   | 'grant'
@@ -40,6 +41,7 @@ const reads = new Set<Operation>([
   'list',
   'catalog',
   'show',
+  'details',
   'value',
   'resolveLab',
   'assignments',
@@ -80,6 +82,8 @@ function perform(store: LoginStore, request: LoginRequest): unknown {
       return store.edit(args[0] as string, args[1] as LoginEdit, caller)
     case 'show':
       return store.show(args[0] as string, caller)
+    case 'details':
+      return store.details(args[0] as string, caller)
     case 'value':
       return store
         .value(args[0] as string, caller, typeof args[1] === 'string' ? args[1] : undefined)
@@ -274,6 +278,9 @@ export class LoginClient {
   }
   show(name: string, caller: LoginCaller) {
     return this.request<Login>('show', [name], caller)
+  }
+  details(name: string, caller: LoginCaller) {
+    return this.request<ReturnType<LoginStore['details']>>('details', [name], caller)
   }
   async value(name: string, caller: LoginCaller, action?: string) {
     return Buffer.from(await this.request<string>('value', [name, action], caller), 'base64')

@@ -3,6 +3,7 @@ import { fstatSync, readFileSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
 import { probeLoginPage } from './login-probe'
 import {
+  LOGIN_KINDS,
   type LoginCaller,
   LoginError,
   type LoginKind,
@@ -28,11 +29,17 @@ function loginLines(logins: LoginLine[]): string {
   return `${lines.join('\n')}\n`
 }
 
+/** `lab enroll` makes lab logins; set refuses them. The first kind is set's default. */
+const SETTABLE_KINDS = LOGIN_KINDS.filter((kind) => kind !== 'lab login').join(', ')
+
 export const LOGINS_USAGE = `Usage: aico logins <command> (also st logins)
 Logins live in Aico's private secrets folder. Values enter through hidden input or stdin.
-  list [TEXT] [--json]                every login, one line each; with TEXT or --json, the
-                                      matching ones in full, with what is missing and its fix
-  show NAME                           metadata only (NAME or an account login's site name)
+  list [TEXT] [--json]                every login, one line each: name, kind, then "usable" or the
+                                      command that makes it usable. With TEXT (part of a name) or
+                                      --json: the matching ones in full as JSON, no values, with
+                                      state (Unused means never used yet) and what is missing
+  show NAME                           metadata and recent activity, no value (NAME or an account
+                                      login's site name)
   allow NAME [--role ROLE | --session ID] [--machine NAME]
                                       give yourself (or ROLE; a coordinator: session ID) what is missing
                                       to use NAME: machine, role or session. Logged; no owner step
@@ -40,7 +47,7 @@ Logins live in Aico's private secrets folder. Values enter through hidden input 
                                       fix notes, the login page (same site), the site name or the
                                       programs lab run may hand it to; the login page is checked
                                       for a password field. Logged
-  set NAME [--kind KIND] [--notes TEXT] hidden prompt or piped stdin
+  set NAME [--kind KIND] [--notes TEXT] hidden prompt or piped stdin. KIND: ${SETTABLE_KINDS}
   set NAME --account --username USER --login-url URL [--notes TEXT]
                                       account login (username, password, login page); the
                                       password comes from hidden input; saved as lab target NAME
@@ -62,6 +69,23 @@ Logins live in Aico's private secrets folder. Values enter through hidden input 
 Only the username and password are the owner's: a wrong or missing one is one plain ask
 (tether ask create). Everything else agents fix themselves, logged in the login's activity
 (restricted roles get lab targets from a coordinator).`
+
+/** One command's lines of the usage above, so `aico logins edit --help` answers about edit. */
+function commandUsage(command: string): string {
+  const named = (line: string) => {
+    const word = line.match(/^ {2}(\S+)/)?.[1]
+    return word?.split('|').includes(command)
+  }
+  const lines = LOGINS_USAGE.split('\n')
+  const picked = lines.filter((line, index) => {
+    if (named(line)) return true
+    // A continuation line belongs to the command above it.
+    if (!/^ {3,}/.test(line)) return false
+    for (let i = index - 1; i >= 0; i--) if (!/^ {3,}/.test(lines[i])) return named(lines[i])
+    return false
+  })
+  return picked.length ? `${picked.join('\n')}\n` : `${LOGINS_USAGE}\n`
+}
 
 /** Recover only caller metadata when a harness filters its child environment. Never log /proc data. */
 export function loginCaller(env: NodeJS.ProcessEnv = process.env): LoginCaller {
@@ -245,6 +269,12 @@ export async function runLogins(
       io.out(`${LOGINS_USAGE}\n`)
       return 0
     }
+    // Only ours: what follows `run ... --` belongs to the command being run.
+    const own = rest.includes('--') ? rest.slice(0, rest.indexOf('--')) : rest
+    if (own.includes('--help') || own.includes('-h')) {
+      io.out(commandUsage(command))
+      return 0
+    }
     const store = new LoginClient(env)
     // Caller checks and authority routing are shared with the owner page.
     const output = (value: unknown) => {
@@ -280,6 +310,11 @@ export async function runLogins(
         : store.catalog(io.caller))) as LoginLine[]
       const text = words[0]?.toLowerCase()
       const found = text ? logins.filter((l) => l.name.toLowerCase().includes(text)) : logins
+      // Stdout stays JSON for scripts; the plain words go beside it.
+      if (text && !found.length)
+        io.err(
+          `No login has "${words[0]}" in its name. aico logins list shows every saved login.\n`,
+        )
       if (text || rest.includes('--json')) output(found)
       else {
         io.out(loginLines(found))
@@ -341,7 +376,7 @@ export async function runLogins(
     }
     if (command === 'show') {
       if (rest.length !== 1) throw new LoginError('show needs a name')
-      output(await store.show(rest[0], io.caller))
+      output(await store.details(rest[0], io.caller))
       return 0
     }
     if (command === 'set' || command === 'rotate') {

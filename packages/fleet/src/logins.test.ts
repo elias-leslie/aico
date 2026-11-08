@@ -346,6 +346,49 @@ it('CLI values enter through input, stay out of metadata and argv; get refuses s
   expect(execute.mock.calls[0]?.[1]).toMatchObject({ LOGIN: 'fixture-private-value' })
   expect(JSON.stringify(out.mock.calls)).not.toContain('fixture-private-value')
 })
+it('CLI answers questions without acting: help for one command, no match in words, the valid kinds, recent activity', async () => {
+  const out = vi.fn(),
+    err = vi.fn()
+  const io = {
+    out,
+    err,
+    caller: owner,
+    execute: vi.fn(async () => 0),
+    input: vi.fn(async () => 'fixture-private-value'),
+    outputSafe: () => false,
+  }
+  const printed = () => out.mock.calls.flat().join('')
+
+  for (const command of ['edit', 'set', 'remove']) {
+    out.mockClear()
+    expect(await runLogins([command, '--help'], env, io)).toBe(0)
+    expect(printed()).toContain(`  ${command} NAME`)
+    expect(printed()).not.toContain('assign SESSION')
+  }
+  expect(io.input).not.toHaveBeenCalled()
+  // What follows run's -- belongs to the command.
+  expect(await runLogins(['run', '--with', 'absent', '--', '/bin/true', '--help'], env, io)).toBe(1)
+
+  err.mockClear()
+  expect(await runLogins(['set', 'bad-kind', '--kind', 'token'], env, io)).toBe(1)
+  expect(err.mock.calls.flat().join('')).toContain('use one of: tool login, API key')
+
+  out.mockClear()
+  err.mockClear()
+  expect(await runLogins(['list', 'nothing-like-this'], env, io)).toBe(0)
+  expect(err.mock.calls.flat().join('')).toContain('No login has "nothing-like-this" in its name')
+  expect(printed().trim()).toBe('[]')
+
+  expect(await runLogins(['set', 'sample', '--notes', 'first'], env, io)).toBe(0)
+  expect(await runLogins(['edit', 'sample', '--notes', 'second'], env, io)).toBe(0)
+  out.mockClear()
+  expect(await runLogins(['show', 'sample'], env, io)).toBe(0)
+  const shown = JSON.parse(printed())
+  expect(shown.notes).toBe('second')
+  expect(shown.state).toBe('Unused')
+  expect(shown.activity.at(-1).name).toBe('sample')
+  expect(printed()).not.toContain('fixture-private-value')
+})
 it('CLI set --account saves an account login, shows only length, and the summary has no password', async () => {
   const out = vi.fn(),
     err = vi.fn()
