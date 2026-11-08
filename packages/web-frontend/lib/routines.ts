@@ -79,6 +79,21 @@ export function whenIn(routine: Routine, at: number): string {
     : text
 }
 
+const DAY_MS = 24 * 3_600_000
+
+/** The same for a row's one line: a run due within a day is just its time of day ("4:30 AM UTC"). */
+export function soonIn(routine: Routine, at: number, now = Date.now()): string {
+  if (at - now >= DAY_MS || at < now) return whenIn(routine, at)
+  const time = new Date(at).toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    ...(routine.tz ? { timeZone: routine.tz } : {}),
+  })
+  return routine.tz && routine.tz !== viewerZone()
+    ? `${time} ${zoneLabel(routine.tz, at)}`
+    : time
+}
+
 /** "daily at 19:00" as a sentence start; a time of day in another zone than the viewer's names it. */
 export function scheduleText(routine: Routine): string {
   const text =

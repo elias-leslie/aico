@@ -175,9 +175,8 @@ describe('Routines', () => {
     ]
     view()
     const weekly = await screen.findByTestId('routine-proveout')
-    expect(weekly.textContent).toContain('next')
     fireEvent.click(weekly.querySelector('button') as HTMLElement)
-    expect(weekly.textContent).toContain('Every Monday at 06:30')
+    expect(weekly.textContent).toContain('Every Monday at 06:30 · next')
     const timer = screen.getByTestId('routine-host-steward-heartbeat@aico')
     // A failed row opens by itself and wears the failed chip, like any routine.
     expect(timer.textContent).toContain('Failed')
@@ -214,6 +213,24 @@ describe('Routines', () => {
       url: '/api/routines/log',
       body: { kind: 'host-steward-heartbeat@aico' },
     })
+  })
+
+  it('shows a run due within a day as its time of day alone, in the routine’s zone', async () => {
+    list = [
+      routine({
+        kind: 'soon',
+        what: 'Soon one',
+        schedule: 'daily at 03:30',
+        at: '03:30',
+        tz: 'Pacific/Kiritimati',
+        nextRun: Date.now() + 3_600_000,
+      }),
+    ]
+    view()
+    const row = await screen.findByTestId('routine-soon')
+    const when = row.querySelector('button')?.textContent ?? ''
+    expect(when).toMatch(/\d:\d\d (AM|PM) GMT\+14/)
+    expect(when).not.toMatch(/[A-Z][a-z]{2} \d/)
   })
 
   it('groups by machine, groups with a problem first (by name), with the failed count in the head', async () => {
@@ -269,7 +286,7 @@ describe('Routines', () => {
   })
 
   it('names the zone on the schedule and the next run when it is not the viewer’s, and on neither when it is', async () => {
-    const next = Date.UTC(2026, 10, 8, 3, 30)
+    const next = Date.UTC(2030, 5, 15, 3, 30)
     list = [
       routine({
         kind: 'gem',
@@ -290,14 +307,16 @@ describe('Routines', () => {
     ]
     view()
     const gem = await screen.findByTestId('routine-gem')
-    // 03:30 UTC is 17:30 on the 8th in Kiritimati (UTC+14): the next run is told in that zone.
-    expect(gem.textContent).toContain('Nov 8, 5:30 PM GMT+14')
+    // 03:30 UTC is 17:30 on the 15th in Kiritimati (UTC+14): the next run is told in that zone.
+    expect(gem.textContent).toContain('Jun 15, 5:30 PM GMT+14')
     fireEvent.click(gem.querySelector('button') as HTMLElement)
-    expect(gem.textContent).toContain('Daily at 03:30 GMT+14')
+    expect(gem.textContent).toContain(
+      'Daily at 03:30 GMT+14 · next Jun 15, 5:30 PM GMT+14',
+    )
     const here = screen.getByTestId('routine-here')
     fireEvent.click(here.querySelector('button') as HTMLElement)
-    expect(here.textContent).toContain('Daily at 03:30')
-    expect(here.textContent).not.toMatch(/Daily at 03:30 \S/)
+    expect(here.textContent).toContain('Daily at 03:30 · next ')
+    expect(here.textContent).not.toMatch(/Daily at 03:30 [^·]/)
     expect(here.textContent).not.toContain('GMT')
   })
 

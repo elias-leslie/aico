@@ -16,6 +16,7 @@ import {
   type Routine,
   type RoutineGroup,
   scheduleText,
+  soonIn,
   whenIn,
 } from '@/lib/routines'
 import { plural } from '@/lib/status'
@@ -67,9 +68,15 @@ function whenLine(routine: Routine): string {
   if (routine.running) return 'running now'
   if (routine.paused) return 'paused'
   if (!routine.started) return 'waiting for the scheduler'
-  return routine.nextRun === null
-    ? ''
-    : `next ${whenIn(routine, routine.nextRun)}`
+  return routine.nextRun === null ? '' : soonIn(routine, routine.nextRun)
+}
+
+/** "Daily at 03:30 UTC · next Nov 8, 3:30 AM UTC": the schedule and the next run in one zone. */
+function scheduleLine(routine: Routine): string {
+  const schedule = scheduleText(routine)
+  return routine.started && !routine.paused && routine.nextRun !== null
+    ? `${schedule} · next ${whenIn(routine, routine.nextRun)}`
+    : schedule
 }
 
 /** What the last run said, or why there is nothing to say. */
@@ -151,7 +158,7 @@ function Row({ routine }: { routine: Routine }) {
       {open && (
         <div className={styles.detail}>
           <p className={styles.meaning}>{lastLine(routine)}</p>
-          <p className={styles.line}>{scheduleText(routine)}</p>
+          <p className={styles.line}>{scheduleLine(routine)}</p>
           <p className={styles.line}>
             <span className={styles.tag} title="The project that owns it">
               {routine.project}
