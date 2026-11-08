@@ -1,6 +1,8 @@
 // The Backups list as the owner reads it: one line of how it stands, then
 // each source with its copies (T7, Drive, CT 160) under one name.
 
+import { BACKUP_TARGET_NAMES } from '@aico/shared/backup-targets'
+
 export type BackupTarget = 'native' | 'drive' | 'append' | 'external'
 export type BackupState = 'ok' | 'warn' | 'failed' | 'off'
 
@@ -33,15 +35,8 @@ export interface BackupGroup {
   retired: boolean
 }
 
-const TARGET_LABEL: Record<BackupTarget, string> = {
-  native: 'T7',
-  drive: 'Drive',
-  append: 'CT 160',
-  external: 'Owner backup',
-}
-
 export const targetLabel = (target: BackupTarget): string =>
-  TARGET_LABEL[target] ?? 'Backup'
+  (BACKUP_TARGET_NAMES as Record<string, string>)[target] ?? 'Backup'
 
 const RANK = { failed: 0, warn: 1, ok: 2, off: 3 } as const
 const known = (state: string): keyof typeof RANK =>

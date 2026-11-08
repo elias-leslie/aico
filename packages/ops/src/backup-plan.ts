@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs'
 import { homedir, hostname } from 'node:os'
 import { join } from 'node:path'
+import { backupTargetName } from '@aico/shared/backup-targets'
 import type { StatusRow } from '@aico/status'
 import defaults from '../data/backups.json' with { type: 'json' }
 import imported from '../data/backups-import.json' with { type: 'json' }
@@ -312,10 +313,7 @@ export function markUnplugged(items: BackupEntry[], attached: boolean): void {
 export function backupRows(items: BackupEntry[]): StatusRow[] {
   return items.map((item) => ({
     id: `${item.machine}/backup/${item.id}`,
-    what: `${item.name} · ${item.target === 'native' ? 'T7' : item.target === 'drive' ? 'Drive' : item.target === 'append' ? 'CT 160' : 'Owner backup'}`.slice(
-      0,
-      120,
-    ),
+    what: `${item.name} · ${backupTargetName(item.target)}`.slice(0, 120),
     kind: 'backup',
     machine: item.machine,
     ...(item.project ? { project: item.project } : {}),

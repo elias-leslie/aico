@@ -1,6 +1,7 @@
 // Aico owns the schedule, run receipts, coverage and scratch-only restore boundary.
 import { existsSync, mkdirSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
+import { backupTargetName } from '@aico/shared/backup-targets'
 import { nearest } from '@aico/shared/suggest'
 import { localTime } from '@aico/shared/time'
 import { machineId, outboxDir, postOrKeep, type StatusRow } from '@aico/status'
@@ -651,13 +652,6 @@ export async function backups(argv: string[], env = process.env): Promise<number
   return sourceCommand(rt, state, verb as string, args)
 }
 
-const TARGET_NAME: Record<string, string> = {
-  native: 'T7',
-  drive: 'Drive',
-  append: 'CT 160',
-  external: 'Owner backups',
-}
-
 function since(iso: string | null | undefined, now: number): string {
   if (!iso) return 'never'
   const minutes = Math.round((now - Date.parse(iso)) / 60000)
@@ -700,14 +694,14 @@ export function listText(
     lines.push('', 'On a machine that is off:')
     for (const e of away)
       lines.push(
-        `  ${(TARGET_NAME[e.target] ?? e.target).padEnd(13)} ${e.name}: ${e.dataAt ? `last good copy ${since(e.dataAt, now)}` : 'no good copy date known'}`,
+        `  ${backupTargetName(e.target).padEnd(13)} ${e.name}: ${e.dataAt ? `last good copy ${since(e.dataAt, now)}` : 'no good copy date known'}`,
       )
   }
   if (problems.length) {
     lines.push('', 'Need a look:')
     for (const e of problems)
       lines.push(
-        `  ${e.state.padEnd(6)} ${(TARGET_NAME[e.target] ?? e.target).padEnd(13)} ${e.name}: ${e.meaning}`,
+        `  ${e.state.padEnd(6)} ${backupTargetName(e.target).padEnd(13)} ${e.name}: ${e.meaning}`,
       )
   }
   lines.push('', 'By target:')
@@ -729,7 +723,7 @@ export function listText(
       .filter((at): at is string => !!at)
       .sort()[0]
     lines.push(
-      `  ${(TARGET_NAME[target] ?? target).padEnd(13)} ${ok}/${rows.length} ok; newest data ${since(newest, now)}${last}${next ? `; next ${localTime(next)}` : ''}`,
+      `  ${backupTargetName(target).padEnd(13)} ${ok}/${rows.length} ok; newest data ${since(newest, now)}${last}${next ? `; next ${localTime(next)}` : ''}`,
     )
   }
   if (gone.length)

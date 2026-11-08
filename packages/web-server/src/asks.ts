@@ -9,7 +9,7 @@
 import { resolve } from 'node:path'
 import { blobPath } from '@aico/notes/blobs'
 import type { TetherClient } from '@aico/tether-client'
-import { ASK_LIMITS, ASK_ORIGINS, type AskOrigin } from '@aico/tether-client/asks'
+import { ASK_LIMITS, ASK_OPEN_LINK, ASK_ORIGINS, type AskOrigin } from '@aico/tether-client/asks'
 import { pendingGrants } from './grants'
 import { objectBody, type Router } from './http'
 import { tetherCall } from './lifecycle'
@@ -205,7 +205,7 @@ export function validateAsk(data: unknown): Ask | null {
   if (
     a.open !== undefined &&
     a.open !== null &&
-    !(line(a.open, ASK_LIMITS.open) && /^https:\/\//.test(a.open as string))
+    !(line(a.open, ASK_LIMITS.open) && ASK_OPEN_LINK.test(a.open as string))
   )
     return null
   if (a.origin !== undefined && a.origin !== null && !ASK_ORIGINS.includes(a.origin as AskOrigin))

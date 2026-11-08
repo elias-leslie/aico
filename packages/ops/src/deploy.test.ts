@@ -534,6 +534,21 @@ describe('deploy', () => {
     expect(readFileSync(join(deps.systemdDir, 'demo-web.service'), 'utf8')).toContain(newer)
   })
 
+  it('refuses a commit beside the running one, as a refusal that changed nothing', async () => {
+    const { root, git, deps, rows, head } = setup()
+    const commit = (text: string) => {
+      writeFileSync(join(root, 'packages/web-server/main.ts'), text)
+      git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qam', text)
+      return git('rev-parse', 'HEAD').out.trim()
+    }
+    commit('v2\n')
+    expect(await deploy(request(), root, deps)).toBe(0)
+    git('checkout', '-q', '-b', 'side', head)
+    const side = commit('side\n')
+    await expect(deploy(request({ sha: side }), root, deps)).rejects.toThrow(/does not contain/)
+    expect(rows.at(-1)?.state).toBe('warn')
+  })
+
   it('refuses on failed acceptance or another agent hold, and answers NOT_HANDLED for other projects', async () => {
     const failing = setup({ accept: () => 1 })
     await expect(deploy(request(), failing.root, failing.deps)).rejects.toThrow(

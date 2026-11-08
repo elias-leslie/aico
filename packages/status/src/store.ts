@@ -10,6 +10,7 @@ import { type MajorWindows, majorOf } from './major'
 import { parseRow, type StatusRow } from './row'
 import {
   type Filter,
+  LATE_GRACE_MS,
   type Shown,
   type ShownRow,
   type StatusView,
@@ -144,7 +145,7 @@ export class StatusStore {
           const away =
             !was ||
             was.state === 'off' ||
-            (was.next_run !== undefined && Date.parse(was.next_run) < at)
+            (was.next_run !== undefined && Date.parse(was.next_run) + LATE_GRACE_MS < at)
           backAt = row.state === 'off' ? null : away ? at : (old?.back_at ?? null)
         }
         put.run(row.id, JSON.stringify(row), at, backAt)

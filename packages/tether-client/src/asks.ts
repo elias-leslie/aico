@@ -26,6 +26,9 @@ export const ASK_LIMITS = {
   host: 120,
 } as const
 
+/** The link an ask opens: one https address, no spaces. */
+export const ASK_OPEN_LINK = /^https:\/\/\S+$/
+
 /** Who filed an ask when an app did. */
 export const ASK_ORIGINS = ['notice', 'status'] as const
 export type AskOrigin = (typeof ASK_ORIGINS)[number]

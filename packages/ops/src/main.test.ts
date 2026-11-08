@@ -94,7 +94,7 @@ it('lists backups for a person: problems, one line per target, archived sources 
     'Backups on ws: All 1 source current (2 copies), 1 on a machine that is off, 1 archived.',
   )
   expect(text).toContain('On a machine that is off:')
-  expect(text).toContain('Owner backups Jobs DB: no good copy date known')
+  expect(text).toContain('Owner backup  Jobs DB: no good copy date known')
   expect(text).toMatch(
     / {2}T7 +1\/1 ok; newest data 30 min ago; last run 30 min ago, ok; next Nov 7, 12:30 AM EST/,
   )

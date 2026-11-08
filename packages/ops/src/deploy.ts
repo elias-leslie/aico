@@ -842,9 +842,14 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
           await finish(
             'failed',
             `Deploy of ${sha.slice(0, 10)} refused: ${unit} ${what} ${from?.slice(0, 10)}, not an ancestor`,
+            [],
+            1,
+            true,
           )
           throw new Refusal(
             `${unit} ${what} ${from?.slice(0, 12)}, which ${sha.slice(0, 12)} does not contain; deploy a newer commit or pass --rollback.`,
+            1,
+            true,
           )
         }
         return false
@@ -936,7 +941,7 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
           throw new Refusal(refused, 2, true)
         }
         if (!held()) {
-          await finish('failed', `Deploy of ${sha.slice(0, 10)} lost the deploy lock`)
+          await finish('failed', `Deploy of ${sha.slice(0, 10)} lost the deploy lock`, [], 1, true)
           throw new Refusal('Another deploy took the deploy lock; nothing was restarted.', 1, true)
         }
       }

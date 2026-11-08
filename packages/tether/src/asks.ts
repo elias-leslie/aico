@@ -14,7 +14,7 @@ import type { Hub } from '@aico/fleet/hub/hub'
 import type { EventBus } from '@aico/session-engine/events'
 import type { Db } from '@aico/session-engine/store'
 import { HttpError, type Router, readJsonObject, sendJson } from '@aico/shared/http'
-import { ASK_LIMITS, ASK_ORIGINS, type AskOrigin } from '@aico/tether-client/asks'
+import { ASK_LIMITS, ASK_OPEN_LINK, ASK_ORIGINS, type AskOrigin } from '@aico/tether-client/asks'
 import type { ShowConfig } from './config'
 import { realPaths, ShareStore } from './shares'
 
@@ -378,7 +378,7 @@ function parseOrigin(value: unknown): AskOrigin | null {
 function openLink(value: unknown): string | null {
   const link = oneLine(value, 'open', ASK_LIMITS.open, false)
   if (link === null) return null
-  if (!/^https:\/\/[^\s]+$/.test(link))
+  if (!ASK_OPEN_LINK.test(link))
     throw new HttpError(400, 'invalid_body', { field: 'open', detail: 'an https link' })
   return link
 }

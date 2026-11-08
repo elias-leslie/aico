@@ -124,6 +124,27 @@ describe('alerts', () => {
     store.close()
   })
 
+  it('counts a machine back only once it was later than the grace Status shows late after', () => {
+    const { store, clock } = watched()
+    const backAt = () =>
+      (
+        (store as unknown as { db: { prepare(sql: string): { get(id: string): unknown } } }).db
+          .prepare('SELECT back_at FROM status_rows WHERE id = ?')
+          .get('a/machine') as { back_at: number | null }
+      ).back_at
+    store.upsert([machine('a', 'ok', T0 + HOUR)])
+    expect(backAt()).toBe(T0)
+    // Thirty seconds past its next report is within the grace: not away, so not back either.
+    clock.now = T0 + HOUR + 30_000
+    store.upsert([machine('a', 'ok', clock.now + HOUR)])
+    expect(backAt()).toBe(T0)
+    // Past the grace it was away, and is back now.
+    clock.now += HOUR + 3 * 60_000
+    store.upsert([machine('a', 'ok', clock.now + HOUR)])
+    expect(backAt()).toBe(clock.now)
+    store.close()
+  })
+
   it('gives a backup due while its machine was off one interval to run before it is late', () => {
     const { store, batches, clock } = watched()
     const backup = (at: number, state = 'ok') =>
