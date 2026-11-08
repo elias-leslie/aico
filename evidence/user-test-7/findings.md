@@ -32,9 +32,7 @@ Not a bug. Rows 0, 1, 5, 20 and 40 all opened by tap and click at both sizes and
 
 ## Left as they are
 
-- Hover-only tooltips can't be read on touch (the whole app; design call).
-- "gem" in routine names ("Aico gem databases to CT 160" beside "Aico databases to CT 160"), "the other full Aico", and machine "aico" vs Aico agent vs project Aico.
-- Files: Find narrows only the top level, not expanded folders. Download gives no sign beyond the browser's own.
+- Files: Download gives no sign beyond the browser's own.
 - New session vs New chat side by side, with nothing saying how they differ.
 - Pi stays selectable when used up, since it can run on another provider.
 - Reminder field says nothing about when or how it fires.
@@ -46,6 +44,7 @@ Not a bug. Rows 0, 1, 5, 20 and 40 all opened by tap and click at both sizes and
 
 ## Refactors not taken
 
+Weighed again in round 8 (evidence/user-test-8/findings.md): the launcher's rebuild blocks are done; these don't make the next change cheaper.
+
 - web-server `serve()` can't be imported, so there's no boot test; the route wiring test covers the failure seen so far.
-- The launcher's six rebuild blocks: `jobs` imports fleet and shared but watches neither, so a change there may not rebuild it.
 - A phone 44 px tap-size check; `globals.css` split only moves code.
