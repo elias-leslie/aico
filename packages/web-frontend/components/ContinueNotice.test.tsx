@@ -28,6 +28,7 @@ vi.mock('@/lib/hooks/use-terminal-panes', () => ({
 const glance = (id: string, state: QuotaGlance['state']) =>
   ({
     id,
+    names: [id],
     name: id === 'claude' ? 'Claude' : 'Codex',
     state,
     left: state === 'left' ? 50 : 0,

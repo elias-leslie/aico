@@ -13,6 +13,8 @@ export interface QuotaGlance {
   id: string
   /** The subscription's name: "Claude", "OpenCode Go". */
   name: string
+  /** What tools call it: its id and any tool that runs on it under another name. */
+  names: string[]
   state: QuotaState
   /** Percent left in its tightest window; 0 when used up, null when not known. */
   left: number | null
@@ -146,6 +148,7 @@ function glanceOf(provider: UsageProvider, now: number): QuotaGlance {
   return {
     id: provider.id,
     name: provider.name,
+    names: [provider.id, ...(provider.tools ?? [])],
     state,
     left,
     gone: gone === null ? null : Math.round(gone * 100),
@@ -167,12 +170,14 @@ function glanceOf(provider: UsageProvider, now: number): QuotaGlance {
   }
 }
 
-/** The subscription a tool runs on: they share a name (`claude`, `codex`) in the tool's slug or aliases. */
+/** The subscription a tool runs on: they share a name (`claude`, `codex`) in the tool's slug or aliases, or the subscription lists the tool (`pi` on OpenCode Go). */
 export function toolGlance(
   glances: readonly QuotaGlance[],
   names: readonly string[],
 ): QuotaGlance | undefined {
-  return glances.find((glance) => names.includes(glance.id))
+  return glances.find((glance) =>
+    glance.names.some((name) => names.includes(name)),
+  )
 }
 
 /** The agent picker's few words: "73% left", "on credits", "used up"; nothing when not known. */

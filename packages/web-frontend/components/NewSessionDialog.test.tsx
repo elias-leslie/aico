@@ -164,6 +164,15 @@ describe('NewSessionDialog', () => {
     expect(
       within(agent()).getByRole('button', { name: /Codex/ }),
     ).toHaveTextContent('used up')
+    cleanup()
+    // Pi's subscription has another name; the usage report lists Pi under it.
+    usage.report = {
+      providers: [{ ...provider('opencode-go', 'used_up', 0), tools: ['pi'] }],
+    }
+    renderDialog()
+    const pi = within(agent()).getByRole('button', { name: /^Pi/ })
+    expect(pi).toHaveTextContent('used up')
+    expect(pi).toHaveAttribute('title', 'opencode-go answer')
     usage.report = null
   })
 

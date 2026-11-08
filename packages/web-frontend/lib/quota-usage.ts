@@ -50,6 +50,8 @@ export interface UsageProvider {
     | 'untracked'
   /** The plain answer to "can I use it now?", ahead of the windows: "Used up until Nov 8, 7:00 PM EST (weekly)". */
   answer: string
+  /** The agent tools that run on it when their name differs from its id. */
+  tools?: string[]
   plan: string | null
   windows: UsageWindow[]
   credits: { balance: number; lasts_days: number | null; text: string } | null

@@ -20,8 +20,7 @@ function ownGlance(
 
 /**
  * The agent tools that could take over from `mode`'s: another enabled tool whose
- * subscription still has room (time left, or paid by credits). The tool and its
- * subscription share a name (`claude`, `codex`) in the usage report.
+ * subscription still has room (time left, or paid by credits), as toolGlance matches them.
  */
 export function continueTargets(
   mode: string,
@@ -35,7 +34,7 @@ export function continueTargets(
   const open = new Set(
     glances
       .filter((glance) => glance.state === 'left' || glance.state === 'credits')
-      .map((glance) => glance.id),
+      .flatMap((glance) => glance.names),
   )
   return tools.filter(
     (tool) =>

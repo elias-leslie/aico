@@ -43,6 +43,8 @@ export interface ReportProvider {
   status: Usage['status']
   /** The plain answer to "can I use it now?", ahead of the windows: "Used up until Nov 8, 7:00 PM EST (weekly)". */
   answer: string
+  /** The agent tools that run on this subscription when their name differs from its id. */
+  tools: string[]
   plan: string | null
   windows: ReportWindow[]
   credits: { balance: number; lasts_days: number | null; text: string } | null
@@ -145,6 +147,7 @@ export function usageReport(
         name: provider.name,
         status: usage.status,
         answer: answerText(usage, now),
+        tools: provider.tools ?? [],
         plan: currentPlan(plans.plans, provider.id, now)?.plan ?? null,
         windows: shown.map((window) => ({
           label: window.label,
