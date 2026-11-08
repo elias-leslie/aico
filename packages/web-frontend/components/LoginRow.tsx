@@ -548,12 +548,16 @@ function DetailsEdit({
           />
         </label>
       )}
-      {!entry.lab && (
+      {!entry.lab && !entry.tool && (
         <label>
           Kind
           <select name="kind" defaultValue={entry.kind}>
             {kinds
-              .filter((kind) => kind !== 'lab login')
+              .filter(
+                (kind) =>
+                  kind !== 'lab login' &&
+                  (kind !== 'tool login' || entry.kind === 'tool login'),
+              )
               .map((kind) => (
                 <option key={kind} value={kind}>
                   {kind}

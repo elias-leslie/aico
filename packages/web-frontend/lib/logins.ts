@@ -22,6 +22,8 @@ export const groups = [
 export const groupOf = (e: Entry): Choice =>
   e.lab?.kind === 'account' ? ACCOUNT : e.kind
 export interface Entry {
+  /** Set when a tool's login is delivered from this one; its kind then stays tool login. */
+  tool?: unknown
   name: string
   kind: Kind
   notes: string

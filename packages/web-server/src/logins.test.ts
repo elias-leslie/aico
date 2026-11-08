@@ -171,4 +171,7 @@ it('checks an account login page on save and lets the owner fix notes, page and 
   expect(
     await (await post('/api/logins/probe', { url: 'https://canvas.example.test/' })).json(),
   ).toMatchObject({ probe: { suggestion: 'https://canvas.example.test/login/canvas' } })
+  await post('/api/logins', { name: 'key', kind: 'password', value: 'fixture-private-value' })
+  const kind = await post('/api/logins/key/edit', { kind: 'backup key' })
+  expect(await kind.json()).toMatchObject({ entry: { name: 'key', kind: 'backup key' } })
 })

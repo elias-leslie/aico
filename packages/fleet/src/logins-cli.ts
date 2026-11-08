@@ -54,11 +54,11 @@ Logins live in Aico's private secrets folder. Values enter through hidden input 
                                       fix notes, the kind (owner, not a site login), the login page, the site name
                                       or the programs lab run may hand it to; the login page is
                                       checked for a password field. Logged; prints what show prints
-  set NAME [--kind KIND] [--notes TEXT] hidden prompt or piped stdin. KIND: ${SETTABLE_KINDS}
+  set NAME [--kind KIND] [--notes TEXT] owner, hidden prompt; a tool's own grant, piped stdin. KIND: ${SETTABLE_KINDS}
   set NAME --account --username USER --login-url URL [--notes TEXT]
                                       account login (username, password, login page); the
                                       password comes from hidden input; saved as lab target NAME
-  rotate NAME                         replace through hidden input or stdin
+  rotate NAME                         replace through hidden input or stdin (not a key or tool login)
   get NAME                            only to an owner-only file; never a session log
   run --with NAME[=ENV] ... -- CMD      inject into one command's environment
   grant|revoke NAME --machine NAME | --role ROLE     logged on the login

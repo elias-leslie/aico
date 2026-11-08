@@ -15,7 +15,7 @@
 
 ## Limits kept on purpose
 
-- Everything else in the store (backup keys, API keys, passwords, tool logins) stays the owner's on the Logins page: who may use it and its notes and kind. An agent's `allow`, `grant`, `revoke`, `edit`, `set` or `rotate` on one is refused, and `aico logins list` says so. A saved key with the same name as a site login doesn't hide the site login from an agent.
+- Everything else in the store (backup keys, API keys, passwords, tool logins) stays the owner's on the Logins page: who may use it and its notes and kind. An agent's `allow`, `grant`, `revoke`, `edit`, `set` or `rotate` on one is refused, and `aico logins list` says so. A saved key with the same name as a site login doesn't hide the site login from an agent. The one exception is a tool's own grant (`toolGrants` in `packages/fleet/data/logins-policy.json`): `st cloudflare` saves and refreshes its OAuth grant itself, logged, for any unrestricted caller.
 - The login page probe only suggests pages on the saved site; it moves to another site only when someone sets that page.
 - Opening a login to another session (it may be a hunter's) and `aico logins assign` stay with a coordinator or the owner.
 - Restricted roles (`restrictedRoles` in `packages/fleet/data/logins-policy.json`: hunting, recon, verification) never reach the owner's own logins, get lab targets from a coordinator, not by themselves, and no other agent can name them on a login.

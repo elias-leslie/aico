@@ -440,6 +440,60 @@ it('CLI set --account saves an account login, shows only length, and the summary
   expect(JSON.stringify(store.list())).not.toContain('fixture-private-value')
   expect(await runLogins(['set', 'again', '--account', '--username', 'u'], env, io)).toBe(1)
 })
+it('sends each command to the store, and says so for one it does not know', async () => {
+  const out = vi.fn(),
+    err = vi.fn()
+  const env = { ...process.env, HOME: home }
+  let input = ''
+  const io = { out, err, caller: owner, input: async () => input }
+  const reply = () => out.mock.calls.at(-1)?.[0]
+  const run = (...args: string[]) => runLogins(args, env, io)
+  expect(await run('nothing')).toBe(1)
+  expect(err.mock.calls.at(-1)?.[0]).toBe('Unknown login command; see aico logins --help\n')
+  expect(await run('constructor')).toBe(1)
+  expect(err.mock.calls.at(-1)?.[0]).toBe('Unknown login command; see aico logins --help\n')
+  expect(await run('lab', 'nothing')).toBe(1)
+  expect(err.mock.calls.at(-1)?.[0]).toBe('A lab target is required\n')
+  expect(await run('lab', 'nothing', '--target', 'site')).toBe(1)
+  expect(err.mock.calls.at(-1)?.[0]).toBe('Unknown login command; see aico logins --help\n')
+  input = JSON.stringify({ username: 'u', password: 'fixture-private-value' })
+  expect(await run('lab', 'enroll', '--target', 'site', '--kind', 'synthetic')).toBe(0)
+  const { name, reference } = labIdentity('site', 'default')
+  expect(JSON.parse(reply())).toEqual({ reference })
+  expect(await run('lab', 'refs', '--target', 'site')).toBe(0)
+  expect(JSON.parse(reply())).toEqual({ references: [reference] })
+  input = JSON.stringify({ username: 'u', password: 'fixture-private-other' })
+  expect(await run('lab', 'refresh', '--target', 'site')).toBe(0)
+  expect(JSON.parse(store.value(name, owner).toString()).values.password).toBe(
+    'fixture-private-other',
+  )
+  input = JSON.stringify({ set: { password: 'fixture-private-third' } })
+  expect(await run('lab', 'patch', '--target', 'site')).toBe(0)
+  expect(JSON.parse(store.value(name, owner).toString()).values.password).toBe(
+    'fixture-private-third',
+  )
+  input = 'fixture-private-value'
+  expect(await run('set', 'key', '--kind', 'API key')).toBe(0)
+  input = 'fixture-private-other'
+  expect(await run('rotate', 'key')).toBe(0)
+  expect(store.value('key', owner).toString()).toBe('fixture-private-other')
+  expect(await run('grant', 'key', '--role', 'review')).toBe(0)
+  expect(JSON.parse(reply()).roles).toContain('review')
+  expect(await run('revoke', 'key', '--role', 'review')).toBe(0)
+  expect(JSON.parse(reply()).roles).not.toContain('review')
+  expect(await run('grant', 'key')).toBe(1)
+  expect(err.mock.calls.at(-1)?.[0]).toBe('Choose one machine or role\n')
+  expect(await run('assign', 'a1b2c3d4', '--target', 'site')).toBe(0)
+  expect(JSON.parse(reply())).toEqual({ session: 'a1b2c3d4', targets: ['site'] })
+  expect(await run('assignments')).toBe(0)
+  expect(JSON.parse(reply())).toEqual({ a1b2c3d4: ['site'] })
+  expect(await run('unassign', 'a1b2c3d4')).toBe(0)
+  expect(JSON.parse(reply())).toEqual({ session: 'a1b2c3d4', targets: [] })
+  input = 'key'
+  expect(await run('remove', 'key')).toBe(0)
+  expect(JSON.parse(reply())).toEqual({ removed: 'key' })
+  expect(store.list().find((e) => e.name === 'key')).toBeUndefined()
+})
 it('a lab login opens for an explicitly named role without a session, never for the default all-roles grant', () => {
   const one = lab('school', 'default', {
     username: 'me@example.test',
@@ -867,6 +921,26 @@ it('keeps hunters and other sessions a coordinator call, and the saved site the 
     "owner's",
   )
 })
+it("shows the new login page however long the old one, and an account's first one", () => {
+  account()
+  const agent = { role: 'job', machine: loginMachine(), session: 'a1b2c3d4' }
+  store.allow('canvas-pcsb', {}, agent)
+  store.edit(
+    'canvas-pcsb',
+    { login_url: `https://canvas.example.test/?x=${'y'.repeat(700)}` },
+    agent,
+  )
+  store.edit('canvas-pcsb', { login_url: 'https://lms.example.test/login' }, agent)
+  expect(store.audit(owner).at(-1)?.detail).toContain('to https://lms.example.test/login')
+  store.patchLab('canvas-pcsb', 'default', { remove: ['login_url'] }, owner)
+  expect(
+    store.edit('canvas-pcsb', { login_url: 'https://lms.example.test/login' }, agent).lab
+      ?.login_url,
+  ).toBe('https://lms.example.test/login')
+  expect(store.audit(owner).at(-1)?.detail).toBe(
+    'login page none to https://lms.example.test/login',
+  )
+})
 it('a rename keeps the old site for sessions while another login uses it; long details are cut', () => {
   account('school')
   const teacher = lab('school', 'teacher')
@@ -876,7 +950,7 @@ it('a rename keeps the old site for sessions while another login uses it; long d
   store.edit(teacher.identity.name, { target: 'school2' }, agent)
   expect(store.assignments(owner).a1b2c3d4).toEqual(['school', 'school2'])
   store.edit('school', { login_url: `https://canvas.example.test/${'a'.repeat(700)}` }, agent)
-  expect(store.audit(owner).at(-1)?.detail?.length).toBe(600)
+  expect(store.audit(owner).at(-1)?.detail?.length).toBeLessThanOrEqual(600)
   const peer = new LoginStore({ HOME: join(home, 'peer') })
   peer.list()
   expect(peer.mergeSnapshot(store.snapshot(loginMachine(), true))).toBe(true)
@@ -1038,6 +1112,22 @@ it("keeps an account login's username, password and login page out of an agent's
   expect(store.set(name, bundle({ ...saved, totp_secret: 'x' }), {}, agent, true).name).toBe(name)
 })
 
+it("lets a tool save and refresh its own grant, and no other tool's", () => {
+  const agent = { role: 'job', machine: loginMachine(), session: 'a1b2c3d4' }
+  const saved = store.set('cloudflare-mcp-oauth', '{"a":1}', { kind: 'tool login' }, agent)
+  expect(saved.name).toBe('cloudflare-mcp-oauth')
+  store.grant('cloudflare-mcp-oauth', 'role', 'job', true, owner)
+  expect(store.set('cloudflare-mcp-oauth', '{"a":2}', {}, agent, true).name).toBe(
+    'cloudflare-mcp-oauth',
+  )
+  expect(() =>
+    store.set('cloudflare-mcp-oauth', '{"a":3}', { provider: 'claude-code' }, agent, true),
+  ).toThrow(/not a site login/)
+  expect(() =>
+    store.set('cloudflare-mcp-oauth', '{"a":3}', {}, { ...agent, role: 'hunting' }, true),
+  ).toThrow()
+})
+
 it('a key named like a site does not hide the site login from an agent', () => {
   const { identity, value, metadata } = lab('canvas', 'default')
   store.set(identity.name, value, { ...metadata, roles: ['someone-else'] }, owner)
@@ -1047,6 +1137,7 @@ it('a key named like a site does not hide the site login from an agent', () => {
     name: identity.name,
     notes: 'fixed',
   })
+  expect(store.details('canvas', { ...agent, role: 'someone-else' }).name).toBe(identity.name)
 })
 
 it('an agent does not shut a restricted role out of a login', () => {

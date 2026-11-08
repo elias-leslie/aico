@@ -3,6 +3,7 @@
   "localFiles": ["update-signing-key"],
   "restrictedTools": ["claude", "claude-code", "anthropic"],
   "restrictedRoles": ["hunting", "recon", "verification"],
+  "toolGrants": ["cloudflare-mcp-oauth"],
   "revealSeconds": 30,
   "maxValueBytes": 65536,
   "labPrograms": [

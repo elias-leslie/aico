@@ -398,8 +398,13 @@ export class LoginStore {
     const labs = index.entries.filter((e) => e.lab?.target === name)
     return labs.length === 1 ? labs[0] : labs.find((e) => e.lab?.actor === 'default')
   }
+  /** As find, except an agent only changes site logins: a key of the same name doesn't hide the site's. */
+  private findFor(index: Index, name: string, caller: LoginCaller): Login | undefined {
+    const found = this.find(index, loginName(name))
+    return found && !found.lab && !caller.owner ? (this.siteNamed(index, name) ?? found) : found
+  }
   private require(index: Index, name: string, caller: LoginCaller, toolRuntime = false) {
-    const entry = this.find(index, loginName(name))
+    const entry = this.findFor(index, name, caller)
     if (!entry)
       throw new LoginError(`No login named ${name}. aico logins list shows every saved login.`)
     const gaps = this.gaps(entry, caller, index, toolRuntime)
@@ -610,9 +615,14 @@ export class LoginStore {
       )
     if (!old && replace) throw new LoginError('No login with this name; add it before replacing it')
     // Agents save site logins only: a replacement can't turn another login into one or into a tool's.
+    // A tool's own grant is the one exception: the tool saves and refreshes it itself (toolGrants).
     if (
       !caller.owner &&
-      (!(old ? old.lab : metadata.lab) || metadata.tool || metadata.provider || metadata.source)
+      (metadata.tool ||
+        metadata.provider ||
+        metadata.source ||
+        (!(old ? old.lab : metadata.lab) &&
+          (!policy.toolGrants.includes(name) || policy.restrictedRoles.includes(caller.role))))
     )
       throw new LoginError(`${name} is not a site login. ${OWNER_CHANGES}`)
     if (
@@ -828,10 +838,7 @@ export class LoginStore {
   }
   /** A login by name or site name for a change that does not read it (no access check). */
   private existing(index: Index, name: string, caller: LoginCaller) {
-    const found = this.find(index, loginName(name))
-    // An agent only changes site logins: a key of the same name doesn't hide the site's.
-    const entry =
-      found && !found.lab && !caller.owner ? (this.siteNamed(index, name) ?? found) : found
+    const entry = this.findFor(index, name, caller)
     if (!entry || (!caller.owner && entry.verifierOnly))
       throw new LoginError(`No login named ${name}. aico logins list shows every saved login.`)
     return entry
@@ -915,6 +922,7 @@ export class LoginStore {
       if (patch.kind !== undefined && patch.kind !== entry.kind) {
         if (!LOGIN_KINDS.includes(patch.kind) || patch.kind === 'lab login' || entry.lab)
           throw new LoginError('Choose tool login, API key, password or backup key')
+        if (entry.tool) throw new LoginError('A tool login keeps its kind')
         entry.kind = patch.kind
         changed.push('kind')
       }
@@ -948,8 +956,10 @@ export class LoginStore {
         if (patch.login_url !== undefined && patch.login_url !== bundle.values.login_url) {
           const next = loginPage(patch.login_url)
           const from = bundle.values.login_url || 'none'
+          // Both pages stay readable in the activity however long either is.
+          const short = (url: string) => (url.length > 250 ? `${url.slice(0, 249)}…` : url)
           bundle.values.login_url = next
-          changed.push(`login page ${from} to ${next}`)
+          changed.push(`login page ${short(from)} to ${short(next)}`)
         }
         let target = lab.target
         if (patch.target !== undefined && patch.target !== lab.target) {
