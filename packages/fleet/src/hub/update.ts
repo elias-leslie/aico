@@ -20,6 +20,7 @@ import {
   stageRelease,
   verifyRelease,
 } from '../releases'
+import { secretsDir } from '../secret-files'
 import { readSettings } from '../settings'
 import { readPins } from '../trust'
 import { type RunResult, shellQuote } from './host-admin'
@@ -35,6 +36,8 @@ const UPDATE_ANSWER_SEC = 90
 export const UPDATE_BUSY_EXIT = 75
 /** The line the host script prints just before it installs anything. */
 export const UPDATE_INSTALLING = 'tether-update: installing'
+/** RunResult stdout: this host neither has a signed release nor the key to make one, so it sends none. */
+export const NOTHING_TO_SEND = 'tether-update: nothing to send'
 
 /** Whether the host began installing: a failure after that (the install, the
  * restart or the rollback) would happen again on this release, while one
@@ -359,6 +362,12 @@ export async function pushRelease(
       !pins.some((pin) => pin.name === target.entry.name)
     )
       return fail('Only a full peer may update an approved machine')
+    // A standby runs what it was given: without the signing key, sending is another host's job.
+    if (
+      !existsSync(join(release, SIGNED_RELEASE)) &&
+      !existsSync(join(secretsDir(), 'update-signing-key'))
+    )
+      return { code: null, stdout: NOTHING_TO_SEND, output: '' }
     const input = readFileSync(join(release, SIGNED_RELEASE), 'utf8')
     const signed = verifyRelease(input, readUpdateKeys(settings.updatePins || DEFAULT_UPDATE_PINS))
     if (signed.bundleHash !== bundleHash(release) || signed.releaseHash !== releaseHash(release))

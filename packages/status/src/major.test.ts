@@ -105,6 +105,75 @@ describe('major rows that stay bad', () => {
     expect(majorOf({ ...row, id: 'gem/machine' }, new Map())).toBe('outage')
   })
 
+  describe('one notice per row until the row itself is well', () => {
+    const guestLink = (state: 'ok' | 'off') =>
+      row({
+        id: 'guest/link',
+        kind: 'machine',
+        machine: 'guest',
+        state,
+        next_run: new Date(T0 + 1000 * HOUR).toISOString(),
+      })
+    const failedService = row({
+      id: 'guest/web',
+      kind: 'service',
+      machine: 'guest',
+      state: 'failed',
+    })
+
+    it('its machine going off and back ends the notice and never repeats it', () => {
+      const w = world()
+      w.store.syncIntents([{ machine: 'guest', intent: 'always' }])
+      w.store.upsert([guestLink('ok'), failedService])
+      w.step(31 * MIN)
+      expect(w.stayed()).toEqual(['guest/web'])
+      for (let i = 0; i < 5; i++) {
+        w.store.upsert([guestLink('off')])
+        w.step(MIN)
+        w.store.upsert([guestLink('ok')])
+        w.step(31 * MIN)
+      }
+      expect(w.stayed()).toEqual(['guest/web'])
+      expect(w.told.flatMap((t) => t.recovered)).toEqual(['guest/web'])
+    })
+
+    it('after its machine was off, a failure not yet told gets its whole window from the return', () => {
+      const w = world()
+      w.store.syncIntents([{ machine: 'guest', intent: 'always' }])
+      w.store.upsert([guestLink('ok'), failedService])
+      w.step(5 * MIN)
+      w.store.upsert([guestLink('off')])
+      w.step(100 * HOUR)
+      w.store.upsert([guestLink('ok')])
+      w.step(29 * MIN)
+      expect(w.stayed()).toEqual([])
+      w.step(2 * MIN)
+      expect(w.stayed()).toEqual(['guest/web'])
+    })
+
+    it('going from failed to late is the same trouble, not a new notice', () => {
+      const w = world()
+      const due = new Date(T0 + HOUR).toISOString()
+      w.store.upsert([host(), row({ id: 'host/web', kind: 'backup', state: 'failed' })])
+      w.step(27 * HOUR)
+      expect(w.stayed()).toEqual(['host/web'])
+      w.store.upsert([row({ id: 'host/web', kind: 'backup', state: 'ok', next_run: due })])
+      w.step(40 * HOUR)
+      expect(w.stayed()).toEqual(['host/web'])
+    })
+
+    it('tells again once the row was well and goes bad again', () => {
+      const w = world()
+      w.store.upsert([host(), row({ id: 'host/web', kind: 'service', state: 'failed' })])
+      w.step(31 * MIN)
+      w.store.upsert([row({ id: 'host/web', kind: 'service', state: 'ok' })])
+      w.step(MIN)
+      w.store.upsert([row({ id: 'host/web', kind: 'service', state: 'failed' })])
+      w.step(31 * MIN)
+      expect(w.stayed()).toEqual(['host/web', 'host/web'])
+    })
+  })
+
   it('a failed service is an outage after its window', () => {
     const w = world()
     w.store.upsert([host(), row({ id: 'host/web', kind: 'service', state: 'failed' })])

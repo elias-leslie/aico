@@ -381,7 +381,8 @@ export class StatusStore {
     }
     const put = this.db.prepare(
       `INSERT INTO status_seen (id, shown, since, escalated) VALUES (?, ?, ?, 0)
-       ON CONFLICT (id) DO UPDATE SET shown = excluded.shown, since = excluded.since, escalated = 0`,
+       ON CONFLICT (id) DO UPDATE SET shown = excluded.shown, since = excluded.since,
+         escalated = CASE WHEN excluded.shown IN ('failed', 'late') THEN status_seen.escalated ELSE 0 END`,
     )
     transaction(this.db, () => {
       for (const row of rows) {
@@ -394,7 +395,12 @@ export class StatusStore {
     return batch
   }
 
-  /** The sustained pass (major.ts): rows past their window are told once, recovered ones once. */
+  /**
+   * The sustained pass (major.ts): one notice per row until the row itself is well again. `escalated`
+   * is 0 (not told), 1 (told, its notice open) or 2 (told, its notice ended because its machine went
+   * off; not told again, since the row hasn't said it's well). A row whose machine is off or silent
+   * says nothing, so its window starts over when the machine is back.
+   */
   private checkSustained(
     rows: readonly ShownRow[],
     now: number,
@@ -415,12 +421,23 @@ export class StatusStore {
     const intents = new Map(this.intents().map((m) => [m.machine, m.intent]))
     const stayed: Sustained[] = []
     const recovered: string[] = []
+    const ended: string[] = []
+    const setSince = this.db.prepare('UPDATE status_seen SET since = ? WHERE id = ?')
     for (const row of rows) {
       const record = kept.get(row.id)
       if (!record) continue
+      if (row.machine_off || row.unknown_why === 'late') {
+        if (record.since !== null) setSince.run(null, row.id)
+        if (row.machine_off && wasTold.has(row.id)) ended.push(row.id)
+        continue
+      }
       const major = majorOf(row, intents)
       if (major && record.shown === row.shown) {
-        const since = record.since ?? now
+        if (record.since === null) {
+          setSince.run(now, row.id)
+          continue
+        }
+        const since = record.since
         if (!record.escalated && now - since >= windows[major]) stayed.push({ row, major, since })
       } else if (
         wasTold.has(row.id) &&
@@ -428,9 +445,9 @@ export class StatusStore {
       )
         recovered.push(row.id)
     }
-    if (!stayed.length && !recovered.length) return
+    if (!stayed.length && !recovered.length && !ended.length) return
     try {
-      hook({ stayed, recovered })
+      hook({ stayed, recovered: [...recovered, ...ended] })
     } catch (error) {
       console.error('[status] sustained hook failed; the next pass tries again:', error)
       return
@@ -439,6 +456,7 @@ export class StatusStore {
     transaction(this.db, () => {
       for (const { row } of stayed) mark.run(1, row.id)
       for (const id of recovered) mark.run(0, id)
+      for (const id of ended) mark.run(2, id)
     })
   }
 

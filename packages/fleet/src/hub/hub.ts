@@ -24,6 +24,7 @@ import type { HubPorts, PeerView, ReleaseIdentity } from './types'
 import {
   installedRelease,
   installStarted,
+  NOTHING_TO_SEND,
   pushRelease,
   releaseAction,
   releaseId,
@@ -101,9 +102,9 @@ export interface HubDeps {
 export interface ReleaseUpdateRow {
   id: string
   what: string
-  kind: 'service'
+  kind: 'check'
   machine: string
-  state: 'ok' | 'failed'
+  state: 'ok' | 'warn' | 'failed'
   meaning: string
   last_run: string
 }
@@ -185,6 +186,7 @@ export class Hub {
   private readonly updater: Updater
   private readonly release: string
   private readonly build: ReleaseIdentity | null
+  private readonly toldCurrent = new Set<string>()
   /** Hosts linked up since their last build check that have not had it done: a host
    * with sessions waits here for the sweep. One attempt per link-up. */
   private readonly awaiting = new Set<string>()
@@ -454,6 +456,7 @@ export class Hub {
         peer.setUpdate(null)
         this.forgetUpdateFailure(name)
       }
+      this.reportCurrent(peer)
       return
     }
     if (action === 'defer') {
@@ -502,9 +505,31 @@ export class Hub {
     this.deps.settings.put(UPDATE_FAILURES_KEY, JSON.stringify(failures))
   }
 
+  /** A host that runs this hub's build, however it got it: an earlier failure no longer holds.
+   * Once per run of this hub. */
+  private reportCurrent(peer: Peer): void {
+    if (this.toldCurrent.has(peer.name)) return
+    this.toldCurrent.add(peer.name)
+    const at = new Date(this.now())
+    this.deps
+      .status?.({
+        id: `tether/release-update/${peer.name}`,
+        what: `Tether release on ${peer.name}`,
+        kind: 'check',
+        machine: peer.name,
+        state: 'ok',
+        meaning: `${peer.name} runs the same Tether release as this host.`,
+        last_run: at.toISOString(),
+      })
+      .catch((error: Error) =>
+        this.log(`${peer.name}: could not write its Status row: ${error.message}`),
+      )
+  }
+
   /** Aico web's Status says each release update: when a host got this hub's
-   * build, and why one did not. */
-  private reportUpdate(peer: Peer, update: PeerUpdate): void {
+   * build, and why one did not. A release that didn't land is never a service down: `installed`
+   * false means nothing changed on the host and the next link-up tries again. */
+  private reportUpdate(peer: Peer, update: PeerUpdate, installed = true): void {
     const status = this.deps.status
     if (!status || update.state === 'updating') return
     const at = new Date(this.now())
@@ -516,12 +541,12 @@ export class Hub {
     status({
       id: `tether/release-update/${peer.name}`,
       what: `Tether release on ${peer.name}`,
-      kind: 'service',
+      kind: 'check',
       machine: peer.name,
-      state: done ? 'ok' : 'failed',
+      state: done ? 'ok' : installed ? 'failed' : 'warn',
       meaning: done
         ? `This Tether sent ${peer.name} its release at ${clock}; ${peer.name} now runs ${what}.`
-        : `This Tether tried to bring ${peer.name} to ${what} at ${clock} and could not: ${update.error ?? 'unknown error'}.`,
+        : `${peer.name} didn't get ${what} at ${clock}: ${update.error ?? 'unknown error'}.`,
       last_run: at.toISOString(),
     }).catch((error: Error) =>
       this.log(`${peer.name}: could not write its Status row: ${error.message}`),
@@ -556,7 +581,8 @@ export class Hub {
         error,
       }
       peer.setUpdate(update)
-      this.reportUpdate(peer, update)
+      this.toldCurrent.delete(peer.name)
+      this.reportUpdate(peer, update, remember)
       if (!remember) return this.forgetUpdateFailure(peer.name)
       this.deps.settings.put(
         UPDATE_FAILURES_KEY,
@@ -575,6 +601,11 @@ export class Hub {
       })
     } catch (error) {
       return fail((error as Error).message, false)
+    }
+    if (result.stdout === NOTHING_TO_SEND) {
+      this.log(`${peer.name}: this host has no signed release to send it; not updating it`)
+      peer.setUpdate(null)
+      return this.forgetUpdateFailure(peer.name)
     }
     if (result.code !== 0)
       return fail(result.output || `exit ${result.code ?? 'error'}`, installStarted(result))
@@ -613,6 +644,7 @@ export class Hub {
       error: null,
     }
     peer.setUpdate(update)
+    this.toldCurrent.add(peer.name)
     this.reportUpdate(peer, update)
     this.forgetUpdateFailure(peer.name)
   }

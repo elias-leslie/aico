@@ -17,6 +17,7 @@ import { RELEASE_FILES, releaseHash, SIGNED_RELEASE, signRelease, verifyRelease 
 import { TEST_PORTS } from './testing'
 import {
   installStarted,
+  NOTHING_TO_SEND,
   pushRelease,
   receiveUpdate,
   UPDATE_BUSY_EXIT,
@@ -257,7 +258,13 @@ it('signs the installed release where the update signing key is held', () => {
   expect(readFileSync(calls, 'utf8')).toBe(`fleet sign-update ${lib}\n`)
 })
 
+it('a standby with neither a signed release nor the signing key has nothing to send', async () => {
+  const result = await pushRelease(release, target, PORTS)
+  expect(result).toMatchObject({ code: null, stdout: NOTHING_TO_SEND })
+})
+
 it('names why a release could not be sent', async () => {
+  put(join(dir, 'home/.local/state/aico/secrets/update-signing-key'), 'key', 0o600)
   const result = await pushRelease(release, target, PORTS)
   expect(result.code).toBeNull()
   expect(result.output).toMatch(

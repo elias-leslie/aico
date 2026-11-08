@@ -117,10 +117,11 @@ describe('the notices that fired because a machine was off', () => {
       'link-power',
       'repo-peer-away',
       'owner-booting',
+      'release-push',
     ])
     for (const notice of replay.notices)
       expect([notice.title, cases.has(notice.case)]).toEqual([notice.title, true])
-    expect(replay.notices.reduce((sum, n) => sum + n.sent, 0)).toBe(42)
+    expect(replay.notices.reduce((sum, n) => sum + n.sent, 0)).toBe(88)
   })
 
   describe('off-during-copy', () => {
@@ -340,6 +341,54 @@ describe('the notices that fired because a machine was off', () => {
       ])
       s.store.checkAlerts()
       expect(s.titles()).toEqual(['Link to guest'])
+    })
+  })
+
+  describe('release-push', () => {
+    const link = (state: 'off' | 'warn'): StatusRow => ({
+      id: 'fleet/standby/guest',
+      what: 'Link to guest',
+      kind: 'machine',
+      machine: 'guest',
+      state,
+      meaning: 'Link.',
+      next_run: new Date(T0 + 24 * 60 * MIN).toISOString(),
+    })
+    const sustained = (kind: 'check' | 'service') => {
+      const s = status()
+      const told: { stayed: string[]; recovered: string[] }[] = []
+      s.store.onSustained({ 'data-risk': 26 * 60 * MIN, outage: 30 * MIN }, (item) =>
+        told.push({ stayed: item.stayed.map((r) => r.row.id), recovered: item.recovered }),
+      )
+      const flip = () => {
+        s.clock.now += 20 * MIN
+        s.store.upsert([link('warn')])
+        s.clock.now += 5000
+        s.store.upsert([link('off')])
+      }
+      s.store.upsert([
+        link('warn'),
+        {
+          id: 'tether/release-update/guest',
+          what: 'Tether release on guest',
+          kind,
+          machine: 'guest',
+          state: 'failed',
+          meaning: 'No signed release.',
+        },
+      ])
+      s.clock.now += 40 * MIN
+      s.store.checkAlerts()
+      for (let i = 0; i < 46; i++) flip()
+      return told
+    }
+    it('a release push that did not land never reaches the phone', () => {
+      expect(sustained('check')).toEqual([])
+    })
+    it('a failed service on a host whose link flips at every restart tells the phone once', () => {
+      const told = sustained('service')
+      expect(told.flatMap((t) => t.stayed)).toEqual(['tether/release-update/guest'])
+      expect(told.flatMap((t) => t.recovered)).toEqual(['tether/release-update/guest'])
     })
   })
 

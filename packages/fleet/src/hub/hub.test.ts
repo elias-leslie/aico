@@ -955,7 +955,10 @@ describe('hub', () => {
       await new Promise((resolve) => setTimeout(resolve, 400))
       expect(calls).toBe(0)
       expect(update()).toBeNull()
-      expect(rows).toEqual([])
+      // Says so once, so an earlier failure on this host doesn't stand.
+      expect(rows).toEqual([
+        expect.objectContaining({ id: 'tether/release-update/vm', state: 'ok', kind: 'check' }),
+      ])
     })
 
     it('never pushes an older or same-age build over a host that runs a newer deploy', async () => {

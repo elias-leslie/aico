@@ -73,6 +73,9 @@ export class Fleet {
   /** The last good reading stays when a read fails: a failed read says nothing about a guest. */
   private power: { at: number; value: ReadonlyMap<string, string> } | null = null
   private powerTriedAt = 0
+  /** A first reading has finished. Until then a peer with no link isn't reported: at every start it
+   * would read as waiting for a moment, though it's off. Bounded by powerTimeoutMs if a read hangs. */
+  private powerAnswered = false
   /** Guests read running after a reading that had them off, with since when. */
   private readonly runningSince = new Map<string, number>()
   private powerProbe: Promise<void> | null = null
@@ -580,7 +583,10 @@ export class Fleet {
       const reading = this.power
       if (this.stopping) return
       const pins = this.pins()
-      const rows = this.status().map((peer) =>
+      const known =
+        this.powerAnswered || Date.now() - this.startedAt >= (s.powerTimeoutMs ?? 10_000)
+      const peers = this.status().filter((peer) => peer.connected || known)
+      const rows = peers.map((peer) =>
         peerStatusRow(
           s,
           peer,
@@ -628,6 +634,7 @@ export class Fleet {
         this.log(`Could not read guest power: ${(error as Error).message}`)
       }
     })().finally(() => {
+      this.powerAnswered = true
       this.powerProbe = null
       if (!this.stopping) void this.report()
     })

@@ -1,8 +1,16 @@
 {
-  "description": "Status notices from the 7 days to 2026-11-08 that fired only because a machine was or went off, a job was running or this server restarted. Titles and counts are real; each names the case off-replay.test.ts replays. `sent` is how many notices fired then; every case must now fire none.",
+  "description": "Status notices from the 7 days to 2026-11-08 that fired only because a machine was or went off, a job was running, this server restarted or a release push to an off machine had not landed. Titles and counts are real; each names the case off-replay.test.ts replays. `sent` is how many notices fired then; every case must now fire none.",
   "notices": [
-    { "title": "1 failed: VM180 app recovery data · Drive", "sent": 2, "case": "off-during-copy" },
-    { "title": "1 late: Aico databases and photos · CT 160", "sent": 12, "case": "running-job" },
+    {
+      "title": "1 failed: VM180 app recovery data · Drive",
+      "sent": 2,
+      "case": "off-during-copy"
+    },
+    {
+      "title": "1 late: Aico databases and photos · CT 160",
+      "sent": 12,
+      "case": "running-job"
+    },
     {
       "title": "60 late: / recovery · T7, /home recovery · T7, /srv/models recovery · T7",
       "sent": 5,
@@ -13,20 +21,45 @@
       "sent": 2,
       "case": "running-job"
     },
-    { "title": "1 late: apps", "sent": 5, "case": "on-demand-power" },
-    { "title": "1 late: Proxmox host", "sent": 4, "case": "server-restart" },
-    { "title": "1 late: Link to neri-hunters", "sent": 2, "case": "link-power" },
-    { "title": "1 late: Link to agent-work", "sent": 2, "case": "link-power" },
+    {
+      "title": "1 late: apps",
+      "sent": 5,
+      "case": "on-demand-power"
+    },
+    {
+      "title": "1 late: Proxmox host",
+      "sent": 4,
+      "case": "server-restart"
+    },
+    {
+      "title": "1 late: Link to neri-hunters",
+      "sent": 2,
+      "case": "link-power"
+    },
+    {
+      "title": "1 late: Link to agent-work",
+      "sent": 2,
+      "case": "link-power"
+    },
     {
       "title": "2 late: Link to agent-work, Link to neri-hunters",
       "sent": 3,
       "case": "link-power"
     },
-    { "title": "1 failed: Repo copy to aico", "sent": 3, "case": "repo-peer-away" },
+    {
+      "title": "1 failed: Repo copy to aico",
+      "sent": 3,
+      "case": "repo-peer-away"
+    },
     {
       "title": "1 failed: Portfolio-AI full backup (database and uploads) · Owner backup",
       "sent": 2,
       "case": "owner-booting"
+    },
+    {
+      "title": "Tether release on neri-hunters is still down",
+      "sent": 46,
+      "case": "release-push"
     }
   ]
 }
