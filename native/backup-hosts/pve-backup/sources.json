@@ -103,5 +103,24 @@
   },
   "kind": "qemu",
   "vmid": 180
+ },
+ "pve-vm-210-dadbot-data": {
+  "digest": "b89bc827345011bec2d10a57b7bcb76952e2adfee5e4196a27150a5a6d89cc22",
+  "files": {
+   "excludes": [
+    "data/dadbot.db",
+    "data/dadbot.db-wal",
+    "data/dadbot.db-shm",
+    "data/school.db",
+    "data/school.db-wal",
+    "data/school.db-shm"
+   ],
+   "paths": [
+    "/srv/dadbot/data"
+   ],
+   "via": "agent"
+  },
+  "kind": "qemu",
+  "vmid": 210
  }
 }
