@@ -2,6 +2,7 @@
 Aico is a Linux companion for people working with terminal AI tools. Agent sessions keep running in the background and open in a browser or on the phone, owned by Tether, the session daemon. It also runs the owner's status, backups, notes and project tooling.
 
 ## Now
+- Notifications leftovers: home alarm, update ready and phone pairing can't get a Settings switch until the next Android release; the Proxmox sender's own alarms (when no Aico answers) reach the phone but aren't on the shared list
 ## Next
 - Systems review leftovers (risk list: /srv/scratch/briefs/usage-burn-2026-11-08/lane10-final.md): recurring Status rows with no next_run can't go late; PVE packages, kernels, hand-installed Node and tools get no automatic updates; VM 100 runs Node 20 (past end of life); thin pool can't grow itself
 - Sessions shift between Aico machines: always know what was going on, then a planned move to the standby (plan: docs/plans/session-shift/plan.md)
