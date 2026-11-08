@@ -45,7 +45,7 @@ Commands:
   sessions diagnostics <id>
   roots [list | show <requestId>]   coordinator sessions started from a request
   share <path>... [--title T] [--session ID]
-                                file files or folders quietly in Aico (Files > Shared;
+                                put files or folders quietly in Aico (Files > Shared;
                                 no notice, nothing copied); relative paths are from
                                 here; the session is this pane's own unless --session
                                 ID names one. To get the owner to look at something:

@@ -580,7 +580,7 @@ export function snapshotLines(
   if (!found.length) return `No copies of ${source} on ${backupTargetName(target)}.`
   const shown = all ? found : found.slice(0, SNAPSHOTS_SHOWN)
   const lines = [
-    `${found.length} copies of ${source} on ${backupTargetName(target)}, newest first:`,
+    `${found.length} ${found.length === 1 ? 'copy' : 'copies'} of ${source} on ${backupTargetName(target)}, newest first:`,
   ]
   for (const s of shown) lines.push(`  ${new Date(s.time).toLocaleString()}  ${s.id}`)
   if (shown.length < found.length)

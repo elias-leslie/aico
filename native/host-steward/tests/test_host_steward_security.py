@@ -587,7 +587,7 @@ def test_new_family_row_lists_three_and_says_what_to_do(tmp_path):
     text = core.explain(sig.code, sig.fields, DATA["meanings"], True, sig.state)
     assert text.startswith("5 new sudo commands: alpha, bravo, charlie and 2 more.")
     assert "delta" not in text and "aico declare --what any" in text
-    assert "normal after a day" in text and "journalctl -t sudo" in text
+    assert "normal after a day" in text and "sudo log" in text
     one = core.explain(sig.code, {**sig.fields, "n": 1, "plural": "", "families": ["alpha"]}, DATA["meanings"], False)
     assert one == "1 new sudo command: alpha."
 

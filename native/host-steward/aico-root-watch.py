@@ -1395,7 +1395,7 @@ def launch_refusal(role: str, tool: str, model: str | None, row: dict | None,
     if row["allowed"]:
         return None
     reason = re.sub(r"[\x00-\x1f\x7f]", " ", str(row.get("deny_reason") or "Aico's launch rules deny it"))[:300]
-    return (f"{tool}{f' --model {model}' if model else ''} is not allowed for {role} work: {reason}. "
+    return (f"{tool}{f' --model {model}' if model else ''} is not allowed for {role} work: {reason.rstrip('.')}. "
             f"See the options: st models route --role {role}")
 
 

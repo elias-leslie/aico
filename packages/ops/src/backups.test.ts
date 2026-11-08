@@ -1086,6 +1086,7 @@ it('snapshots list the newest copies with the ids restore takes, and say how to 
   expect(text).toContain('2 older: add --all')
   expect(snapshotLines(copies, 'aico', 'drive', true)).toContain(copies[11]?.id)
   expect(snapshotLines([], 'aico', 'drive', false)).toContain('No copies of aico')
+  expect(snapshotLines(copies.slice(0, 1), 'aico', 'drive', false)).toContain('1 copy of aico')
 })
 
 const t7Run = {

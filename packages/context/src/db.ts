@@ -245,6 +245,10 @@ const MIGRATIONS = [
        'Antigravity runs under limits that stop it starting or managing sessions, and it is not for hunting or recon.',
        'Usage-burn lane 13, 2026-11-08'
      WHERE NOT EXISTS (SELECT 1 FROM launch_deny WHERE provider = 'antigravity');`,
+  // The route reads "(when ...)": a capital A read as a stray letter.
+  `UPDATE launch_tools SET
+     default_row = replace(default_row, '"when":"A diagnosis, or', '"when":"a diagnosis, or')
+     WHERE name = 'antigravity';`,
 ]
 
 /** The context DB file in a data directory. */
