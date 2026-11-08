@@ -49,7 +49,7 @@ const ALIASES: Record<string, string[]> = {
   snaps: ['snapshots', 'list'],
   rollback: ['snapshots', 'restore'],
 }
-const NATIVE = new Set([
+export const NATIVE = new Set([
   'projects',
   'pulse',
   'lease',

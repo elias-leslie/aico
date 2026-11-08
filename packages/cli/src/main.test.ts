@@ -5,7 +5,7 @@ import { openTasksDb } from '@aico/tasks'
 import { afterEach, describe, expect, it } from 'vitest'
 import config from '../data/cli.json' with { type: 'json' }
 import { catalog, extensionEnvironment, parseBinding, passiveHelp } from './extensions'
-import { main, monitorSummary } from './main'
+import { main, monitorSummary, NATIVE } from './main'
 
 const root = resolve('.')
 const scratch: string[] = []
@@ -1021,5 +1021,18 @@ describe('aico as the owner CLI', () => {
     expect(await h.go(['ask', 'haiku', 'hi'])).toBe(2)
     expect(h.errors.join()).toMatch(/aico prompt-model MODEL.*tether ask create/)
     expect(h.calls).toHaveLength(1)
+  })
+})
+
+describe('the launcher', () => {
+  it('routes every command the CLI hands it (aico away once fell through to unknown command)', () => {
+    const script = readFileSync(
+      resolve(import.meta.dirname, '../../web-server/scripts/aico'),
+      'utf8',
+    )
+    const routed = new Set(
+      [...script.matchAll(/^ {2}([a-z-]+(?: \| [a-z-]+)*)\)/gm)].flatMap((m) => m[1].split(' | ')),
+    )
+    expect([...NATIVE].filter((verb) => !routed.has(verb))).toEqual([])
   })
 })

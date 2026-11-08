@@ -9,7 +9,7 @@
 # `aico agent run`: Aico's own agent harness (packages/agent, agent.db).
 # `aico check | commit`: the repo gate and path-scoped commits (packages/checks).
 # `aico nightly`: the nightly deep lane (full gate on HEAD plus the live checks; packages/checks).
-# `aico deploy | logs | snapshots | vm | plug | wip | context-sync`: deploys, unit logs, Btrfs points, Proxmox guests and the power plug (packages/ops).
+# `aico deploy | logs | snapshots | vm | plug | away | wip | context-sync`: deploys, unit logs, Btrfs points, Proxmox guests, the power plug and leaving with the hosts off (packages/ops).
 # `aico web search|research|fetch|batch|refocus`: public web search and fetch with a call counter (packages/webtools).
 # `aico video URL`: review a YouTube video, or ask it a question (packages/video).
 # `aico prompt-model MODEL "question"`: one question to one model, no tools (packages/agent).
@@ -129,7 +129,7 @@ case "${1:-}" in
   grants | elevate) shift; exec /usr/local/lib/host-steward/aico-grants "$@" ;;
   memory | prompt | models | context | usage | logins | app | status | phones | machines) exec_aico_web "$@" ;;
   check | commit | publish | nightly) aico_checks "$@" ;;
-  deploy | logs | snapshots | vm | plug | backups | wip | context-sync) aico_ops "$@" ;;
+  deploy | logs | snapshots | vm | plug | away | backups | wip | context-sync) aico_ops "$@" ;;
   web) shift; aico_webtools "$@" ;;
   video) shift; aico_video "$@" ;;
   jobs | routines)
