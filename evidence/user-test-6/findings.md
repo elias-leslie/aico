@@ -8,7 +8,7 @@ Haiku testers at 390 and 1440 wide, given only the URL and a goal. Findings belo
 |---|---|---|
 | Files | No way to find a name in a long folder | Find in this folder, narrowing the list by name |
 | Files | Text and images could be opened but not saved | Download beside Open |
-| History | A list stopped at 100 with no sign there were more | "Newest 100 ..." when the list stops at a full page |
+| History | A list stopped at 100 with no sign there were more | "Newest 100 sessions", or "75 of the newest 100" under a filter, when the list stops at a full page |
 | History | Filters missing at phone size, since the phone rule hid them for Status's sheet | Filters stay on a page without a sheet |
 | History search | "so far" read as still searching | "newest first; older ones not searched" |
 | Routines | "Next" gave a bare time that could be tomorrow | Later today is a time; tomorrow names the day |
@@ -17,7 +17,7 @@ Haiku testers at 390 and 1440 wide, given only the URL and a goal. Findings belo
 | Status | Restore drill's name hid that it checks daily | "Aico restore drill: checks daily, runs monthly" |
 | Ages | Session rows, Needs you, notes sync, tray and phone app rounded differently from Status | One shared formatter; the tray matches |
 | Notes | Delete warning didn't say what happens to photos | Says items go and photos stay in Captures |
-| Logins | Activity showed raw names like `_lab_school--default` and `rotate` | Shown name, "added", "password changed" |
+| Logins | Activity showed raw names like `_lab_school--default` and `rotate` | Shown name with the account beside its site, "added", "changed" |
 | Logins | "Same access as" couldn't tell apart several logins on one site | Adds the username |
 | Needs you | "Add 1 more photo" with none added | "Add a photo", "Add 2 photos" |
 | Needs you | Words typed on a files question were lost on Not now | Not now takes them along |
