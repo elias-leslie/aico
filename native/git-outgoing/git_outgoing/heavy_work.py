@@ -515,7 +515,7 @@ def _wait_status(lane: str, label: str, since: float, activity: int, admission: 
         _LOCAL.waited_behind = f"{observed['label']} project={observed['project']}"
     holder = holder_text(observed)
     work_class = _lane_class(lane)
-    print(f"[st] Waiting for shared {work_class}-work lane: {_public_label(label)} "
+    print(f"[st] Queued for the shared {work_class}-work lane (normal; it starts when the lane frees): {_public_label(label)} "
           f"class={work_class} wait_age={time.monotonic() - since:.1f}s {holder}", file=sys.stderr, flush=True)
 
 

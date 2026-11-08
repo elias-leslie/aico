@@ -263,3 +263,10 @@ def test_cwd_project_beats_inherited_env_and_flag_beats_both(monkeypatch, tmp_pa
     config.set_project_override('c')
     monkeypatch.chdir(project_b)
     assert (config.get_config().project_id, config.get_config().source) == ('c', 'flag')
+
+
+def test_details_path_is_whole_so_it_opens_from_any_folder(tmp_path):
+    from st_sdk.details import detail_path, display_path
+
+    assert display_path(tmp_path, detail_path(tmp_path, 'pytest')) == str(tmp_path / '.dev-tools/pytest-details.txt')
+    assert display_path(tmp_path, Path('.dev-tools/x.txt')) == str(tmp_path / '.dev-tools/x.txt')

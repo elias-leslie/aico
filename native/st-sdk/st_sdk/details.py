@@ -37,10 +37,8 @@ def detail_path(root: Path, name: str) -> Path:
 
 
 def display_path(root: Path, path: Path) -> str:
-    try:
-        return path.relative_to(root).as_posix()
-    except ValueError:
-        return str(path)
+    """Whole, so a printed details path opens from any folder (root joins a relative one)."""
+    return str(root / path)
 
 
 def summary_hint(output: str, *, limit: int = 180) -> str:
