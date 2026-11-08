@@ -325,6 +325,26 @@ func (h *Hook) yesFrom(id, agent string) map[string]any {
 	return nil
 }
 
+// yesForGone: my request id, answered yes by anyone within ackValid, stands in for a named writer whose process is
+// gone. An unnamed writer ("unknown") could be anyone, so it never hands over this way.
+func (h *Hook) yesForGone(id, agent string) map[string]any {
+	identity := rows(h.Cfg.loadDoc(), "identities")[agent]
+	if identity == nil || anchorAlive(str(identity["anchor"])) {
+		return nil
+	}
+	mine := h.lineage().SelfIDs(h.ID)
+	for _, r := range h.Rows() {
+		if str(r["id"]) != id || !mine[str(r["from"])] || str(r["intent"]) != "yes" {
+			continue
+		}
+		if t, ok := parseStamp(str(r["acked_at"])); ok && time.Since(t) <= ackValid {
+			return r
+		}
+		return nil
+	}
+	return nil
+}
+
 // maxListedAgents bounds the live agents a refused send lists: enough to spot the one meant.
 const maxListedAgents = 12
 

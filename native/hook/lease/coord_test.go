@@ -13,6 +13,7 @@ import (
 const (
 	sidA = "11111111-aaaa-4bbb-8ccc-000000000001" // agent cc:111111
 	sidB = "22222222-aaaa-4bbb-8ccc-000000000002" // agent cc:222222
+	sidC = "33333333-aaaa-4bbb-8ccc-000000000003" // agent cc:333333
 )
 
 func agent(sid, event string) *Hook {

@@ -359,12 +359,14 @@ func (h *Hook) Foreign(project string, paths []string) (map[string][]string, err
 }
 
 // ExceptAcked drops from found (Foreign's answer) the agents whose yes to ackID (my request, under two hours
-// old, sent from any project: the files are the writer's either way) lets me take their uncommitted work.
+// old, sent from any project: the files are the writer's either way) lets me take their uncommitted work. A writer
+// whose process is gone can't answer, so a yes from whoever I asked (its coordinator, usually) stands in for it.
 func (h *Hook) ExceptAcked(found map[string][]string, ackID string) map[string][]string {
 	out := map[string][]string{}
 	for path, ids := range found {
 		for _, id := range ids {
-			if h.yesFrom(ackID, strings.TrimPrefix(id, "lease:")) == nil {
+			agent := strings.TrimPrefix(id, "lease:")
+			if h.yesFrom(ackID, agent) == nil && h.yesForGone(ackID, agent) == nil {
 				out[path] = append(out[path], id)
 			}
 		}

@@ -396,6 +396,43 @@ func TestWritersYesHandsOverTheirPaths(t *testing.T) {
 	}
 }
 
+func TestYesFromAnotherSessionStandsInOnlyForAWriterThatIsGone(t *testing.T) {
+	repo := sandbox(t)
+	real, _ := filepath.EvalSymlinks(repo)
+	theirs := filepath.Join(real, "theirs.txt")
+	New(testConfig(), edit(sidB, theirs)).Edit()
+	a, b, c := agent(sidA, ""), agent(sidB, ""), agent(sidC, "")
+	register(t, a, c)
+	startWindow(t, b, "abcd1234")
+	found, err := a.Foreign("demo", []string{theirs})
+	if err != nil || len(found[theirs]) == 0 {
+		t.Fatalf("the other agent's write must show: %v (%v)", found, err)
+	}
+	row, _, err := a.Send(SendOpts{To: "cc:333333", Text: "may I commit theirs.txt?", Project: "demo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := row["id"].(string)
+	if _, err := c.Ack(id, "yes", ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := a.ExceptAcked(found, id); len(got[theirs]) == 0 {
+		t.Errorf("a writer still running answers for itself: %v", got)
+	}
+	pid, _, _ := strings.Cut(b.ID.Anchor, ":")
+	n, _ := strconv.Atoi(pid)
+	_ = syscall.Kill(n, syscall.SIGKILL)
+	for i := 0; i < 200 && anchorAlive(b.ID.Anchor); i++ {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if got := a.ExceptAcked(found, id); len(got[theirs]) != 0 {
+		t.Errorf("a yes stands in for a writer that is gone: %v", got)
+	}
+	if got := a.ExceptAcked(map[string][]string{theirs: {"unknown"}}, id); len(got[theirs]) == 0 {
+		t.Errorf("an unnamed writer never hands over this way: %v", got)
+	}
+}
+
 // startWindow runs a detached process as a window's agent (not under this test's own harness, which would make it
 // a nested one) and registers that identity on it.
 func startWindow(t *testing.T, h *Hook, widget string) {
