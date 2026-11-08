@@ -83,11 +83,11 @@ export function registerShowRoute(
       const request = parseShow(await readJsonObject(req))
       if (request.kind === 'files') request.paths = await realPaths(request.paths)
       // Sharing the same files again replaces the earlier entry, not a second row.
-      const share =
+      const { share, replaces } =
         request.kind === 'files'
           ? shares.reshare(request.session, request.title, request.paths)
-          : shares.add(request)
-      events.publish('show.requested', share)
+          : { share: shares.add(request), replaces: null }
+      events.publish('show.requested', replaces ? { ...share, replaces } : share)
       sendJson(res, 201, share)
     })
     .add('DELETE', '/v1/shares/:id', (_req, res, params) => {

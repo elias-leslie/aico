@@ -661,6 +661,8 @@ export class Peer {
     }
     if (type === 'show.requested') {
       if (!hasId(data)) return
+      // Sharing the same files again gives a new id; the entry it replaces goes here too.
+      if (typeof data.replaces === 'string') this.shareItems.delete(data.replaces)
       this.remember(this.shareItems, data, KEPT_SHARES)
       this.deps.publish(type, { ...data, host: this.name })
       return

@@ -112,7 +112,12 @@ export class ShareStore {
 
   /** Share these paths again: a new entry, so it notifies, lists and lasts as new, in place of
    * the session's last one for them; one an open question points at stays with the question. */
-  reshare(session: string | null, title: string | null, paths: string[], now = Date.now()): Share {
+  reshare(
+    session: string | null,
+    title: string | null,
+    paths: string[],
+    now = Date.now(),
+  ): { share: Share; replaces: string | null } {
     const row = this.db
       .prepare(
         `SELECT * FROM shares WHERE paths = ? AND session_id IS ?
@@ -121,7 +126,11 @@ export class ShareStore {
       )
       .get(JSON.stringify(paths), session) as unknown as ShareRow | undefined
     if (row) this.remove(row.id)
-    return this.add({ session, title: title ?? row?.title ?? null, kind: 'files', paths }, now)
+    const share = this.add(
+      { session, title: title ?? row?.title ?? null, kind: 'files', paths },
+      now,
+    )
+    return { share, replaces: row?.id ?? null }
   }
 
   get(id: string): Share | undefined {

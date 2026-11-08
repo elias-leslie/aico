@@ -82,7 +82,7 @@ export const NATIVE = new Set([
 ])
 const ROUTINE_VERBS = new Set(['context', 'jobs', 'routines', 'agent'])
 /** Commands that answer `X sub --help` about that sub-command themselves. */
-const OWN_SUBCOMMAND_HELP = new Set(['logins', 'grants', 'elevate', 'backups'])
+const OWN_SUBCOMMAND_HELP = new Set(['logins', 'grants', 'elevate', 'backups', 'backup'])
 const CORE = new Set([
   ...NATIVE,
   ...Object.keys(ALIASES),
@@ -514,7 +514,7 @@ async function monitorCommand(cli: Cli, rest: string[]): Promise<number> {
     }
     out(rest.includes('--json') ? json(reading) : monitorSummary(reading))
   } else if (rest[0] === 'connections')
-    return execute(['ss', rest.includes('--all') ? '-tun' : '-tuln'], env)
+    return execute(['ss', rest.includes('--all') ? '-tuna' : '-tuln'], env)
   else if (rest[0] === 'mounts') out(readFileSync('/proc/mounts', 'utf8'))
   else if (rest[0] === 'processes')
     return rest.includes('--all')

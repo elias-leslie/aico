@@ -48,6 +48,18 @@ describe('POST /v1/show', () => {
     expect(await listed()).toEqual([renamed.body])
   })
 
+  it('a share an open question points at stays with the question', async () => {
+    const asked = await callSocket(paths.socket, 'POST', '/v1/asks', {
+      session: '0123abcd',
+      question: 'Ship it?',
+      attach: [dir],
+    })
+    const id = (asked.body as { share: string }).share
+    const second = await show({ session: '0123abcd', path: dir })
+    expect((second.body as { id: string }).id).not.toBe(id)
+    expect((await listed()).map((row) => (row as { id: string }).id)).toContain(id)
+  })
+
   it('publishes and keeps a link', async () => {
     const result = await show({
       session: '0123abcd',

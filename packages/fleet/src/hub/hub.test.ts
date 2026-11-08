@@ -260,6 +260,17 @@ describe('hub', () => {
       expect(hub.mergeAsks([], { states: [] }).map((item) => item.id)).toEqual(['dddddddddddd'])
     })
 
+    it('a share that replaces another drops it from the cache', async () => {
+      peer.emit('show.requested', share('aaaaaaaaaaaa', '2026-11-02T11:00:00.000Z'))
+      peer.emit('show.requested', {
+        ...share('bbbbbbbbbbbb', '2026-11-02T12:00:00.000Z'),
+        replaces: 'aaaaaaaaaaaa',
+      })
+      await vi.waitFor(() =>
+        expect(hub.mergeShares([]).map((item) => item.id)).toEqual(['bbbbbbbbbbbb']),
+      )
+    })
+
     it('merges shares oldest first', async () => {
       await relinked()
       const mine = [
