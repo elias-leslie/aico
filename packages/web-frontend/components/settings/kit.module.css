@@ -181,6 +181,7 @@ button.rowHead:focus-visible {
   outline-offset: 1px;
 }
 .form input[type="checkbox"] {
+  flex: none;
   width: auto;
   min-height: 0;
   accent-color: var(--lantern);
