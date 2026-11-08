@@ -123,7 +123,7 @@ def test_roots_resolves_tether(monkeypatch, env, expected):
 
     monkeypatch.setattr(admin.Collector, "discover", discover)
     _, output = record(monkeypatch, [])
-    assert admin.main(["roots"]) == 0
+    assert admin.main(["roots", "--json"]) == 0
     assert seen == [(expected, expected, None)]
     assert output == [{"owner": "aico", "roots": []}]
 

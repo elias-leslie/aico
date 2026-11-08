@@ -458,7 +458,7 @@ def test_roots_fail_only_for_failed_observation(monkeypatch, reason, code):
     output = []
     monkeypatch.setattr(watcher.Collector, "discover", lambda self, request_id: ([], [record]))
     monkeypatch.setattr(watcher, "emit_json", lambda _, row: output.append(row))
-    assert watcher.roots_main(["--root-socket", "/fixture/root",
+    assert watcher.roots_main(["--json", "--root-socket", "/fixture/root",
                                "--owner-socket", "/fixture/owner"]) == code
     assert output == [{"owner": "aico", "roots": [{**record, "context": "unknown"}]}]
 
@@ -468,7 +468,7 @@ def test_roots_report_unknown_context_without_legacy_service_calls(monkeypatch):
     output = []
     monkeypatch.setattr(watcher.Collector, "discover", lambda self, request_id: ([], rows))
     monkeypatch.setattr(watcher, "emit_json", lambda _, row: output.append(row))
-    assert watcher.roots_main(["--root-socket", "/fixture/root", "--owner-socket", "/fixture/owner"]) == 0
+    assert watcher.roots_main(["--json", "--root-socket", "/fixture/root", "--owner-socket", "/fixture/owner"]) == 0
     assert output[0]["roots"][0]["context"] == "unknown"
 
 
@@ -548,7 +548,7 @@ def test_dynamic_snapshot_contains_identity_status_only(monkeypatch):
                         lambda *_: "Worked for 15s\n› secret draft\n".encode())
     output = []
     monkeypatch.setattr(watcher, "emit_json", lambda _, record: output.append(record))
-    assert watcher.main(["roots", "--root-socket", "/fixture/root",
+    assert watcher.main(["roots", "--json", "--root-socket", "/fixture/root",
                          "--owner-socket", "/fixture/owner"]) == 0
     record = output[0]["roots"][0]
     assert record["paneId"] == PIN.paneId
@@ -1100,3 +1100,43 @@ def test_bare_or_unknown_command_lists_commands_not_watch_flags(capsys, argv, hi
     err = capsys.readouterr().err
     assert "Usage: st aico create|" in err and hint in err
     assert "--root-socket" not in err
+
+
+def table_receipts(monkeypatch, roots, sessions, reports):
+    def receipt(self, path, route, **_):
+        if route == "/v1/roots?ended=0":
+            return 200, {"owner": "aico", "roots": roots}
+        if route == "/v1/sessions":
+            return 200, {"items": sessions}
+        if route.endswith("/report"):
+            return 200, reports.get(route.split("/")[3], {})
+        return 404, {}
+    monkeypatch.setattr(watcher.Collector, "receipt", receipt)
+    # A table never reads a pane.
+    monkeypatch.setattr(watcher.Collector, "discover", lambda *_: pytest.fail("sampled panes"))
+    monkeypatch.setattr(watcher.time, "time", lambda: 10_000.0)
+
+
+def test_roots_default_to_a_short_table_newest_first_and_unknown_stays_unknown(monkeypatch, capsys):
+    now = 10_000_000
+    table_receipts(monkeypatch,
+                   [{"requestId": "lane-old", "hostIdentity": "aaaaaaaa", "status": "running"},
+                    {"requestId": "lane-new", "hostIdentity": "bbbbbbbb", "status": "running"},
+                    {"requestId": "lane-far", "hostIdentity": "cccccccc", "status": "running", "host": "gem"}],
+                   [{"id": "aaaaaaaa", "displayTitle": "Old " + "x" * 60, "state": "idle",
+                     "stateDetail": None, "stateAt": now - 7_200_000, "stateAgentAt": 0},
+                    {"id": "bbbbbbbb", "displayTitle": "New", "state": "idle",
+                     "stateDetail": "background shells running", "stateAt": now - 5_000, "stateAgentAt": now - 90_000}],
+                   {"bbbbbbbb": {"contextPercent": 21}, "aaaaaaaa": {"contextTokens": 206_000}})
+    assert watcher.roots_main(["--root-socket", "/fixture/root", "--owner-socket", "/fixture/owner"]) == 0
+    head, new, old, far = capsys.readouterr().out.splitlines()
+    assert head.split() == ["REQUEST", "TITLE", "STATE", "CTX", "LAST"]
+    assert new.split()[:1] == ["lane-new"] and "idle, shells running" in new and "21%" in new and new.endswith("5s")
+    assert "206k" in old and old.endswith("2h") and "…" in old
+    assert far.startswith("lane-far @gem") and "running" in far and far.endswith("-")
+
+
+def test_a_named_root_that_does_not_exist_says_so(monkeypatch, capsys):
+    monkeypatch.setattr(watcher.Collector, "receipt", lambda *_a, **_k: (404, {}))
+    assert watcher.roots_main(["nope", "--root-socket", "/fixture/root", "--owner-socket", "/fixture/owner"]) == 1
+    assert "no root named nope" in capsys.readouterr().err

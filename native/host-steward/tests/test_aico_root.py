@@ -1,9 +1,10 @@
 """Exact retained-root owner controls, using isolated receipts only."""
 
 import json
+import threading
 
 import pytest
-from aico_cli_fixtures import admin
+from aico_cli_fixtures import REAL_STARTED_AGENT_ID, admin
 
 ROOT = "root-fixture"
 GENERATION = "a" * 64
@@ -359,3 +360,69 @@ def test_rewind_refusals_say_why_and_applied_nothing(monkeypatch, reply, reason,
 def test_rewind_with_a_stale_generation_sends_nothing(monkeypatch):
     code, calls, output = invoke(monkeypatch, ["rewind", ROOT, "--generation", "b" * 64], [(200, DESCRIPTOR)])
     assert code == 1 and len(calls) == 1 and output[0]["reason"] == "stale_generation"
+
+
+REPORT_SESSION = {"id": "aabbcc01", "displayTitle": "Aico — burn lane", "state": "idle", "stateDetail": None,
+                  "waitingOn": None, "doing": None, "stateAt": 1_000, "stateAgentAt": 2_000,
+                  "resumeId": "22222222-aaaa-4bbb-8ccc-000000000002"}
+REPORT = {"id": "aabbcc01", "text": "Done. 3 commits. " + "x" * 2000, "at": 2_000, "contextTokens": 210_000,
+          "contextWindow": 1_000_000, "contextPercent": 21, "model": "claude-opus-5-5"}
+COORD = {"name": "_coord", "doc": {"identities": {
+    "cc:000002": {"session": "22222222-aaaa-4bbb-8ccc-000000000002", "last": "2026-11-08T10:00:00Z"},
+    "cc:999999": {"session": "99999999-aaaa-4bbb-8ccc-000000000009", "last": "2026-11-08T11:00:00Z"}}}}
+
+
+def lane_receipts(monkeypatch, session=REPORT_SESSION, report=REPORT):
+    def receipt(_self, _path, route, *_a, **_k):
+        if route == f"/v1/roots/{ROOT}":
+            return 200, {**DESCRIPTOR, "tool": "claude-code"}
+        if route == "/v1/sessions/aabbcc01":
+            return (200, session) if session else (404, {"error": "not_found"})
+        if route == "/v1/sessions/aabbcc01/report":
+            return 200, report
+        if route == admin.COORD_DOC_ROUTE:
+            return 200, COORD
+        return 404, {}
+    monkeypatch.setattr(admin.Collector, "receipt", receipt)
+    monkeypatch.setattr(admin, "agent_view", lambda *_a: {"agent": "running"})
+    monkeypatch.setattr(admin.time, "time", lambda: 5.0)
+
+
+def test_status_says_how_the_lane_is_and_what_it_said_bounded(monkeypatch):
+    lane_receipts(monkeypatch)
+    output = []
+    monkeypatch.setattr(admin, "emit_json", lambda _, value: output.append(value))
+    assert admin.main(["root", "status", ROOT]) == 0
+    view = output[0]
+    assert view["state"] == "idle" and view["context"] == "21%" and view["agentId"] == "cc:000002"
+    assert view["lastMessage"].startswith("Done.") and len(view["lastMessage"]) == admin.STATUS_MESSAGE_CHARS
+    assert view["lastMessageCut"] is True and view["lastActivityAt"] == 2_000
+
+
+def test_report_prints_the_whole_last_message_in_plain_text(monkeypatch, capsys):
+    lane_receipts(monkeypatch)
+    assert admin.main(["root", "report", ROOT]) == 0
+    head, blank, text = capsys.readouterr().out.rstrip("\n").split("\n", 2)
+    assert head == "Aico — burn lane · idle · context 21% · last activity 3s ago"
+    assert blank == "" and text == REPORT["text"]
+
+
+def test_report_with_nothing_to_show_says_so(monkeypatch, capsys):
+    lane_receipts(monkeypatch, session=None, report={"text": None})
+    assert admin.main(["root", "report", ROOT]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith(f"{ROOT} · ") and "no message from its agent" in out
+
+
+def test_create_reports_the_started_agent_id_and_null_when_it_has_not_started(monkeypatch):
+    lane_receipts(monkeypatch)
+    monkeypatch.setenv("TETHER_SOCKET", "/fixture/tether.sock")
+    monkeypatch.setattr(admin.time, "sleep", lambda _: None)
+    created = {"status": "running", "hostIdentity": "aabbcc01"}
+    instance = admin.Collector("/fixture/tether.sock", "/fixture/tether.sock", "", 1e12, threading.Event())
+    assert REAL_STARTED_AGENT_ID(instance, created) == "cc:000002"
+    assert REAL_STARTED_AGENT_ID(instance, {**created, "host": "agent-work"}) is None
+    assert REAL_STARTED_AGENT_ID(instance, {**created, "status": "pending"}) is None
+    monkeypatch.setattr(admin, "CREATE_AGENT_SECONDS", 0.0)
+    lane_receipts(monkeypatch, session={**REPORT_SESSION, "resumeId": None})
+    assert REAL_STARTED_AGENT_ID(instance, created) is None

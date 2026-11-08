@@ -18,6 +18,8 @@ sys.modules[SPEC.name] = admin
 SPEC.loader.exec_module(admin)
 # conftest stubs the launch-table lookup for every test; the tests of the lookup itself use this.
 REAL_LAUNCH_ROW = admin.launch_row
+# The real lookup: conftest turns it off for tests that count a create's requests.
+REAL_STARTED_AGENT_ID = admin.started_agent_id
 
 THREAD = "00000000-0000-4000-8000-000000000001"
 BASE = ["create", "recovery-1", "Reconcile after crash.", "--tool", "codex", "--project", "sample-app",

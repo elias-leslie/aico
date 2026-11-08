@@ -11,6 +11,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
 @pytest.fixture(autouse=True)
+def no_agent_id_lookup(monkeypatch):
+    """A create's receipt is the request a test counts: looking up the started agent is its own test's."""
+    monkeypatch.setattr(admin, "started_agent_id", lambda *_args: None)
+
+
+@pytest.fixture(autouse=True)
 def no_launch_table(monkeypatch):
     """Aico's launch table is unreadable unless a test serves a row: create never runs `st`."""
     monkeypatch.setattr(admin, "launch_row", lambda *_args: None)

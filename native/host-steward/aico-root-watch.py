@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Bounded owner root control and observation. Emits metadata, never terminal text.
 
-Use `st aico roots [REQUEST_ID] [--watch SECONDS]` for compact snapshots or
-bounded change-only JSONL. Discovery reads existing private catalog/owner receipts
+Use `st aico roots [REQUEST_ID]` for a short table, `--json` for the pinned
+terminal-chrome snapshot, or `--watch SECONDS` for bounded change-only JSONL. Discovery reads existing private catalog/owner receipts
 and verifies exact tmux server/pane identity once; a watch never re-pins.
 Unknown TUI profiles are reported unavailable without failing the command. Output
 contains no terminal or draft text.
@@ -45,6 +45,17 @@ from urllib.parse import quote, urlencode
 CAPTURE_LIMIT = 32 * 1024
 RECEIPT_LIMIT = 16 * 1024
 CATALOG_LIMIT = 256 * 1024
+COORD_DOC_ROUTE = "/v1/coordination/docs/_coord"
+COORD_DOC_LIMIT = 4 * 1024 * 1024
+# Tether's words for an agent with work still running (session-engine adapters/contract.ts).
+BACKGROUND_SHELLS = "background shells running"
+MAIN_TURN_OVER = "main turn over, background work running"
+ROOTS_TITLE_WIDTH = 44
+ROOTS_STATE_WIDTH = 24
+# How much of a lane's last message `root status` carries; `root report` prints it all.
+STATUS_MESSAGE_CHARS = 1500
+# How long `st aico create` looks for the new agent's id: it exists once the agent has started.
+CREATE_AGENT_SECONDS = 6.0
 ROOT_LIMIT = 128
 CONTROL = re.compile(
     r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|"
@@ -739,7 +750,8 @@ class Collector:
     def receipt(self, path: str, route: str, payload: dict | None = None,
                 *, timeout: float = .25, method: str | None = None,
                 headers: dict[str, str] | None = None) -> tuple[int, dict]:
-        limit = CATALOG_LIMIT if route.split("?")[0] in ("/v1/roots", "/v1/sessions") else RECEIPT_LIMIT
+        limit = (COORD_DOC_LIMIT if route == COORD_DOC_ROUTE
+                 else CATALOG_LIMIT if route.split("?")[0] in ("/v1/roots", "/v1/sessions") else RECEIPT_LIMIT)
         connection = http.client.HTTPConnection("localhost", timeout=min(timeout, self.remaining()))
         client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         connection.sock = client
@@ -1463,6 +1475,22 @@ def host_tool_unavailable(collector: Collector, endpoint: str, host: str, tool: 
     return f"{host} cannot start --tool {tool}; tools it can start: {usable or 'none'}"
 
 
+def started_agent_id(collector: Collector, created: dict) -> str | None:
+    """The new agent's id, read for as long as starting usually takes. Null is no failure: send by request id."""
+    if created.get("status") != "running" or created.get("host", "local") != "local":
+        return None
+    socket_name = socket_path(tether_socket())
+    limit = time.monotonic() + CREATE_AGENT_SECONDS
+    while True:
+        try:
+            agent = agent_id_of(collector, socket_name, session_view(collector, socket_name, created["hostIdentity"]))
+        except (Stopped, argparse.ArgumentTypeError):
+            return None
+        if agent or time.monotonic() >= limit:
+            return agent
+        time.sleep(.5)
+
+
 def create_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="st aico create", description=(
         "Create one exact owner root; native resume uses an adapter-validated session ID in a new root. "
@@ -1751,6 +1779,9 @@ def create_main(argv: list[str]) -> int:
         output.update(workRole=args.work_role, workRoleDisplayName=args.work_role_name)
         if "launchedBy" in payload:
             output["launchedBy"] = payload["launchedBy"]
+        # Either name reaches it with `st sessions send`; the agent id exists once its agent has started.
+        output["sendTo"] = args.request_id
+        output["agentId"] = started_agent_id(collector, output)
         emit_json(collector, output)
         return 0
     except (ValueError, UnicodeError):
@@ -2034,13 +2065,76 @@ def root_descriptor(data: dict, request_id: str) -> dict:
     return {**{key: data[key] for key in (*ROOT_IDENTITY, "generation", "status")}, **named, **launch_deferral(data)}
 
 
+def session_view(collector: Collector, socket_name: str, widget: str) -> dict:
+    """The session's descriptor, or {} when this computer's Tether can't say."""
+    try:
+        status, data = collector.receipt(socket_name, f"/v1/sessions/{widget}", timeout=2)
+    except Unavailable:
+        return {}
+    return data if status == 200 else {}
+
+
+def agent_id_of(collector: Collector, socket_name: str, session: dict) -> str | None:
+    """The agent id `st sessions send` shows for a session's agent, once it has started and registered."""
+    resume = session.get("resumeId")
+    if not isinstance(resume, str) or not resume:
+        return None
+    try:
+        status, data = collector.receipt(socket_name, COORD_DOC_ROUTE, timeout=2)
+    except Unavailable:
+        return None
+    doc = data.get("doc") if status == 200 else None
+    identities = doc.get("identities") if isinstance(doc, dict) else None
+    if not isinstance(identities, dict):
+        return None
+    found = [(str(row.get("last")), agent) for agent, row in identities.items()
+             if isinstance(row, dict) and row.get("session") == resume]
+    return max(found)[1] if found else None
+
+
+def lane_view(collector: Collector, socket_name: str, widget: str) -> dict:
+    """What `root status` adds for a running root: its agent's state and last words. Best effort."""
+    session = session_view(collector, socket_name, widget)
+    if not session:
+        return {}
+    view = {key: session.get(key) for key in ("displayTitle", "state", "stateDetail", "waitingOn", "doing")}
+    view["lastActivityAt"] = last_activity(session) or None
+    view["agentId"] = agent_id_of(collector, socket_name, session)
+    report = session_report(collector, socket_name, widget)
+    view["context"] = context_label(report)
+    text = report.get("text")
+    if isinstance(text, str):
+        view["lastMessage"] = text[:STATUS_MESSAGE_CHARS]
+        if len(text) > STATUS_MESSAGE_CHARS:
+            view["lastMessageCut"] = True
+    return view
+
+
+def root_report(collector: Collector, socket_name: str, pinned: dict) -> str:
+    """`st aico root report`: one head line, then the agent's last message as it wrote it."""
+    widget = pinned["hostIdentity"]
+    session = session_view(collector, socket_name, widget)
+    report = session_report(collector, socket_name, widget)
+    now_ms = int(time.time() * 1000)
+    title = session.get("displayTitle")
+    head: list[str] = [title if isinstance(title, str) else str(pinned["requestId"]),
+                       state_label(session or None, pinned["status"])]
+    if context_label(report) != "-":
+        head.append(f"context {context_label(report)}")
+    if last_activity(session):
+        head.append(f"last activity {age_label(last_activity(session), now_ms)} ago")
+    text = report.get("text")
+    return " · ".join(head) + "\n\n" + (text if isinstance(text, str) and text else "(no message from its agent to show)")
+
+
 def root_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="st aico root", description=(
         "Inspect or control one exact retained owner root by request ID. Mutations pin its "
         "current generation, send one request and qualify the receipt. No retry or owner startup."))
     commands = parser.add_subparsers(dest="operation", required=True)
-    for operation in ("status", "title", "end", "send", "rewind"):
-        command = commands.add_parser(operation)
+    for operation in ("status", "report", "title", "end", "send", "rewind"):
+        command = commands.add_parser(operation, help=(
+            "the session's last message, in plain text" if operation == "report" else None))
         command.add_argument("request_id")
         if operation == "title":
             command.add_argument("label")
@@ -2081,7 +2175,11 @@ def root_main(argv: list[str]) -> int:
         if args.operation == "status":
             if data.get("tool") in ("codex", "claude-code", "pi") and pinned["status"] == "running":
                 output.update(agent_view(collector, args.request_id, data["tool"], data.get("agentExit")))
+                output.update(lane_view(collector, control, pinned["hostIdentity"]))
             emit_json(collector, output)
+            return 0
+        if args.operation == "report":
+            print(root_report(collector, control, pinned))
             return 0
         output["operation"] = args.operation
         if args.operation == "end" and pinned["status"] == "ended":
@@ -2323,9 +2421,112 @@ OUTPUT_RESERVE = 3.0  # seconds the collector keeps for the context read (2 s) a
 
 
 
+def age_label(ms: object, now_ms: int) -> str:
+    """How long ago, short: 40s, 12m, 3h, 2d. Unknown is a dash."""
+    if not isinstance(ms, int) or ms <= 0:
+        return "-"
+    seconds = max(0, (now_ms - ms) // 1000)
+    for size, unit in ((86400, "d"), (3600, "h"), (60, "m")):
+        if seconds >= size:
+            return f"{seconds // size}{unit}"
+    return f"{seconds}s"
+
+
+def state_label(session: dict | None, status: object) -> str:
+    """A root's state in a few words: its agent's state, and what an idle one still has going."""
+    if status != "running" or session is None:
+        return status if isinstance(status, str) else "unknown"
+    state = session.get("state")
+    state = state if isinstance(state, str) else "unknown"
+    detail = session.get("stateDetail")
+    if state == "idle" and detail == BACKGROUND_SHELLS:
+        return "idle, shells running"
+    if state == "idle" and session.get("waitingOn"):
+        return "idle, waiting"
+    if state == "working" and detail == MAIN_TURN_OVER:
+        return "working, background"
+    if state == "blocked" and isinstance(detail, str):
+        return f"blocked: {detail}"[:ROOTS_STATE_WIDTH]
+    return state
+
+
+def context_label(report: dict) -> str:
+    """Context fill: a percent, tokens when the model's window is unknown, a dash when nothing is known."""
+    if isinstance(report.get("contextPercent"), int):
+        return f"{report['contextPercent']}%"
+    if isinstance(report.get("contextTokens"), int):
+        return f"{report['contextTokens'] // 1000}k"
+    return "-"
+
+
+def last_activity(session: dict | None) -> int:
+    """When the agent last did something by its own clock, or Tether last saw its state change; 0: unknown."""
+    times = [(session or {}).get(key) for key in ("stateAgentAt", "stateAt")]
+    return max((value for value in times if isinstance(value, int)), default=0)
+
+
+def session_report(collector: Collector, socket_name: str, widget: object) -> dict:
+    """Tether's report on a session (its last message, context fill). Best effort: {} when it can't say."""
+    if not isinstance(widget, str) or not re.fullmatch(WIDGET, widget):
+        return {}
+    try:
+        status, data = collector.receipt(socket_name, f"/v1/sessions/{widget}/report", timeout=2)
+    except Unavailable:
+        return {}
+    return data if status == 200 else {}
+
+
+def roots_table(args: argparse.Namespace) -> int:
+    """The default `st aico roots`: request id, title, state, context, last activity. No pane reads."""
+    collector = Collector(args.root_socket, args.owner_socket, "", time.monotonic() + 10, threading.Event())
+    try:
+        if args.request_id:
+            status, root = collector.receipt(args.root_socket, f"/v1/roots/{quote(args.request_id)}", timeout=2)
+            if status == 404:
+                print(f"no root named {args.request_id}", file=sys.stderr)
+                return 1
+            roots = [root] if status == 200 else None
+        else:
+            status, catalog = collector.receipt(args.root_socket, "/v1/roots?ended=0", timeout=2)
+            roots = catalog.get("roots") if status == 200 else None
+        if not isinstance(roots, list):
+            raise Unavailable("catalog_unavailable")
+        status, listing = collector.receipt(args.owner_socket, "/v1/sessions", timeout=2)
+        items = listing.get("items") if status == 200 else None
+        sessions = {item.get("id"): item for item in items or [] if isinstance(item, dict)}
+        now_ms = int(time.time() * 1000)
+        rows = []
+        for root in sorted((r for r in roots if isinstance(r, dict) and isinstance(r.get("requestId"), str)),
+                           key=lambda r: last_activity(sessions.get(r.get("hostIdentity"))), reverse=True):
+            session = sessions.get(root.get("hostIdentity"))
+            title = (session or {}).get("displayTitle")
+            title = title if isinstance(title, str) else "-"
+            if len(title) > ROOTS_TITLE_WIDTH:
+                title = title[:ROOTS_TITLE_WIDTH - 1] + "…"
+            where = f" @{root['host']}" if isinstance(root.get("host"), str) else ""
+            report = session_report(collector, args.owner_socket, root.get("hostIdentity")) if session else {}
+            rows.append((root["requestId"] + where, title, state_label(session, root.get("status")),
+                         context_label(report), age_label(last_activity(session), now_ms)))
+    except (Unavailable, Stopped) as error:
+        print(f"roots unavailable: {error}", file=sys.stderr)
+        return 1
+    if not rows:
+        print("no roots running")
+        return 0
+    table = [("REQUEST", "TITLE", "STATE", "CTX", "LAST"), *rows]
+    widths = [max(len(row[column]) for row in table) for column in range(4)]
+    try:
+        for row in table:
+            print("  ".join(cell.ljust(width) for cell, width in zip(row, widths)) + "  " + row[4])
+    except BrokenPipeError:
+        pass
+    return 0
+
+
 def roots_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="st aico roots", description=__doc__)
     parser.add_argument("request_id", nargs="?", help="exact retained Aico catalog request ID")
+    parser.add_argument("--json", action="store_true", help="each root's pinned identity and terminal chrome, as JSON")
     parser.add_argument("--watch", type=float, help="change-only JSONL seconds, >0 and <=3600")
     parser.add_argument("--interval", type=float, default=2, help="poll seconds, >=0.1")
     parser.add_argument("--root-socket", type=socket_path, default=tether_socket())
@@ -2336,6 +2537,8 @@ def roots_main(argv: list[str]) -> int:
     if (args.watch is not None and (not math.isfinite(args.watch) or not 0 < args.watch <= 3600)
             or not math.isfinite(args.interval) or args.interval < .1):
         parser.error("invalid watch or interval bound")
+    if args.watch is None and not args.json:
+        return roots_table(args)
     cancel = threading.Event()
     handlers = {s: signal.signal(s, lambda *_: cancel.set()) for s in (signal.SIGINT, signal.SIGTERM)}
     discovery = Collector(args.root_socket, args.owner_socket, "",
@@ -2878,8 +3081,12 @@ def wait_main(argv: list[str]) -> int:
             "hold this command until the wait is over and print the line (exit 0 ready, 4 it was over "
             "first (ended, gone, closed without an answer, the command failed), 3 timed out, 1 cancelled, 2 Tether unreachable, 130 interrupted, which cancels a wait it "
             "armed); for subagents and agents outside Aico, run it in a background shell"))
-    if operation in ("get", "cancel"):
+    if operation == "get":
         parser.add_argument("wait_id")
+    if operation == "cancel":
+        parser.add_argument("wait_id", nargs="*", help="wait IDs from st aico waits")
+        parser.add_argument("--note", dest="cancel_note", metavar="TEXT",
+                            help="also every armed wait of this session whose note contains TEXT")
     if operation == "list":
         parser.add_argument("--recent", action="store_true", help="also waits that ended in the last day")
     args = parser.parse_args(options)
@@ -2894,10 +3101,13 @@ def wait_main(argv: list[str]) -> int:
             args.timeout = CMD_DEFAULT_MINUTES
     widget = args.widget_id if isinstance(args.widget_id, str) and re.fullmatch(WIDGET, args.widget_id) else None
     block = getattr(args, "block", False)
-    if (arming or operation == "list") and widget is None and not block:
+    if operation == "cancel" and not args.wait_id and not args.cancel_note:
+        parser.error("expected a wait ID or --note TEXT")
+    if ((arming or operation == "list") or (operation == "cancel" and args.cancel_note)) and widget is None and not block:
         parser.error("expected --widget-id or AICO_WIDGET_ID with exactly eight lowercase hex characters"
                      + ("; outside an Aico session use --block" if arming else ""))
-    if operation in ("get", "cancel") and not re.fullmatch(WAIT_ID, args.wait_id):
+    wanted = [args.wait_id] if operation == "get" else args.wait_id if operation == "cancel" else []
+    if not all(re.fullmatch(WAIT_ID, wait_id) for wait_id in wanted):
         parser.error("expected a wait ID from st aico waits (12 lowercase hex characters)")
     if arming:
         if operation != "cmd" and not re.fullmatch(WAIT_REF if pull is None else pull[1], args.ref):
@@ -2958,13 +3168,30 @@ def wait_main(argv: list[str]) -> int:
                 return wait_block(collector, args.owner_socket, data)
             output["wait"] = wait_item(data)
         elif operation == "cancel":
-            status, data = collector.receipt(args.owner_socket, f"/v1/waits/{args.wait_id}", timeout=5,
-                                             method="DELETE")
-            if status != 200:
-                if isinstance(data.get("state"), str):
-                    output["state"] = data["state"]
-                raise Refused(data.get("error") if isinstance(data.get("error"), str) else "wait_unavailable")
-            output.update(applied=True, waitId=args.wait_id, detail="cancelled; no line will be sent")
+            targets = list(args.wait_id)
+            if args.cancel_note:
+                status, data = collector.receipt(args.owner_socket, f"/v1/sessions/{widget}/waits", timeout=5)
+                if status != 200 or not isinstance(data.get("items"), list):
+                    raise Refused(data.get("error") if isinstance(data.get("error"), str) else "wait_unavailable")
+                targets += [item["id"] for item in data["items"]
+                            if isinstance(item, dict) and item.get("state") == "armed"
+                            and args.cancel_note in str(item.get("note") or "") and item.get("id") not in targets]
+            if len(targets) == 1 and not args.cancel_note:
+                status, data = collector.receipt(args.owner_socket, f"/v1/waits/{targets[0]}", timeout=5,
+                                                 method="DELETE")
+                if status != 200:
+                    if isinstance(data.get("state"), str):
+                        output["state"] = data["state"]
+                    raise Refused(data.get("error") if isinstance(data.get("error"), str) else "wait_unavailable")
+                output.update(applied=True, waitId=targets[0], detail="cancelled; no line will be sent")
+            else:
+                outcomes = [(wait_id, collector.receipt(args.owner_socket, f"/v1/waits/{wait_id}", timeout=5,
+                                                        method="DELETE")[0]) for wait_id in targets]
+                cancelled = [wait_id for wait_id, status in outcomes if status == 200]
+                output.update(applied=len(cancelled) == len(targets), cancelled=cancelled,
+                              notCancelled=[wait_id for wait_id, status in outcomes if status != 200],
+                              detail=(f"cancelled {len(cancelled)} of {len(targets)}; no line will be sent for those"
+                                      if targets else "no armed wait of this session has that note"))
         else:
             route = f"/v1/sessions/{widget}/waits" + ("?recent=1" if args.recent else "")
             status, data = collector.receipt(args.owner_socket, route, timeout=5)

@@ -130,6 +130,21 @@ def test_cancel_confirms_and_explains_a_wait_already_over(monkeypatch):
     assert code == 1 and output[0]["state"] == "fired" and "already over" in output[0]["detail"]
 
 
+def test_cancel_takes_several_ids_and_stale_notes(monkeypatch):
+    other = {**WAIT, "id": "aaaaaaaaaaaa", "note": "start Dadbot lane if not yet started", "state": "armed"}
+    done = {**other, "id": "bbbbbbbbbbbb", "state": "fired"}
+    keep = {**WAIT, "id": "cccccccccccc", "note": "something else", "state": "armed"}
+    code, calls, output = run(monkeypatch, ["wait", "cancel", "--note", "Dadbot"],
+                              [(200, {"items": [other, done, keep]}), (200, {"cancelled": True})])
+    assert code == 0 and calls[1] == ("/v1/waits/aaaaaaaaaaaa", None, "DELETE") and len(calls) == 2
+    assert output[0]["cancelled"] == ["aaaaaaaaaaaa"] and output[0]["applied"] is True
+    code, calls, output = run(monkeypatch, ["wait", "cancel", "aaaaaaaaaaaa", "cccccccccccc"],
+                              [(200, {"cancelled": True}), (409, {"error": "not_armed", "state": "fired"})])
+    assert code == 0 and output[0]["applied"] is False and output[0]["notCancelled"] == ["cccccccccccc"]
+    code, _, output = run(monkeypatch, ["wait", "cancel", "--note", "nothing has this"], [(200, {"items": [keep]})])
+    assert code == 0 and "no armed wait" in output[0]["detail"]
+
+
 def test_waits_lists_this_sessions_waits(monkeypatch):
     code, calls, output = run(monkeypatch, ["waits", "--recent"], [(200, {"items": [WAIT]})])
     assert code == 0 and calls[0][0] == "/v1/sessions/0a1b2c3d/waits?recent=1"

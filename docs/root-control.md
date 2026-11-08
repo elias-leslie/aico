@@ -175,7 +175,7 @@ lifecycle lock and sends one bracketed paste and one Enter; a busy Claude Code,
 Codex or Pi TUI queues it as steering, an idle one starts a turn. The success
 receipt adds `operation: "send"`, `applied: true`, `delivered: true` and the
 byte count, never the text. Delivered means the pane received it, not that the
-agent consumed it: watch `st aico roots REQUEST_ID`. A refusal (`not_found`,
+agent consumed it: watch `st aico roots REQUEST_ID --json`. A refusal (`not_found`,
 `stale_generation`, `workload_unavailable`, `invalid_text`) is `applied: false`
 and safe to correct and resend. `applied: null` (transport loss or an
 unqualified reply after the inject was sent) may have delivered: check the
@@ -201,6 +201,7 @@ st aico create review-1 'Read the brief at /path/BRIEF.md.' --tool codex \
   --model gpt-6.1-sol --reasoning-effort high --daybreak off
 st aico root title review-1 'Review'
 st aico roots review-1
+st aico root report review-1
 ```
 
 For a followup to a root the coordinator created with `st aico create`, use
@@ -422,7 +423,7 @@ reports it as `rootCapable`. Any other tool string, aliases included, returns
 `st aico create` client keeps no tool list of its own: it sends `--tool` as
 given and reports that refusal as `reason: "unsupported_tool"` with
 `supportedTools`.
-Observation is different: `st aico roots` reads each root's terminal through a
+Observation is different: `st aico roots --json` reads each root's terminal through a
 per-tool status profile (codex and claude-code today) and reports a root of any
 other tool as `unsupported_profile`, so a new root tool needs no change to
 `create` but does need a profile before `roots` can observe it.
@@ -519,9 +520,12 @@ different identity.
 
 ## Activity observation
 
-`st aico root status <requestId>` reports owner workload lifecycle: `running`
+`st aico roots [requestId]` is the short table: request id, title, state, context
+fill, last activity. `st aico root report <requestId>` prints the agent's last
+message in plain text; `st aico root status <requestId>` adds its state, the start
+of that message and its agent id to the owner workload lifecycle: `running`
 means the exact managed process is present. For bounded advisory terminal
-activity, use `st aico roots [requestId]` or its `--watch` mode. The watcher
+activity, use `st aico roots [requestId] --json` or its `--watch` mode. The watcher
 verifies root, owner, tmux server, and pane identity before and after each
 visible-screen capture. It emits compact state codes, never pane text. Its
 Codex profile keeps the busy, turn-finished, and warning classifications. Its
