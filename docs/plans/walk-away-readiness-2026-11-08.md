@@ -9,8 +9,10 @@ interrupted Claude work; prove defects before fixing them. No publication.
   verify, review and commit each checkpoint before one combined deployment.
 - Fix Dadbot's four demonstrated Money History review failures using synthetic
   records; preserve real records and deploy after review.
-- Complete existing Drive runs, verify retention on the fixed release and inspect
-  VM 180's space usage. No backup deletion or pruning without owner authority.
+- The owner stopped the overlapping Drive runs at 15:54 EST. Preserve their last
+  good copies and backup history. Complete the subsequently approved seven-part
+  backup simplification and thermal protection work below before resuming backup
+  verification. No backup deletion or pruning without owner authority.
 - Apply the owner's established record-only rule for gem's known corrected-memory
   reporting, including spikes; keep uncorrected-error detection working.
 - After backup-dependent work, perform a controlled gem reboot and verify recovery.
@@ -78,18 +80,59 @@ work's ROADMAP line when its agreed scope is complete.
   test session and closed its browser session. Screenshot:
   `/srv/scratch/readiness-new-session-test/started.png` (regenerable evidence).
 
-## Still running or awaiting verification
+## Approved backup and thermal protection work
 
-- Existing workstation and standby Drive copies are still transferring VM 180.
-  Two read-only samples showed both guest export counters advancing. No new
-  capture was started. The managed disruption check reports backup units as
-  blocking; deployment/reboot remains after those operations.
-- VM 180 has two active generated export directories, about 13.57 GB each. Its
-  root filesystem was 89% used with 7 GB free. Do not delete either active copy;
-  verify normal cleanup and disk recovery when transfers finish.
-- Gem CPU readings during these copies were about 89°C. No extra builds,
-  installs or captures are being run there; development checks run on the
-  workstation. Native source/config installation involved no build or restart.
+The owner approved all seven recommendations after reviewing their examples and
+reasons. Keep sampling inexpensive and no more frequent than protection requires.
+Normal background CPU limits also tighten when hot. Notify affected standalone
+agents when no coordinator is present; enforcement must not depend on agents.
+
+1. One owner for each backup source: the standby owns gem's guests; the
+   workstation owns its own data. Reuse the existing source registry and preserve
+   the source IDs and recovery coverage.
+2. Replace repeated guest-agent/base64 chunk transfers with continuous supported
+   streams. Preserve encryption, existing credentials and completed backup history.
+3. Inspect the 9.45 GB of Portfolio weekly archives and prove coverage before
+   changing their recurring capture. Do not delete archives or old snapshots.
+4. Add lightweight local host thermal enforcement in the existing native package,
+   independent of Aico or agent availability. No recurring SSH/PVE scans for it.
+5. Limit actual host/guest backup workers, including a normal modest CPU ceiling
+   and reduced hot budgets. Do not throttle or stop whole VMs or production
+   services. Serialize exports across controllers.
+6. Deliver deduplicated host heat/action/recovery events to affected coordinators
+   or active agents using existing session delivery. Owner notices stay behind
+   Aico's notification preferences.
+7. Prove guard decisions using injected readings; verify real resource controls
+   with a short bounded benign job. No deliberate heating or full-backup load test.
+
+## Current facts and awaiting verification
+
+- Both controller backup units and the two gem export sessions are stopped.
+  The earlier Claude coordinator requested the workstation run at 14:00:02 and
+  its child requested the standby run at 14:12:39. Their host export sessions
+  consumed 47m40s and 44m57s of CPU time. Local locks did not coordinate hosts.
+- VM 180 is currently off. Before stopping, its two generated export directories
+  occupied about 13.57 GB each; inspect and reclaim only proven unused generated
+  staging. The 10.12 GB application-backup folder includes 9.45 GB of weekly
+  Portfolio archives; this is durable history and must be preserved.
+- Gem was about 87–89°C during overlapping transfers and returned to about
+  45°C after the stop. A bounded synthetic API test confirms significant transfer
+  CPU without compression/encryption. It does not quantify encryption's share.
+  All load tests ended; no full backup was restarted.
+- Both Drive routines were unpaused. They are now temporarily paused through the
+  owning schedulers while the approved replacement is implemented; restore their
+  schedules after deployment and bounded verification. Other routine pauses,
+  including Jobinator's AI pause, must remain unchanged.
+- Inspected VM 180 while it stayed off, using a temporary read-only thin snapshot;
+  snapshot, mount and loop device were removed after inspection. The weekly
+  directory contains timestamped complete Portfolio artifacts with PostgreSQL
+  dumps and 71 uploaded files (20.9 MB in the inspected manifests). Newer archives
+  are about 104 MB each; earlier ones are about 376 MB. Preserve this history.
+  Both abandoned generated chunk directories remain present in the stopped VM.
+- The stopped VM's SSH metadata has two unrestricted management public keys and
+  the standby's restricted port-forward key. One management fingerprint matches
+  the workstation's existing gem key. Do not widen the standby key or copy a
+  management private key as a shortcut to the new transport.
 - Finish and review schedule/phone corrections and browser on-demand lifecycle;
   deploy Aico to both hosts and browser tools to both entry points, then validate
   the live paths. VM 100's on-demand runtime policy is registered on both hosts.
