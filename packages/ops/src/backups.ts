@@ -34,7 +34,7 @@ import {
   migrated,
   runPeriodMinutes,
 } from './backup-plan'
-import { retainDrive, snapshotSweep, verifyDrive } from './backup-retention'
+import { retainDrive, scratchSnapshots, snapshotSweep, verifyDrive } from './backup-retention'
 import {
   checked,
   type Execute,
@@ -290,7 +290,7 @@ export async function runBackup(
     else if (target === 'append') {
       const staged = stageSqlite(rt.cfg, rt.now()),
         id = `aico-${machine}`
-      const ct = machine === rt.cfg.workstation ? await appendMachine(rt) : undefined
+      const ct = await appendMachine(rt)
       const result = await backupJob(
         rt,
         state,
@@ -306,7 +306,10 @@ export async function runBackup(
       if (result.error) throw new Error(result.error)
     } else if (target === 'guard')
       await checked(rt.run, ['sudo', '-n', rt.cfg.windowHelper, 'guard'])
-    else await snapshotSweep(rt, scheduled)
+    else {
+      await scratchSnapshots(rt, scheduled)
+      await snapshotSweep(rt, scheduled)
+    }
     ok = true
   } catch (error) {
     const message = (error as Error).message
@@ -340,7 +343,7 @@ const USAGE = `Usage:
   aico backups recover check|snapshots|restore|repair --repository REPO --password-file FILE [--to NEW_FOLDER] [--snapshot ID]
   aico backups drill [--plan] [--scheduled]             monthly scratch restore and live Aico counts
   aico backups run native|drive|append|snapshots|guard|verify
-  aico backups run snapshots --pressure                 disk pressure: keep only the newest work points
+  aico backups run snapshots --pressure [--scratch-only]  disk pressure: scratch's snapshots go, then only the newest work points stay
   aico backups snapshots SOURCE [--target native|drive|append] [--all] [--json]  newest copies to restore
   aico backups browse SOURCE SNAPSHOT PATH [--target native|drive|append]
   aico backups restore SOURCE SNAPSHOT PATH --to /srv/scratch/NEW_FOLDER [--target native|drive|append]
@@ -516,8 +519,9 @@ async function runCommand(
   if (args.includes('--pressure')) {
     if (target !== 'snapshots') throw new Error('Only snapshots thin under --pressure.')
     // The space guard's reclaim tier: thin now, take no new point, leave the schedule's record alone.
-    const deleted = await snapshotSweep(rt, true, true)
-    console.log(JSON.stringify({ ok: true, target, pressure: true, deleted }))
+    const scratch = await scratchSnapshots(rt, true, true)
+    const deleted = args.includes('--scratch-only') ? 0 : await snapshotSweep(rt, true, true)
+    console.log(JSON.stringify({ ok: true, target, pressure: true, deleted, scratch }))
     return 0
   }
   const ok = await runBackup(
