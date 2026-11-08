@@ -15,7 +15,8 @@ probe='curl -s -m3 127.0.0.1:20299/ready | grep -q "\"readyConnections\":[1-9]" 
 active() { systemctl is-active --quiet "$unit"; }
 change() { sudo -n systemctl --no-ask-password "$1" "$unit"; }
 
-if ssh -o ConnectTimeout=3 -o BatchMode=yes workstation "$probe" 2>/dev/null; then
+# timeout: a workstation that dies mid-check never answers, and this check must still decide.
+if timeout 15 ssh -o ConnectTimeout=3 -o BatchMode=yes workstation "$probe" 2>/dev/null; then
   seen=$(($(cat "$count_file" 2>/dev/null || echo 0) + 1))
   echo "$seen" >"$count_file"
   if ! active; then
