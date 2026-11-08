@@ -877,6 +877,21 @@ describe('pull kinds', () => {
     expect(h.waits.store.get(a.wait.id)?.outcome).toBe('until')
   })
 
+  it("a reply's line carries the answer's text on one line", async () => {
+    const h = harness()
+    h.pulls.set('reply:abc123', { state: 'open', detail: null, title: 'cc:1' })
+    await pullArm(h, 'reply', 'abc123', 'acked')
+    h.pull('reply', 'abc123', {
+      state: 'acked',
+      detail: 'no',
+      title: 'cc:1',
+      note: 'not until\nthe build is green',
+    })
+    expect(h.delivered[0]?.line).toBe(
+      '[Ready] request abc123 to cc:1 answered: no: not until the build is green · st sessions inbox',
+    )
+  })
+
   it("a reply line names the recipient's window, an ask line its question", async () => {
     const h = harness()
     const title = 'SummitFlow — One wake per message (cc:94bdf3)'

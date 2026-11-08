@@ -20,7 +20,7 @@
 // owner's state at arm, when it changes (a file watch, an event, a nudge),
 // every 60 s and at start. Lines are built from typed values only: never
 // an owner's free text, and of agent reply text only a session's last message
-// when it finished or is idle (`closingWords`). A `cmd` wait names no ref: the
+// when it finished or is idle (`closingWords`) and a reply's trimmed note. A `cmd` wait names no ref: the
 // waiter sends the command (`argv`, `cwd`) and Tether runs it as a transient
 // unit under a ref it makes (src/wait-readers.ts), stopped once the wait is over.
 

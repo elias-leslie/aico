@@ -422,7 +422,8 @@ func send(h *lease.Hook, pos []string, flags map[string]string) int {
 		fmt.Printf("existing %s -> %s (%s; state %s); not sent again. Track it with st sessions inbox\n", id, to, why, state)
 		return 0
 	}
-	waited := "to be woken by the answer: st aico wait reply " + id + "; acks: st sessions inbox"
+	h.CopyCoordinators(to, lease.CopyLine(from, to, text))
+	waited := "for the answer: st aico wait reply " + id + " --block (in a background shell)"
 	switch queued, werr := h.Wake(to, from, false); {
 	case fyi:
 		fmt.Printf("sent FYI %s -> %s (no wake; shown on its next turn; no ack needed)\n", id, to)
@@ -451,6 +452,7 @@ func ack(h *lease.Hook, pos []string) int {
 	}
 	fmt.Printf("acked %s %s\n", s(row["id"]), intent)
 	lease.Nudge("reply", id)
+	h.CopyCoordinators(s(row["from"]), lease.CopyLine(h.ID.AgentID, s(row["from"]), "acked "+id+" "+intent+" "+note))
 	row = h.SettleBareAck(row)
 	from := s(row["from"])
 	queued, _ := h.Wake(from, s(row["acked_by"]), true)

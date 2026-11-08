@@ -530,3 +530,48 @@ func TestSessionStateAsksWhetherAGoneSessionComesBack(t *testing.T) {
 		t.Error("nothing kept: ended")
 	}
 }
+
+func TestCoordinatorsGetAOneLineCopyWithoutAWake(t *testing.T) {
+	savedState, savedAgent, savedOwn := sessionState, agentWindow, ownWindow
+	t.Cleanup(func() { sessionState, agentWindow, ownWindow = savedState, savedAgent, savedOwn })
+	sandbox(t)
+	a, b, c := agent(sidA, ""), agent(sidB, ""), agent(sidC, "")
+	register(t, a, b, c)
+	ownWindow = func(*Hook) string { return "win-a" }
+	agentWindow = func(*Hook, string) string { return "win-b" }
+	copies := func() (found []map[string]any) {
+		for _, r := range a.Rows() {
+			if str(r["state"]) == "fyi" {
+				found = append(found, r)
+			}
+		}
+		return found
+	}
+	coord := map[string]string{"win-a": "cc:333333", "win-b": "cc:333333"}
+	sessionState = func(w string) (map[string]any, bool) {
+		return map[string]any{"coordinatorId": coord[w]}, false
+	}
+
+	a.CopyCoordinators("cc:222222", CopyLine("cc:111111", "cc:222222", "line one\nline two "+strings.Repeat("x", 300)))
+	got := copies()
+	if len(got) != 1 || str(got[0]["to"]) != "cc:333333" {
+		t.Fatalf("both lanes share one coordinator, one copy to it: %v", got)
+	}
+	text := str(got[0]["text"])
+	if strings.Contains(text, "\n") || len([]rune(text)) > copyMax+40 || !strings.Contains(text, "line one line two") {
+		t.Errorf("one trimmed line: %q", text)
+	}
+
+	// The coordinator is the sender or recipient: it already has it.
+	coord = map[string]string{"win-a": "win-b", "win-b": ""}
+	a.CopyCoordinators("cc:222222", CopyLine("cc:111111", "cc:222222", "second"))
+	coord = map[string]string{"win-a": "cc:222222"}
+	agentWindow = func(*Hook, string) string { return "" }
+	a.CopyCoordinators("cc:222222", CopyLine("cc:111111", "cc:222222", "third"))
+	// No coordinator, nothing.
+	coord = map[string]string{}
+	a.CopyCoordinators("cc:222222", CopyLine("cc:111111", "cc:222222", "fourth"))
+	if n := len(copies()); n != 1 {
+		t.Errorf("no copies beyond the first: %d", n)
+	}
+}

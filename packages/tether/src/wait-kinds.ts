@@ -49,6 +49,8 @@ export interface PullReading {
   state: string
   detail: string | null
   title: string | null
+  /** A reply's note, trimmed to one line for the waiter. */
+  note?: string | null
 }
 
 /** A reading: the thing as it is now, `null` when it is gone (no such job,
@@ -123,6 +125,9 @@ function names(kind: PullKind, ref: string, title: string | null): { name: strin
 /** A `cmd` wait's transient unit is `aico-wait-<ref>`. */
 export const CMD_UNIT_PREFIX = 'aico-wait-'
 
+/** What of a reply's text the waiter's line carries: the sender needs no second command. */
+const REPLY_MAX = 300
+
 const NOT_WORDS: Record<string, string> = {
   done: 'not done',
   acked: 'not answered',
@@ -144,7 +149,7 @@ function readyWords(kind: PullKind, until: string, reading: PullReading | null):
     case 'reply':
       return until === 'closed'
         ? 'closed'
-        : `answered: ${word(reading?.detail, 'yes')}${state === 'closed' ? ' (closed)' : ''}`
+        : `answered: ${word(reading?.detail, 'yes')}${state === 'closed' ? ' (closed)' : ''}${reading?.note ? `: ${laneTitle(reading.note, REPLY_MAX)}` : ''}`
     case 'ask':
       return 'answered'
     case 'host':

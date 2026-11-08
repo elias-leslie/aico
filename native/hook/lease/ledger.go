@@ -144,6 +144,42 @@ func (h *Hook) Send(o SendOpts) (row map[string]any, duplicate bool, err error) 
 	return row, duplicate, err
 }
 
+// copyMax bounds what a coordinator's copy says of a message: one trimmed line.
+const copyMax = 160
+
+// CopyLine is the one line a coordinator reads about a message between two lanes.
+func CopyLine(from, to, text string) string {
+	line := []rune(strings.Join(strings.Fields(text), " "))
+	if len(line) > copyMax {
+		line = append(line[:copyMax], '…')
+	}
+	return "copy: " + from + " -> " + to + ": " + string(line)
+}
+
+// CopyCoordinators leaves the coordinator of each lane in an exchange with other the line, without waking it
+// (an FYI, shown on its next turn). A coordinator in the exchange already has it. Best effort: the message itself
+// has already gone.
+func (h *Hook) CopyCoordinators(other, line string) {
+	own, theirs := ownWindow(h), agentWindow(h, other)
+	done := map[string]bool{own: true, theirs: true}
+	for _, window := range []string{own, theirs} {
+		if window == "" {
+			continue
+		}
+		desc, _ := sessionState(window)
+		coord := str(desc["coordinatorId"])
+		if coord == "" || done[coord] {
+			continue
+		}
+		done[coord] = true
+		to, err := h.SendTarget(coord)
+		if err != nil || to == h.ID.AgentID || to == other {
+			continue
+		}
+		_, _, _ = h.Send(SendOpts{To: to, Text: line, FYI: true})
+	}
+}
+
 func nilIfEmpty(s string) any {
 	if s == "" {
 		return nil

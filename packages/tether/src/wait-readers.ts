@@ -425,12 +425,13 @@ export class PullReaders {
       for (const message of messages) {
         if (!message || typeof message !== 'object') continue
         const id = str((message as Record<string, unknown>).id)
-        // Only the typed fields: never the request's text.
+        // The typed fields and the answer's note: never the request's text.
         if (id) {
           const m = message as Record<string, unknown>
           value.set(id, {
             state: m.state,
             intent: m.intent,
+            note: m.note,
             to: m.to,
             withdrawn: m.withdrawn,
           })
@@ -468,6 +469,7 @@ export class PullReaders {
       state: str(message.state) ?? 'open',
       detail: str(message.intent),
       title,
+      note: str(message.note),
     }
   }
 

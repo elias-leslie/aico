@@ -186,13 +186,20 @@ describe('PullReaders', () => {
     expect(probes).toHaveLength(2)
   })
 
-  it('reads a reply from the ledger: typed fields only, withdrawn is closed', () => {
+  it("reads a reply from the ledger: the answer's note but not the request's text, withdrawn is closed", () => {
     const r = readers()
     ledger = {
       version: ledger.version + 1,
       doc: {
         messages: [
-          { id: 'abc123', to: 'cc:1c7a9f', state: 'acked', intent: 'yes', text: 'secret' },
+          {
+            id: 'abc123',
+            to: 'cc:1c7a9f',
+            state: 'acked',
+            intent: 'yes',
+            note: 'done',
+            text: 'secret',
+          },
           { id: 'def456', to: 'cc:1', state: 'open', withdrawn: true },
         ],
       },
@@ -203,6 +210,7 @@ describe('PullReaders', () => {
       state: 'acked',
       detail: 'yes',
       title: 'cc:1c7a9f',
+      note: 'done',
     })
     expect(r.read('reply', 'def456')).toEqual({ state: 'closed', detail: null, title: 'cc:1' })
     expect(r.read('reply', '999999')).toBeNull()
