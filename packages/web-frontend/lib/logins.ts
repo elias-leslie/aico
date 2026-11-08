@@ -139,7 +139,8 @@ const CHIP: Record<string, Chip> = {
 export const chipOf = (state: string): Chip => CHIP[state] ?? 'off'
 export const STATE_TIP: Record<string, string> = {
   'In use': 'An agent has used this login.',
-  Unused: 'Saved, but no agent has used it yet.',
+  Unused:
+    'Saved, but no agent has used it yet. A program that reads it directly, like a backup, doesn’t count here.',
   Expired: 'Past its end date: agents can no longer use it.',
   'Needs sign-in': 'Its tool is signed out on this computer: sign in again.',
   Unavailable: 'Its saved value is missing on this computer: replace it.',
