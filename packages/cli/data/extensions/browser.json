@@ -27,7 +27,8 @@
       "when": "UI render verification; screenshots; DOM snapshots; web tasks in a browser",
       "precautions": [
         "each agent gets its own VM browser session; st browser session close when done",
-        "login, 2FA or captcha: st browser session pause --reason \"login needed: <site>\" --wait",
+        "login: a site the owner is signed in to, including Google and our Cloudflare Access pages: st browser selected-tabs ask --reason R (a security key tap), then use their Chrome; never ask them to sign in again. Our own apps: test on the local address",
+        "a captcha, or a login not in their Chrome: st browser session pause --reason \"login needed: <site>\" --wait",
         "logged-in accounts: --shared-profile NAME (e.g. linkedin), one agent at a time",
         "use st ui when the open desktop/PWA is the right evidence source",
         "never start arbitrary chrome/CDP on project or server host, nor set ST_BROWSER_HOST / ST_BROWSER_VM_ID without approval; local-AI profile and Dark Reader: st browser help all"
