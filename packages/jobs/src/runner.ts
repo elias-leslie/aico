@@ -7,6 +7,7 @@ import { type JobDef, nextRun, schedule } from './jobs'
 import { type JobResult, type JobState, type JobStore, type Lease, StaleLease } from './leases'
 
 type MaybePromise<T> = T | Promise<T>
+const DAY_MS = 86_400_000
 export interface LeaseAuthority {
   claim(
     kind: string,
@@ -96,7 +97,7 @@ export class Runner {
     this.sync()
     for (const job of this.jobs) {
       if (!(job.workers ?? [job.home]).includes(machine) || this.running.has(job.kind)) continue
-      const authority = this.options.authority?.(job) ?? store
+      let authority: LeaseAuthority = this.options.authority?.(job) ?? store
       let lease: Lease | null
       try {
         lease =
@@ -109,11 +110,23 @@ export class Runner {
             job.home === machine ? 0 : job.lease_s * 1000,
           ))
       } catch (error) {
-        this.log(`${job.kind}: could not take the lease: ${(error as Error).message}`)
-        continue
+        if (job.home !== machine || authority === store) {
+          this.log(`${job.kind}: could not take the lease: ${(error as Error).message}`)
+          continue
+        }
+        // The home keeps its job when the lease host is down: it claims from its own store,
+        // due once the latest scheduled time has passed (the work is idempotent).
+        const now = this.now()
+        store.ensure(job.kind, job.every_min === undefined ? nextRun(job, now - DAY_MS) : now)
+        lease = store.claim(job.kind, this.who, now, job.lease_s * 1000, 0)
+        if (lease)
+          this.log(
+            `${job.kind}: ${job.lease_host} does not answer (${(error as Error).message}); running it here on the home's own lease`,
+          )
+        authority = store
       }
       if (!lease) continue
-      const work = this.run(job, lease).finally(() => this.running.delete(job.kind))
+      const work = this.run(job, lease, authority).finally(() => this.running.delete(job.kind))
       this.running.set(job.kind, work)
     }
     await this.flush()
@@ -140,8 +153,7 @@ export class Runner {
     await this.flush()
   }
 
-  private async run(job: JobDef, lease: Lease): Promise<void> {
-    const store = this.options.authority?.(job) ?? this.options.store
+  private async run(job: JobDef, lease: Lease, store: LeaseAuthority): Promise<void> {
     const ttlMs = job.lease_s * 1000
     this.log(`${job.kind}: started on ${lease.machine} (lease ${lease.fence})`)
     let held = true

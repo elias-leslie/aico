@@ -15,5 +15,6 @@
   "maxRepoMb": 2048,
   "maxDirtyMb": 100,
   "maxMirrorMb": 8192,
-  "minFreeMb": 4096
+  "minFreeMb": 4096,
+  "standby": { "from": ["davion-sidarli"], "aico": ".local/bin/aico" }
 }

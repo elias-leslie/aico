@@ -58,7 +58,10 @@ function fakePeer(name = 'gem', free = 10_000_000): Peer {
     name,
     exec: async (script) => {
       const body = script.startsWith('mkdir') ? fakeDisk(script, free) : script
-      const out = spawnSync('sh', ['-c', `cd "${peerHome}" && ${body}`], { encoding: 'utf8' })
+      const out = spawnSync('sh', ['-c', `cd "${peerHome}" && ${body}`], {
+        encoding: 'utf8',
+        env: { ...env, HOME: peerHome },
+      })
       return { code: out.status ?? 1, out: `${out.stdout}${out.stderr}` }
     },
     remote: (rel) => ({ url: join(peerHome, rel), env: {} }),
@@ -279,5 +282,86 @@ describe('wip mirror', () => {
     expect(readFileSync(join(target, 'a.txt'), 'utf8')).toBe('one\nlost work\n')
     expect(git(target, 'branch', '--show-current')).toBe('wip-restored')
     await expect(restoreWip(['app', '--to', target], d)).rejects.toThrow(/already exists/)
+  })
+
+  describe('standby checkouts', () => {
+    const standbyCfg = { standby: { from: ['home'], aico: 'fake-aico' } }
+    const checkout = (id: string) => join(peerHome, 'checkouts', id)
+    const standbyDeps = (projects: { id: string; root: string; name?: string }[]) =>
+      deps(
+        projects,
+        { standbyRoot: (root) => checkout(root.split('/').at(-1) as string) },
+        standbyCfg,
+      )
+    beforeEach(() => {
+      // The peer's aico: `projects show` knows nothing yet, `projects register` works; every call is logged.
+      const fake = join(peerHome, 'fake-aico')
+      writeFileSync(
+        fake,
+        '#!/bin/sh\necho "$@" >> "$HOME/aico.log"\n[ "$2" = show ] && exit 1\nexit 0\n',
+        { mode: 0o755 },
+      )
+    })
+
+    it('keeps a working checkout on the peer and lists it in its projects', async () => {
+      const root = repo('app')
+      const d = standbyDeps([{ id: 'app', root, name: 'App' }])
+      const first = await mirror(d)
+      expect(first.problems).toEqual([])
+      expect(git(checkout('app'), 'branch', '--show-current')).toBe('main')
+      expect(git(checkout('app'), 'rev-parse', 'HEAD')).toBe(git(root, 'rev-parse', 'HEAD'))
+      expect(readFileSync(join(peerHome, 'aico.log'), 'utf8')).toContain(
+        `projects register app --root ${checkout('app')} --name App`,
+      )
+      writeFileSync(join(root, 'a.txt'), 'two\n')
+      git(root, 'commit', '-qam', 'second')
+      await mirror(d)
+      expect(readFileSync(join(checkout('app'), 'a.txt'), 'utf8')).toBe('two\n')
+    })
+
+    it('brings an existing copy up once, even when the mirror is already current', async () => {
+      const root = repo('app')
+      await mirror(deps([{ id: 'app', root }]))
+      const d = standbyDeps([{ id: 'app', root }])
+      const state = join(dir, 'state.json')
+      d.state = state
+      await mirror(d)
+      expect(existsSync(join(checkout('app'), 'a.txt'))).toBe(true)
+    })
+
+    it('never overwrites work done on the peer', async () => {
+      const root = repo('app')
+      const d = standbyDeps([{ id: 'app', root }])
+      await mirror(d)
+      writeFileSync(join(checkout('app'), 'a.txt'), 'standby edit\n')
+      writeFileSync(join(root, 'b.txt'), 'b\n')
+      git(root, 'add', '-A')
+      git(root, 'commit', '-qm', 'second')
+      const report = await mirror(d)
+      expect(report.problems.map((p) => [p.state, p.reason])).toEqual([
+        ['warn', `app: gem's checkout at ${checkout('app')} left as it is: it has its own changes`],
+      ])
+      expect(readFileSync(join(checkout('app'), 'a.txt'), 'utf8')).toBe('standby edit\n')
+      expect(existsSync(join(checkout('app'), 'b.txt'))).toBe(false)
+    })
+
+    it('leaves a folder that is not a Git checkout alone', async () => {
+      const root = repo('app')
+      mkdirSync(checkout('app'), { recursive: true })
+      writeFileSync(join(checkout('app'), 'old.txt'), 'old\n')
+      const report = await mirror(standbyDeps([{ id: 'app', root }]))
+      expect(report.problems[0]?.reason).toMatch(/not a Git checkout/)
+      expect(readFileSync(join(checkout('app'), 'old.txt'), 'utf8')).toBe('old\n')
+    })
+
+    it('makes no checkouts from a machine that is not a home for them', async () => {
+      const root = repo('app')
+      await mirror(
+        deps([{ id: 'app', root }], {
+          standbyRoot: (r) => checkout(r.split('/').at(-1) as string),
+        }),
+      )
+      expect(existsSync(checkout('app'))).toBe(false)
+    })
   })
 })

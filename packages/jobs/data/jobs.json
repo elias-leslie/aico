@@ -49,6 +49,8 @@
       "what": "Morning digest to the phone",
       "project": "aico",
       "home": "davion-sidarli",
+      "lease_host": "aico",
+      "workers": ["davion-sidarli", "aico"],
       "at": "07:30",
       "run": {
         "post": "/api/digest/push"

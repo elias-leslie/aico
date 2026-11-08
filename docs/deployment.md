@@ -19,6 +19,12 @@ The workstation writes the memories, prompts, roles and launch policy (context.d
 
 If a session on the CT does save a memory or edit a prompt, it is not merged back. The next sync keeps the CT's whole file as `context-replica-before-STAMP.db` beside context.db (the last five), says so in the job's last output (Routines), and then replaces the tables, so nothing is lost silently. Re-save what matters on the workstation. During a workstation outage the CT works from the last copy; a memory saved there waits in that kept file for the owner. Check with `ssh aico-gem aico memory list` against the workstation's.
 
+### Working checkouts and jobs on the standby
+
+The workstation's `aico wip run` (job `wip-mirror-davion-sidarli`) also keeps a working checkout of each copied repo on the CT, at the same path as on the workstation (for example `/srv/workspaces/projects/aico`), on the branch the workstation has checked out, and lists it in the CT's projects (`aico projects register`), so a session on the CT starts in a project the same way when the workstation is down. Uncommitted work stays in the mirror (`aico wip restore`). The checkout is only ever fast-forwarded: one on another branch, with its own changes or commits, or a folder that is not a Git checkout is left as it is and named in the repo's Repo copy Status row. Which machines' repos get checkouts is `standby.from` in packages/ops/data/wip-mirror.json.
+
+Jobs with `lease_host: aico` and both machines as `workers` (note-reminders, morning-digest, and routines registered with `--hosts either`) run on the CT when the workstation misses them by one lease period. The other way round, when the CT does not answer, the workstation still runs its own jobs on a lease from its own jobs.db, due once the latest scheduled time has passed. A digest sent from the CT describes the CT's sessions and Status, with spend shown as unavailable (it has no usage.db).
+
 ### Browser on CT 190
 
 `scripts/peer-release.sh` also runs `scripts/peer-tools.sh aico-gem`, which puts the workstation's `aico-hook` on the CT (`st sessions inbox` and the edit guard need it; the CT has no Go) and the browser runtime. `st browser` runs the workstation's accepted browser-automation release: the script copies that release without its `.venv`, builds the CT's own with `uv sync --frozen` (uv is copied over once) and installs the pinned agent-browser with `npm ci`. Sessions run on the browser VM (VM 100), not on the CT, so the CT needs no Chrome. What the scripts do not do is host configuration, set once:

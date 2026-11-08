@@ -183,3 +183,54 @@ it('uses authority configuration and clock for claims, never caller TTL or sched
   expect(store.get('job')?.leaseExpires).toBe(11000)
   store.close()
 })
+
+it('lets the home run its job on its own lease while the lease host does not answer', async () => {
+  const job: JobDef = {
+    kind: 'digest',
+    what: 'Digest',
+    project: 'aico',
+    home: 'home',
+    lease_host: 'gem',
+    workers: ['home', 'gem'],
+    at: '07:30',
+    tz: 'UTC',
+    run: { post: '/x' },
+    lease_s: 60,
+  }
+  const down = {
+    claim: async () => {
+      throw new Error('connect ENOENT')
+    },
+  } as unknown as ReturnType<typeof remoteAuthority>
+  const ran: string[] = []
+  const runner = (machine: string, store: JobStore, at: number) =>
+    new Runner({
+      store,
+      authority: () => down,
+      jobs: [job],
+      machine,
+      holder: `${machine}-runner`,
+      now: () => at,
+      act: async () => {
+        ran.push(machine)
+        return { state: 'ok', meaning: 'Sent.' }
+      },
+      postRows: async () => {},
+      log: () => {},
+    })
+  const homeStore = new JobStore(':memory:')
+  const after = Date.parse('2026-11-08T08:00:00Z')
+  const home = runner('home', homeStore, after)
+  await home.tick()
+  await home.idle()
+  await home.tick()
+  await home.idle()
+  expect(ran).toEqual(['home'])
+  expect(homeStore.get('digest')?.nextRun).toBe(Date.parse('2026-11-09T07:30:00Z'))
+  // Only the home falls back; the other worker waits for the lease host.
+  const other = runner('gem', new JobStore(':memory:'), after)
+  await other.tick()
+  await other.idle()
+  expect(ran).toEqual(['home'])
+  homeStore.close()
+})
