@@ -535,7 +535,7 @@ def test_receipt_projection_returns_no_pairing_material(tmp_path):
 
 
 @pytest.mark.parametrize("uncorrected", [False, True])
-def test_corrected_rate_jump_is_visible_but_only_uncorrected_errors_push(cfg, monkeypatch, uncorrected):
+def test_corrected_rate_jump_stays_record_only_but_uncorrected_errors_push(cfg, monkeypatch, uncorrected):
     from pve_sender import watch
 
     now = 8 * 86400
@@ -549,7 +549,7 @@ def test_corrected_rate_jump_is_visible_but_only_uncorrected_errors_push(cfg, mo
     status = watchdog.tick(cfg, now=now, boot=0, send=lambda n: notices.append(n) or {"ok": True},
                            door=lambda *_a: None, publish=False)
     ecc_row = next(r for r in status["rows"] if r["id"].endswith("/check-ecc"))
-    assert ecc_row["state"] == ("failed" if uncorrected else "warn")
+    assert ecc_row["state"] == ("failed" if uncorrected else "ok")
     pushes = [n for n in notices if n["key"].endswith("/check-ecc")]
     assert bool(pushes) is uncorrected
 

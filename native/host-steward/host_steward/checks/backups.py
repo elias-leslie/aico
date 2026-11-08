@@ -107,10 +107,11 @@ def aico_backups(ctx: Ctx) -> list[Signal]:
         if not isinstance(latest, dict):
             return [("warn", f"Aico's {label} run is unavailable")]
         started = to_ts(latest.get("started"))
-        running = any(e.get("target") == target and e.get("running") is True for e in entries)
-        if latest.get("finished") is None and running and started is not None and -ctx.cfg["future_skew_s"] <= ctx.now - started <= max_age_h * 3600:
-            return []  # A live lease plus the last verified copies covers an in-progress run.
-        if latest.get("ok") is False:
+        if latest.get("finished") is None and started is not None and -ctx.cfg["future_skew_s"] <= ctx.now - started <= max_age_h * 3600:
+            # Running, or cut short by a shutdown before it could say how it went: not a failed run. The last
+            # verified copies cover it, and their age below catches a run that never comes back.
+            return []
+        if latest.get("finished") is not None and latest.get("ok") is False:
             return [("failed", f"Aico's {label} run failed")]
         finished = to_ts(latest.get("finished"))
         if latest.get("ok") is not True or finished is None or ctx.now - finished > max_age_h * 3600 or finished - ctx.now > ctx.cfg["future_skew_s"]:

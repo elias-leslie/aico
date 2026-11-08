@@ -6,6 +6,7 @@ bound to one key in /root/.ssh/authorized_keys with restrict,command="...". The 
 sends one fixed verb; no shell ever runs what it sends:
 
   guests                  guest list (pvesh get /cluster/resources --type vm)
+  host-boot               kernel boot identity (to recognize a host restart during a copy)
   thinpool                data_percent of the guest thin pool
   sources                 the installed source list (install.sh shows what a re-install changes)
   capture SOURCE DIGEST   stream one registered source to stdout (a stopped VM or container is read from a
@@ -27,6 +28,7 @@ OmniNull hub (CT 150) and append-only restic (CT 160) are never captured.
 """
 
 import base64
+import fcntl
 import fnmatch
 import json
 import os
@@ -41,6 +43,8 @@ import time
 from pathlib import Path
 
 SOURCES = Path("/etc/summitflow-pve-backup/sources.json")
+BOOT_ID = Path("/proc/sys/kernel/random/boot_id")
+CAPTURE_LOCKS = Path("/run/lock/summitflow-pve-backup")
 CONFIG_DATABASE = "/var/lib/pve-cluster/config.db"
 DUMP_DIRECTORY = Path("/var/lib/vz/dump")
 DUMP_LOG_KEEP_DAYS = 7
@@ -336,6 +340,10 @@ def main(command=None, run=subprocess.run, out=None):
     try:
         if words == ["guests"]:
             return run(["pvesh", "get", "/cluster/resources", "--type", "vm", "--output-format", "json"]).returncode
+        if words == ["host-boot"]:
+            out.write(BOOT_ID.read_bytes())
+            out.flush()
+            return 0
         if words == ["thinpool"]:
             return run(["lvs", "--noheadings", "-o", "data_percent", THIN_POOL]).returncode
         if words == ["sources"]:
@@ -343,8 +351,16 @@ def main(command=None, run=subprocess.run, out=None):
             out.flush()
             return 0
         if len(words) == 3 and words[0] == "capture":
-            return capture(load_source(words[1], words[2]), out, run)
-        raise Refused("unknown request; this key runs only guests, thinpool, sources or capture SOURCE DIGEST")
+            entry = load_source(words[1], words[2])
+            if entry.get("vmid") is None:
+                return capture(entry, out, run)
+            # The two backup machines can copy the same guest. Keep its staging data and stopped
+            # disk snapshot to one capture at a time, through cleanup; other guests run independently.
+            CAPTURE_LOCKS.mkdir(mode=0o700, parents=True, exist_ok=True)
+            with (CAPTURE_LOCKS / f"guest-{entry['vmid']}.lock").open("a") as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                return capture(entry, out, run)
+        raise Refused("unknown request; this key runs only guests, host-boot, thinpool, sources or capture SOURCE DIGEST")
     except (Refused, OSError, ValueError, sqlite3.Error, subprocess.CalledProcessError) as exc:
         sys.stderr.write(f"summitflow-pve-backup: {exc}\n")
         return 2

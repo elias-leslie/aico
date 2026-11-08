@@ -5,8 +5,8 @@ into the trend history (corrected events, events with the overflow flag, uncorre
 check evaluates the multi-week rules). The window is the 8 days the PVE snippet reads. A region with
 corrected errors is new when this check's saved state has not seen it: the first run adopts every region it finds. Memory-controller
 records only: one machine check is logged by up to four banks within the same second, so records are grouped into
-events first. The data file caps corrected-error signals (this PVE host reports them without DRAM ECC: record
-only); uncorrected errors and a configured rate jump still fail.
+events first. The data file caps all corrected-error signals, including rate jumps (this PVE host reports them
+without DRAM ECC: record only); uncorrected errors still fail.
 """
 
 from __future__ import annotations
@@ -222,7 +222,7 @@ def evaluate(
     baseline = statistics.median(windows) if windows else None
     spike = baseline is not None and last >= max(cfg["spike_min"], cfg["spike_factor"] * baseline)
     if spike:
-        out.append(Signal("ecc.spike", "failed", {"n": last, "base": f"{baseline:g}"}))
+        out.append(Signal("ecc.spike", "failed", {"n": last, "base": f"{baseline:g}"}, note=True))
     elif last:
         out.append(Signal("ecc.corrected", "ok", {"n": last}, note=True))
     else:

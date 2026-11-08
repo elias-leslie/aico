@@ -29,9 +29,9 @@ swap_clear = true
 # First matching pattern wins. GEM10 logs corrected memory errors without DRAM ECC (owner 2026-10-30).
 [caps]
 "ecc.corrected" = "ok"
-# A corrected-error jump is worth a mention, not a red (owner 2026-11-05): only uncorrected errors fail.
-"ecc.spike" = "warn"
-# Long-term memory trends remain record-only; the ECC check evaluates the configured daily rate jump.
+# Corrected-rate jumps are also record-only on this non-ECC host (owner 2026-11-08).
+"ecc.spike" = "ok"
+# Long-term memory trends remain record-only; uncorrected errors still fail in the ECC check.
 "pve.ecc.trend" = "ok"
 
 [checks.workstation]

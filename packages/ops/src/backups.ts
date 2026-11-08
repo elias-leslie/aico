@@ -458,19 +458,41 @@ async function runInUnit(
   console.log(
     result.code === 0
       ? 'Backup finished.'
-      : `The backup did not finish cleanly. ${failedSourcesLine(readState(cfg), target as string)} Its log: aico logs ${unit}.`,
+      : `The backup did not finish cleanly. ${failedSourcesLine(readState(cfg), target as string, cfg)} Its log: aico logs ${unit}.`,
   )
   return result.code
 }
 
-/** Which sources a failed run left failing, for the line the routine's log and Status show. */
-export function failedSourcesLine(state: BackupState, target: string): string {
+/** How many failed sources a job row names before it counts the rest. */
+const FAILED_NAMED = 3
+
+/**
+ * Which sources a failed run left failing, for the line the routine's log and Status show: the first
+ * few by name and how many in all. Only what this run tried: a retired source's old error isn't its.
+ */
+export function failedSourcesLine(
+  state: BackupState,
+  target: string,
+  cfg: Pick<BackupConfig, 'displayNames'> = config(),
+): string {
+  const started = state.runs[target as BackupTarget]?.started
   const failed = Object.values(state.copies)
-    .filter((copy) => copy.target === target && copy.error)
-    .map((copy) => copy.source)
-  return failed.length
-    ? `Failed: ${failed.join(', ')}.`
-    : 'Which sources failed: aico backups list.'
+    .filter(
+      (copy) =>
+        copy.target === target &&
+        copy.error &&
+        (!started || (copy.attemptedAt && copy.attemptedAt >= started)),
+    )
+    .map(
+      ({ source }) =>
+        (cfg.displayNames as Record<string, string>)[source] ??
+        migrated.sources.find((s) => s.id === source)?.name ??
+        source,
+    )
+  if (!failed.length) return 'Which sources failed: aico backups list.'
+  const named = failed.slice(0, FAILED_NAMED).join(', ')
+  const more = failed.length - FAILED_NAMED
+  return `${failed.length} ${failed.length === 1 ? 'source' : 'sources'} failed: ${named}${more > 0 ? ` and ${more} more` : ''}.`
 }
 
 /** systemd counts dying of SIGINT as a clean exit, so a stopped run would report "Backup finished". */
@@ -806,17 +828,20 @@ export function listText(
       .sort()
       .at(-1)
     const run = list.runs[target as BackupTarget]
-    const last = run
-      ? `; last run ${since(run.finished ?? run.started, now)}${run.finished ? (run.ok ? ', ok' : ', failed') : ', running'}`
-      : ''
+    const running = rows.some((e) => e.running)
+    const last =
+      running && (!run || run.finished)
+        ? `; ${run && !run.ok ? 'retrying' : 'running'}`
+        : run
+          ? `; last run ${since(run.finished ?? run.started, now)}${run.finished ? (run.ok ? ', ok' : ', failed') : running ? ', running' : ', cut short'}`
+          : ''
     // While it runs, nextRun is Status's deadline for the run, not the schedule's next start.
-    const next =
-      run && !run.finished
-        ? undefined
-        : rows
-            .map((e) => e.nextRun)
-            .filter((at): at is string => !!at)
-            .sort()[0]
+    const next = running
+      ? undefined
+      : rows
+          .map((e) => e.nextRun)
+          .filter((at): at is string => !!at)
+          .sort()[0]
     lines.push(
       `  ${backupTargetName(target).padEnd(13)} ${ok}/${rows.length} ok; newest data ${since(newest, now)}${last}${next ? `; next ${localTime(next)}` : ''}`,
     )

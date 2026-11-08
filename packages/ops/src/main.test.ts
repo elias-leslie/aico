@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import type { BackupState } from './backup-plan'
+import type { BackupEntry, BackupState } from './backup-plan'
 import { failedSourcesLine, listText } from './backups'
 import { main } from './main'
 
@@ -128,6 +128,22 @@ it('a running backup gives no next time, and a failed one names its sources', ()
     now,
   )
   expect(text).toMatch(/last run 5 min ago, running$/m)
+  const retrying = listText(
+    {
+      machine: 'ws',
+      entries: [entry],
+      // The next run holds its lease but is waiting for the lock before writing its own receipt.
+      runs: {
+        drive: {
+          started: '2026-11-07T00:00:00Z',
+          finished: '2026-11-07T00:30:00Z',
+          ok: false,
+        },
+      },
+    },
+    now,
+  )
+  expect(retrying).toMatch(/Drive +1\/1 ok; newest data 30 min ago; retrying$/m)
   const copy = (source: string, target: string, error?: string) =>
     ({ source, target, error }) as BackupState['copies'][string]
   const state = {
@@ -135,8 +151,61 @@ it('a running backup gives no next time, and a failed one names its sources', ()
     runs: {},
     points: [],
   }
-  expect(failedSourcesLine(state, 'drive')).toBe('Failed: vm.')
+  expect(failedSourcesLine(state, 'drive')).toBe('1 source failed: vm.')
   expect(failedSourcesLine(state, 'append')).toBe('Which sources failed: aico backups list.')
+})
+
+it('a failed run names its first few sources and how many in all, by name, and only ones it tried', () => {
+  const started = '2026-11-08T18:00:00Z'
+  const copy = (source: string, attemptedAt: string) =>
+    ({ source, target: 'drive', error: 'boom', attemptedAt }) as BackupState['copies'][string]
+  const after = '2026-11-08T18:05:00Z'
+  const line = (...sources: string[]) =>
+    failedSourcesLine(
+      {
+        copies: {
+          // Retired two days ago, its error still in the state file: this run never tried it.
+          retired: copy('postgres', '2026-11-06T15:53:19Z'),
+          ...Object.fromEntries(sources.map((s) => [s, copy(s, after)])),
+        },
+        runs: { drive: { started, ok: false } },
+        points: [],
+      },
+      'drive',
+      { displayNames: { 'pve-ct-191-jobinator-data': 'Jobinator' } } as never,
+    )
+  expect(line('pve-ct-191-jobinator-data')).toBe('1 source failed: Jobinator.')
+  expect(line('a', 'b')).toBe('2 sources failed: a, b.')
+  expect(line('a', 'b', 'c')).toBe('3 sources failed: a, b, c.')
+  expect(line('a', 'b', 'c', 'd', 'e')).toBe('5 sources failed: a, b, c and 2 more.')
+  expect(line()).toBe('Which sources failed: aico backups list.')
+})
+
+it('a run with no end and no live lease reads cut short, not running', () => {
+  const now = Date.parse('2026-11-07T02:00:00Z')
+  const entry = {
+    id: 'drive/x',
+    source: 'x',
+    name: 'X',
+    target: 'drive',
+    dataAt: null,
+    nextRun: null,
+    state: 'ok',
+    meaning: '',
+    snapshot: null,
+    path: null,
+    running: false,
+    machine: 'ws',
+  } as BackupEntry
+  const text = listText(
+    {
+      machine: 'ws',
+      entries: [entry],
+      runs: { drive: { started: '2026-11-07T01:55:00Z', ok: false } },
+    },
+    now,
+  )
+  expect(text).toMatch(/last run 5 min ago, cut short$/m)
 })
 
 async function backupsCall(argv: string[]) {

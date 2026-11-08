@@ -356,7 +356,10 @@ def test_ecc_a_spike_over_the_baseline_and_a_new_region():
     assert out["ecc.spike"] == "failed"
     signals = ecc.run(ctx("ecc", pve_run(pve_answer(ecc_text=f"FIRST {first}\n" + quiet + burst))))
     row = core.make_row("ecc", signals, DATA["checks"]["ecc"], DATA["meanings"], "m", NOW, DATA["caps"])
-    assert row["state"] == "warn"  # Worth a mention, never a red: only uncorrected errors fail.
+    assert row["state"] == "ok"
+    assert "recorded only" in row["meaning"] and "non-ECC host" in row["meaning"]
+    assert "Check the memory-error history" not in row["meaning"]
+    assert "Run a memory test" not in row["meaning"]
 
 
 def test_ecc_new_corrected_regions_remain_record_only():
@@ -546,6 +549,18 @@ def test_backups_native_follows_aico_not_unwritten_host_receipts(tmp_path, monke
     config.touch()
     out = states(backups.run(ctx("backups", run=aico_backup_runner(aico_backup_health()), native_config=str(config))))
     assert out["backups.native"] == "ok"
+
+
+def test_backups_run_cut_short_by_a_shutdown_is_not_a_failed_run(tmp_path):
+    # Back from a reboot: the receipt has no end, and no new run has taken the lease yet.
+    data = aico_backup_health()
+    data["runs"]["drive"] = {"ok": False, "started": NOW - 600}
+    out = states(backups.run(ctx("backups", run=aico_backup_runner(data), native_config=str(tmp_path / "absent"))))
+    assert out["backups.pve"] == "ok"
+    # One that never comes back does show, as a run that hasn't finished lately.
+    data["runs"]["drive"] = {"ok": False, "started": NOW - 37 * 3600}
+    out = states(backups.run(ctx("backups", run=aico_backup_runner(data), native_config=str(tmp_path / "absent"))))
+    assert out["backups.pve"] == "warn"
 
 
 def test_backups_running_drive_uses_last_verified_copies(tmp_path):

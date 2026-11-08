@@ -83,6 +83,8 @@ export interface JobResult {
   meaning: string
   /** Another run of this job holds its lock: nothing ran here, so nothing is recorded or alerted. */
   busy?: true
+  /** This machine shut down during the run: it says nothing about the job, so nothing is recorded or alerted. */
+  cut?: true
 }
 
 /** A routine another project registered: the data behind one job (routines table). */
@@ -311,7 +313,7 @@ export class JobStore {
     })
   }
 
-  /** Frees the lease without recording a run (another run held the job's lock): the job is due
+  /** Frees the lease without recording a run (busy, or cut short by shutdown): the job is due
    * again at `retryAt` and its last result stays as it was. StaleLease when not held. */
   release(lease: Lease, retryAt: number): void {
     const changes = this.db

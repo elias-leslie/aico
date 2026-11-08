@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import concurrent.futures
 import hashlib
 import importlib.machinery
 import importlib.util
@@ -12,6 +13,7 @@ import os
 import shutil
 import sqlite3
 import subprocess
+import threading
 import time
 from pathlib import Path
 from types import ModuleType
@@ -74,6 +76,7 @@ def dispatcher(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     module = _load()
     monkeypatch.setattr(module, "SOURCES", tmp_path / "sources.json")
     monkeypatch.setattr(module, "DUMP_DIRECTORY", tmp_path / "dump")
+    monkeypatch.setattr(module, "CAPTURE_LOCKS", tmp_path / "locks")
     monkeypatch.delenv("SSH_ORIGINAL_COMMAND", raising=False)
     return module
 
@@ -93,6 +96,7 @@ VM = "proxmox://proxmox-gem/qemu/100/files?via=agent&path=/home/u/p&exclude=Cach
 @pytest.mark.parametrize("command", [
     "", "id", "bash -c id", "sh", "guests --type node", "thinpool pve/root", "capture", "capture pve-host-files",
     "pvesh delete /nodes/davion-gem/qemu/100", "vzdump 150 --stdout 1", "capture ../../etc/shadow " + "0" * 64,
+    "host-boot /etc/shadow", "host-boot; id",
     "capture pve-host-files " + "0" * 64 + " extra", "rm -rf /",
 ])
 def test_only_the_fixed_verbs_run(dispatcher, command, capsys):
@@ -110,6 +114,66 @@ def test_forced_command_reads_the_original_ssh_command(dispatcher, monkeypatch):
     assert dispatcher.main(run=runs) == 0
     assert runs.calls == [["pvesh", "get", "/cluster/resources", "--type", "vm", "--output-format", "json"],
                           ["lvs", "--noheadings", "-o", "data_percent", "pve/data"]]
+
+
+def test_host_boot_reads_only_the_kernel_boot_identity(dispatcher, tmp_path, monkeypatch):
+    boot_id = tmp_path / "boot_id"
+    boot_id.write_text("0db4609d-4ec6-4c36-8890-f43ea90c83f1\n")
+    monkeypatch.setattr(dispatcher, "BOOT_ID", boot_id, raising=False)
+    runs, out = Runs(), io.BytesIO()
+    assert dispatcher.main("host-boot", run=runs, out=out) == 0
+    assert out.getvalue() == boot_id.read_bytes()
+    assert runs.calls == []
+    boot_id.unlink()
+    assert dispatcher.main("host-boot", run=runs, out=io.BytesIO()) == 2
+    assert runs.calls == []
+
+
+@pytest.mark.parametrize("failure", [False, True])
+def test_same_guest_captures_wait_for_cleanup_but_other_guests_can_run(dispatcher, tmp_path, monkeypatch, failure):
+    monkeypatch.setattr(dispatcher, "CAPTURE_LOCKS", tmp_path / "locks", raising=False)
+    digests = _install(dispatcher, {"first": VM, "second": VM, "other": VM.replace("/100/", "/101/")})
+    local = threading.local()
+    first_started, second_attempted, second_started, release = (threading.Event() for _ in range(4))
+    real_flock = __import__("fcntl").flock
+
+    def flock(handle, operation):
+        if local.name == "second":
+            second_attempted.set()
+        return real_flock(handle, operation)
+
+    monkeypatch.setattr("fcntl.flock", flock)
+
+    def capture(entry, out, run):
+        if local.name == "first":
+            first_started.set()
+            assert release.wait(5), "the held synthetic capture was never released"
+            if failure:
+                raise dispatcher.Refused("synthetic capture failed after cleanup")
+        elif local.name == "second":
+            second_started.set()
+            second_attempted.set()
+        return 0
+
+    monkeypatch.setattr(dispatcher, "capture", capture)
+
+    def request(name):
+        local.name = name
+        return dispatcher.main(f"capture {name} {digests[name]}", run=Runs(), out=io.BytesIO())
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+        first = pool.submit(request, "first")
+        try:
+            assert first_started.wait(5)
+            second = pool.submit(request, "second")
+            assert second_attempted.wait(5)
+            assert not second_started.is_set(), "two captures of the same guest overlapped"
+            assert pool.submit(request, "other").result(timeout=5) == 0
+        finally:
+            release.set()
+        assert first.result(timeout=5) == (2 if failure else 0)
+        assert second.result(timeout=5) == 0
+        assert second_started.is_set()
 
 
 def test_capture_needs_the_installed_source_and_its_current_path(dispatcher, capsys):

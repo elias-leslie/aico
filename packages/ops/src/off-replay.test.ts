@@ -10,7 +10,14 @@ import { fileURLToPath } from 'node:url'
 import { peerStatusRow } from '@aico/fleet/power'
 import { type AlertBatch, type StatusRow, StatusStore } from '@aico/status'
 import { afterEach, describe, expect, it } from 'vitest'
-import { backupJob, diskAway, type GuestPower, hostAway } from './backup-drive'
+import {
+  appendMachine,
+  backupJob,
+  diskAway,
+  type GuestPower,
+  hostAway,
+  readListed,
+} from './backup-drive'
 import { observeExternal } from './backup-external'
 import {
   type BackupEntry,
@@ -91,12 +98,17 @@ async function failedCopy(
   now: GuestPower,
   state = emptyState(),
   later?: GuestPower,
+  atCopyStart = before,
 ) {
   state.copies[copyKey(GOOD.source, 'drive')] = GOOD
   let clock = T0
+  let copying = false
   const rt: Runtime = {
     cfg: cfg(),
-    run: async () => ({ code: 1, out: '', err: 'restic: capture failed' }),
+    run: async () => {
+      copying = true
+      return { code: 1, out: '', err: 'restic: capture failed' }
+    },
     now: () => {
       clock += 5 * MIN
       return new Date(clock)
@@ -112,6 +124,7 @@ async function failedCopy(
     machine: {
       before,
       read: async () => {
+        if (!copying) return atCopyStart
         const reading = now
         now = later ?? now
         return reading
@@ -144,6 +157,134 @@ describe('the notices that fired because a machine was off', () => {
     for (const notice of replay.notices)
       expect([notice.title, cases.has(notice.case)]).toEqual([notice.title, true])
     expect(replay.notices.reduce((sum, n) => sum + n.sent, 0)).toBe(88)
+  })
+
+  describe('the Proxmox host going away under a copy', () => {
+    const away: GuestPower = { state: 'off', hostAway: true }
+    const old = 99_999
+
+    it('reads actual host boot evidence through the restricted helper and tolerates older helpers', async () => {
+      const c = cfg()
+      const before = '0db4609d-4ec6-4c36-8890-f43ea90c83f1'
+      const after = '82fb22dd-98bd-4f20-a430-0d77df5de11e'
+      let boot = { code: 0, out: `${before}\n`, err: '' }
+      const rt: Runtime = {
+        cfg: c,
+        now: () => new Date(T0),
+        run: async (argv) => {
+          if (argv.includes('-G')) return { code: 0, out: 'hostname synthetic-pve\n', err: '' }
+          if (argv.at(-1) === 'host-boot') return boot
+          return {
+            code: 0,
+            out: JSON.stringify([{ vmid: c.pve.appendGuest, type: 'lxc', status: 'stopped' }]),
+            err: '',
+          }
+        },
+      }
+      const machine = await appendMachine(rt)
+      expect(machine?.before).toEqual({ state: 'off', hostBootId: before })
+      boot = { code: 0, out: after, err: '' }
+      expect(await machine?.read()).toEqual({ state: 'off', hostBootId: after })
+      for (const unavailable of [
+        { code: 2, out: '', err: 'unknown request' },
+        { code: 0, out: 'not a boot identity', err: '' },
+      ]) {
+        boot = unavailable
+        expect(await machine?.read()).toEqual({ state: 'off' })
+      }
+    })
+
+    it('a stopped-disk read cut by the host going down is off, not failed', async () => {
+      const copy = await failedCopy({ state: 'off' }, away)
+      expect(copy.error).toBeUndefined()
+      expect(copy.observed).toBe('offline')
+    })
+
+    it('a stopped-disk read cut by a host restart that is already over keeps the last copy', async () => {
+      const copy = await failedCopy(
+        { state: 'off', hostBootId: 'before' },
+        { state: 'off', hostBootId: 'after' },
+      )
+      expect(copy.error).toBeUndefined()
+      expect(copy).toMatchObject({ observed: 'ok', snapshot: GOOD.snapshot })
+    })
+
+    it('a copy from the host itself (no guest) cut by its restart keeps the last copy', async () => {
+      const copy = await failedCopy(
+        { state: 'on', hostBootId: 'before' },
+        { state: 'on', hostBootId: 'after' },
+      )
+      expect(copy.error).toBeUndefined()
+    })
+
+    it('a host going down that only answers oddly at first still ends up off', async () => {
+      const copy = await failedCopy(
+        { state: 'on', uptime: old },
+        { state: 'unknown' },
+        undefined,
+        away,
+      )
+      expect(copy.error).toBeUndefined()
+      expect(copy.observed).toBe('offline')
+    })
+
+    it('real failures with the host up all along still fail', async () => {
+      const stayedUp: GuestPower = { state: 'off', hostBootId: 'same-boot' }
+      for (const [before, now, later] of [
+        [stayedUp, stayedUp],
+        // No running guest says how old the host is: nothing to go on, so it is a failure.
+        [{ state: 'off' }, { state: 'off' }],
+        [
+          { state: 'on', uptime: old },
+          { state: 'on', uptime: old },
+          { state: 'on', uptime: old },
+        ],
+        // The list stays broken with the host answering.
+        [{ state: 'on', uptime: old }, { state: 'unknown' }, { state: 'unknown' }],
+      ] as [GuestPower, GuestPower, GuestPower?][]) {
+        const copy = await failedCopy(before, now, undefined, later)
+        expect(copy.error).toContain('The Drive copy failed')
+      }
+    })
+
+    it('a reboot while waiting for the copy does not hide a later real failure', async () => {
+      for (const state of ['on', 'off'] as const) {
+        const after: GuestPower = { state, hostBootId: 'after' }
+        const copy = await failedCopy(
+          { state, hostBootId: 'before' },
+          after,
+          undefined,
+          undefined,
+          after,
+        )
+        expect(copy.error).toContain('The Drive copy failed')
+      }
+    })
+
+    it('host reboot evidence comes from its boot identity, not the age of its guests', async () => {
+      const list = [
+        { vmid: 1, type: 'qemu', status: 'running', uptime: 500 },
+        { vmid: 2, type: 'lxc', status: 'running', uptime: 900 },
+        { vmid: 3, type: 'qemu', status: 'stopped', uptime: 0 },
+      ]
+      expect(readListed(list)).toEqual({ state: 'on' })
+      expect(readListed(list, { vmid: 1, type: 'qemu' })).toEqual({ state: 'on', uptime: 500 })
+      expect(readListed(list, { vmid: 3, type: 'qemu' })).toEqual({ state: 'off' })
+      expect(readListed(list, undefined, 'same-boot')).toEqual({
+        state: 'on',
+        hostBootId: 'same-boot',
+      })
+      expect(
+        readListed([{ vmid: 3, type: 'qemu', status: 'stopped' }], { vmid: 3, type: 'qemu' }),
+      ).toEqual({
+        state: 'off',
+      })
+      const youngGuests = list.map((guest) => ({ ...guest, uptime: 100 }))
+      const before = readListed(list, { vmid: 3, type: 'qemu' }, 'same-boot')
+      const after = readListed(youngGuests, { vmid: 3, type: 'qemu' }, 'same-boot')
+      const copy = await failedCopy(before, after)
+      expect(copy.error).toContain('The Drive copy failed')
+    })
   })
 
   describe('off-during-copy', () => {
@@ -180,7 +321,10 @@ describe('the notices that fired because a machine was off', () => {
     })
     it('off when the run began, switched on while it waited, shut down mid-copy: off', async () => {
       // Live on 2026-11-08: VM 180 off at the start of a 30-minute run, on by its turn.
-      const copy = await failedCopy(off, { state: 'on', uptime: 1800 }, emptyState(), off)
+      const copy = await failedCopy(off, off, emptyState(), undefined, {
+        state: 'on',
+        uptime: 1800,
+      })
       expect(copy.observed).toBe('offline')
       expect(copy.error).toBeUndefined()
     })
@@ -190,7 +334,7 @@ describe('the notices that fired because a machine was off', () => {
     })
     it('started or restarted mid-copy: no failure, the next normal run takes it', async () => {
       for (const [before, ...now] of [
-        [off, off, on],
+        [off, on],
         [on, { state: 'on', uptime: 60 }],
       ] as [GuestPower, GuestPower, GuestPower?][]) {
         const copy = await failedCopy(before, now[0], emptyState(), now[1])

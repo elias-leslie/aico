@@ -184,6 +184,12 @@ export class Runner {
           )
         }
       if (!lease) continue
+      try {
+        const state = await authority.get(job.kind)
+        if (state) this.queueRow(job, state)
+      } catch (error) {
+        this.log(`${job.kind}: could not read its active lease: ${(error as Error).message}`)
+      }
       const work = this.run(job, lease, authority).finally(() => this.running.delete(job.kind))
       this.running.set(job.kind, work)
     }
@@ -330,14 +336,17 @@ export class Runner {
       clearInterval(renewal)
     }
     const finishedAt = this.now()
-    if (result.busy) {
-      // Another run holds this job's lock. Nothing ran, so there is no result to record or alert on.
+    if (result.busy || result.cut) {
+      // Another run holds this job's lock, or this machine shut down under the run. Either way there is
+      // no result to record or alert on: the last result stands and the job is due again.
       try {
         await store.release(lease, finishedAt + ttlMs)
+        const state = await store.get(job.kind)
+        if (state) this.queueRow(job, state)
       } catch (error) {
         this.log(`${job.kind}: could not release lease ${lease.fence}: ${(error as Error).message}`)
       }
-      this.log(`${job.kind}: already running: ${result.meaning}`)
+      this.log(`${job.kind}: ${result.cut ? 'cut short' : 'already running'}: ${result.meaning}`)
       return
     }
     try {
@@ -388,7 +397,7 @@ export class Runner {
   }
 
   private queueRow(job: JobDef, state: JobState): void {
-    const row = jobRow(job, state)
+    const row = jobRow(job, state, this.now())
     this.unsent.set(row.id, row)
     this.rowKinds.add(job.kind)
     this.announced.set(job.kind, rowSignature(state))
@@ -431,7 +440,7 @@ export function homeFirstMs(job: JobDef, machine: string, lastMachine?: string |
 }
 
 /** The job's one Status row: where and how it last ran, and when it is due next. */
-export function jobRow(job: JobDef, state: JobState): StatusRow {
+export function jobRow(job: JobDef, state: JobState, now = Date.now()): StatusRow {
   const ran = state.lastRun !== null
   if (state.paused)
     return {
@@ -456,7 +465,11 @@ export function jobRow(job: JobDef, state: JobState): StatusRow {
     project: job.project,
     state: (state.lastState as JobResult['state'] | null) ?? 'ok',
     meaning: ran
-      ? cut(state.lastMeaning || 'Finished.')
+      ? cut(
+          state.lastState === 'failed' && state.leaseId && (state.leaseExpires ?? 0) > now
+            ? `Retrying. Last run failed: ${state.lastMeaning || 'It failed.'}`
+            : state.lastMeaning || 'Finished.',
+        )
       : `Not run yet. Runs ${schedule(job)} on ${job.home}.`,
     ...(ran ? { last_run: iso(state.lastRun as number) } : {}),
     // While it runs the scheduler still holds the due time it started at, so a long run would read

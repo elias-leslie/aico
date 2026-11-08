@@ -36,8 +36,14 @@ export interface BackupJob {
   /** The machine this copy reads: how it stood at the start, and how to read it again if the copy fails. */
   machine?: { before: GuestPower; read: () => Promise<GuestPower>; settleSeconds?: number }
 }
-/** A machine's power: `off` also when the Proxmox host holding it does not answer at all. */
-export type GuestPower = { state: 'on'; uptime?: number } | { state: 'off' } | { state: 'unknown' }
+/**
+ * A machine's power. `off` also when the Proxmox host holding it does not answer at all (`hostAway`).
+ * `hostBootId` comes from the host kernel, not its guests: young guests do not prove a host restart.
+ */
+export type GuestPower =
+  | { state: 'on'; uptime?: number; hostBootId?: string }
+  | { state: 'off'; hostAway?: true; hostBootId?: string }
+  | { state: 'unknown' }
 export function volumeJobs(cfg: BackupConfig, state: BackupState): BackupJob[] {
   return Object.entries(cfg.subvolumes).map(([id, spec]) => {
     const p = state.points.find((p) => p.source === spec.mount)
@@ -140,31 +146,46 @@ export function diskAway(
     .join('/')
   return !mounts.split('\n').some((line) => line.split(' ')[1] === root)
 }
-/** How a guest (or, with no `guest`, the Proxmox host) stands now, from the host's own list. */
+/** The old guest-list contract stays intact; an older helper simply has no boot evidence. */
+async function powerListing(rt: Runtime, ssh: string[]) {
+  const [listing, boot] = await Promise.all([
+    rt.run([...ssh, 'guests']),
+    rt.run([...ssh, 'host-boot']).catch(() => null),
+  ])
+  const id = boot?.code === 0 ? boot.out.trim() : ''
+  const hostBootId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+    ? id
+    : undefined
+  return { listing, hostBootId }
+}
+
+/** How a guest (or the Proxmox host) stands now, from the host's own list and boot identity. */
 async function readPower(
   rt: Runtime,
   ssh: string[],
   guest?: { vmid: number; type: string },
 ): Promise<GuestPower> {
-  const listing = await rt.run([...ssh, 'guests'])
-  if (hostAway(listing)) return { state: 'off' }
+  const { listing, hostBootId } = await powerListing(rt, ssh)
+  if (hostAway(listing)) return { state: 'off', hostAway: true }
   if (listing.code) return { state: 'unknown' }
   try {
-    return readListed(JSON.parse(listing.out), guest)
+    return readListed(JSON.parse(listing.out), guest, hostBootId)
   } catch {
     return { state: 'unknown' }
   }
 }
-function readListed(
+export function readListed(
   resources: { vmid: number; type: string; status: string; uptime?: number }[],
   guest?: { vmid: number; type: string },
+  hostBootId?: string,
 ): GuestPower {
-  if (!guest) return { state: 'on' }
+  const host = hostBootId ? { hostBootId } : {}
+  if (!guest) return { state: 'on', ...host }
   const found = resources.find((g) => g.vmid === guest.vmid && g.type === guest.type)
   if (!found) return { state: 'unknown' }
   return found.status === 'running'
-    ? { state: 'on', ...(found.uptime === undefined ? {} : { uptime: found.uptime }) }
-    : { state: 'off' }
+    ? { state: 'on', ...(found.uptime === undefined ? {} : { uptime: found.uptime }), ...host }
+    : { state: 'off', ...host }
 }
 /** CT 160, where the append copy goes, as a machine a copy can find off; undefined with no Proxmox key. */
 export async function appendMachine(rt: Runtime): Promise<BackupJob['machine']> {
@@ -188,7 +209,8 @@ export async function appendMachine(rt: Runtime): Promise<BackupJob['machine']> 
  */
 /**
  * The machine's power once a step on it failed. A shutdown stops the guest agent first, so the step
- * fails while Proxmox still says running: give that time to show before calling it a real failure.
+ * fails while Proxmox still says running, and a host going down or coming up answers ssh before its
+ * guest list works: give that time to show before calling it a real failure.
  */
 async function settledPower(machine: NonNullable<BackupJob['machine']>): Promise<GuestPower> {
   const { before, read, settleSeconds = 0 } = machine
@@ -196,7 +218,7 @@ async function settledPower(machine: NonNullable<BackupJob['machine']>): Promise
   let now = await look()
   for (
     let left = settleSeconds;
-    now.state === 'on' && before.state === 'on' && left > 0;
+    (now.state === 'unknown' || (now.state === 'on' && before.state === 'on')) && left > 0;
     left -= 5
   ) {
     await new Promise((resolve) => setTimeout(resolve, Math.min(left, 5) * 1000))
@@ -213,7 +235,12 @@ async function failedCopyMachine(
   const { before } = job.machine
   const now = await settledPower(job.machine)
   if (now.state === 'unknown' || before.state === 'unknown') return null
-  if (now.state === 'off') return before.state === 'off' ? null : 'off'
+  if (before.hostBootId && now.hostBootId && before.hostBootId !== now.hostBootId) return 'changed'
+  if (now.state === 'off') {
+    if (before.state !== 'off' || now.hostAway) return 'off'
+    // Off all along, with no evidence the host changed: this stopped-disk read failed for real.
+    return null
+  }
   if (before.state === 'off') return 'changed'
   // Proxmox still lists a VM as running for the minutes it takes to shut down, but its agent is gone.
   if (/guest agent is not running/i.test(reason)) return 'changed'
@@ -238,7 +265,7 @@ async function proxmoxJob(
   const onHost = parts[0] === 'config' || parts[0] === 'host'
   const guestId = onHost ? undefined : { vmid: Number(parts[1]), type: parts[0] as string }
   // The host itself doesn't answer: everything on it is off.
-  const listing = await rt.run([...ssh, 'guests'])
+  const { listing, hostBootId } = await powerListing(rt, ssh)
   if (hostAway(listing)) return offline()
   if (listing.code)
     throw new Error(`The Proxmox guest list is unavailable${failureReason(listing, ': ')}.`)
@@ -250,7 +277,7 @@ async function proxmoxJob(
     template?: boolean
   }[]
   const machine = {
-    before: readListed(resources, guestId),
+    before: readListed(resources, guestId, hostBootId),
     read: () => readPower(rt, ssh, guestId),
     settleSeconds: rt.cfg.schedule.copyFailSettleSeconds,
   }
@@ -405,9 +432,14 @@ export async function backupJob(
       throw new Error('The source has no readable payload date; no fresh backup was claimed.')
     // Jobs are built when the run starts and a copy can wait half an hour behind the others. A
     // machine switched on since then was on when this copy started, so going off is what stopped it.
-    if (job.machine?.before.state === 'off') {
+    // Refresh host identity here too: a reboot while waiting did not interrupt this copy.
+    if (
+      job.machine &&
+      (job.machine.before.state === 'off' ||
+        (job.machine.before.state !== 'unknown' && job.machine.before.hostBootId))
+    ) {
       const fresh = await job.machine.read().catch((): GuestPower => ({ state: 'unknown' }))
-      if (fresh.state === 'on') job.machine.before = fresh
+      job.machine.before = fresh
     }
     const tags = ['offsite', `job:${job.id}`, `source:${job.id}`]
     const base = [

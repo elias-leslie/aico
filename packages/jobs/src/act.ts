@@ -9,8 +9,9 @@
 // guard: a run that finds it live attaches instead of starting a second.
 
 import { execFile, spawn } from 'node:child_process'
-import { mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs'
+import { mkdirSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs'
 import { request } from 'node:http'
+import { uptime } from 'node:os'
 import { join } from 'node:path'
 import type { JobDef } from './jobs'
 import type { JobResult } from './leases'
@@ -132,6 +133,12 @@ export function commandJob(argv: readonly string[]): Promise<JobResult> {
 export interface UnitHost {
   active(unit: string, where?: UnitWhere): Promise<boolean>
   start(unit: string, argv: readonly string[], where?: UnitWhere): Promise<void>
+  /** This machine, or the user manager running its units, is shutting down right now. */
+  stopping?(where?: UnitWhere): Promise<boolean>
+  /** When this boot began, ms since the epoch: a result written before it is the last boot's. */
+  bootedAt?(): number
+  /** Stable across clock adjustments; different after a machine reboot. */
+  bootId?(): string | null
 }
 
 /** Where a unit runs: a user unit (default) or a system unit as root; and its working folder. */
@@ -166,6 +173,15 @@ export function systemdUnits(env: NodeJS.ProcessEnv = process.env): UnitHost {
           unit,
         ])
       ).code === 0,
+    stopping: async (where) =>
+      (
+        await Promise.all([
+          run('systemctl', ['is-system-running']),
+          ...(where?.scope === 'system' ? [] : [run('systemctl', ['--user', 'is-system-running'])]),
+        ])
+      ).some((answer) => answer.out === 'stopping'),
+    bootedAt: () => Date.now() - uptime() * 1000,
+    bootId: () => readIf('/proc/sys/kernel/random/boot_id')?.trim() || null,
     start: async (unit, argv, where) => {
       const system = where?.scope === 'system'
       const args = [
@@ -190,7 +206,8 @@ export const unitName = (kind: string) => `aico-job-${kind}`
 
 // "$@" runs the job; its exit code is written last and moved into place whole, so a code file
 // is never half-written. SIGKILL of the wrapper leaves no code file: that run reads as stopped.
-const WRAPPER = '"$@" >"$0.log" 2>&1; echo $? >"$0.code.tmp"; mv "$0.code.tmp" "$0.code"'
+const WRAPPER =
+  'cat /proc/sys/kernel/random/boot_id >"$0.boot.tmp" 2>/dev/null; mv "$0.boot.tmp" "$0.boot"; "$@" >"$0.log" 2>&1; echo $? >"$0.code.tmp"; mv "$0.code.tmp" "$0.code"'
 
 /** The unit's command line: the wrapper shell, then the job's argv. */
 export const unitArgv = (base: string, argv: readonly string[]) => [
@@ -216,6 +233,47 @@ function readIf(path: string): string | null {
   } catch {
     return null
   }
+}
+
+const CUT_SHORT: JobResult = {
+  state: 'ok',
+  cut: true,
+  meaning: 'This machine shut down during the run; it runs again once the machine is back.',
+}
+
+/** Shutdown signals; SIGKILL and crash signals also have real running-machine causes. */
+const endedByShutdownSignal = (code: number) => code === 130 || code === 143
+
+/** When the file was last written, or null when it isn't there. */
+function writtenAt(path: string): number | null {
+  try {
+    return statSync(path).mtimeMs
+  } catch {
+    return null
+  }
+}
+
+/**
+ * A run this machine's shutdown ended, which says nothing about the job (owner 2026-11-08). Anything
+ * short of success while the machine is stopping counts; after the boot only a shutdown signal exit
+ * from the last boot does, as any other exit code then is a real result nobody had read yet. Boot
+ * identity survives clock adjustments; older wrappers without it fall back to the result timestamp.
+ * A run stopped by hand on a running machine reads failed, as it did.
+ */
+async function endedWithMachine(
+  host: UnitHost,
+  code: number | null,
+  codeAt: number | null,
+  resultBoot: string | null,
+  where?: UnitWhere,
+): Promise<boolean> {
+  if (code === 0) return false
+  if (await host.stopping?.(where).catch(() => false)) return true
+  if (code === null || !endedByShutdownSignal(code)) return false
+  const bootId = host.bootId?.()
+  if (bootId && resultBoot) return bootId !== resultBoot
+  const booted = host.bootedAt?.()
+  return codeAt !== null && booted !== undefined && Number.isFinite(booted) && codeAt < booted
 }
 
 /** True when the job's unit is live, or it finished and nobody has recorded its code yet. */
@@ -257,14 +315,18 @@ export async function unitJob(
   while (await host.active(unit, where))
     await new Promise((resolve) => setTimeout(resolve, options.pollMs ?? 2_000))
   const code = readIf(`${base}.code`)
+  const codeAt = writtenAt(`${base}.code`)
+  const resultBoot = readIf(`${base}.boot`)?.trim() || null
   const log = readIf(`${base}.log`) ?? ''
   rmSync(`${base}.code`, { force: true })
   // The last run's output stays for `aico routines log KIND`; the next run writes a fresh .log.
   try {
     renameSync(`${base}.log`, `${base}.last.log`)
   } catch {}
-  if (code === null) return { state: 'failed', meaning: 'It was stopped before it left a result.' }
-  return read(Number(code.trim()), log.slice(-TAIL_BYTES))
+  const exit = code === null ? null : Number(code.trim())
+  if (await endedWithMachine(host, exit, codeAt, resultBoot, where)) return CUT_SHORT
+  if (exit === null) return { state: 'failed', meaning: 'It was stopped before it left a result.' }
+  return read(exit, log.slice(-TAIL_BYTES))
 }
 
 /** A POST job unit's result: the JSON line `aico jobs post` printed last; else its exit as a command's. */

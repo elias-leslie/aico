@@ -232,6 +232,9 @@ what = "Corrected memory errors jumped to {n} in a day (usual {base})"
 impact = "The corrected-error rate is above its configured limit"
 next = "Check the memory-error history on the PVE host"
 
+[signal."ecc.spike:ok"]
+what = "{n} corrected memory reports in a day (usual {base}); recorded only on this non-ECC host"
+
 [signal."ecc.corrected:ok"]
 what = "{n} corrected memory errors in a day; recorded only"
 
@@ -513,8 +516,8 @@ next = "See what is calling sudo with host-steward check --only sudo --dry-run"
 
 [signal."sudo.new_family"]
 what = "{n} new sudo command{plural}: {families}"
-impact = "Expected if run by a known agent or declared (aico declare --what any); they count as normal after a day"
-next = "Don't know one? The sudo log on this machine shows who ran it"
+impact = "Nothing for you to do if an agent ran it; these clear by themselves after a day"
+next = "Don't recognize one? The sudo log on this machine shows who ran it"
 
 [signal."sudo.new_family.auto:ok"]
 what = "{n} new kinds of sudo command, all from known services or agent sessions: {by}"
