@@ -18,7 +18,18 @@
 // waiting after their machine's return show unknown but are left out of the badge too: nothing is
 // known wrong yet.
 
-import { byTier } from '@aico/shared/status-order'
+import {
+  countShown,
+  isProblem,
+  matchesSearch,
+  PROBLEMS,
+  type Problem,
+  SHOWN,
+  type Shown,
+  SORTS,
+  STATUS_ORDER,
+  type StatusSort,
+} from '@aico/shared/status-order'
 import { showsBack } from './intent'
 import { type Major, needsOwner } from './major'
 import type { Kind, StatusRow } from './row'
@@ -34,13 +45,8 @@ export interface StoredRow {
   offAt?: number
 }
 
-/** What a reader sees: the writer's state, or late / unknown. */
-export const SHOWN = ['failed', 'late', 'unknown', 'warn', 'ok', 'off'] as const
-export type Shown = (typeof SHOWN)[number]
-
-/** Shown states that are problems (listed first); the rest fold into the healthy count. */
-export const PROBLEMS: readonly Shown[] = ['failed', 'late', 'unknown', 'warn']
-export type Problem = 'failed' | 'late' | 'unknown' | 'warn'
+// Shown states, problems and sorts are shared with the Status page (@aico/shared/status-order).
+export { PROBLEMS, type Problem, SHOWN, type Shown, SORTS }
 
 /**
  * Why a row shows unknown: its machine row went late or there is none; or its machine is back and
@@ -59,8 +65,7 @@ export interface ShownRow extends StatusRow {
   unknown_why?: UnknownWhy
 }
 
-export const SORTS = ['problems', 'what', 'updated', 'next'] as const
-export type Sort = (typeof SORTS)[number]
+export type Sort = StatusSort
 
 export interface Filter {
   state?: readonly Shown[]
@@ -213,49 +218,21 @@ export function show(
   })
 }
 
-const byCodeUnit = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
-const byWhat = (a: ShownRow, b: ShownRow) => byCodeUnit(a.what, b.what) || byCodeUnit(a.id, b.id)
-const rank = (row: ShownRow) => SHOWN.indexOf(row.shown)
-const nextOf = (row: ShownRow) =>
-  row.next_run ? Date.parse(row.next_run) : Number.POSITIVE_INFINITY
-
-const isProblem = (row: ShownRow) => PROBLEMS.includes(row.shown)
-
-/** Problems first, by what each costs (lost work, security, service, resource pressure), then by state. */
-const byConsequence = (a: ShownRow, b: ShownRow) =>
-  Number(!isProblem(a)) - Number(!isProblem(b)) ||
-  (isProblem(a) && isProblem(b) ? byTier(a, b) : 0) ||
-  rank(a) - rank(b) ||
-  byWhat(a, b)
-
-const ORDER: Record<Sort, (a: ShownRow, b: ShownRow) => number> = {
-  problems: byConsequence,
-  what: byWhat,
-  updated: (a, b) => byCodeUnit(b.updated_at, a.updated_at) || byWhat(a, b),
-  next: (a, b) => nextOf(a) - nextOf(b) || byWhat(a, b),
-}
-
 /** The rows that pass `filter`, in its sort order (problems first by default). */
 function select(rows: readonly ShownRow[], filter: Filter = {}): ShownRow[] {
-  const needle = filter.search?.trim().toLowerCase()
   const kept = rows.filter((row) => {
     if (filter.state?.length && !filter.state.includes(row.shown)) return false
     if (filter.kind?.length && !filter.kind.includes(row.kind)) return false
     if (filter.machine?.length && !filter.machine.includes(row.machine)) return false
     if (filter.project?.length && !(row.project && filter.project.includes(row.project)))
       return false
-    if (needle) {
-      const haystack = [row.id, row.what, row.meaning, row.kind, row.machine, row.project ?? '']
-      if (!haystack.some((field) => field.toLowerCase().includes(needle))) return false
-    }
-    return true
+    return matchesSearch(row, filter.search)
   })
-  return kept.sort(ORDER[filter.sort ?? 'problems'])
+  return kept.sort(STATUS_ORDER[filter.sort ?? 'problems'])
 }
 
 function rollup(rows: readonly ShownRow[]): Rollup {
-  const counts = Object.fromEntries(SHOWN.map((state) => [state, 0])) as Record<Shown, number>
-  for (const row of rows) counts[row.shown] += 1
+  const counts = countShown(rows)
   const problems = PROBLEMS.reduce((sum, state) => sum + counts[state], 0)
   return { problems, healthy: rows.length - problems, counts }
 }
@@ -265,7 +242,7 @@ const QUIET: readonly (UnknownWhy | undefined)[] = ['back']
 
 /** Whether a row counts toward the badge and alerts: a problem not left out as quiet. */
 export function counted(row: ShownRow): boolean {
-  return PROBLEMS.includes(row.shown) && !QUIET.includes(row.unknown_why)
+  return isProblem(row.shown) && !QUIET.includes(row.unknown_why)
 }
 
 /** Where a pile of problems comes from: the machine most of them are on, when that is a crowd. */
@@ -302,11 +279,11 @@ export function summary(rows: readonly ShownRow[]): Summary {
   ).length
   return {
     problems: problems.length,
-    worst: (PROBLEMS as readonly Problem[]).find((state) => counts[state] > 0) ?? null,
+    worst: PROBLEMS.find((state) => counts[state] > 0) ?? null,
     counts,
     quiet,
     needs: problems.filter(needsOwner).length,
-    healthy: rows.filter((row) => !PROBLEMS.includes(row.shown)).length,
+    healthy: rows.filter((row) => !isProblem(row.shown)).length,
     top: problems.slice(0, 3),
   }
 }

@@ -4,7 +4,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { type ParseArgsOptionsConfig, parseArgs } from 'node:util'
-import { counted, PROBLEMS, StatusStore, statusDbPath } from '@aico/status'
+import { counted, StatusStore, statusDbPath } from '@aico/status'
 import { TetherClient, tetherSocketPath } from '@aico/tether-client'
 import { type Database, tasksDbPathFromEnv } from './db'
 import { Registry } from './projects'
@@ -43,7 +43,7 @@ function statusFindings(env: NodeJS.ProcessEnv, now: () => number): Finding[] | 
     store = new StatusStore(path, now)
     return store
       .read()
-      .rows.filter((row) => counted(row) && PROBLEMS.includes(row.shown))
+      .rows.filter(counted)
       .map((row) => ({
         id: row.id,
         machine: row.machine,

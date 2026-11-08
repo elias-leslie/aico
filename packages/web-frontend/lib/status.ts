@@ -1,16 +1,23 @@
 // The Status page's data and words. GET /api/status serves the rows with the late and unknown
-// rules applied (packages/status show.ts); the page filters, sorts and counts them here the same
-// way, so the rollup chips can count every state while one is picked.
+// rules applied (packages/status show.ts); the page filters, sorts and counts them here with the
+// same shared rules (@aico/shared/status-order), so the rollup chips can count every state while
+// one is picked.
 
-import { byTier, tierLabel, tierOf } from '@aico/shared/status-order'
+import {
+  countShown,
+  isProblem,
+  matchesSearch,
+  PROBLEMS,
+  type Problem,
+  type Shown,
+  STATUS_ORDER,
+  type StatusSort,
+  tierLabel,
+  tierOf,
+} from '@aico/shared/status-order'
 import { machineLabel } from './machine-name'
 
-export { tierLabel, tierOf }
-
-const SHOWN = ['failed', 'late', 'unknown', 'warn', 'ok', 'off'] as const
-export type Shown = (typeof SHOWN)[number]
-export const PROBLEMS = ['failed', 'late', 'unknown', 'warn'] as const
-export type Problem = (typeof PROBLEMS)[number]
+export { isProblem, PROBLEMS, type Problem, type Shown, tierLabel, tierOf }
 export const KINDS = [
   'check',
   'job',
@@ -85,8 +92,8 @@ export const SORTS = [
   ['what', 'Name'],
   ['updated', 'Last report'],
   ['next', 'Next due'],
-] as const
-export type Sort = (typeof SORTS)[number][0]
+] as const satisfies readonly (readonly [StatusSort, string])[]
+export type Sort = StatusSort
 
 export interface StatusFilter {
   states: Shown[]
@@ -106,28 +113,7 @@ export const NO_FILTER: StatusFilter = {
   sort: 'problems',
 }
 
-export const isProblem = (shown: Shown) =>
-  (PROBLEMS as readonly string[]).includes(shown)
-
 const time = (iso: string | null | undefined) => (iso ? Date.parse(iso) : null)
-const byText = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
-const byWhat = (a: StatusRow, b: StatusRow) =>
-  byText(a.what, b.what) || byText(a.id, b.id)
-const rank = (row: StatusRow) => SHOWN.indexOf(row.shown)
-/** Problems first, by what each costs (lost work, security, service, resource pressure), then by state. */
-const byConsequence = (a: StatusRow, b: StatusRow) =>
-  Number(!isProblem(a.shown)) - Number(!isProblem(b.shown)) ||
-  (isProblem(a.shown) && isProblem(b.shown) ? byTier(a, b) : 0) ||
-  rank(a) - rank(b) ||
-  byWhat(a, b)
-const ORDER: Record<Sort, (a: StatusRow, b: StatusRow) => number> = {
-  problems: byConsequence,
-  what: byWhat,
-  updated: (a, b) => byText(b.updated_at, a.updated_at) || byWhat(a, b),
-  next: (a, b) =>
-    (time(a.next_run) ?? Number.POSITIVE_INFINITY) -
-      (time(b.next_run) ?? Number.POSITIVE_INFINITY) || byWhat(a, b),
-}
 
 /** Whether a row passes the filter; `withState` false skips the state chips (the rollup's scope). */
 export function matches(
@@ -140,34 +126,15 @@ export function matches(
   if (filter.kind && row.kind !== filter.kind) return false
   if (filter.machine && row.machine !== filter.machine) return false
   if (filter.project && row.project !== filter.project) return false
-  const needle = filter.search.trim().toLowerCase()
-  if (
-    needle &&
-    ![
-      row.id,
-      row.what,
-      row.meaning,
-      row.kind,
-      row.machine,
-      row.project ?? '',
-    ].some((field) => field.toLowerCase().includes(needle))
-  )
-    return false
-  return true
+  return matchesSearch(row, filter.search)
 }
 
 export function sortRows(rows: readonly StatusRow[], sort: Sort): StatusRow[] {
-  return [...rows].sort(ORDER[sort])
+  return [...rows].sort(STATUS_ORDER[sort])
 }
 
-export function rollup(rows: readonly StatusRow[]): Record<Shown, number> {
-  const counts = Object.fromEntries(SHOWN.map((state) => [state, 0])) as Record<
-    Shown,
-    number
-  >
-  for (const row of rows) counts[row.shown] += 1
-  return counts
-}
+export const rollup = (rows: readonly StatusRow[]): Record<Shown, number> =>
+  countShown(rows)
 
 export const plural = (n: number, one: string, many = `${one}s`) =>
   `${n} ${n === 1 ? one : many}`
