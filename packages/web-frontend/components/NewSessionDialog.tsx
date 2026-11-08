@@ -39,14 +39,16 @@ interface NewSessionDialogProps {
   /** Preselected project: the open session's, else the project link's. */
   defaultProjectId?: string | null
   /** `mode` is an agent tool's slug, or `shell`; `host` a Tether peer, or
-   * absent for this computer; `name` is the owner's own, when given. A
-   * rejection keeps the dialog open with its reason. */
+   * absent for this computer; `name` is the owner's own and `firstMessage`
+   * what the agent is told first, when given. A rejection keeps the dialog
+   * open with its reason. */
   onStart: (
     projectId: string,
     rootPath: string | null,
     mode: string,
     host?: string,
     name?: string,
+    firstMessage?: string,
   ) => void | Promise<void>
   /** The agent of the newest session, for a device that hasn't started one. */
   recentAgentSlug?: string | null
@@ -122,6 +124,7 @@ export function NewSessionDialog({
   const [pickedToolSlug, setPickedToolSlug] = useState<string | null>(null)
   const [pickedHost, setPickedHost] = useState<string | null>(null)
   const [name, setName] = useState('')
+  const [firstMessage, setFirstMessage] = useState('')
   const [lastToolSlug, setLastToolSlug] = useLocalStorageState<string | null>(
     LAST_AGENT_KEY,
     null,
@@ -199,6 +202,7 @@ export function NewSessionDialog({
     setPickedToolSlug(null)
     setPickedHost(null)
     setName('')
+    setFirstMessage('')
     setStartError(null)
     setStarting(false)
     onClose()
@@ -207,7 +211,14 @@ export function NewSessionDialog({
     if (!project || starting) return
     const mode = tool ? tool.slug : SHELL_MODE
     const named = name.trim()
-    const extra: [string?, string?] = named ? [host, named] : host ? [host] : []
+    const message = tool ? firstMessage.trim() : ''
+    const extra: [string?, string?, string?] = message
+      ? [host, named || undefined, message]
+      : named
+        ? [host, named]
+        : host
+          ? [host]
+          : []
     const started = onStart(project.id, project.root_path, mode, ...extra)
     const remember = () => {
       setLastProjectId(project.id)
@@ -271,58 +282,61 @@ export function NewSessionDialog({
           {isMobile && <SheetHandle />}
           <SheetTitleBar title="New session" />
 
-          <div className="flex-none pb-1">
-            <SectionTitle>Start</SectionTitle>
-            <div className="px-[18px]">
-              {enabledTools.length > 0 && (
-                <fieldset aria-label="Session kind" className="lantern-seg">
-                  {(['agent', 'shell'] as const).map((value) => (
-                    <button
-                      key={value}
-                      type="button"
-                      aria-pressed={kind === value}
-                      onClick={() => setKind(value)}
-                    >
-                      {value === 'agent' ? 'Agent' : 'Shell'}
-                    </button>
-                  ))}
-                </fieldset>
-              )}
-              {kind === 'agent' && enabledTools.length > 0 && (
-                <fieldset aria-label="Agent" className="lantern-tools mt-2.5">
-                  <AgentChoices
-                    tools={enabledTools}
-                    glances={glances}
-                    picked={tool?.slug}
-                    onPick={setPickedToolSlug}
-                  />
-                </fieldset>
-              )}
-              {toolIsLastUsed && (
-                <p
-                  className="mt-1.5 text-xs"
-                  style={{ color: 'var(--mist)' }}
-                  data-testid="last-used-agent"
-                >
-                  {tool.name} was the last one you used.
-                </p>
-              )}
-            </div>
-          </div>
-
-          {(hosts.length > 0 || hostsError) && (
+          <div className="lantern-new-session">
             <div className="flex-none pb-1">
-              <SectionTitle>Runs on</SectionTitle>
-              {hostsError ? (
-                <Note>Couldn’t load hosts. New sessions run here.</Note>
-              ) : (
-                <fieldset
-                  aria-label="Runs on"
-                  className="lantern-tools mx-[18px]"
-                  data-testid="new-session-hosts"
-                >
-                  {[{ name: null, state: 'connected' as const }, ...hosts].map(
-                    (h) => {
+              <SectionTitle>Start</SectionTitle>
+              <div className="px-[18px]">
+                {enabledTools.length > 0 && (
+                  <fieldset aria-label="Session kind" className="lantern-seg">
+                    {(['agent', 'shell'] as const).map((value) => (
+                      <button
+                        key={value}
+                        type="button"
+                        aria-pressed={kind === value}
+                        onClick={() => setKind(value)}
+                      >
+                        {value === 'agent' ? 'Agent' : 'Shell'}
+                      </button>
+                    ))}
+                  </fieldset>
+                )}
+                {kind === 'agent' && enabledTools.length > 0 && (
+                  <fieldset aria-label="Agent" className="lantern-tools mt-2.5">
+                    <AgentChoices
+                      tools={enabledTools}
+                      glances={glances}
+                      picked={tool?.slug}
+                      onPick={setPickedToolSlug}
+                    />
+                  </fieldset>
+                )}
+                {toolIsLastUsed && (
+                  <p
+                    className="mt-1.5 text-xs"
+                    style={{ color: 'var(--mist)' }}
+                    data-testid="last-used-agent"
+                  >
+                    {tool.name} was the last one you used.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {(hosts.length > 0 || hostsError) && (
+              <div className="flex-none pb-1">
+                <SectionTitle>Runs on</SectionTitle>
+                {hostsError ? (
+                  <Note>Couldn’t load hosts. New sessions run here.</Note>
+                ) : (
+                  <fieldset
+                    aria-label="Runs on"
+                    className="lantern-tools mx-[18px]"
+                    data-testid="new-session-hosts"
+                  >
+                    {[
+                      { name: null, state: 'connected' as const },
+                      ...hosts,
+                    ].map((h) => {
                       const note = h.name ? HOST_STATE_LABELS[h.state] : ''
                       return (
                         <button
@@ -345,88 +359,88 @@ export function NewSessionDialog({
                           )}
                         </button>
                       )
-                    },
-                  )}
-                </fieldset>
-              )}
-            </div>
-          )}
-          {hostsLoading && hosts.length === 0 && (
-            <p className="sr-only" aria-live="polite">
-              Loading hosts…
-            </p>
-          )}
-
-          <div className="flex-1 overflow-y-auto overscroll-contain pb-2">
-            <SectionTitle>Project</SectionTitle>
-            <div className="px-[18px]">
-              <label className="lantern-field">
-                <Search className="h-4 w-4 flex-shrink-0" strokeWidth={1.7} />
-                <input
-                  type="search"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Find a project"
-                  aria-label="Find a project"
-                  className="text-sm"
-                />
-              </label>
-            </div>
-            {away && (
-              <Note>{`${sessionHostLabel(host)} is off or out of reach. Starting a session there turns it on first.`}</Note>
-            )}
-            {isLoading ? (
-              <Note>Loading projects…</Note>
-            ) : isError ? (
-              <Note>
-                {host
-                  ? `${remote.error?.message || `Couldn’t load projects on ${sessionHostLabel(host)}`}.`
-                  : "Couldn't load projects."}{' '}
-                <button
-                  type="button"
-                  onClick={() => void refetch()}
-                  className="underline"
-                  style={{ color: 'var(--lantern)' }}
-                >
-                  Try again
-                </button>
-              </Note>
-            ) : projects.length === 0 ? (
-              <Note>
-                {host
-                  ? `No projects on ${sessionHostLabel(host)}.`
-                  : 'No projects.'}
-              </Note>
-            ) : visibleProjects.length === 0 ? (
-              <Note>No project matches “{query.trim()}”.</Note>
-            ) : (
-              <div
-                role="radiogroup"
-                aria-label="Project"
-                className="mx-2 mt-2 flex flex-col"
-              >
-                {visibleProjects.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={p.id === projectId}
-                    onClick={() => setPickedProjectId(p.id)}
-                    className="lantern-choice"
-                  >
-                    <span aria-hidden="true" className="radio" />
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm">{p.name}</span>
-                      {p.root_path && (
-                        <span className="path block truncate">
-                          {p.root_path}
-                        </span>
-                      )}
-                    </span>
-                  </button>
-                ))}
+                    })}
+                  </fieldset>
+                )}
               </div>
             )}
+            {hostsLoading && hosts.length === 0 && (
+              <p className="sr-only" aria-live="polite">
+                Loading hosts…
+              </p>
+            )}
+
+            <div className="projects overscroll-contain pb-2">
+              <SectionTitle>Project</SectionTitle>
+              <div className="px-[18px]">
+                <label className="lantern-field">
+                  <Search className="h-4 w-4 flex-shrink-0" strokeWidth={1.7} />
+                  <input
+                    type="search"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder="Find a project"
+                    aria-label="Find a project"
+                    className="text-sm"
+                  />
+                </label>
+              </div>
+              {away && (
+                <Note>{`${sessionHostLabel(host)} is off or out of reach. Starting a session there turns it on first.`}</Note>
+              )}
+              {isLoading ? (
+                <Note>Loading projects…</Note>
+              ) : isError ? (
+                <Note>
+                  {host
+                    ? `${remote.error?.message || `Couldn’t load projects on ${sessionHostLabel(host)}`}.`
+                    : "Couldn't load projects."}{' '}
+                  <button
+                    type="button"
+                    onClick={() => void refetch()}
+                    className="underline"
+                    style={{ color: 'var(--lantern)' }}
+                  >
+                    Try again
+                  </button>
+                </Note>
+              ) : projects.length === 0 ? (
+                <Note>
+                  {host
+                    ? `No projects on ${sessionHostLabel(host)}.`
+                    : 'No projects.'}
+                </Note>
+              ) : visibleProjects.length === 0 ? (
+                <Note>No project matches “{query.trim()}”.</Note>
+              ) : (
+                <div
+                  role="radiogroup"
+                  aria-label="Project"
+                  className="mx-2 mt-2 flex flex-col"
+                >
+                  {visibleProjects.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={p.id === projectId}
+                      onClick={() => setPickedProjectId(p.id)}
+                      className="lantern-choice"
+                    >
+                      <span aria-hidden="true" className="radio" />
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm">{p.name}</span>
+                        {p.root_path && (
+                          <span className="path block truncate">
+                            {p.root_path}
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <div
@@ -442,6 +456,26 @@ export function NewSessionDialog({
               >
                 {startError}
               </p>
+            )}
+            {tool && (
+              <label className="mb-2 flex items-start gap-2.5 text-xs">
+                <span
+                  className="flex-none pt-2.5"
+                  style={{ color: 'var(--mist)' }}
+                >
+                  First message
+                </span>
+                <span className="lantern-field area min-w-0 flex-1">
+                  <textarea
+                    rows={2}
+                    value={firstMessage}
+                    onChange={(event) => setFirstMessage(event.target.value)}
+                    placeholder="Optional"
+                    className="text-sm"
+                    data-testid="new-session-first-message"
+                  />
+                </span>
+              </label>
             )}
             <label className="mb-2 flex items-center gap-2.5 text-xs">
               <span className="flex-none" style={{ color: 'var(--mist)' }}>

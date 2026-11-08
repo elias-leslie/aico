@@ -294,7 +294,7 @@ select {
   border-color: var(--lantern);
 }
 
-.lantern-field input {
+.lantern-field :is(input, textarea) {
   flex: 1;
   min-width: 0;
   border: none;
@@ -303,8 +303,21 @@ select {
   color: var(--bone);
 }
 
-.lantern-field input::placeholder {
+.lantern-field :is(input, textarea)::placeholder {
   color: var(--mist);
+}
+
+/* A field that takes a few lines and grows with them, up to about five. */
+.lantern-field.area {
+  height: auto;
+  align-items: flex-start;
+  padding: 8px 12px;
+}
+
+.lantern-field.area textarea {
+  max-height: 7em;
+  resize: none;
+  field-sizing: content;
 }
 
 /* Menu rows (session menu, mode picker). */
@@ -338,7 +351,34 @@ select {
   color: var(--ember);
 }
 
-/* New session picker. */
+/* New session picker: what to start stays put above the projects, which
+   scroll on their own. With the phone's keyboard open there's no room for
+   that, so it all scrolls together and the first message stays in view. */
+.lantern-new-session {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.lantern-new-session .projects {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+@media (max-height: 600px) {
+  .lantern-new-session {
+    overflow-y: auto;
+  }
+
+  .lantern-new-session .projects {
+    flex: none;
+    overflow: visible;
+  }
+}
+
 .lantern-seg {
   display: grid;
   grid-auto-flow: column;

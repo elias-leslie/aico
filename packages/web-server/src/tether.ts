@@ -38,11 +38,14 @@ export function createSession(
     continueFrom?: string | null
     /** Reopen this ended conversation of `tool` (its native resume). */
     resumeId?: string | null
+    /** What the agent is told first: its launch prompt, as `st aico create` gives a root. */
+    initialPrompt?: string | null
   },
 ): Promise<SessionDescriptor> {
   const body: Record<string, unknown> = { origin: WEB_ORIGIN, tool: input.tool, size: input.size }
   if (input.continueFrom) body.continueFrom = input.continueFrom
   if (input.resumeId) body.resumeId = input.resumeId
+  if (input.initialPrompt) body.initialPrompt = input.initialPrompt
   if (input.host) body.host = input.host
   if (input.projectId) body.projectId = input.projectId
   if (input.projectRoot) body.projectRoot = input.projectRoot
@@ -115,6 +118,8 @@ const DETAILS: Record<string, [number, string]> = {
   unknown_tool: [400, 'Unknown agent tool'],
   unknown_project: [400, 'Unknown project'],
   invalid_body: [400, 'Invalid request'],
+  prompt_too_long: [422, 'The first message is too long'],
+  unsupported_tool: [400, 'This agent can’t take a first message'],
   wake_unsupported: [409, "Aico can't tell when this session is idle, so it can't take check-ins"],
   too_many_wakes: [409, 'This session has as many check-ins as it can take'],
   host_unavailable: [409, 'That host is not reachable'],

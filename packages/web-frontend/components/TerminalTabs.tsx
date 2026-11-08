@@ -246,8 +246,15 @@ export function TerminalTabs({
             ?.project_id ??
           projectId
         }
-        onStart={(projectId, rootPath, mode, host, name) =>
-          handleNewTerminalForProject(projectId, mode, rootPath, host, name)
+        onStart={(projectId, rootPath, mode, host, name, firstMessage) =>
+          handleNewTerminalForProject(
+            projectId,
+            mode,
+            rootPath,
+            host,
+            name,
+            firstMessage,
+          )
         }
         recentAgentSlug={recentAgentSlug}
         isMobile={isMobile}

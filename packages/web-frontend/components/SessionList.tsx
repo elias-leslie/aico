@@ -69,6 +69,19 @@ export function alsoRunningText(
   return `${modes.map((mode) => toolName(tools, mode)).join(', ')} also running`
 }
 
+/** Why a row says "Shell also running": only true of the Shell beside an agent. */
+export function alsoRunningTip(
+  slot: TerminalSlot | PaneSlot | undefined,
+): string | undefined {
+  const modes = slot && 'alsoRunning' in slot ? slot.alsoRunning : undefined
+  return slot?.type === 'project' &&
+    slot.activeMode !== 'shell' &&
+    modes?.length &&
+    modes.every((mode) => mode === 'shell')
+    ? 'A Shell session opens beside the agent and ends with it.'
+    : undefined
+}
+
 /** What ending the shown session does to the pane's other one: ending the
  * agent takes the shell beside it too; ending the shell leaves the agent. */
 export function endAlongsideNote(
@@ -254,7 +267,11 @@ export function SessionList({
               <CoordinatorBadge badge={slot?.badge} ownLine />
             )}
             <HostBadge host={slot?.host} state={slot?.hostState} />
-            <span className="truncate" style={{ flexShrink: 100 }}>
+            <span
+              className="truncate"
+              style={{ flexShrink: 100 }}
+              title={alsoRunningTip(slot)}
+            >
               {meta}
             </span>
             <CheckInBadge checkIns={checkIns} />

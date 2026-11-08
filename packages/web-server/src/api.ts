@@ -125,6 +125,13 @@ export function buildApi(deps: ApiDeps): Router {
       throw new HttpError(400, 'resume_id needs a project tab, an agent tool and this computer')
     if (resumeId && continueFrom)
       throw new HttpError(400, 'resume_id and continue_from cannot be combined')
+    // What the new agent is told first, by the launch prompt Tether gives a root.
+    const firstMessage = optionalString(body, 'first_message')?.trim() || null
+    if (
+      firstMessage &&
+      (paneType !== 'project' || toolRef === SHELL_MODE || resumeId || continueFrom)
+    )
+      throw new HttpError(400, 'first_message needs a project tab starting a new agent')
     if (paneType === 'project' && !projectId)
       throw new HttpError(400, 'project_id required for project panes')
     if (paneType === 'adhoc' && projectId)
@@ -142,6 +149,7 @@ export function buildApi(deps: ApiDeps): Router {
       sessionName,
       continueFrom,
       resumeId,
+      firstMessage,
     })
     const { pane: view, order } = await paneById(created.id, false)
     return paneResponse(view, order)

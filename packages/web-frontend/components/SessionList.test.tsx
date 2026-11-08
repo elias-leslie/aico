@@ -3,7 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Attention } from '@/lib/attention'
 import { type AdHocSlot, getSlotPanelId } from '@/lib/utils/slot'
 import { SLOT_BASE } from '@/test-stubs/session-fixtures'
-import { alsoRunningText, endAlongsideNote, SessionList } from './SessionList'
+import {
+  alsoRunningText,
+  alsoRunningTip,
+  endAlongsideNote,
+  SessionList,
+} from './SessionList'
 
 vi.mock('@/lib/frame/live', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/frame/live')>()),
@@ -265,6 +270,14 @@ describe('a pane with two sessions', () => {
       'Claude Code also running',
     )
     expect(alsoRunningText(pane('shell', []), tools)).toBeNull()
+  })
+
+  it('its tooltip says what the Shell beside an agent is, and only that', () => {
+    expect(alsoRunningTip(pane('claude-code', ['shell']))).toBe(
+      'A Shell session opens beside the agent and ends with it.',
+    )
+    expect(alsoRunningTip(pane('shell', ['claude-code']))).toBeUndefined()
+    expect(alsoRunningTip(pane('claude-code', []))).toBeUndefined()
   })
 
   it('ending the agent says the shell beside it ends too; ending the shell leaves the agent', () => {

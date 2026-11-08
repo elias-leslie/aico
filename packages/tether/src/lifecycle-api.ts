@@ -90,6 +90,7 @@ import type { Project } from '@aico/session-engine/project'
 import {
   createRootHandler,
   isProjectRootPath,
+  MAX_FRESH_PROMPT_BYTES,
   type MutationRejection,
   parseLabel,
   type RootControlOperations,
@@ -138,6 +139,7 @@ import {
   ADAPTERS,
   adapterOf,
   getTui,
+  isRootCreateTool,
   supportsInstructions,
 } from '@aico/session-engine/tui/registry'
 import { extractSignInLink, signInToolOf } from '@aico/session-engine/tui/sign-in-link'
@@ -732,7 +734,9 @@ function createSession(context: LifecycleApiContext): Handler {
       'host',
       'continueFrom',
       'resumeId',
+      'initialPrompt',
     ])
+    const initialPrompt = firstPrompt(body)
     if (body.host !== undefined && body.host !== null) {
       if (body.continueFrom != null) throw new HttpError(400, 'continue_on_this_host_only')
       if (body.resumeId != null) throw new HttpError(400, 'reopen_on_this_host_only')
@@ -765,6 +769,8 @@ function createSession(context: LifecycleApiContext): Handler {
     const tool =
       body.tool === undefined ? store.defaultTool() : store.resolveTool(body.tool as string)
     if (!tool?.enabled) throw new HttpError(400, 'unknown_tool')
+    if (initialPrompt !== null && !isRootCreateTool(tool.slug))
+      throw new HttpError(400, 'unsupported_tool')
     let projectId: string | null = null
     let projectRoot: string | null = null
     if (body.projectId !== undefined && body.projectId !== null) {
@@ -844,6 +850,7 @@ function createSession(context: LifecycleApiContext): Handler {
     if (name) setWidgetName(id, name)
     if (instructions) saveInstructions(id, instructions)
     const launch = () => ensureSessionSerialized(id, grid)
+    const launchPrompt = recap ?? initialPrompt
     // Checked again here: nothing awaits between this and withRootPrompt claiming it.
     const racing =
       resumeId === null
@@ -857,11 +864,22 @@ function createSession(context: LifecycleApiContext): Handler {
     if (resumeId !== null) holdResume(id, resumeId)
     const started = await (resumeId !== null
       ? withRootPrompt(id, REOPEN_PROMPT, launch, resumeId).finally(() => holdResume(id, resumeId))
-      : recap === null
+      : launchPrompt === null
         ? launch()
-        : withRootPrompt(id, recap, launch))
+        : withRootPrompt(id, launchPrompt, launch))
     if (!started) {
       const failure = lastEnsureFailure(id)
+      // The prompt lives only for this launch: a later one would start the agent without it.
+      if (initialPrompt !== null && discardNeverAllocated(id)) {
+        notifySessionChanged(id, { ended: true })
+        throw new HttpError(
+          failure?.code === 'linger_required' ? 503 : 409,
+          failure?.code ?? 'workload_unavailable',
+          {
+            reason: failure?.reason,
+          },
+        )
+      }
       if (failure?.code === 'admission_denied' || failure?.code === 'linger_required') {
         // Refused before allocation: nothing exists, so nothing is kept.
         if (discardNeverAllocated(id)) notifySessionChanged(id, { ended: true })
@@ -877,6 +895,23 @@ function createSession(context: LifecycleApiContext): Handler {
     if (!started) result.failure = lastEnsureFailure(id) ?? null
     sendJson(res, settled.status === 'running' ? 201 : 202, result)
   }
+}
+
+/** `initialPrompt`: the agent's first message, on the launch prompt a root's rides. */
+function firstPrompt(body: Record<string, unknown>): string | null {
+  const value = body.initialPrompt
+  if (value === undefined || value === null) return null
+  if (
+    typeof value !== 'string' ||
+    !value.trim() ||
+    value.includes('\0') ||
+    body.continueFrom != null ||
+    body.resumeId != null
+  )
+    throw new HttpError(400, 'invalid_body', { field: 'initialPrompt' })
+  if (Buffer.byteLength(value) > MAX_FRESH_PROMPT_BYTES)
+    throw new HttpError(400, 'prompt_too_long', { limit: MAX_FRESH_PROMPT_BYTES })
+  return value
 }
 
 function transferSession(context: LifecycleApiContext): Handler {

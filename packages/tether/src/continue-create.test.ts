@@ -47,6 +47,36 @@ const size = { cols: 80, rows: 24 }
 const create = (extra: Record<string, unknown>) =>
   callSocket(paths.socket, 'POST', '/v1/sessions', { origin: 'cli', size, ...extra })
 
+describe('POST /v1/sessions initialPrompt', () => {
+  it('is a real message, for an agent, and not on top of a recap or a reopen', async () => {
+    for (const initialPrompt of ['   ', 7, 'a\0b'])
+      expect(await create({ tool: 'codex', initialPrompt })).toMatchObject({
+        status: 400,
+        body: { error: 'invalid_body', field: 'initialPrompt' },
+      })
+    expect(
+      await create({ tool: 'codex', initialPrompt: 'hi', continueFrom: '0a1b2c3d' }),
+    ).toMatchObject({ status: 400, body: { field: 'initialPrompt' } })
+    expect(await create({ tool: 'shell', initialPrompt: 'hi' })).toMatchObject({
+      status: 400,
+      body: { error: 'unsupported_tool' },
+    })
+    expect(await create({ tool: 'codex', initialPrompt: 'x'.repeat(14 * 1024 + 1) })).toMatchObject(
+      {
+        status: 400,
+        body: { error: 'prompt_too_long', limit: 14 * 1024 },
+      },
+    )
+  })
+
+  it('a valid one gets as far as the launch', async () => {
+    expect(await create({ tool: 'codex', initialPrompt: 'say hi' })).toMatchObject({
+      status: 503,
+      body: { error: 'linger_required' },
+    })
+  })
+})
+
 describe('POST /v1/sessions continueFrom', () => {
   it('needs a session id, a tool and an existing session', async () => {
     expect(await create({ tool: 'codex', continueFrom: 'nope' })).toMatchObject({

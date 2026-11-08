@@ -43,6 +43,8 @@ interface CreatePaneRequest {
   continue_from?: string
   /** Reopen this ended conversation of the agent's own tool. */
   resume_id?: string
+  /** What the new agent is told first. */
+  first_message?: string
 }
 
 interface UpdatePaneRequest {
@@ -56,6 +58,7 @@ interface PanePlacementOptions {
   sessionName?: string
   continueFrom?: string
   resumeId?: string
+  firstMessage?: string
 }
 
 const api = {
@@ -323,6 +326,7 @@ export function useTerminalPanes() {
         session_name: options?.sessionName,
         continue_from: options?.continueFrom,
         resume_id: options?.resumeId,
+        first_message: options?.firstMessage,
       }),
     [createMutation],
   )

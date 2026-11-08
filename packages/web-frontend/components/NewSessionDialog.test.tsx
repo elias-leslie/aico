@@ -372,7 +372,7 @@ describe('NewSessionDialog', () => {
     expect(
       agents.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy()
-    expect(list.closest('.overflow-y-auto')?.contains(agents)).toBe(false)
+    expect(list.closest('.projects')?.contains(agents)).toBe(false)
   })
 
   it('starts the chosen agent, or a shell, in the chosen project', () => {
@@ -428,6 +428,35 @@ describe('NewSessionDialog', () => {
     expect(
       JSON.parse(localStorage.getItem('aico:new-session-agent') ?? ''),
     ).toBe('codex')
+  })
+
+  it('hands over a first message for an agent, not for a shell, and keeps it through a refusal', async () => {
+    const onStart = vi.fn<Start>(() => Promise.reject(new Error('No room')))
+    const { onClose } = renderDialog('neri', onStart)
+    const box = screen.getByLabelText('First message')
+    fireEvent.change(box, { target: { value: '  say hi\nthen stop  ' } })
+    fireEvent.click(screen.getByRole('button', { name: /^Start Claude Code/ }))
+    await screen.findByTestId('new-session-error')
+    expect(onStart).toHaveBeenCalledWith(
+      'neri',
+      '/srv/neri',
+      'claude-code',
+      undefined,
+      undefined,
+      'say hi\nthen stop',
+    )
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('First message')).toHaveValue(
+      '  say hi\nthen stop  ',
+    )
+
+    onStart.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: 'Shell' }))
+    expect(screen.queryByLabelText('First message')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /^Start a shell/ }))
+    await waitFor(() =>
+      expect(onStart).toHaveBeenCalledWith('neri', '/srv/neri', 'shell'),
+    )
   })
 
   it('without a remembered agent, follows the newest session, then the registry default', () => {

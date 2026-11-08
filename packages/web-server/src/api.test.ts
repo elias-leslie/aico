@@ -502,6 +502,37 @@ describe('panes', () => {
     expect(creates[1]).toMatchObject({ tool: 'claude', name: 'Fix login' })
   })
 
+  it('gives the first message to the new agent only, and only to a new agent', async () => {
+    const base = { pane_type: 'project', pane_name: 'Aico', project_id: 'aico' }
+    const { status } = await call('POST', '/api/panes', {
+      ...base,
+      agent_tool_slug: 'cc',
+      first_message: '  say hi  ',
+    })
+    expect(status).toBe(200)
+    const creates = tether
+      .callsOf('request')
+      .filter(([method, path]) => method === 'POST' && path === '/v1/sessions')
+      .map(([, , input]) => input as { tool: string; initialPrompt?: string })
+    expect(creates[0]).toMatchObject({ tool: 'shell' })
+    expect(creates[0].initialPrompt).toBeUndefined()
+    expect(creates[1]).toMatchObject({ tool: 'claude', initialPrompt: 'say hi' })
+    expect(
+      (await call('POST', '/api/panes', { ...base, agent_tool_slug: 'shell', first_message: 'hi' }))
+        .status,
+    ).toBe(400)
+    expect(
+      (
+        await call('POST', '/api/panes', {
+          ...base,
+          agent_tool_slug: 'cc',
+          continue_from: 'a1b2c3d4',
+          first_message: 'hi',
+        })
+      ).status,
+    ).toBe(400)
+  })
+
   it('asks Tether to carry on from another session in the new agent only', async () => {
     const { status } = await call('POST', '/api/panes', {
       pane_type: 'project',

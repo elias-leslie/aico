@@ -17,7 +17,7 @@ import { AgentIcon, getAgentColor } from '../AgentIcon'
 import { CheckInBadge } from '../CheckInBadge'
 import { CoordinatorBadge } from '../CoordinatorBadge'
 import { HostBadge } from '../HostBadge'
-import { alsoRunningText, useTeamFolds } from '../SessionList'
+import { alsoRunningText, alsoRunningTip, useTeamFolds } from '../SessionList'
 import { usePopoverClose } from './RailPopover'
 import {
   laneTitle,
@@ -140,7 +140,11 @@ export function SessionRow({
             <CoordinatorBadge badge={slot.badge} ownLine />
           )}
           <HostBadge host={slot.host} state={slot.hostState} />
-          <span className="truncate" style={{ flexShrink: 100 }}>
+          <span
+            className="truncate"
+            style={{ flexShrink: 100 }}
+            title={alsoRunningTip(slot)}
+          >
             {meta}
           </span>
           <CheckInBadge checkIns={checkIns} />
