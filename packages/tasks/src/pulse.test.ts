@@ -2,7 +2,7 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { SessionDescriptor } from '@aico/tether-client'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { openTasksDb } from './db'
 import { Registry } from './projects'
 import {
@@ -16,6 +16,12 @@ import {
   roleOf,
 } from './pulse'
 import { runPulse } from './pulse-cli'
+
+// A host name in another case with a domain: rows carry it short and in lower case.
+vi.mock('node:os', async (original) => ({
+  ...(await original<typeof import('node:os')>()),
+  hostname: () => 'Davion-Host.lan',
+}))
 
 const NOW = Date.parse('2026-11-04T12:00:00Z')
 const iso = (minutesAgo: number) => new Date(NOW - minutesAgo * 60_000).toISOString()
@@ -218,6 +224,20 @@ describe('aico pulse', () => {
     expect(lines).toContain('Leases: Tether did not answer; leases are unknown.')
     expect(lines).toContain('Handshakes: Tether did not answer; open requests are unknown.')
     expect(lines).toContain('Status: unreadable; host findings are unknown.')
+  })
+
+  it('--brief names the machine only when it is another one', () => {
+    const { registry } = setup()
+    const ledger = new BriefLedger(join(mkdtempSync(join(tmpdir(), 'pulse-')), 'brief.json'))
+    const lines = brief({
+      findings: [finding({ machine: 'davion-host' })],
+      role: 'agent' as const,
+      project: 'aico',
+      registry,
+      now: NOW,
+      ledger,
+    })
+    expect(lines[1]).toMatch(/^- CRIT host: Thin pool: /)
   })
 
   it('--brief lists host findings once per role window and stays small', () => {

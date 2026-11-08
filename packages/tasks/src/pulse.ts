@@ -4,8 +4,8 @@
 // and status.db rows (the Status problems are the host findings).
 
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
-import { hostname } from 'node:os'
 import { dirname, join } from 'node:path'
+import { machineId } from '@aico/status'
 import type { ChildAgent, SessionDescriptor } from '@aico/tether-client'
 import policy from '../data/pulse-brief.json' with { type: 'json' }
 import type { Registry } from './projects'
@@ -260,7 +260,7 @@ function items(findings: Finding[], projects: ReadonlySet<string>, now: number, 
     // The first sentence of the finding, and the machine only when it is not this one: `aico pulse` has the rest.
     const flat = f.meaning.replace(/\s+/g, ' ').trim()
     const meaning = flat.split(/(?<=[.!?])\s/)[0] ?? ''
-    const where = f.machine === hostname() ? '' : `${f.machine}: `
+    const where = f.machine === machineId() ? '' : `${f.machine}: `
     let body = `${where}${f.what}: ${meaning}`.trim()
     const room = cfg.max_item_chars - tail.length
     if (body.length > room) body = `${body.slice(0, room - 1)}…`

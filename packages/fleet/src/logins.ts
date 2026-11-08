@@ -15,6 +15,7 @@ import {
 import { hostname } from 'node:os'
 import { basename, isAbsolute, join, resolve } from 'node:path'
 import policy from '../data/logins-policy.json' with { type: 'json' }
+import { machineName } from './identity'
 import type { ToolSecret } from './secret-files'
 import {
   parseToolSecrets,
@@ -193,7 +194,7 @@ export function unavailableText(entry: Login, caller: LoginCaller, gaps: LoginGa
     fix.startsWith('aico ') ? `Fix it yourself (logged, no owner step): ${fix}` : fix
   }`
 }
-export const loginMachine = () => hostname().split('.')[0].toLowerCase()
+export const loginMachine = () => machineName(hostname())
 export function loginName(value: unknown): string {
   if (
     typeof value !== 'string' ||

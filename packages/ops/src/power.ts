@@ -6,11 +6,11 @@
 
 import { createSocket } from 'node:dgram'
 import { connect } from 'node:net'
-import { hostname } from 'node:os'
 import { requestExec } from '@aico/fleet/exec'
 import { fullPeers } from '@aico/fleet/peers'
 import { readSettings } from '@aico/fleet/settings'
 import { readPins } from '@aico/fleet/trust'
+import { machineId } from '@aico/status'
 import syncConfig from '../data/context-sync.json' with { type: 'json' }
 import ops from '../data/ops.json' with { type: 'json' }
 import { type AwayDeps, awayDeps, markEverywhere, namesOf, sshArgs } from './away'
@@ -135,7 +135,7 @@ export function powerDeps(out: (line: string) => void, env = process.env): Power
     plug: away.plug,
     run,
     out,
-    machine: (hostname().toLowerCase().split('.')[0] as string) || hostname(),
+    machine: machineId(),
     answers,
     sendWake,
     peers: () => {

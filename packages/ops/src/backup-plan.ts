@@ -1,10 +1,10 @@
 // Backup configuration is migrated once. Runtime code never queries SummitFlow's database.
 import { readFileSync } from 'node:fs'
-import { homedir, hostname } from 'node:os'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { backupTargetName } from '@aico/shared/backup-targets'
 import { spanText } from '@aico/shared/time'
-import type { StatusRow } from '@aico/status'
+import { machineId, type StatusRow } from '@aico/status'
 import defaults from '../data/backups.json' with { type: 'json' }
 import imported from '../data/backups-import.json' with { type: 'json' }
 
@@ -64,7 +64,7 @@ export function config(env = process.env): BackupConfig {
   const cfg = env.AICO_BACKUPS_CONFIG
     ? (JSON.parse(readFileSync(env.AICO_BACKUPS_CONFIG, 'utf8')) as BackupConfig)
     : structuredClone(defaults)
-  const machine = env.AICO_BACKUP_MACHINE || hostname().toLowerCase().split('.')[0]
+  const machine = env.AICO_BACKUP_MACHINE || machineId()
   const client = cfg.appendClients[machine as keyof typeof cfg.appendClients]
   if (client) {
     cfg.append = { repository: client.repository, passwordFile: client.passwordFile }
