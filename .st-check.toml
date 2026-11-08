@@ -29,6 +29,7 @@ openssl = "/usr/bin/openssl"
 mktemp = "/usr/bin/mktemp"
 rm = "/usr/bin/rm"
 git = "/usr/bin/git"
+uv = "/usr/local/bin/uv"
 
 # The whole-repo stages below are the full gate. The generated per-package stages
 # further down are quick views of them (`covered_by`): they run only in
