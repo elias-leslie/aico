@@ -263,10 +263,14 @@ export async function runBackup(
     target === 'native' && !existsSync(join('/dev/disk/by-uuid', rt.cfg.nativeDriveUuid))
   if (t7Gone()) {
     console.log('The T7 drive is unplugged; nothing to copy to.')
+    const last = state.runs.native
+    // A run it never got to finish while away isn't a failed one; one that finished keeps its result.
     state.runs.native = {
-      ...(state.runs.native ?? { started, ok: true }),
+      ...(last ?? { started }),
+      ok: last?.finished ? last.ok : true,
       unpluggedAt: started,
     }
+    saveRun(rt.cfg, target, state.runs.native)
     saveState(rt.cfg, state)
     return true
   }
@@ -702,17 +706,16 @@ export async function backups(argv: string[], env = process.env): Promise<number
     const { runReportSeconds, runReportTimeoutSeconds } = cfg.schedule
     const bounded: Execute = (argv, options) =>
       execute(argv, { ...options, timeout: runReportTimeoutSeconds * 1000 })
-    let telling = false
-    const tell = async () => {
-      if (telling) return
-      telling = true
-      await report(cfg, readState(cfg), machine, bounded)
+    let telling: Promise<void> | null = null
+    const tell = () => {
+      telling ??= report(cfg, readState(cfg), machine, bounded)
         .catch((error) =>
           console.error(`Could not tell Status this run started: ${(error as Error).message}`),
         )
         .finally(() => {
-          telling = false
+          telling = null
         })
+      return telling
     }
     await tell()
     const every = setInterval(() => void tell(), runReportSeconds * 1000)
@@ -720,6 +723,9 @@ export async function backups(argv: string[], env = process.env): Promise<number
       return await runUnderLock(env, args, lockFiles)
     } finally {
       clearInterval(every)
+      // A report still under way carries what was true before the run's own last one: say it again.
+      await telling
+      await tell()
     }
   }
   const state = readState(cfg)
@@ -848,10 +854,17 @@ export async function scheduledEntries(
     item.running = !!job?.leaseId && !!job.leaseExpires && job.leaseExpires > Date.now()
     // While the job runs, the scheduler still holds the due time it started at; posting that would
     // show the row late from the run's first report until the next one. Due a period after now,
-    // as the scheduler sets it when the run completes.
+    // as the scheduler sets it when the run completes. A run stuck past `runStuckHours` stops being
+    // moved on, so a hung backup does read late.
     const due =
       job && item.running && item.target !== 'external'
-        ? Math.max(job.nextRun, Date.now() + runPeriodMinutes(item.target, cfg) * 60000)
+        ? Math.max(
+            job.nextRun,
+            Math.min(
+              Date.now() + runPeriodMinutes(item.target, cfg) * 60000,
+              job.nextRun + cfg.schedule.runStuckHours * 3600000,
+            ),
+          )
         : job?.nextRun
     item.nextRun = due !== undefined ? new Date(due).toISOString() : null
   }

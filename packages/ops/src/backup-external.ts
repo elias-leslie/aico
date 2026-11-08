@@ -22,11 +22,18 @@ export async function observeExternal(
           error: undefined,
           unreadSince: undefined,
           observed: 'offline',
+          offSince: old?.offSince ?? rt.now().toISOString(),
           attemptedAt: rt.now().toISOString(),
         }
       }
-      // Its artifact had no chance to get newer while off: its age counts from its return.
-      const backAt = old?.observed === 'offline' ? { backAt: rt.now().toISOString() } : {}
+      // Its artifact had no chance to get newer while off, so that time doesn't age it. Only the
+      // time off: a backup broken on a machine that keeps coming back still goes late.
+      const wasOffMs =
+        old?.observed === 'offline'
+          ? rt.now().getTime() -
+            Date.parse(old.offSince ?? old.attemptedAt ?? rt.now().toISOString())
+          : 0
+      const offMs = (old?.offMs ?? 0) + wasOffMs
       try {
         if ('statusCommand' in probe) {
           const status = await rt.run(probe.statusCommand)
@@ -66,8 +73,7 @@ export async function observeExternal(
           dataAt: date,
           observed: 'ok',
           attemptedAt: rt.now().toISOString(),
-          ...(date === old?.dataAt && old.backAt ? { backAt: old.backAt } : {}),
-          ...backAt,
+          ...(date === old?.dataAt && offMs ? { offMs } : {}),
         }
       } catch (error) {
         // A machine still booting, or a Proxmox host that doesn't answer yet, isn't a failed
@@ -81,7 +87,9 @@ export async function observeExternal(
             target: 'drive',
             unreadSince: since,
             // It is on now, so the row stops saying off and waits on its last good date.
-            ...(running && old?.observed === 'offline' ? { observed: undefined, ...backAt } : {}),
+            ...(running && old?.observed === 'offline'
+              ? { observed: undefined, offSince: undefined, offMs }
+              : {}),
           }
           return
         }

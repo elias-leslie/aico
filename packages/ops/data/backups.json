@@ -79,6 +79,7 @@
     "freshAppendHours": 2,
     "ownerUnreadMinutes": 30,
     "runReportSeconds": 300,
+    "runStuckHours": 12,
     "runReportTimeoutSeconds": 60
   },
   "pve": {

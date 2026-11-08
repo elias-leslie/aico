@@ -52,6 +52,8 @@ import {
   type Runtime,
   readState,
   restic,
+  resticArgs,
+  saveRun,
   saveState,
 } from './backup-runtime'
 import {
@@ -202,7 +204,7 @@ it('gets next-run and running state from the real scheduler; unavailable is unkn
     out: JSON.stringify([
       {
         kind: 'backups-drive',
-        state: { nextRun: now, leaseId: 'a', leaseExpires: Date.now() + 100000 },
+        state: { nextRun: Date.now(), leaseId: 'a', leaseExpires: Date.now() + 100000 },
       },
     ]),
     err: '',
@@ -211,8 +213,28 @@ it('gets next-run and running state from the real scheduler; unavailable is unkn
   const list = await scheduledEntries(s, c, c.workstation, run)
   // A running job's due time is the one it started at; the row is due a period after now instead.
   const drive = list.find((r) => r.target === 'drive')
-  expect(Date.parse(drive?.nextRun as string)).toBeGreaterThanOrEqual(before + 1440 * 60000)
+  expect(Date.parse(drive?.nextRun as string)).toBeLessThanOrEqual(
+    Date.now() + c.schedule.runStuckHours * 3600000,
+  )
+  expect(Date.parse(drive?.nextRun as string)).toBeGreaterThanOrEqual(
+    before + c.schedule.runStuckHours * 3600000,
+  )
   expect(drive?.running).toBe(true)
+  // Stuck past its limit: the rows stop being moved on, so a hung backup does read late.
+  const stuck = Date.now() - (c.schedule.runStuckHours + 1) * 3600000
+  const hung = await scheduledEntries(s, c, c.workstation, async () => ({
+    code: 0,
+    out: JSON.stringify([
+      {
+        kind: 'backups-drive',
+        state: { nextRun: stuck, leaseId: 'a', leaseExpires: Date.now() + 100000 },
+      },
+    ]),
+    err: '',
+  }))
+  expect(Date.parse(hung.find((r) => r.target === 'drive')?.nextRun as string)).toBeLessThan(
+    Date.now(),
+  )
   expect(list.find((r) => r.target === 'append')?.nextRun).toBeNull()
   const idleRun = async (_argv: string[]) => ({
     code: 0,
@@ -1079,6 +1101,29 @@ it('an unplugged T7 records only that it is away: no unfinished run, and the las
   expect(readState(c).runs.native).toEqual(away)
   expect(backupNative.nativeBackup).not.toHaveBeenCalled()
 })
+it('an unplugged T7 keeps its away mark over an earlier run receipt, and an unfinished run is not a failure', async () => {
+  const c = cfg(),
+    state = emptyState()
+  c.nativeDriveUuid = 'no-such-t7-uuid'
+  saveRun(c, 'native', { ...t7Run })
+  state.runs.native = { ...t7Run }
+  const rt: Runtime = { cfg: c, run: ok, now: () => new Date(now) }
+  await runBackup(rt, state, 'native', c.workstation, true)
+  expect(readState(c).runs.native?.unpluggedAt).toBe(new Date(now).toISOString())
+  expect(readState(c).runs.native?.finished).toBe(t7Run.finished)
+
+  const cut = { started: t7Run.started, ok: false }
+  saveRun(c, 'native', cut)
+  state.runs.native = cut
+  await runBackup(rt, state, 'native', c.workstation, true)
+  expect(readState(c).runs.native).toMatchObject({ ok: true, started: t7Run.started })
+  // A run that finished and failed keeps that result.
+  const failed = { ...t7Run, ok: false }
+  saveRun(c, 'native', failed)
+  state.runs.native = failed
+  await runBackup(rt, state, 'native', c.workstation, true)
+  expect(readState(c).runs.native?.ok).toBe(false)
+})
 it('a real native run keeps the away mark until it finishes, then clears it', async () => {
   const c = cfg(),
     state = emptyState()
@@ -1178,4 +1223,12 @@ it('a disk that is away reads as off and keeps the last good copy', async () => 
     offlineSince: new Date(now).toISOString(),
   })
   expect(copy.error).toBeUndefined()
+})
+
+it('keeps the restic cache in its own cache folder, never on the scratch disk', () => {
+  const c = cfg()
+  vi.stubEnv('XDG_RUNTIME_DIR', temp())
+  const { argv } = resticArgs(c, 'drive', ['snapshots'])
+  expect(JSON.stringify(c)).not.toContain('/srv/scratch/aico-backups')
+  vi.unstubAllEnvs()
 })

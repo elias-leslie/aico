@@ -412,7 +412,10 @@ describe('the notices that fired because a machine was off', () => {
       const s = status()
       const told: { stayed: string[]; recovered: string[] }[] = []
       s.store.onSustained({ 'data-risk': 26 * 60 * MIN, outage: 30 * MIN }, (item) =>
-        told.push({ stayed: item.stayed.map((r) => r.row.id), recovered: item.recovered }),
+        told.push({
+          stayed: item.stayed.map((r) => r.row.id),
+          recovered: [...item.recovered, ...item.ended],
+        }),
       )
       const flip = () => {
         s.clock.now += 20 * MIN
@@ -490,7 +493,7 @@ describe('the notices that fired because a machine was off', () => {
       await observeExternal(rt(rejected, T0 + 31 * MIN), state, ['portfolio-ai-complete'])
       expect(state.copies[id]?.observed).toBe('failed')
     })
-    it('back after days off with its old artifact: its age counts from the return', async () => {
+    it('back after days off with its old artifact: the time off does not age it', async () => {
       const old = T0 - 20 * 24 * 60 * MIN
       const artifact = async (argv: string[]) =>
         argv.includes('status')
@@ -502,11 +505,30 @@ describe('the notices that fired because a machine was off', () => {
         target: 'drive',
         dataAt: new Date(old).toISOString(),
         observed: 'offline',
+        offSince: new Date(old + 60 * MIN).toISOString(),
       }
       await observeExternal(rt(artifact, T0), state, ['portfolio-ai-complete'])
-      expect(state.copies[id]).toMatchObject({ observed: 'ok', backAt: new Date(T0).toISOString() })
+      const offMs = T0 - (old + 60 * MIN)
+      expect(state.copies[id]).toMatchObject({ observed: 'ok', offMs })
       await observeExternal(rt(artifact, T0 + 10 * MIN), state, ['portfolio-ai-complete'])
-      expect(state.copies[id]?.backAt).toBe(new Date(T0).toISOString())
+      expect(state.copies[id]?.offMs).toBe(offMs)
+      // Only the time off counts: coming back again doesn't renew the whole period, so a backup
+      // broken on a machine that keeps being started still goes late.
+      const off = async () => ({ code: 0, out: 'status: stopped\n', err: '' })
+      await observeExternal(rt(off, T0 + 20 * MIN), state, ['portfolio-ai-complete'])
+      await observeExternal(rt(artifact, T0 + 50 * MIN), state, ['portfolio-ai-complete'])
+      expect(state.copies[id]?.offMs).toBe(offMs + 30 * MIN)
+      // A new artifact starts clean.
+      const fresh = async (argv: string[]) =>
+        argv.includes('status')
+          ? { code: 0, out: 'status: running\n', err: '' }
+          : {
+              code: 0,
+              out: JSON.stringify({ exitcode: 0, 'out-data': `${T0 / 1000},` }),
+              err: '',
+            }
+      await observeExternal(rt(fresh, T0 + 60 * MIN), state, ['portfolio-ai-complete'])
+      expect(state.copies[id]?.offMs).toBeUndefined()
     })
     it('still unreadable after the window: Failed', async () => {
       const state = emptyState()

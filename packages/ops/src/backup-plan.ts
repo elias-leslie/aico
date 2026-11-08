@@ -35,7 +35,10 @@ export interface Copy {
   /** Its owner machine could not be read, since then; a failure only once that has lasted. */
   unreadSince?: string
   /** When an external owner came back from being off: its artifact's age counts from then. */
-  backAt?: string
+  /** When the machine that owns this copy was first seen off, while it stays off. */
+  offSince?: string
+  /** How long it has been off since this artifact was written: its age doesn't count that. */
+  offMs?: number
 }
 export interface BackupState {
   copies: Record<string, Copy>
@@ -288,9 +291,7 @@ export function entries(
   if (machine === cfg.workstation)
     for (const external of migrated.external.filter((s) => s.enabled)) {
       const copy = state.copies[`external/${external.id}`]
-      const age = copy?.dataAt
-        ? now - Math.max(Date.parse(copy.dataAt), copy.backAt ? Date.parse(copy.backAt) : 0)
-        : null
+      const age = copy?.dataAt ? now - Date.parse(copy.dataAt) - (copy.offMs ?? 0) : null
       const fresh =
         age !== null &&
         age <=
