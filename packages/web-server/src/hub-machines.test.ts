@@ -73,6 +73,31 @@ describe('hubMachines', () => {
     ])
   })
 
+  it('sends a guest stopped against its intent as not known, so the hub keeps watching it', () => {
+    expect(hubMachines([guest('core', 'down', 'always')], status)).toMatchObject([
+      { machine: 'core', intent: 'always', up: null },
+    ])
+  })
+
+  it('counts a guest starting as up, so its agent gets its grace from now', () => {
+    expect(hubMachines([guest('boot', 'starting', 'on-demand')], status)).toMatchObject([
+      { machine: 'boot', up: true },
+    ])
+  })
+
+  it('keeps the machine row when the hypervisor has no reading', () => {
+    report('fleet/here', 'here')
+    expect(hubMachines([guest('here', 'unknown')], status)).toMatchObject([
+      { machine: 'here', up: true, reports: true },
+    ])
+  })
+
+  it('leaves out every row of the hub machine', () => {
+    report('ominull.machine', 'ominull-hub')
+    report('fleet/ominull-hub', 'ominull-hub')
+    expect(hubMachines([], status)).toEqual([])
+  })
+
   it('lets the hypervisor win over a machine row, keeping that the machine reports', () => {
     report('fleet/both', 'both')
     expect(hubMachines([guest('both', 'stopped')], status)).toMatchObject([

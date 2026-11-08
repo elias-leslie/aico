@@ -16,13 +16,14 @@ export interface HubMachine {
 
 export function hubMachines(guests: readonly MachineGuest[], status: StatusStore): HubMachine[] {
   const intents = new Map(status.intents().map((m) => [m.machine, m.intent]))
+  const rows = status.read({ kind: ['machine'] }).rows
+  // The hub's own machine: nothing there for it to watch.
+  const hub = new Set(rows.filter((r) => r.id.startsWith('ominull.')).map((r) => r.machine))
   const out = new Map<string, HubMachine>()
-  for (const row of status.read({ kind: ['machine'] }).rows) {
-    // The hub's own row says nothing about a machine it should be watching.
-    if (row.id.startsWith('ominull')) continue
-    const up =
-      row.shown === 'ok' || row.shown === 'warn' ? true : row.shown === 'off' ? false : null
+  for (const row of rows) {
+    if (hub.has(row.machine)) continue
     const seen = out.get(row.machine)
+    const up = rowSaysUp(row)
     // Several rows for one machine: up if any says so, off only if all do.
     const merged = !seen ? up : seen.up === true || up === true ? true : seen.up === up ? up : null
     out.set(row.machine, {
@@ -32,20 +33,29 @@ export function hubMachines(guests: readonly MachineGuest[], status: StatusStore
       reports: true,
     })
   }
-  // The hypervisor's reading beats a machine's own reports.
+  // The hypervisor's reading beats a machine's own reports, when it has one.
   for (const guest of guests) {
-    const up =
-      guest.state === 'running'
-        ? true
-        : guest.state === 'stopped' || guest.state === 'down'
-          ? false
-          : null
+    const seen = out.get(guest.machine)
     out.set(guest.machine, {
       machine: guest.machine,
       intent: guest.intent ?? intents.get(guest.machine) ?? null,
-      up,
-      reports: out.get(guest.machine)?.reports ?? false,
+      up: guest.state === 'unknown' ? (seen?.up ?? null) : guestSaysUp(guest.state),
+      reports: seen?.reports ?? false,
     })
   }
   return [...out.values()].sort((a, b) => a.machine.localeCompare(b.machine))
+}
+
+function rowSaysUp(row: { id: string; shown: string }): boolean | null {
+  if (row.shown === 'ok') return true
+  // A link row in warn is a watcher saying it lost the machine, not the machine reporting.
+  if (row.shown === 'warn') return row.id.startsWith('fleet/') ? null : true
+  return row.shown === 'off' ? false : null
+}
+
+function guestSaysUp(state: MachineGuest['state']): boolean | null {
+  if (state === 'running' || state === 'starting') return true
+  if (state === 'stopped') return false
+  // down: stopped when it was not meant to be. That is not "off": the hub keeps watching it.
+  return null
 }
