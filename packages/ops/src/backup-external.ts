@@ -13,6 +13,7 @@ export async function observeExternal(
     owners.map(async (source) => {
       const probe = rt.cfg.externalProbes[source.id as keyof typeof rt.cfg.externalProbes]
       const old = state.copies[`external/${source.id}`]
+      let running = false
       try {
         if ('statusCommand' in probe) {
           const status = await rt.run(probe.statusCommand)
@@ -24,11 +25,13 @@ export async function observeExternal(
               source: source.id,
               target: 'drive',
               error: undefined,
+              unreadSince: undefined,
               observed: 'offline',
               attemptedAt: rt.now().toISOString(),
             }
             return
           }
+          running = true
         }
         let date: string | null = null
         if ('path' in probe && probe.path) date = payloadTime(probe.path)
@@ -60,8 +63,24 @@ export async function observeExternal(
           attemptedAt: rt.now().toISOString(),
         }
       } catch (error) {
+        // A machine still booting, or a Proxmox host that doesn't answer yet, isn't a failed
+        // backup: it fails only once it has stayed unreadable (`ownerUnreadMinutes`).
+        const now = rt.now()
+        const since = old?.unreadSince ?? now.toISOString()
+        if (now.getTime() - Date.parse(since) < rt.cfg.schedule.ownerUnreadMinutes * 60000) {
+          state.copies[`external/${source.id}`] = {
+            ...old,
+            source: source.id,
+            target: 'drive',
+            unreadSince: since,
+            // It is on now, so the row stops saying off and waits on its last good date.
+            ...(running && old?.observed === 'offline' ? { observed: undefined } : {}),
+          }
+          return
+        }
         state.copies[`external/${source.id}`] = {
           ...old,
+          unreadSince: since,
           source: source.id,
           target: 'drive',
           attemptedAt: rt.now().toISOString(),

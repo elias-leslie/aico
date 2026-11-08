@@ -36,6 +36,8 @@ export function peerStatusRow(
   role: string | undefined,
   power: string | undefined,
   startedAt: number,
+  /** When this peer was first read as running after being off: its link has had only since then. */
+  runningSince = 0,
 ): StatusRow {
   const off = Boolean(role) && !peer.connected && power === 'stopped'
   return {
@@ -55,7 +57,9 @@ export function peerStatusRow(
             : `Waiting for ${peer.name} to connect.`,
     ...(peer.lastSeen ? { last_run: new Date(peer.lastSeen).toISOString() } : {}),
     // Machine rows require a reporting deadline; Status exempts off rows from late.
-    next_run: new Date((peer.lastSeen ?? startedAt) + settings.deadMs).toISOString(),
+    next_run: new Date(
+      Math.max(peer.lastSeen ?? startedAt, runningSince) + settings.deadMs,
+    ).toISOString(),
     actions: [{ kind: 'detail', ref: 'tether hosts' }],
   }
 }

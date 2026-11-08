@@ -3,9 +3,12 @@ import { hostname } from 'node:os'
 import type { StatusRow } from '@aico/status'
 import { Fleet } from './fleet'
 import { machineName } from './identity'
+import { guestPower, peerStatusRow } from './power'
+import { pveRequest } from './proxmox'
 import { type FleetSettings, readSettings } from './settings'
 
 export class FleetService {
+  private powerRead: { at: number; value: ReadonlyMap<string, string> } | null = null
   private fleet: Fleet | null = null
   private settings: FleetSettings | null = null
   private retry: NodeJS.Timeout | null = null
@@ -59,6 +62,22 @@ export class FleetService {
       this.working = null
     })
   }
+  /** Guest power for the failure rows, read at most once per powerCacheMs; empty when it can't be read. */
+  private async peerPower(settings: FleetSettings): Promise<ReadonlyMap<string, string>> {
+    if (!settings.proxmox) return new Map()
+    const cacheMs = settings.powerCacheMs ?? 60_000
+    if (this.powerRead && Date.now() - this.powerRead.at < cacheMs) return this.powerRead.value
+    let value: ReadonlyMap<string, string> = new Map()
+    try {
+      value = await guestPower(
+        pveRequest(this.env, { timeoutMs: settings.powerTimeoutMs ?? 10_000 }),
+      )
+    } catch (error) {
+      this.log(`Could not read guest power: ${(error as Error).message}`)
+    }
+    this.powerRead = { at: Date.now(), value }
+    return value
+  }
   private async failed(error: unknown): Promise<void> {
     const message = error instanceof Error ? error.message : String(error)
     this.log(`Link failed: ${message}`)
@@ -71,17 +90,29 @@ export class FleetService {
     if (this.stopped) return
     const settings = this.settings
     const machine = settings?.machine ?? machineName(hostname())
+    // This machine's link failed. A peer that is off stays off: the failure isn't about it.
+    const power = settings?.peers.length ? await this.peerPower(settings) : new Map()
     const rows: StatusRow[] = settings?.peers.length
-      ? settings.peers.map((peer) => ({
-          id: `fleet/${machine}/${peer.name}`,
-          what: `Link to ${peer.name}`,
-          kind: 'machine',
-          machine: peer.name,
-          state: 'failed',
-          meaning: `Link failed: ${message}`.slice(0, 300),
-          next_run: new Date(Date.now() + settings.deadMs).toISOString(),
-          actions: [{ kind: 'detail', ref: 'tether hosts' }],
-        }))
+      ? settings.peers.map((peer) =>
+          power.get(peer.name) === 'stopped'
+            ? peerStatusRow(
+                { machine, deadMs: settings.deadMs },
+                { name: peer.name, connected: false, lastSeen: null },
+                'peer',
+                'stopped',
+                Date.now(),
+              )
+            : {
+                id: `fleet/${machine}/${peer.name}`,
+                what: `Link to ${peer.name}`,
+                kind: 'machine',
+                machine: peer.name,
+                state: 'failed',
+                meaning: `Link failed: ${message}`.slice(0, 300),
+                next_run: new Date(Date.now() + settings.deadMs).toISOString(),
+                actions: [{ kind: 'detail', ref: 'tether hosts' }],
+              },
+        )
       : [
           {
             id: `fleet/${machine}`,

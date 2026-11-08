@@ -303,7 +303,8 @@ export async function mirror(deps: WipDeps): Promise<WipReport> {
       report.problems.push({
         key: `peer-${peer.name}`,
         what: `Repo copy to ${peer.name}`,
-        state: 'failed',
+        // Off or restarting: the next run catches up, and a machine that stays down has its own row.
+        state: 'warn',
         reason: disk,
       })
     else {

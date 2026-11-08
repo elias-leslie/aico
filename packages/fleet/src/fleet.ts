@@ -70,7 +70,11 @@ export class Fleet {
   private timer: NodeJS.Timeout | null = null
   private stopping = false
   private reporting = false
+  /** The last good reading stays when a read fails: a failed read says nothing about a guest. */
   private power: { at: number; value: ReadonlyMap<string, string> } | null = null
+  private powerTriedAt = 0
+  /** Guests read running after a reading that had them off, with since when. */
+  private readonly runningSince = new Map<string, number>()
   private powerProbe: Promise<void> | null = null
   private readonly startedAt = Date.now()
 
@@ -573,12 +577,7 @@ export class Fleet {
     const s = this.options.settings
     try {
       if (this.status().some((peer) => !peer.connected)) this.refreshPower()
-      // A reading older than one refresh (a peer that just dropped) is not evidence it is off.
-      const power =
-        this.power &&
-        Date.now() - this.power.at < (s.powerCacheMs ?? 60_000) + (s.powerTimeoutMs ?? 10_000)
-          ? this.power.value
-          : new Map<string, string>()
+      const reading = this.power
       if (this.stopping) return
       const pins = this.pins()
       const rows = this.status().map((peer) =>
@@ -586,8 +585,10 @@ export class Fleet {
           s,
           peer,
           pins.find((pin) => pin.name === peer.name)?.role,
-          power.get(peer.name),
+          // A reading from before the peer's last contact (one that just dropped) is not evidence it is off.
+          reading && reading.at > (peer.lastSeen ?? 0) ? reading.value.get(peer.name) : undefined,
           this.startedAt,
+          this.runningSince.get(peer.name),
         ),
       )
       if (rows.length) await this.postRows(rows)
@@ -604,22 +605,26 @@ export class Fleet {
   }
 
   /** Reads guest power at most once per powerCacheMs, in the background so a hung probe never
-   * holds up link Status; a fresh reading reports at once. A failed reading clears the cache. */
+   * holds up link Status; a fresh reading reports at once. A failed reading keeps the last good one. */
   private refreshPower(): void {
     const s = this.options.settings
-    if (this.powerProbe || (this.power && Date.now() - this.power.at < (s.powerCacheMs ?? 60_000)))
-      return
+    if (this.powerProbe || Date.now() - this.powerTriedAt < (s.powerCacheMs ?? 60_000)) return
     const read =
       this.options.peerPower ??
       (() =>
         s.proxmox
           ? guestPower(this.pveCall(s.powerTimeoutMs ?? 10_000))
           : Promise.resolve(new Map<string, string>()))
+    this.powerTriedAt = Date.now()
     this.powerProbe = (async () => {
       try {
-        this.power = { at: Date.now(), value: await read() }
+        const value = await read()
+        const at = Date.now()
+        for (const [name, state] of value)
+          if (state !== 'running') this.runningSince.delete(name)
+          else if (this.power?.value.get(name) === 'stopped') this.runningSince.set(name, at)
+        this.power = { at, value }
       } catch (error) {
-        this.power = { at: Date.now(), value: new Map() }
         this.log(`Could not read guest power: ${(error as Error).message}`)
       }
     })().finally(() => {

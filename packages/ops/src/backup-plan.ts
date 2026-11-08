@@ -32,6 +32,8 @@ export interface Copy {
   attemptedAt?: string
   copiedAt?: string
   observed?: 'ok' | 'offline' | 'failed'
+  /** Its owner machine could not be read, since then; a failure only once that has lasted. */
+  unreadSince?: string
 }
 export interface BackupState {
   copies: Record<string, Copy>
@@ -144,15 +146,17 @@ export function entry(
         : cfg.schedule.freshDriveHours
   const age = copy?.dataAt ? Math.max(0, now - Date.parse(copy.dataAt)) : null
   const fresh = age !== null && age <= limit * 3600000
-  const offline =
-    !!copy?.offlineSince && !!copy.dataAt && Number.isFinite(Date.parse(copy.offlineSince))
-  const state = copy?.error ? 'failed' : fresh || offline ? 'ok' : 'warn'
+  // Off is off: its age doesn't count, and the copy it had stands until its next normal run.
+  const offline = copy?.observed === 'offline' && !copy.error
+  const state = copy?.error ? 'failed' : offline ? 'off' : fresh ? 'ok' : 'warn'
   const meaning = copy?.error
     ? copy.error
-    : age === null
-      ? 'No verified copy yet.'
-      : offline
-        ? 'Machine is off; its last copy covers the unchanged data.'
+    : offline
+      ? age === null
+        ? 'Machine was off at the last run; no copy of it yet.'
+        : 'Machine was off at the last run; its last copy covers the unchanged data.'
+      : age === null
+        ? 'No verified copy yet.'
         : `${fresh ? 'Restorable data is' : 'Restorable data is late:'} ${spanText(age)} old.`
   const period = runPeriodMinutes(target, cfg)
   const attempted = copy?.attemptedAt && Date.parse(copy.attemptedAt)

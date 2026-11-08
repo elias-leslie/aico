@@ -519,6 +519,23 @@ def test_backups_offline_unchanged_age_is_computed_by_owning_live_api(tmp_path):
     assert set(out.values()) == {"ok"}
 
 
+def test_backups_a_copy_of_a_machine_that_was_off_is_not_behind(tmp_path):
+    data = aico_backup_health()
+    for entry in data["entries"]:
+        entry.update(state="off", dataAt=NOW - 60 * 86400)
+    data["entries"].append({"id": "drive/running", "source": "running", "target": "drive", "state": "ok", "dataAt": NOW})
+    out = states(backups.run(ctx("backups", run=aico_backup_runner(data), native_config=str(tmp_path / "absent"))))
+    assert out["backups.sources"] == out["backups.pve"] == "ok"
+    assert out["backups.native"] == "ok"
+
+
+def test_backups_a_failed_copy_of_a_running_machine_still_fails(tmp_path):
+    data = aico_backup_health()
+    data["entries"][0].update(state="failed")
+    out = states(backups.run(ctx("backups", run=aico_backup_runner(data), native_config=str(tmp_path / "absent"))))
+    assert out["backups.sources"] == "failed"
+
+
 def test_backups_native_follows_aico_not_unwritten_host_receipts(tmp_path, monkeypatch):
     monkeypatch.setattr(backups.pwd, "getpwnam", lambda owner: type("Owner", (), {"pw_dir": str(tmp_path), "pw_uid": tmp_path.stat().st_uid}))
     root = tmp_path / ".local/state/summitflow/host-recovery"

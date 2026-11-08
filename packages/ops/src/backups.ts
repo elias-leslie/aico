@@ -15,7 +15,7 @@ import {
   type StatusRow,
   statusRowsUrl,
 } from '@aico/status'
-import { backupJob, driveBackup, stageSqlite } from './backup-drive'
+import { appendMachine, backupJob, driveBackup, stageSqlite } from './backup-drive'
 import { observeExternal } from './backup-external'
 import { nativeBackup } from './backup-native'
 import {
@@ -261,6 +261,13 @@ export async function runBackup(
   state.runs[target] = { started, ok: false }
   saveRun(rt.cfg, target, state.runs[target] as NonNullable<BackupState['runs'][typeof target]>)
   if (target !== 'snapshots' && target !== 'guard') saveState(rt.cfg, state)
+  // An unplugged T7 isn't a failed backup: its rows show off, and it runs when it is back.
+  const t7Gone = () =>
+    target === 'native' && !existsSync(join('/dev/disk/by-uuid', rt.cfg.nativeDriveUuid))
+  if (t7Gone()) {
+    console.log('The T7 drive is unplugged; nothing to copy to.')
+    return true
+  }
   let ok = false
   try {
     if (target === 'native') await nativeBackup(rt, state, scheduled)
@@ -273,7 +280,18 @@ export async function runBackup(
     else if (target === 'append') {
       const staged = stageSqlite(rt.cfg, rt.now()),
         id = `aico-${machine}`
-      const result = await backupJob(rt, state, { id, ...staged, binds: [] }, 'append')
+      const ct = machine === rt.cfg.workstation ? await appendMachine(rt) : undefined
+      const result = await backupJob(
+        rt,
+        state,
+        {
+          id,
+          ...staged,
+          binds: [],
+          ...(ct ? { machine: ct, offline: ct.before.state === 'off' } : {}),
+        },
+        'append',
+      )
       state.copies[copyKey(id, 'append')] = result
       if (result.error) throw new Error(result.error)
     } else if (target === 'guard')
@@ -282,7 +300,9 @@ export async function runBackup(
     ok = true
   } catch (error) {
     const message = (error as Error).message
-    if (target === 'native')
+    // Pulled out mid-run: the same, not a failure.
+    if (t7Gone()) ok = true
+    else if (target === 'native')
       for (const root of rt.cfg.nativeSources)
         state.copies[copyKey(root, 'native')] = {
           ...state.copies[copyKey(root, 'native')],
@@ -668,8 +688,15 @@ export async function backups(argv: string[], env = process.env): Promise<number
     !['list', 'snapshots', 'browse'].includes(verb) &&
     lockFiles.length &&
     env.AICO_BACKUPS_LOCKED !== '1'
-  )
+  ) {
+    // A scheduled run can wait behind another backup for an hour. Tell Status it has started, so its
+    // rows don't read late while it waits and works.
+    if (verb === 'run' && args.includes('--scheduled'))
+      await report(cfg, readState(cfg), machine).catch((error) =>
+        console.error(`Could not tell Status this run started: ${(error as Error).message}`),
+      )
     return runUnderLock(env, args, lockFiles)
+  }
   const state = readState(cfg)
   if (verb === 'list') return listCommand(rt, state, machine, args)
   if (verb === 'run') return runCommand(rt, state, machine, args)

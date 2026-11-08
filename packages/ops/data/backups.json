@@ -76,12 +76,14 @@
     "guardMinutes": 5,
     "freshLocalHours": 8,
     "freshDriveHours": 36,
-    "freshAppendHours": 2
+    "freshAppendHours": 2,
+    "ownerUnreadMinutes": 30
   },
   "pve": {
     "alias": "proxmox-gem",
     "backupKey": "~/.local/state/summitflow/backup-keys/pve-backup.ed25519",
     "appendKey": "~/.local/state/summitflow/backup-keys/pve-append.ed25519",
+    "appendGuest": 160,
     "knownHosts": "~/.ssh/known_hosts",
     "thinPoolMaximumPercent": 98,
     "address": "192.168.86.39",

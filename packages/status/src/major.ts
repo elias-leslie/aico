@@ -8,7 +8,7 @@
 //   first failure, so the retry or next scheduled run has also failed. A row off with its machine
 //   (T7 unplugged, guest stopped) never gets here: off is not a problem.
 // - outage: a machine row late on a machine expected up (declared always, or not declared at all:
-//   the Proxmox host, the hub), or a service row failed. Sustained for a shorter window.
+//   the Proxmox host; a link to an undeclared guest doesn't count), or a service row failed. Sustained for a shorter window.
 
 import type { Intent } from './intent'
 import type { Action } from './row'
@@ -17,6 +17,7 @@ export type Major = 'data-risk' | 'outage'
 
 /** The fields of a shown row that decide this (a ShownRow, which this file does not import: show.ts reads it). */
 export interface MajorRow {
+  id?: string
   kind: string
   machine: string
   shown: string
@@ -34,7 +35,9 @@ export function majorOf(row: MajorRow, intents: ReadonlyMap<string, Intent>): Ma
   if (row.kind === 'service' && row.shown === 'failed') return 'outage'
   if (row.kind === 'machine') {
     const intent = intents.get(row.machine)
-    return intent === 'on-demand' || intent === 'off' ? null : 'outage'
+    if (intent === 'on-demand' || intent === 'off') return null
+    // A link to a guest no project declares (VMs turned on when needed) isn't an always-on machine.
+    return intent === undefined && row.id?.startsWith('fleet/') ? null : 'outage'
   }
   return null
 }

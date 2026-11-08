@@ -74,7 +74,8 @@ def aico_backups(ctx: Ctx) -> list[Signal]:
         if any(not isinstance(entry.get(key), str) or not entry[key] for key in ("id", "source", "target")):
             return "warn"
         when = to_ts(entry.get("dataAt"))
-        if entry.get("state") != "ok" or when is None or when - ctx.now > ctx.cfg["future_skew_s"]:
+        # A copy of a machine that was off stands as it is: off isn't behind.
+        if entry.get("state") not in ("ok", "off") or when is None or when - ctx.now > ctx.cfg["future_skew_s"]:
             return "warn"
         # The API recomputes age with its owning per-target policy and offlineSince state on every GET.
         # Do not reinterpret UI wording or call an old, unchanged offline copy stale here.
@@ -130,6 +131,8 @@ def aico_backups(ctx: Ctx) -> list[Signal]:
         entry = matches[0]
         state = copy_state(entry)
         when = to_ts(entry.get("dataAt"))
+        if entry.get("state") == "off":
+            continue  # the T7 is unplugged: its age doesn't count until it is back
         if when is not None and ctx.now - when > ctx.cfg["native_failed_hours"] * 3600:
             state = "failed"
         elif when is not None and ctx.now - when > ctx.cfg["native_warn_hours"] * 3600 and state == "ok":
@@ -138,7 +141,8 @@ def aico_backups(ctx: Ctx) -> list[Signal]:
             native_problems.append((state, f"{name}: recovery point is {state}"))
         if not isinstance(entry.get("snapshot"), str) or not entry["snapshot"] or not isinstance(entry.get("path"), str) or not entry["path"].startswith("/"):
             native_problems.append(("failed", f"{name}: no verified received recovery point"))
-    native_problems += run_problems("native", ctx.cfg["native_failed_hours"])
+    if not any(e.get("target") == "native" and e.get("state") == "off" for e in entries):
+        native_problems += run_problems("native", ctx.cfg["native_failed_hours"])
     return [source, signal("backups.pve", problems), signal("backups.native", native_problems)]
 
 

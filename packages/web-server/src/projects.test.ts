@@ -364,12 +364,17 @@ describe('Places power', () => {
     expect(status.intents()[0]).toMatchObject({ stoppedAt: null, power: 'off' })
     expect(status.read().rows[0]?.shown).toBe('off')
     expect(p.view(CT).state).toBe('stopped')
-    // Started outside the page: expected on, so the silent machine row is late.
+    // Started outside the page: expected on, and quiet while it boots.
     g.list[0]!.status = 'running'
     g.list[0]!.uptime = 60
     clock.now += 60_000
     await p.refresh()
     expect(status.isExpectedOff('jobinator')).toBe(false)
+    expect(status.read().rows[0]?.shown).toBe('unknown')
+    // On and still silent once that has passed: late.
+    g.list[0]!.uptime = 960
+    clock.now += 900_000
+    await p.refresh()
     expect(status.read().rows[0]?.shown).toBe('late')
     // Proxmox unreachable: the last reading stays, as of its own time.
     const seenAt = clock.now

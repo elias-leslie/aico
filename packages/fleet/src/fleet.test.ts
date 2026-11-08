@@ -664,7 +664,7 @@ it('keeps full-peer channels available after repeated Logins snapshots', async (
   ).toBe(0)
 })
 
-it('reports actual stopped guests as off and restores warning when the power reading fails', async () => {
+it('reports actual stopped guests as off and keeps the last reading when a read fails', async () => {
   let power: string | null = 'stopped'
   let latest: import('@aico/status').StatusRow[] = []
   const p = await pair({
@@ -685,7 +685,13 @@ it('reports actual stopped guests as off and restores warning when the power rea
   power = 'stopped'
   await vi.waitFor(() => expect(latest[0]?.state).toBe('off'))
   power = null
-  await vi.waitFor(() => expect(latest[0]?.state).toBe('warn'))
+  // A failed read says nothing about the guest, whose last reading was off.
+  let reads = 0
+  await vi.waitFor(() => {
+    reads++
+    expect(reads).toBeGreaterThan(3)
+  })
+  expect(latest[0]?.state).toBe('off')
   await p.fb.start()
   await vi.waitFor(() => expect(latest[0]?.state).toBe('ok'))
 })

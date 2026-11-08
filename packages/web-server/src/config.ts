@@ -48,7 +48,7 @@ export interface WebConfig {
    * the same rows turning the same way again stay quiet in the tray (`AICO_STATUS_ALERT_COOLDOWN_SECONDS`);
    * `major` is how long a major row stays bad before it interrupts the phone.
    */
-  status: { heartbeatMs: number; alertCooldownS: number; major: MajorWindows }
+  status: { heartbeatMs: number; alertCooldownS: number; major: MajorWindows; settleMs: number }
   /**
    * The Projects page: how often Proxmox is read for each place's power state
    * (`AICO_PROJECTS_POLL_SECONDS`), how long a start, shutdown or restart is shown as going
@@ -242,6 +242,8 @@ const DEFAULT_STATUS_ALERT_COOLDOWN_SECONDS = 6 * 60 * 60
  */
 const DEFAULT_STATUS_DATA_RISK_SECONDS = 26 * 60 * 60
 const DEFAULT_STATUS_OUTAGE_SECONDS = 30 * 60
+/** How long a row past due waits for its on-demand machine, or this server, to settle (show.ts). */
+const DEFAULT_STATUS_SETTLE_SECONDS = 10 * 60
 // The FCM access token host-steward's root timer mints; the paired phones live in Aico's data directory
 // (phones.json). The site file and the app's FCM options are the shared, readable copies under /etc/aico.
 const DEFAULT_FCM_TOKEN_FILE = '/var/lib/host-steward/fcm/token.json'
@@ -456,6 +458,7 @@ export function loadConfig(
           positiveInt(env.AICO_STATUS_DATA_RISK_SECONDS, DEFAULT_STATUS_DATA_RISK_SECONDS) * 1000,
         outage: positiveInt(env.AICO_STATUS_OUTAGE_SECONDS, DEFAULT_STATUS_OUTAGE_SECONDS) * 1000,
       },
+      settleMs: positiveInt(env.AICO_STATUS_SETTLE_SECONDS, DEFAULT_STATUS_SETTLE_SECONDS) * 1000,
     },
     projects: {
       pollMs: positiveInt(env.AICO_PROJECTS_POLL_SECONDS, DEFAULT_PROJECTS_POLL_SECONDS) * 1000,

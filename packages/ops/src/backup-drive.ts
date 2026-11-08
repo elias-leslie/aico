@@ -30,7 +30,11 @@ export interface BackupJob {
   filename?: string
   offline?: boolean
   prepare?: boolean
+  /** The machine this copy reads: how it stood at the start, and how to read it again if the copy fails. */
+  machine?: { before: GuestPower; read: () => Promise<GuestPower> }
 }
+/** A machine's power: `off` also when the Proxmox host holding it does not answer at all. */
+export type GuestPower = { state: 'on'; uptime?: number } | { state: 'off' } | { state: 'unknown' }
 export function volumeJobs(cfg: BackupConfig, state: BackupState): BackupJob[] {
   return Object.entries(cfg.subvolumes).map(([id, spec]) => {
     const p = state.points.find((p) => p.source === spec.mount)
@@ -110,6 +114,62 @@ export function hostReadsStoppedDisk(type: string, parts: string[], via: string 
     ((type === 'qemu' && via === 'agent') || (type === 'lxc' && via === 'pct'))
   )
 }
+/** Exit code of ssh itself: the connection failed, so the host is off or off the network. */
+const SSH_NO_ANSWER = 255
+/** How a guest (or, with no `guest`, the Proxmox host) stands now, from the host's own list. */
+async function readPower(
+  rt: Runtime,
+  ssh: string[],
+  guest?: { vmid: number; type: string },
+): Promise<GuestPower> {
+  const listing = await rt.run([...ssh, 'guests'])
+  if (listing.code === SSH_NO_ANSWER) return { state: 'off' }
+  if (listing.code) return { state: 'unknown' }
+  try {
+    return readListed(JSON.parse(listing.out), guest)
+  } catch {
+    return { state: 'unknown' }
+  }
+}
+function readListed(
+  resources: { vmid: number; type: string; status: string; uptime?: number }[],
+  guest?: { vmid: number; type: string },
+): GuestPower {
+  if (!guest) return { state: 'on' }
+  const found = resources.find((g) => g.vmid === guest.vmid && g.type === guest.type)
+  if (!found) return { state: 'unknown' }
+  return found.status === 'running'
+    ? { state: 'on', ...(found.uptime === undefined ? {} : { uptime: found.uptime }) }
+    : { state: 'off' }
+}
+/** CT 160, where the append copy goes, as a machine a copy can find off; null off the workstation. */
+export async function appendMachine(rt: Runtime): Promise<BackupJob['machine']> {
+  try {
+    const ssh = await pveSsh(rt, rt.cfg.pve.backupKey)
+    const guest = { vmid: rt.cfg.pve.appendGuest, type: 'lxc' }
+    return { before: await readPower(rt, ssh, guest), read: () => readPower(rt, ssh, guest) }
+  } catch {
+    return undefined
+  }
+}
+/**
+ * What a failed copy says about its machine. A machine turned off (or on, or restarted) during the
+ * copy is why it failed, so it isn't a failed backup: `off` records it as off, `changed` leaves the
+ * last good copy to the next normal run. A machine that stayed as it was failed for real: restic,
+ * Drive, or a read of a stopped disk, which works on a machine that stays off.
+ */
+async function failedCopyMachine(
+  job: BackupJob,
+  seconds: number,
+): Promise<'off' | 'changed' | null> {
+  if (!job.machine) return null
+  const { before, read } = job.machine
+  const now = await read().catch((): GuestPower => ({ state: 'unknown' }))
+  if (now.state === 'unknown' || before.state === 'unknown') return null
+  if (now.state === 'off') return before.state === 'off' ? null : 'off'
+  if (before.state === 'off') return 'changed'
+  return now.uptime !== undefined && now.uptime < seconds ? 'changed' : null
+}
 async function proxmoxJob(
   rt: Runtime,
   state: BackupState,
@@ -118,22 +178,41 @@ async function proxmoxJob(
   const target = new URL(source.path)
   const ssh = await pveSsh(rt, rt.cfg.pve.backupKey)
   let dataAt = rt.now().toISOString()
+  const parts = target.pathname.split('/').filter(Boolean)
+  const offline = (): BackupJob => ({
+    id: source.id,
+    paths: [],
+    binds: [],
+    dataAt: rt.now().toISOString(),
+    offline: true,
+  })
+  const onHost = parts[0] === 'config' || parts[0] === 'host'
+  const guestId = onHost ? undefined : { vmid: Number(parts[1]), type: parts[0] as string }
+  // The host itself doesn't answer: everything on it is off.
+  const listing = await rt.run([...ssh, 'guests'])
+  if (listing.code === SSH_NO_ANSWER) return offline()
+  if (listing.code) throw new Error('The Proxmox guest list is unavailable.')
+  const resources = JSON.parse(listing.out) as {
+    vmid: number
+    type: string
+    status: string
+    uptime?: number
+    template?: boolean
+  }[]
+  const machine = {
+    before: readListed(resources, guestId),
+    read: () => readPower(rt, ssh, guestId),
+  }
   if (source.id === rt.cfg.remoteSqlite.source) {
+    if (machine.before.state === 'off') return offline()
     await checked(rt.run, rt.cfg.remoteSqlite.snapshotCommand)
     const seconds = Number((await checked(rt.run, rt.cfg.remoteSqlite.timeCommand)).trim())
     if (!Number.isFinite(seconds) || seconds <= 0)
       throw new Error('The gem Aico snapshot date is unavailable.')
     dataAt = new Date(Math.min(rt.now().getTime(), seconds * 1000)).toISOString()
   }
-  const parts = target.pathname.split('/').filter(Boolean)
   let filename = 'pve-cluster-config.sql'
-  if (parts[0] !== 'config' && parts[0] !== 'host') {
-    const resources = JSON.parse(await checked(rt.run, [...ssh, 'guests'])) as {
-      vmid: number
-      type: string
-      status: string
-      template?: boolean
-    }[]
+  if (!onHost) {
     const guest = resources.find(
       (g) => g.vmid === Number(parts[1]) && g.type === parts[0] && !g.template,
     )
@@ -143,7 +222,7 @@ async function proxmoxJob(
       !hostReadsStoppedDisk(guest.type, parts, target.searchParams.get('via')) &&
       (parts[2] === 'files' || state.copies[copyKey(source.id, 'drive')]?.snapshot)
     )
-      return { id: source.id, paths: [], binds: [], dataAt: rt.now().toISOString(), offline: true }
+      return offline()
     if (guest.type === 'lxc' && guest.status === 'running' && parts[2] !== 'files') {
       const pool = Number(await checked(rt.run, [...ssh, 'thinpool']))
       if (!Number.isFinite(pool) || pool >= rt.cfg.pve.thinPoolMaximumPercent)
@@ -161,6 +240,7 @@ async function proxmoxJob(
     dataAt,
     filename,
     command: [...ssh, 'capture', source.id, createHash('sha256').update(source.path).digest('hex')],
+    machine,
   }
 }
 export async function prepareFolder(
@@ -225,27 +305,27 @@ export async function backupJob(
 ): Promise<Copy> {
   const attemptedAt = rt.now().toISOString(),
     old = state.copies[copyKey(job.id, target)]
+  const off = (): Copy => ({
+    ...old,
+    source: job.id,
+    target,
+    attemptedAt,
+    observed: 'offline',
+    dataAt:
+      old?.dataAt ??
+      (old?.snapshot && old.copiedAt && job.paths[0]
+        ? copiedDataTime(old.copiedAt, payloadTime(job.paths[0]))
+        : undefined),
+    offlineSince:
+      old?.observed === 'offline'
+        ? old.offlineSince
+        : old?.observed === 'ok' && !old.error
+          ? attemptedAt
+          : undefined,
+    error: undefined,
+  })
   try {
-    if (job.offline || (job.prepare && !(await prepareFolder(rt, job, state))))
-      return {
-        ...old,
-        source: job.id,
-        target,
-        attemptedAt,
-        observed: 'offline',
-        dataAt:
-          old?.dataAt ??
-          (old?.snapshot && old.copiedAt && job.paths[0]
-            ? copiedDataTime(old.copiedAt, payloadTime(job.paths[0]))
-            : undefined),
-        offlineSince:
-          old?.observed === 'offline'
-            ? old.offlineSince
-            : old?.observed === 'ok' && !old.error
-              ? attemptedAt
-              : undefined,
-        error: undefined,
-      }
+    if (job.offline || (job.prepare && !(await prepareFolder(rt, job, state)))) return off()
     if (job.prepare) job.dataAt = payloadTime(job.paths[0] as string) ?? ''
     if (!job.dataAt)
       throw new Error('The source has no readable payload date; no fresh backup was claimed.')
@@ -295,6 +375,11 @@ export async function backupJob(
       attemptedAt,
     }
   } catch (error) {
+    const seconds = (rt.now().getTime() - Date.parse(attemptedAt)) / 1000
+    const machine = await failedCopyMachine(job, seconds)
+    if (machine === 'off') return off()
+    if (machine === 'changed')
+      return { ...old, source: job.id, target, attemptedAt, error: undefined }
     return {
       ...old,
       source: job.id,

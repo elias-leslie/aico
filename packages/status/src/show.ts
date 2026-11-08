@@ -12,6 +12,9 @@
 // due while it was away and hasn't reported since shows unknown (why 'back',
 // since the machine's return) instead of late, for at most one of its own
 // intervals (next_run - last_run); a report ends that, and so does the interval.
+// Settling: a row can't report while its on-demand machine is shutting down or booting, or while
+// the server reading it has just started. Until that has had time to pass (`Settling`), a row past
+// due shows unknown (why 'back') instead of late: the machine's power or a restart is not a problem.
 //
 // The badge (owner rule, 2026-11-03, shown as off since 2026-11-06): rows of a machine turned off on
 // purpose are not problems, so they are out of the badge count and alerts like any off row. Rows
@@ -136,6 +139,25 @@ function lateSince(stored: StoredRow, now: number): number | null {
   return due !== null && now > due + LATE_GRACE_MS ? due : null
 }
 
+/** How long a row past due waits for its machine or this server to settle. Overridable (config.ts). */
+export const SETTLE_MS = 10 * 60_000
+
+/** What may hold a row past due back from late at `now` (StatusStore.settling). */
+export interface Settling {
+  ms: number
+  /** On-demand machines the hypervisor last read as on, with since when (epoch ms). */
+  onDemand?: ReadonlyMap<string, number>
+  /** Until when this server has only just started: its writers haven't had a turn (epoch ms). */
+  until?: number
+}
+
+/** When a row due at `due` may show late, given what is settling; 0 when nothing holds it. */
+function settledAt(machine: string, due: number, settling?: Settling): number {
+  if (!settling) return 0
+  const on = settling.onDemand?.get(machine)
+  return Math.max(settling.until ?? 0, on === undefined ? 0 : Math.max(due, on) + settling.ms)
+}
+
 /** A row's own interval: from its last run (else its last report) to its next. */
 function interval(stored: StoredRow, due: number): number {
   const last = stored.row.last_run ? Date.parse(stored.row.last_run) : stored.updatedAt
@@ -152,6 +174,7 @@ export function show(
   rows: readonly StoredRow[],
   now: number,
   expectedOff: ReadonlyMap<string, number> = new Map(),
+  settling?: Settling,
 ): ShownRow[] {
   // Per machine with a machine row: since when it says the machine is not reporting (late or
   // off), else null; and when it last came back.
@@ -161,7 +184,12 @@ export function show(
     if (stored.row.kind !== 'machine') continue
     const off = stored.row.state === 'off'
     const since = off ? (stored.offAt ?? stored.updatedAt) : lateSince(stored, now)
-    silent.set(stored.row.machine, since === null ? null : { since, why: off ? 'off' : 'late' })
+    const settlingNow =
+      !off && since !== null && now < settledAt(stored.row.machine, since, settling)
+    silent.set(
+      stored.row.machine,
+      since === null ? null : { since, why: off ? 'off' : settlingNow ? 'back' : 'late' },
+    )
     if (stored.backAt !== undefined) back.set(stored.row.machine, stored.backAt)
   }
   const stopped = new Map<string, number>()
@@ -201,6 +229,9 @@ export function show(
       return { ...base, shown: 'off', shown_since: iso(stored.offAt ?? stored.updatedAt) }
     const due = lateSince(stored, now)
     if (due === null) return { ...base, shown: stored.row.state, shown_since: null }
+    const settled = settledAt(stored.row.machine, due, settling)
+    if (now < settled)
+      return { ...base, shown: 'unknown', shown_since: iso(due), unknown_why: 'back' }
     // Due while its machine was away and silent since it came back: unknown until it reports,
     // for at most one of its own intervals from the machine's return; late after that.
     const backAt = back.get(stored.row.machine)
@@ -214,7 +245,7 @@ export function show(
       if (now > graceEnd) return { ...base, shown: 'late', shown_since: iso(graceEnd) }
       return { ...base, shown: 'unknown', shown_since: iso(backAt), unknown_why: 'back' }
     }
-    return { ...base, shown: 'late', shown_since: iso(due) }
+    return { ...base, shown: 'late', shown_since: iso(Math.max(due, settled)) }
   })
 }
 
@@ -294,8 +325,9 @@ export function view(
   now: number,
   filter: Filter = {},
   expectedOff?: ReadonlyMap<string, number>,
+  settling?: Settling,
 ): StatusView {
-  const shown = show(rows, now, expectedOff)
+  const shown = show(rows, now, expectedOff, settling)
   const selected = select(shown, filter)
   return {
     generated_at: iso(now),

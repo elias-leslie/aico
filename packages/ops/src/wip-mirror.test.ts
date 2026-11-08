@@ -224,12 +224,12 @@ describe('wip mirror', () => {
     expect(full.problems[0]?.reason).toMatch(/would pass 0 MB/)
   })
 
-  it('reports a peer that does not answer as a failure', async () => {
+  it('a peer that does not answer is off or restarting: a warning, not a failure', async () => {
     const root = repo('app')
     const down: Peer = { ...fakePeer('gem'), exec: async () => ({ code: 255, out: '' }) }
     const report = await mirror(deps([{ id: 'app', root }], {}, {}, [down]))
-    expect(report.problems).toEqual([expect.objectContaining({ key: 'peer-gem', state: 'failed' })])
-    expect(summary(report, 'home', 1)).toContain('Failed: gem did not answer')
+    expect(report.problems).toEqual([expect.objectContaining({ key: 'peer-gem', state: 'warn' })])
+    expect(summary(report, 'home', 1)).toContain('Skipped: gem did not answer')
   })
 
   it('does nothing and says so plainly when there is no peer', async () => {

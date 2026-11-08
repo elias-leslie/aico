@@ -11,6 +11,8 @@ import { parseRow, type StatusRow } from './row'
 import {
   type Filter,
   LATE_GRACE_MS,
+  SETTLE_MS,
+  type Settling,
   type Shown,
   type ShownRow,
   type StatusView,
@@ -123,13 +125,35 @@ export class StatusStore {
   private readonly db: Database
   private alertHook: AlertHook | null = null
   private sustained: { windows: MajorWindows; hook: SustainedHook } | null = null
+  private readonly settleMs: number
+  private readonly startedUntil: number | undefined
 
-  /** Opens `path` (`':memory:'` for tests); `now` stamps updated_at. */
+  /**
+   * Opens `path` (`':memory:'` for tests); `now` stamps updated_at. The server passes `server`: for
+   * `settleMs` after it starts nothing it hasn't heard from is late, since its writers (a timer that
+   * got a refused connection during the restart, machines that just booted) haven't had a turn.
+   */
   constructor(
     path: string,
     private readonly now: () => number = Date.now,
+    options: { settleMs?: number; server?: boolean } = {},
   ) {
     this.db = openDatabase(path, migrations(now))
+    this.settleMs = options.settleMs ?? SETTLE_MS
+    this.startedUntil = options.server ? now() + this.settleMs : undefined
+  }
+
+  /** What holds a row past due back from late now (show.ts). */
+  private settling(): Settling {
+    const onDemand = new Map<string, number>()
+    for (const m of this.intents())
+      if (m.intent === 'on-demand' && m.power === 'on')
+        onDemand.set(m.machine, m.powerSince ?? m.powerAt ?? 0)
+    return {
+      ms: this.settleMs,
+      onDemand,
+      ...(this.startedUntil === undefined ? {} : { until: this.startedUntil }),
+    }
   }
 
   /**
@@ -328,7 +352,7 @@ export class StatusStore {
    */
   checkAlerts(): AlertBatch | null {
     const now = this.now()
-    const rows = show(this.rows(), now, this.expectedOff())
+    const rows = show(this.rows(), now, this.expectedOff(), this.settling())
     const seen = new Map(
       (
         this.db.prepare('SELECT id, shown FROM status_seen').all() as {
@@ -424,7 +448,7 @@ export class StatusStore {
 
   /** The rows as a reader sees them now. */
   read(filter: Filter = {}): StatusView {
-    return view(this.rows(), this.now(), filter, this.expectedOff())
+    return view(this.rows(), this.now(), filter, this.expectedOff(), this.settling())
   }
 
   close(): void {

@@ -3,6 +3,7 @@
 // a project's own checks never do.
 
 import { describe, expect, it } from 'vitest'
+import { majorOf } from './major'
 import { parseRow, type StatusRow } from './row'
 import type { Sustained } from './show'
 import { StatusStore } from './store'
@@ -93,6 +94,15 @@ describe('major rows that stay bad', () => {
     expect(w.stayed()).toEqual([])
     w.step(30 * MIN)
     expect(w.stayed()).toEqual(['host/machine'])
+  })
+
+  it('a link to a guest no project declares is not an always-on machine', () => {
+    const row = { kind: 'machine', machine: 'guest', shown: 'late' }
+    expect(majorOf({ ...row, id: 'fleet/here/guest' }, new Map())).toBeNull()
+    expect(majorOf({ ...row, id: 'fleet/here/guest' }, new Map([['guest', 'always']]))).toBe(
+      'outage',
+    )
+    expect(majorOf({ ...row, id: 'gem/machine' }, new Map())).toBe('outage')
   })
 
   it('a failed service is an outage after its window', () => {
