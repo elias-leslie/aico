@@ -235,8 +235,9 @@ export async function readTimerStatus(file: TimersFile, ctx: TimerContext): Prom
             systemctl(
               first,
               'show',
+              '--timestamp=unix',
               '-p',
-              'Id,LoadState,ActiveState,Result,ExecMainStatus',
+              'Id,LoadState,ActiveState,Result,ExecMainStatus,ExecMainExitTimestamp',
               ...units,
               ...services,
             ),

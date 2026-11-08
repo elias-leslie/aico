@@ -147,6 +147,10 @@ describe('systemd timers in Routines', () => {
       unreadable: 'gone.timer is not installed on box',
       lastState: null,
     })
+    // It asks systemd for the service's finish time as a plain number, not a date in a locale.
+    const shown = h.calls.find((c) => c.includes('show')) as string[]
+    expect(shown).toContain('--timestamp=unix')
+    expect(shown.find((word) => word.startsWith('Id,'))).toContain('ExecMainExitTimestamp')
     // One batch of calls per host and scope, not per timer.
     expect(h.calls.filter((c) => c.includes('list-timers'))).toHaveLength(5)
   })
