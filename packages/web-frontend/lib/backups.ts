@@ -3,8 +3,6 @@
 
 import { BACKUP_TARGET_NAMES } from '@aico/shared/backup-targets'
 
-export { spanText } from '@aico/shared/time'
-
 export type BackupTarget = 'native' | 'drive' | 'append' | 'external'
 export type BackupState = 'ok' | 'warn' | 'failed' | 'off'
 

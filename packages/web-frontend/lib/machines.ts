@@ -1,6 +1,7 @@
 // The Machines page's data: every machine once, from the Status machine rows and the hosts
 // sessions can run on (Tether's links). Pure; the page fetches and renders.
 
+import { spanText } from '@aico/shared/time'
 import type { HostChoice } from './hooks/use-hosts'
 import type { MachineGuest } from './hooks/use-machine-guests'
 import { MACHINE_LABEL, WORKSTATION_LABEL } from './machine-name'
@@ -149,11 +150,7 @@ const GUEST_FREE = new Set(['davion-gem'])
 function uptime(since: string | null, now: number): string {
   const start = since ? Date.parse(since) : Number.NaN
   if (Number.isNaN(start)) return ''
-  const minutes = Math.max(0, Math.round((now - start) / 60_000))
-  if (minutes < 1) return 'Up just now'
-  if (minutes < 60) return `Up ${minutes} min`
-  if (minutes < 48 * 60) return `Up ${Math.round(minutes / 60)} h`
-  return `Up ${Math.floor(minutes / 1440)} days`
+  return now - start < 30_000 ? 'Up just now' : `Up ${spanText(now - start)}`
 }
 
 const gb = (mb: number) =>

@@ -1,5 +1,6 @@
 'use client'
 
+import { spanText } from '@aico/shared/time'
 import { useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
@@ -11,7 +12,6 @@ import {
   copyWord,
   groupBySource,
   runnableTargets,
-  spanText,
   type TargetAge,
   targetLabel,
 } from '@/lib/backups'

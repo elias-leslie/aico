@@ -1,5 +1,6 @@
 'use client'
 
+import { spanText } from '@aico/shared/time'
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import {
@@ -10,7 +11,6 @@ import {
   copyWord,
   groupBySource,
   runnableTargets,
-  spanText,
   targetLabel,
 } from '@/lib/backups'
 import { backupsApi } from '@/lib/backups-api'
