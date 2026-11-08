@@ -249,13 +249,14 @@ export function useTerminalWebSocket({
   }, [reconnect])
 
   // The device lost its network: the socket can look open for minutes, so
-  // stop showing Live and wait; when the network is back, open a fresh
-  // socket at once rather than trusting the old one.
+  // replace it with a fresh attempt at once and stop showing Live. If the
+  // network really is gone the attempt fails and the usual retries carry on
+  // (the server can still be reachable, e.g. on this machine, and then it
+  // simply connects); when the network is back, retry at once.
   useEffect(() => {
     const handleOffline = () => {
       if (!mountedRef.current || statusRef.current === 'session_dead') return
-      disconnect()
-      setStatus('connecting')
+      reconnect()
     }
     const handleOnline = () => {
       if (!mountedRef.current || statusRef.current === 'session_dead') return
@@ -267,7 +268,7 @@ export function useTerminalWebSocket({
       window.removeEventListener('offline', handleOffline)
       window.removeEventListener('online', handleOnline)
     }
-  }, [disconnect, reconnect])
+  }, [reconnect])
 
   // Cleanup on unmount
   useEffect(() => {

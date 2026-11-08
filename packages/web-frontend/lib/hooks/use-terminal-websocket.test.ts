@@ -43,7 +43,7 @@ afterEach(() => {
 })
 
 describe('useTerminalWebSocket network changes', () => {
-  it('stops showing Live when the device goes offline and opens a fresh socket when it is back', () => {
+  it('stops showing Live when the device goes offline and tries a fresh socket at once', () => {
     const { result } = renderHook(() =>
       useTerminalWebSocket({ sessionId: 's1', sendInitialResize: false }),
     )
@@ -56,13 +56,39 @@ describe('useTerminalWebSocket network changes', () => {
     })
     expect(result.current.status).toBe('connecting')
     expect(sockets[0]?.readyState).toBe(MockWebSocket.CLOSED)
-    expect(sockets).toHaveLength(1)
-
-    act(() => {
-      window.dispatchEvent(new Event('online'))
-    })
     expect(sockets).toHaveLength(2)
+    // The server is still reachable (e.g. on this machine): it connects.
     act(() => sockets[1]?.emitOpen())
     expect(result.current.status).toBe('connected')
+  })
+
+  it('keeps retrying after offline while the network is really gone, and retries at once when it is back', () => {
+    vi.useFakeTimers()
+    try {
+      const { result } = renderHook(() =>
+        useTerminalWebSocket({ sessionId: 's1', sendInitialResize: false }),
+      )
+      act(() => result.current.connect())
+      act(() => sockets[0]?.emitOpen())
+      act(() => {
+        window.dispatchEvent(new Event('offline'))
+      })
+      expect(sockets).toHaveLength(2)
+      act(() => sockets[1]?.onerror?.(new Event('error')))
+      expect(result.current.status).toBe('connecting')
+      act(() => {
+        vi.advanceTimersByTime(60_000)
+      })
+      expect(sockets.length).toBeGreaterThan(2)
+      const before = sockets.length
+      act(() => {
+        window.dispatchEvent(new Event('online'))
+      })
+      expect(sockets).toHaveLength(before + 1)
+      act(() => sockets[before]?.emitOpen())
+      expect(result.current.status).toBe('connected')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
