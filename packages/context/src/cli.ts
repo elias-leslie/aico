@@ -45,7 +45,14 @@ import {
 } from './memory'
 import { Catalog } from './models'
 import { getPrompt, listPrompts, promptRevisions, putPrompt } from './prompts'
-import { applyReplica, readReplicaState, replicaHash, schemaVersion } from './replica'
+import {
+  applyReplica,
+  changedSinceApply,
+  memoriesSavedHere,
+  readReplicaState,
+  replicaHash,
+  schemaVersion,
+} from './replica'
 import { route, UnknownLaunchKey } from './route'
 
 export const CONTEXT_COMMANDS = ['memory', 'prompt', 'models', 'context'] as const
@@ -92,7 +99,7 @@ const USAGE = `Usage: aico <memory|prompt|models|context> ...
   aico context deliver --tool T [--project P] [--session S] [--role R] [--coordinator]
                        [--event E] [--format text|json|claude|codex|pi] [--force]
   aico context delivery [TOOL on|off]
-  aico context replica hash | apply --from MACHINE   (apply reads a snapshot on stdin; \`aico context-sync\` sends it)
+  aico context replica hash | memories | apply --from MACHINE   (apply reads a snapshot on stdin; \`aico context-sync\` sends it)
 `
 
 /** The usage lines of one command (`aico memory --help` shows memory's, not prompt's). */
@@ -555,8 +562,12 @@ function replica(db: Database, argv: string[], io: ContextCliIo): number {
   const parsed = parse(rest, { '--from': 'from' }, [])
   if (sub === 'hash') {
     io.out(
-      `${JSON.stringify({ hash: replicaHash(db), schema: schemaVersion(db), copy: readReplicaState(io.dbPath) !== null })}\n`,
+      `${JSON.stringify({ hash: replicaHash(db), schema: schemaVersion(db), copy: readReplicaState(io.dbPath) !== null, changed: changedSinceApply(db, io.dbPath) })}\n`,
     )
+    return 0
+  }
+  if (sub === 'memories') {
+    io.out(`${JSON.stringify(memoriesSavedHere(db, io.dbPath))}\n`)
     return 0
   }
   if (sub === 'apply') {

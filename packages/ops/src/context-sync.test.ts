@@ -1,8 +1,9 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { addMemory, listMemories, type Memory, openContext } from '@aico/context'
 import { afterEach, expect, it } from 'vitest'
-import { syncCanaryCursor, syncPhones } from './context-sync'
+import { syncCanaryCursor, syncPhones, takeStandbyMemories } from './context-sync'
 
 type Answer = { code: number; stdout: string; output: string; ended: boolean }
 const dirs: string[] = []
@@ -74,4 +75,39 @@ it('a canary cursor sync to a machine that is off is neither a failure nor a lin
     lines: [],
     failed: false,
   })
+})
+
+it('takes memories saved on the standby once, keeps this side on a clash, and a standby that is off is no failure', async () => {
+  const { dir } = setup()
+  const mainDb = join(dir, 'main.db')
+  const db = openContext(mainDb)
+  const mine = addMemory(db, { content: 'edited here', summary: 'mine' }, '2026-11-01T00:00:00Z')
+  db.close()
+  const theirs: Memory[] = [
+    { ...mine, content: 'edited on the standby', version: 2 },
+    {
+      ...mine,
+      id: 'aaaaaaaa-0000-4000-8000-000000000001',
+      content: 'saved while away',
+      createdAt: '2026-11-08T01:00:00Z',
+      updatedAt: '2026-11-08T01:00:00Z',
+    },
+  ]
+  const answer = (stdout: string): Answer => ({ code: 0, stdout, output: stdout, ended: true })
+  const exec = async () => answer(`${JSON.stringify(theirs)}\n`)
+  const peer = peers[0]
+  const first = await takeStandbyMemories(peer, aico, mainDb, exec as never)
+  expect(first).toEqual({
+    added: 1,
+    failed: false,
+    line: 'standby: Took 1 memory saved on the standby',
+  })
+  const again = await takeStandbyMemories(peer, aico, mainDb, exec as never)
+  expect(again).toEqual({ added: 0, failed: false, line: null })
+  const after = openContext(mainDb)
+  const all = listMemories(after, { scope: 'all' }).memories
+  after.close()
+  expect(all.map((m) => m.content).sort()).toEqual(['edited here', 'saved while away'])
+  const off = await takeStandbyMemories(peer, aico, mainDb, (async () => gone) as never)
+  expect(off).toEqual({ added: 0, failed: false, line: null })
 })

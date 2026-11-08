@@ -12,6 +12,7 @@ import { readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { readQuery, snapshotDatabase, transaction } from '@aico/store'
 import { type Database, openContext } from './db'
+import { type Memory, memoriesCreatedSince } from './memory'
 
 /** Parents before children: apply deletes in reverse and inserts in this order. */
 const REPLICATED_TABLES = [
@@ -60,6 +61,18 @@ export function replicaHash(db: Database): string {
       hash.update(`${JSON.stringify(row)}\n`)
   }
   return hash.digest('hex')
+}
+
+/** True when this copy holds something the machine it came from does not (a memory saved here, a count moved). */
+export function changedSinceApply(db: Database, dbPath: string): boolean {
+  const state = readReplicaState(dbPath)
+  return state !== null && replicaHash(db) !== state.hash
+}
+
+/** The memories first saved on this copy since the last apply: what the sender takes before it overwrites them. */
+export function memoriesSavedHere(db: Database, dbPath: string): Memory[] {
+  const state = readReplicaState(dbPath)
+  return state ? memoriesCreatedSince(db, state.at) : []
 }
 
 export function schemaVersion(db: Database): number {

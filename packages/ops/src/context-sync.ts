@@ -10,6 +10,8 @@ import { join } from 'node:path'
 import {
   contextDbPath,
   exportReplica,
+  importMemories,
+  type Memory,
   openContext,
   readReplicaState,
   replicaHash,
@@ -49,13 +51,15 @@ export async function contextSync(argv: string[], env = process.env): Promise<nu
     console.log('No other full Aico in the fleet; nothing to copy to.')
     return 0
   }
-  const db = openContext(dbPath)
-  let hash: string
-  try {
-    hash = replicaHash(db)
-  } finally {
-    db.close()
+  const ownHash = () => {
+    const db = openContext(dbPath)
+    try {
+      return replicaHash(db)
+    } finally {
+      db.close()
+    }
   }
+  let hash = ownHash()
   const aico = (args: string) => ['sh', '-c', `cd "$HOME" && ${config.peerAico} ${args}`]
   const lines: string[] = []
   let failed = false
@@ -63,7 +67,7 @@ export async function contextSync(argv: string[], env = process.env): Promise<nu
   let snapshot: Buffer | null = null
   for (const peer of peers) {
     const asked = await requestExec(peer.exec, aico('context replica hash'), Buffer.alloc(0))
-    let theirs: { hash: string; copy: boolean } | null = null
+    let theirs: { hash: string; copy: boolean; changed?: boolean } | null = null
     try {
       theirs = JSON.parse(lastLine(asked.stdout))
     } catch {}
@@ -78,6 +82,16 @@ export async function contextSync(argv: string[], env = process.env): Promise<nu
         `${peer.name}: could not read its context (${lastLine(asked.output) || `exit ${asked.code}`}); it may not have this Aico release yet`,
       )
       continue
+    }
+    // Memories saved on the standby while this machine was off come over before the copy overwrites them.
+    if (theirs.changed) {
+      const taken = await takeStandbyMemories(peer, aico, dbPath)
+      if (taken.line) lines.push(taken.line)
+      if (taken.failed) failed = true
+      if (taken.added) {
+        hash = ownHash()
+        snapshot = null
+      }
     }
     if (theirs.copy && theirs.hash === hash) {
       lines.push(`${peer.name}: already the same`)
@@ -112,6 +126,48 @@ export async function contextSync(argv: string[], env = process.env): Promise<nu
   lines.push(...canary.lines)
   console.log(lines.join('; '))
   return failed ? 1 : 0
+}
+
+/**
+ * The memories a standby saved itself since it last took a copy (`aico context replica memories`) are added
+ * here, once: an id this machine already has is skipped, so what was edited in both places stays as it is
+ * here and a second run adds nothing. Memories only; prompts and roles are not taken.
+ */
+export async function takeStandbyMemories(
+  peer: { name: string; exec: string },
+  aico: (args: string) => string[],
+  dbPath: string,
+  exec: typeof requestExec = requestExec,
+  now: () => Date = () => new Date(),
+): Promise<{ added: number; failed: boolean; line: string | null }> {
+  const asked = await exec(peer.exec, aico('context replica memories'), Buffer.alloc(0))
+  if (unanswered(asked)) return { added: 0, failed: false, line: null }
+  let memories: Memory[] | null = null
+  try {
+    const parsed = JSON.parse(lastLine(asked.stdout))
+    if (Array.isArray(parsed)) memories = parsed
+  } catch {}
+  if (asked.code !== 0 || !memories)
+    return {
+      added: 0,
+      failed: true,
+      line: `${peer.name}: could not read its memories (${lastLine(asked.output) || `exit ${asked.code}`})`,
+    }
+  if (!memories.length) return { added: 0, failed: false, line: null }
+  const db = openContext(dbPath)
+  let added: number
+  try {
+    added = importMemories(db, memories, now().toISOString())
+  } finally {
+    db.close()
+  }
+  return {
+    added,
+    failed: false,
+    line: added
+      ? `${peer.name}: Took ${added} ${added === 1 ? 'memory' : 'memories'} saved on the standby`
+      : null,
+  }
 }
 
 /** `requestExec` found no peer, or lost it before the command reported an exit status. */

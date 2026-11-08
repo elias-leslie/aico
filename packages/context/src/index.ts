@@ -40,6 +40,7 @@ export {
   deleteMemory,
   type Found,
   getMemories,
+  importMemories,
   listMemories,
   type Memory,
   searchMemories,

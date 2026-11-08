@@ -125,6 +125,46 @@ export function putMemory(db: Database, memory: Memory, reason: string, at: stri
   ).run(memory.id, memory.version, JSON.stringify(memory), reason, at)
 }
 
+/** The memories first saved after `at` (an ISO time), oldest first. */
+export function memoriesCreatedSince(db: Database, at: string): Memory[] {
+  const rows = db
+    .prepare(`SELECT ${COLUMNS} FROM memories WHERE created_at > ? ORDER BY created_at, id`)
+    .all(at) as unknown as Row[]
+  return rows.map(fromRow)
+}
+
+const isMemory = (m: Memory): boolean =>
+  typeof m?.id === 'string' &&
+  m.id !== '' &&
+  (SCOPES as readonly string[]).includes(m.scope) &&
+  (TIERS as readonly string[]).includes(m.tier) &&
+  typeof m.content === 'string' &&
+  m.content.trim() !== '' &&
+  typeof m.scopeId === 'string' &&
+  typeof m.summary === 'string' &&
+  Array.isArray(m.tags) &&
+  Array.isArray(m.triggers) &&
+  Number.isInteger(m.version) &&
+  typeof m.createdAt === 'string' &&
+  typeof m.updatedAt === 'string'
+
+/**
+ * Takes memories written on another machine: each id this store does not have yet is added as it
+ * is; an id it already has is left alone (this store wins). Returns how many were added.
+ */
+export function importMemories(db: Database, incoming: readonly Memory[], at: string): number {
+  let added = 0
+  transaction(db, () => {
+    const has = db.prepare('SELECT 1 FROM memories WHERE id = ?')
+    for (const memory of incoming) {
+      if (!isMemory(memory) || has.get(memory.id)) continue
+      putMemory(db, memory, 'saved on the standby', at)
+      added++
+    }
+  })
+  return added
+}
+
 export interface NewMemory {
   content: string
   summary?: string

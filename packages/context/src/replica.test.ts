@@ -4,19 +4,21 @@ import { join } from 'node:path'
 import { expect, it } from 'vitest'
 import { type ContextCliIo, runContextCli } from './cli'
 import { openContext } from './db'
-import { addMemory, getMemories, listMemories } from './memory'
+import { addMemory, getMemories, importMemories, listMemories, type Memory } from './memory'
 import { putPrompt } from './prompts'
 import { exportReplica, readReplicaState, replicaHash } from './replica'
 
 const NOW = new Date('2026-11-08T00:00:00Z')
+const clock = { now: NOW }
 
 function fixture() {
+  clock.now = NOW
   const dir = mkdtempSync(join(tmpdir(), 'aico-replica-'))
   const main = join(dir, 'main', 'context.db')
   const standby = join(dir, 'standby', 'context.db')
   const io = (dbPath: string, stdin?: Buffer, lines: string[] = []): ContextCliIo => ({
     dbPath,
-    now: () => NOW,
+    now: () => clock.now,
     out: (s) => lines.push(s),
     err: (s) => lines.push(s),
     stdin: stdin ? () => stdin : undefined,
@@ -157,6 +159,43 @@ it('answers its hash, refuses another schema, and leaves a failed copy untouched
     expect(
       readdirSync(join(f.dir, 'standby')).filter((n) => n.startsWith('.context-replica-')),
     ).toEqual([])
+  } finally {
+    rmSync(f.dir, { recursive: true, force: true })
+  }
+})
+
+it('hands over only the memories the standby saved after its last copy, and they survive the next copy', async () => {
+  const f = fixture()
+  try {
+    const db = openContext(f.main)
+    const old = addMemory(db, { content: 'old' }, '2026-11-01T00:00:00Z')
+    const gone = addMemory(db, { content: 'deleted here later' }, '2026-11-01T00:00:00Z')
+    expect(await f.send()).toBe(0)
+    db.prepare('DELETE FROM memories WHERE id = ?').run(gone.id)
+    const copy = openContext(f.standby)
+    const own = addMemory(copy, { content: 'saved while away' }, '2026-11-08T05:00:00Z')
+    copy.close()
+    const hash: string[] = []
+    await runContextCli('context', ['replica', 'hash'], f.io(f.standby, undefined, hash))
+    expect(JSON.parse(hash[0] as string)).toMatchObject({ copy: true, changed: true })
+    const dump: string[] = []
+    await runContextCli('context', ['replica', 'memories'], f.io(f.standby, undefined, dump))
+    const handed = JSON.parse(dump[0] as string) as Memory[]
+    expect(handed.map((m) => m.id)).toEqual([own.id])
+    expect(importMemories(db, handed, NOW.toISOString())).toBe(1)
+    expect(importMemories(db, handed, NOW.toISOString())).toBe(0)
+    clock.now = new Date('2026-11-08T06:00:00Z')
+    expect(await f.send()).toBe(0)
+    const after = openContext(f.standby)
+    expect(getMemories(after, [own.id]).found).toHaveLength(1)
+    expect(getMemories(after, [old.id]).found).toHaveLength(1)
+    expect(getMemories(after, [gone.id]).found).toHaveLength(0)
+    after.close()
+    expect(await f.send()).toBe(0)
+    const again: string[] = []
+    await runContextCli('context', ['replica', 'memories'], f.io(f.standby, undefined, again))
+    expect(JSON.parse(again[0] as string)).toEqual([])
+    db.close()
   } finally {
     rmSync(f.dir, { recursive: true, force: true })
   }
