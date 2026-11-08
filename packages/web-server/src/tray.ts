@@ -168,6 +168,10 @@ function noticeCard(stored: StoredNotice): Record<string, unknown> {
     ...(notice.detail ? [notice.detail] : []),
     ...notice.fields.map((field) => `${field.label}: ${field.value}`),
     ...(notice.if_ignored ? [`If you leave it: ${notice.if_ignored}`] : []),
+    ...(notice.machine || notice.project
+      ? [`About: ${[notice.machine, notice.project].filter(Boolean).join(', ')}`]
+      : []),
+    ...(notice.raised_by ? [`From the Aico on ${notice.raised_by}`] : []),
   ]
   const sent = stored.deliveries.filter((d) => d.state === 'sent').length
   const open = notice.open && /^https:\/\//.test(notice.open) ? notice.open : ''

@@ -243,6 +243,24 @@ describe('POST /api/ominull/push', () => {
   })
 })
 
+describe('the one list', () => {
+  it('a recovery synced from another Aico closes the ask here', async () => {
+    const answer = await call('POST', '/api/ominull/push', {
+      body: { notices: [alert] },
+      headers: { 'x-api-key': KEY },
+    })
+    await settle()
+    expect(hub.store.get(answer.body.notices[0].id)?.askId).toBe('ask1')
+    tetherCalls.length = 0
+    const { afterApply } = hub.syncHandle()
+    const ok = { ...alert, severity: 'ok' }
+    const row = { id: 'gem-ok', source: 'ominull', key: alert.key, doc: JSON.stringify(ok) }
+    afterApply?.([{ table: 'notices', row }])
+    await settle()
+    expect(tetherCalls.map((c) => c.path)).toEqual([expect.stringContaining('/v1/asks/ask1')])
+  })
+})
+
 describe('Needs you through Status rows', () => {
   it('withdraws previously raised ordinary failed-row asks when the hub starts', async () => {
     const old = {

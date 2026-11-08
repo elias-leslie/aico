@@ -26,7 +26,13 @@ export const WEB_SYNC_TABLES: readonly SyncTable[] = [
 // notify.db: the one notification list on every full Aico. Each machine's outbox stays its own;
 // notice_sends says what has already gone out, whoever sent it.
 export const NOTIFY_SYNC_TABLES: readonly SyncTable[] = [
-  { name: 'notices', keys: ['id'], clock: 'sync_at' },
+  {
+    name: 'notices',
+    keys: ['id'],
+    clock: 'sync_at',
+    // An ask lives in this machine's Tether.
+    localOnly: ['ask_id', 'answer', 'answered_at', 'outcome'],
+  },
   { name: 'notice_reads', keys: ['notice_id'], merge: { max: 'read_at' } },
   { name: 'marks', keys: ['name'], merge: { max: 'at' } },
   { name: 'notice_sends', keys: ['notice_id'], merge: { max: 'at' } },

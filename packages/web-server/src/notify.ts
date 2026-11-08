@@ -41,7 +41,7 @@ import { type RequestContext, Router } from './http'
 import type { HubMachine } from './hub-machines'
 import { relaySender } from './phone-relay'
 import { frontedBy, primaryUrl } from './service-primary'
-import type { SyncHandle } from './sync/engine'
+import type { SyncHandle, SyncRow } from './sync/engine'
 import { NOTIFY_SYNC_TABLES } from './sync/registry'
 import { HttpError } from './tether'
 
@@ -250,21 +250,22 @@ export interface SenderRule {
 /**
  * One sender at a time: among the Aicos that answer and sync, a primary comes before a standby, then
  * the lower name. A peer this one can't sync with doesn't count, so a broken link or a machine that's
- * off never stops an alert; each Aico sends when it's alone. Returns who sends while this one holds
- * the list, or null when it sends itself. Right after a start it waits for the first sync (a short
- * while at most), so what another Aico sent while this one was off isn't sent again.
+ * off never stops an alert; each Aico sends when it's alone, and a holder's row goes out after a
+ * deadline in any case (Outbox holdMaxMs). Right after a start nothing goes until the first clean
+ * sync (a short while at most), so what another Aico sent while this one was off isn't sent again.
+ * Every full Aico syncs with every other (hosts.json): the rule reads only its own peers.
  */
-export function holdingFor(rule: SenderRule): string | null {
+export function holdingFor(rule: SenderRule): { by: string; firm?: boolean } | null {
   const now = (rule.now ?? Date.now)()
   const peers = rule.peers()
-  if (now - rule.startedAt < rule.settleMs && peers.some((peer) => peer.state === 'waiting'))
-    return 'The first sync'
+  if (now - rule.startedAt < rule.settleMs && peers.some((peer) => peer.lastSyncAt === null))
+    return { by: 'The first sync', firm: true }
   const rank = (standby: boolean, host: string) => `${standby ? 1 : 0}:${host}`
   const me = rank(rule.standby, rule.hostName)
   for (const peer of peers) {
     if (peer.state !== 'ok' || !peer.host || peer.lastSyncAt === null) continue
     if (now - peer.lastSyncAt > rule.aliveMs) continue
-    if (rank(peer.standby === true, peer.host) < me) return peer.host
+    if (rank(peer.standby === true, peer.host) < me) return { by: peer.host }
   }
   return null
 }
@@ -279,7 +280,7 @@ export class NotifyHub {
   /** Set once the machines service exists (it starts after this hub). */
   hubFleet: (() => HubMachine[]) | null = null
   /** Set once sync runs: who sends now. Until then this Aico sends. */
-  holding: (() => string | null) | null = null
+  holding: (() => { by: string; firm?: boolean } | null) | null = null
   private readonly sender: PhoneSender
 
   constructor(private readonly deps: NotifyDeps) {
@@ -330,6 +331,7 @@ export class NotifyHub {
               : [],
         )
         if (rows.length === 0) return
+        this.withdrawOwnAsks(touched)
         const devices = this.sender.devices()?.map((device) => device.id) ?? [ANY_PHONE]
         if (this.store.takeSynced(rows, devices, Date.now()))
           setTimeout(() => {
@@ -338,6 +340,27 @@ export class NotifyHub {
               .catch((error) => console.error('[notify] outbox pass failed:', error))
           }, SYNC_SETTLE_MS + 100).unref()
       },
+    }
+  }
+
+  /** A recovery from another Aico ends the problem here too: this machine's asks for it close. */
+  private withdrawOwnAsks(touched: readonly { table: string; row: SyncRow }[]): void {
+    for (const { table, row } of touched) {
+      if (table !== 'notices' || !row.key) continue
+      const doc = JSON.parse(String(row.doc)) as { severity?: string }
+      if (doc.severity !== 'ok') continue
+      const asked = this.store
+        .forKey(String(row.source), String(row.key))
+        .filter((stored) => stored.askId)
+      // After the sync's transaction: this calls Tether.
+      setImmediate(() => {
+        for (const stored of asked)
+          void this.needsYou
+            .noticeResolved(stored.id)
+            .catch((error) =>
+              console.error('[notify] could not withdraw an ask:', (error as Error).message),
+            )
+      })
     }
   }
 

@@ -80,24 +80,25 @@ const MIGRATIONS = [
 /** The notify set's version: two Aicos sync it only when they agree. */
 export const NOTIFY_SCHEMA_VERSION = MIGRATIONS.length
 
-/** A notice that arrived from another Aico waits this long, so word that it was sent can catch up. */
-export const SYNC_SETTLE_MS = 5000
+/**
+ * A notice that arrived from another Aico waits this long, so word that it went can catch up. It
+ * outlasts a send on the slowest route (the Proxmox relay's timeout, phone-relay.ts).
+ */
+export const SYNC_SETTLE_MS = 35_000
 /** A notice older than this never starts its way to the phone here: the outbox would give it up. */
 const QUEUE_KEPT_MS = 24 * 3600_000
 const EVENT_BUCKET_MS = 60_000
 
 /**
- * A notice's id, the same on every Aico for the same event: its source and key (a keyed notice), or
- * its words (one without), in the same minute. Two Aicos that raise one event make one row, not two.
+ * A notice's id, the same on every Aico for the same event. A keyed notice: its source and key, and
+ * the newest entry under that key (`prior`), so two Aicos with the same list make one row whenever
+ * they raise it. One without a key: its words, in the same minute.
  */
-export function eventId(notice: Notice, now: number, salt = ''): string {
+export function eventId(notice: Notice, now: number, prior = ''): string {
   const what = notice.key
-    ? [notice.source, notice.key, notice.severity === 'ok' ? 'ok' : 'open', salt]
-    : [notice.source, notice.title, notice.body]
-  return createHash('sha256')
-    .update([...what, Math.floor(now / EVENT_BUCKET_MS)].join('\0'))
-    .digest('hex')
-    .slice(0, 12)
+    ? [notice.source, notice.key, notice.severity === 'ok' ? 'ok' : 'open', prior]
+    : [notice.source, notice.title, notice.body, Math.floor(now / EVENT_BUCKET_MS)]
+  return createHash('sha256').update(what.join('\0')).digest('hex').slice(0, 12)
 }
 
 /** A read mark is kept this long: the tray looks back a week. */
@@ -288,10 +289,14 @@ export class NotifyStore {
       if (
         Number(queuedHere.n) > 0 ||
         this.hasSend(id) ||
-        now - Number(row.received_at) > QUEUE_KEPT_MS ||
-        this.sameEventEarlier(id, row, notice)
+        now - Number(row.received_at) > QUEUE_KEPT_MS
       )
         continue
+      if (this.sameEventEarlier(id, row, notice)) {
+        // An earlier entry under this key already took the phone: tell whoever raised this one.
+        this.writeSend(id, 'sent', now)
+        continue
+      }
       const queue = this.db.prepare(
         `INSERT OR IGNORE INTO outbox (notice_id, device, state, next_at, updated_at)
          VALUES (?, ?, 'pending', ?, ?)`,
@@ -306,13 +311,16 @@ export class NotifyStore {
     return !!this.db.prepare('SELECT 1 FROM notice_sends WHERE notice_id = ?').get(id)
   }
 
+  /** Another Aico settled it. Its failure settles nothing: this one's route may still work. */
   private sentByOther(id: string): boolean {
     return !!this.db
-      .prepare('SELECT 1 FROM notice_sends WHERE notice_id = ? AND sent_by != ?')
+      .prepare(
+        `SELECT 1 FROM notice_sends WHERE notice_id = ? AND sent_by != ? AND state IN ('sent', 'unsure')`,
+      )
       .get(id, this.hostName)
   }
 
-  /** Two Aicos raised one keyed problem either side of a minute: only the first goes to the phone. */
+  /** Another entry for this open problem came first and is headed for the phone. */
   private sameEventEarlier(
     id: string,
     row: { received_at: number; source: string; key: string | null },
@@ -334,7 +342,48 @@ export class NotifyStore {
         row.received_at,
         id,
       ) as { doc: string } | undefined
-    return !!earlier && (JSON.parse(earlier.doc) as Notice).severity !== 'ok'
+    if (!earlier) return false
+    const doc = JSON.parse(earlier.doc) as Notice
+    return doc.severity !== 'ok' && doc.push === 'phone'
+  }
+
+  /**
+   * Whether the phone already has this open problem from another entry under its key: raised on two
+   * Aicos at once with different lists, whichever came first. Checked just before sending.
+   */
+  alreadyPushed(id: string): boolean {
+    const row = this.db
+      .prepare('SELECT received_at, source, key, doc FROM notices WHERE id = ?')
+      .get(id) as
+      | { received_at: number; source: string; key: string | null; doc: string }
+      | undefined
+    if (!row?.key) return false
+    const notice = JSON.parse(row.doc) as Notice
+    if (notice.severity === 'ok') return false
+    const at = Number(row.received_at)
+    const others = this.db
+      .prepare(
+        `SELECT id, received_at, doc FROM notices
+         WHERE source = ? AND key = ? AND id != ? AND received_at BETWEEN ? AND ?`,
+      )
+      .all(row.source, row.key, id, at - notice.cooldown * 1000, at + notice.cooldown * 1000) as {
+      id: string
+      received_at: number
+      doc: string
+    }[]
+    const isOk = (doc: string) => (JSON.parse(doc) as Notice).severity === 'ok'
+    const pushed = this.db.prepare(
+      `SELECT 1 FROM notice_sends WHERE notice_id = ? AND state IN ('sent', 'unsure')
+       UNION ALL SELECT 1 FROM outbox WHERE notice_id = ? AND state IN ('sent', 'unsure') LIMIT 1`,
+    )
+    return others.some((other) => {
+      if (isOk(other.doc) || !pushed.get(other.id, other.id)) return false
+      // A recovery between them makes this one news.
+      const [from, to] = [Number(other.received_at), at].sort((x, y) => x - y) as [number, number]
+      return !others.some(
+        (o) => isOk(o.doc) && Number(o.received_at) > from && Number(o.received_at) < to,
+      )
+    })
   }
 
   /**
@@ -345,38 +394,35 @@ export class NotifyStore {
    */
   accept(notice: Notice, via: Via, devices: readonly string[], now: number): Accepted {
     return this.tx(() => {
-      if (notice.key && notice.severity !== 'ok') {
-        const earlier = this.db
-          .prepare(
-            `SELECT id, doc FROM notices WHERE source = ? AND key = ? AND received_at > ?
-             ORDER BY received_at DESC, rowid DESC LIMIT 1`,
-          )
-          .get(notice.source, notice.key, now - notice.cooldown * 1000) as
-          | { id: string; doc: string }
-          | undefined
-        // A problem that comes back after its recovery is news again: only a newest notice that
-        // is itself still a problem makes this one a repeat.
-        if (earlier && (JSON.parse(earlier.doc) as Notice).severity !== 'ok') {
-          this.db
-            .prepare('UPDATE notices SET repeats = repeats + 1, repeated_at = ? WHERE id = ?')
-            .run(now, earlier.id)
-          this.touch(earlier.id)
-          return { id: earlier.id, repeat: true }
-        }
-      }
-      let id = eventId(notice, now)
-      // The same event already came in this minute (here, or from another Aico): one entry. A keyed
-      // problem that gets this far is news (it came back after its recovery, or has no cooldown).
-      if (this.db.prepare('SELECT 1 FROM notices WHERE id = ?').get(id)) {
-        if (notice.key && notice.severity !== 'ok') id = eventId(notice, now, String(now))
-      }
-      if (this.db.prepare('SELECT 1 FROM notices WHERE id = ?').get(id)) {
+      const newest = notice.key
+        ? (this.db
+            .prepare(
+              `SELECT id, received_at, doc FROM notices WHERE source = ? AND key = ?
+               ORDER BY received_at DESC, rowid DESC LIMIT 1`,
+            )
+            .get(notice.source, notice.key) as
+            | { id: string; received_at: number; doc: string }
+            | undefined)
+        : undefined
+      const again = (id: string): Accepted => {
         this.db
           .prepare('UPDATE notices SET repeats = repeats + 1, repeated_at = ? WHERE id = ?')
           .run(now, id)
         this.touch(id)
         return { id, repeat: true }
       }
+      // A problem that comes back after its recovery is news again: only a newest notice that
+      // is itself still a problem makes this one a repeat.
+      if (
+        newest &&
+        notice.severity !== 'ok' &&
+        Number(newest.received_at) > now - notice.cooldown * 1000 &&
+        (JSON.parse(newest.doc) as Notice).severity !== 'ok'
+      )
+        return again(newest.id)
+      const id = eventId(notice, now, newest?.id)
+      // The same event already came (here, or from another Aico): one entry.
+      if (this.db.prepare('SELECT 1 FROM notices WHERE id = ?').get(id)) return again(id)
       const stamp = this.stamp()
       this.db
         .prepare(
@@ -464,19 +510,20 @@ export class NotifyStore {
 
   /**
    * Takes the due rows for one sender in one write: each turns `sending`, so no other pass (in
-   * this process or another) sends it too.
+   * this process or another) sends it too. `receivedBy`: only notices that came by then.
    */
-  claimDue(now: number, limit = 20): OutboxRow[] {
+  claimDue(now: number, limit = 20, receivedBy = Number.MAX_SAFE_INTEGER): OutboxRow[] {
     return this.tx(() => {
       const rows = this.db
         .prepare(
           `SELECT o.id, o.notice_id, o.device, o.attempts, n.received_at FROM outbox o
            JOIN notices n ON n.id = o.notice_id
-           WHERE o.state = 'pending' AND o.next_at <= ?
-           AND NOT EXISTS (SELECT 1 FROM notice_sends s WHERE s.notice_id = o.notice_id AND s.sent_by != ?)
+           WHERE o.state = 'pending' AND o.next_at <= ? AND n.received_at <= ?
+           AND NOT EXISTS (SELECT 1 FROM notice_sends s WHERE s.notice_id = o.notice_id
+             AND s.sent_by != ? AND s.state IN ('sent', 'unsure'))
            ORDER BY o.next_at, o.id LIMIT ?`,
         )
-        .all(now, this.hostName, limit) as {
+        .all(now, receivedBy, this.hostName, limit) as {
         id: number
         notice_id: string
         device: string
@@ -548,15 +595,25 @@ export class NotifyStore {
       const row = this.db.prepare('SELECT notice_id FROM outbox WHERE id = ?').get(id) as {
         notice_id: string
       }
-      this.recordSend(row.notice_id, outcome.state, now)
+      this.recordSend(row.notice_id, now)
     })
   }
 
-  /** Tells the other Aicos a notice's push is settled, so none of them sends it. Sent stays sent. */
-  private recordSend(noticeId: string, state: OutboxState, now: number): void {
+  /** Tells the other Aicos a notice's push is settled, once every phone's row here has an outcome. */
+  private recordSend(noticeId: string, now: number): void {
+    const rows = this.db.prepare('SELECT state FROM outbox WHERE notice_id = ?').all(noticeId) as {
+      state: OutboxState
+    }[]
+    const has = (state: OutboxState) => rows.some((row) => row.state === state)
+    if (has('pending') || has('sending')) return
+    this.writeSend(noticeId, has('sent') ? 'sent' : has('unsure') ? 'unsure' : 'failed', now)
+  }
+
+  /** Sent stays sent, whichever Aico says otherwise later. */
+  private writeSend(noticeId: string, state: OutboxState, now: number): void {
     const had = this.db
-      .prepare('SELECT state, at FROM notice_sends WHERE notice_id = ?')
-      .get(noticeId) as { state: string; at: number } | undefined
+      .prepare('SELECT state FROM notice_sends WHERE notice_id = ?')
+      .get(noticeId) as { state: string } | undefined
     if (had?.state === 'sent' && state !== 'sent') return
     const { at, seq } = this.stamp()
     this.db
@@ -594,14 +651,21 @@ export class NotifyStore {
    * `unsure` and are never sent again (a notice goes out at most once). Run before the first pass.
    */
   markUnsure(now: number): number {
-    return Number(
-      this.db
-        .prepare(
-          `UPDATE outbox SET state = 'unsure', result = 'stopped mid-send', updated_at = ?
-           WHERE state = 'sending'`,
-        )
-        .run(now).changes,
-    )
+    return this.tx(() => {
+      const left = this.db
+        .prepare(`SELECT DISTINCT notice_id FROM outbox WHERE state = 'sending'`)
+        .all() as { notice_id: string }[]
+      const changes = Number(
+        this.db
+          .prepare(
+            `UPDATE outbox SET state = 'unsure', result = 'stopped mid-send', updated_at = ?
+             WHERE state = 'sending'`,
+          )
+          .run(now).changes,
+      )
+      for (const { notice_id } of left) this.recordSend(notice_id, now)
+      return changes
+    })
   }
 
   /** What the outbox did since `since`, for its Status row. */
@@ -647,12 +711,11 @@ export class NotifyStore {
   }
 
   // -- Needs you --------------------------------------------------------------------
+  // An ask lives in this machine's Tether, so its id, answer and outcome stay on this machine's copy
+  // of the row (localOnly in the sync registry). Another Aico's asks show through hosts=all.
 
   setAsk(noticeId: string, askId: string): void {
-    this.tx(() => {
-      this.db.prepare('UPDATE notices SET ask_id = ? WHERE id = ?').run(askId, noticeId)
-      this.touch(noticeId)
-    })
+    this.db.prepare('UPDATE notices SET ask_id = ? WHERE id = ?').run(askId, noticeId)
   }
 
   byAsk(askId: string): StoredNotice | null {
@@ -664,21 +727,15 @@ export class NotifyStore {
 
   /** Records the owner's answer once; false when it was already recorded. */
   answer(noticeId: string, answer: string, now: number): boolean {
-    return this.tx(() => {
-      const first =
-        this.db
-          .prepare('UPDATE notices SET answer = ?, answered_at = ? WHERE id = ? AND answer IS NULL')
-          .run(answer, now, noticeId).changes === 1
-      if (first) this.touch(noticeId)
-      return first
-    })
+    return (
+      this.db
+        .prepare('UPDATE notices SET answer = ?, answered_at = ? WHERE id = ? AND answer IS NULL')
+        .run(answer, now, noticeId).changes === 1
+    )
   }
 
   setOutcome(noticeId: string, outcome: string): void {
-    this.tx(() => {
-      this.db.prepare('UPDATE notices SET outcome = ? WHERE id = ?').run(outcome, noticeId)
-      this.touch(noticeId)
-    })
+    this.db.prepare('UPDATE notices SET outcome = ? WHERE id = ?').run(outcome, noticeId)
   }
 
   rowAsk(rowId: string): string | null {

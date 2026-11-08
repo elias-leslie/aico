@@ -35,7 +35,7 @@ function aico(host: string, device: string) {
   const store = new NotifyStore(join(dir, `${host}.db`), { hostName: host })
   opened.push(store)
   const pushes: string[] = []
-  const state = { holding: null as string | null, now: T0 }
+  const state = { holding: null as { by: string; firm?: boolean } | null, now: T0 }
   const sender: PhoneSender = {
     devices: () => [{ id: device, fcmToken: '', encPub: '', auth: '' }],
     send: async (_device, plaintext) => {
@@ -107,7 +107,7 @@ describe('one list across Aicos', () => {
   it('a standby holds what it raised; the primary sends it once and the word comes back', async () => {
     const ws = aico('workstation', 'phone-1')
     const gem = aico('gem', 'proxmox')
-    gem.state.holding = 'workstation'
+    gem.state.holding = { by: 'workstation' }
     const { id } = raise(gem)
     expect(await gem.outbox.pass()).toBe(0)
 
@@ -130,7 +130,7 @@ describe('one list across Aicos', () => {
   it('takes over when the sender is gone, sends only what was not sent, and hands back clean', async () => {
     const ws = aico('workstation', 'phone-1')
     const gem = aico('gem', 'proxmox')
-    gem.state.holding = 'workstation'
+    gem.state.holding = { by: 'workstation' }
     const sent = raise(ws, { title: 'Sent before the machine went off' })
     await ws.outbox.pass()
     await sync(ws, gem)
@@ -157,7 +157,7 @@ describe('one list across Aicos', () => {
   it('the same event from two Aicos in the same minute is one entry and one push', async () => {
     const ws = aico('workstation', 'phone-1')
     const gem = aico('gem', 'proxmox')
-    gem.state.holding = 'workstation'
+    gem.state.holding = { by: 'workstation' }
     const one = raise(ws, { key: 'status-sustained:a/backup' })
     const two = raise(gem, { key: 'status-sustained:a/backup' })
     expect(two.id).toBe(one.id)
@@ -170,25 +170,170 @@ describe('one list across Aicos', () => {
     expect(ws.pushes).toEqual([one.id])
   })
 
-  it('a keyed event raised either side of a minute reaches the phone once', async () => {
+  it('a keyed event is one entry whatever the minute', async () => {
     const ws = aico('workstation', 'phone-1')
     const gem = aico('gem', 'proxmox')
-    gem.state.holding = 'workstation'
-    const later = raise(gem, { key: 'status-sustained:a/backup' }, T0 + 40_000)
+    gem.state.holding = { by: 'workstation' }
     const first = raise(ws, { key: 'status-sustained:a/backup' })
-    expect(later.id).not.toBe(first.id)
-    ws.state.now = T0 + 40_000
+    const later = raise(gem, { key: 'status-sustained:a/backup' }, T0 + 40_000)
+    expect(later.id).toBe(first.id)
     await ws.outbox.pass()
     await sync(ws, gem)
-    ws.state.now += SYNC_SETTLE_MS + 1
-    await ws.outbox.pass()
     expect(ws.pushes).toEqual([first.id])
+    expect(gem.store.since(0)).toHaveLength(1)
+  })
+
+  /** Each store marked so its next raise under the key differs: a list from before the sync. */
+  const unsynced = (who: Aico) => who.handle.db.exec('UPDATE notices SET seq = 0')
+
+  it('an earlier entry the other Aico lacks: the raiser of the later one never pushes it', async () => {
+    const ws = aico('workstation', 'phone-1')
+    const gem = aico('gem', 'proxmox')
+    const key = { key: 'status-sustained:a/backup' }
+    raise(ws, key)
+    await ws.outbox.pass()
+    unsynced(ws)
+    gem.state.holding = { by: 'workstation' }
+    gem.state.now = T0 + 60_000
+    const held = raise(gem, key)
+    await sync(ws, gem)
+    gem.state.now += 10 * 60_000
+    gem.state.holding = null
+    expect(await gem.outbox.pass()).toBe(0)
+    expect(gem.store.get(held.id)?.deliveries[0]?.state).toBe('sent')
+    expect(ws.pushes).toHaveLength(1)
+  })
+
+  it('raised on both with different lists, whichever was sent first: one push', async () => {
+    const ws = aico('workstation', 'phone-1')
+    const gem = aico('gem', 'proxmox')
+    const key = { key: 'status-sustained:a/backup' }
+    // The workstation has an old recovery under the key, the standby doesn't.
+    raise(ws, { ...key, severity: 'ok', kind: 'info', push: 'tray', interrupt: undefined })
+    unsynced(ws)
+    gem.state.holding = { by: 'workstation' }
+    gem.state.now = T0 + 60_000
+    ws.state.now = T0 + 61_000
+    const early = raise(gem, key)
+    const late = raise(ws, key)
+    expect(late.id).not.toBe(early.id)
+    expect(await ws.outbox.pass()).toBe(1)
+    await sync(ws, gem)
+    ws.state.now += SYNC_SETTLE_MS + 1
+    expect(await ws.outbox.pass()).toBe(0)
+    gem.state.now += 10 * 60_000
+    gem.state.holding = null
+    expect(await gem.outbox.pass()).toBe(0)
+    expect(ws.pushes).toEqual([late.id])
+    expect(gem.pushes).toEqual([])
+  })
+
+  it('a holder sends anyway when no word comes: a one-way link or a sender that never sends', async () => {
+    const gem = aico('gem', 'proxmox')
+    gem.state.holding = { by: 'workstation' }
+    const { id } = raise(gem)
+    expect(await gem.outbox.pass()).toBe(0)
+    gem.state.now += 2 * 60_000
+    expect(await gem.outbox.pass()).toBe(0)
+    gem.state.now += 60_000 + 1
+    expect(await gem.outbox.pass()).toBe(1)
+    expect(gem.pushes).toEqual([id])
+  })
+
+  it('firm hold: right after a start nothing goes, however old', async () => {
+    const ws = aico('workstation', 'phone-1')
+    raise(ws)
+    ws.state.holding = { by: 'The first sync', firm: true }
+    ws.state.now += 10 * 60_000
+    expect(await ws.outbox.pass()).toBe(0)
+  })
+
+  it('the sender failing for good leaves the holder its own route', async () => {
+    const ws = aico('workstation', 'phone-1')
+    const gem = aico('gem', 'proxmox')
+    gem.state.holding = { by: 'workstation' }
+    const { id } = raise(gem)
+    await sync(ws, gem)
+    ws.state.now += SYNC_SETTLE_MS + 1
+    const [row] = ws.store.claimDue(ws.state.now)
+    if (!row) throw new Error('no row')
+    ws.store.finish(row.id, { state: 'failed', result: 'rejected:403' }, ws.state.now)
+    await sync(ws, gem)
+    gem.state.holding = null
+    gem.state.now += SYNC_SETTLE_MS + 1
+    expect(await gem.outbox.pass()).toBe(1)
+    expect(gem.pushes).toEqual([id])
+  })
+
+  it('no word until every phone on the sender has an outcome', async () => {
+    const ws = aico('workstation', 'phone-1')
+    const gem = aico('gem', 'proxmox')
+    const { id } = ws.store.accept(phone(), 'local', ['phone-1', 'phone-2'], T0)
+    const [one, two] = ws.store.claimDue(T0)
+    if (!one || !two) throw new Error('no rows')
+    ws.store.finish(one.id, { state: 'sent', result: 'sent' }, T0)
+    await sync(ws, gem)
+    gem.state.now += SYNC_SETTLE_MS + 1
+    expect(await gem.outbox.pass()).toBe(1) // the sender is gone with phone-2 unsettled
+    ws.store.finish(two.id, { retryAt: T0 + 1, result: 'no-token' }, T0)
+    expect(gem.pushes).toEqual([id])
+  })
+
+  it('a restart mid-send tells the others, so a takeover never sends it again', async () => {
+    const ws = aico('workstation', 'phone-1')
+    const gem = aico('gem', 'proxmox')
+    gem.state.holding = { by: 'workstation' }
+    const { id } = raise(ws)
+    ws.store.claimDue(T0)
+    expect(ws.outbox.recover()).toBe(1)
+    await sync(ws, gem)
+    gem.state.holding = null
+    gem.state.now += SYNC_SETTLE_MS + 1
+    expect(await gem.outbox.pass()).toBe(0)
+    expect(gem.store.get(id)?.deliveries[0]?.state).toBe('unsure')
+  })
+
+  it('a takeover never sends a row past the give-up age', async () => {
+    const gem = aico('gem', 'proxmox')
+    raise(gem)
+    gem.state.now += 25 * 3600_000
+    expect(await gem.outbox.pass()).toBe(0)
+    expect(gem.pushes).toEqual([])
+  })
+
+  it('problem, recovery, problem, recovery in one minute: each one counts', () => {
+    const gem = aico('gem', 'proxmox')
+    const key = { key: 'status-sustained:a/backup' }
+    const ok = { ...key, severity: 'ok', kind: 'info', push: 'tray', interrupt: undefined }
+    const ids = [
+      raise(gem, key, T0),
+      raise(gem, ok, T0 + 10),
+      raise(gem, key, T0 + 20),
+      raise(gem, ok, T0 + 30),
+    ].map((one) => one.id)
+    expect(new Set(ids).size).toBe(4)
+  })
+
+  it('an ask stays on the Aico whose Tether holds it', async () => {
+    const ws = aico('workstation', 'phone-1')
+    const gem = aico('gem', 'proxmox')
+    const { id } = raise(gem)
+    gem.store.setAsk(id, 'ask-on-gem')
+    gem.store.answer(id, 'That was me', T0)
+    raise(gem, { title: 'Another, so the sync moves on' })
+    await sync(ws, gem)
+    expect(ws.store.get(id)?.askId).toBeNull()
+    ws.store.rewriteNotice(id, { ...phone(), title: 'Changed on the workstation' })
+    await sync(ws, gem)
+    expect(gem.store.get(id)?.notice.title).toBe('Changed on the workstation')
+    expect(gem.store.get(id)?.askId).toBe('ask-on-gem')
+    expect(gem.store.get(id)?.answer).toBe('That was me')
   })
 
   it('a push the sender dropped for a switch that went off leaves the other Aico too', async () => {
     const ws = aico('workstation', 'phone-1')
     const gem = aico('gem', 'proxmox')
-    gem.state.holding = 'workstation'
+    gem.state.holding = { by: 'workstation' }
     const { id } = raise(gem)
     await sync(ws, gem)
     const stored = ws.store.get(id)
@@ -236,7 +381,7 @@ describe('who sends', () => {
   })
 
   it('a standby holds while its primary answers and syncs', () => {
-    expect(rule([peer()])).toBe('workstation')
+    expect(rule([peer()])).toEqual({ by: 'workstation' })
   })
 
   it('a standby sends when the primary is off, silent or out of step, so nothing is lost', () => {
@@ -255,14 +400,15 @@ describe('who sends', () => {
   it('more than two: one sender among the standbys, by name, none waiting on the other', () => {
     const third = { hostName: 'zen', standby: true }
     const gem = peer({ host: 'gem', standby: true })
-    expect(rule([gem], third)).toBe('gem')
+    expect(rule([gem], third)).toEqual({ by: 'gem' })
     expect(rule([peer({ host: 'zen', standby: true })])).toBeNull()
   })
 
-  it('after a start it waits for the first sync, but not for long', () => {
-    expect(rule([peer({ state: 'waiting' })], { now: () => 10_000, startedAt: 0 })).toBe(
-      'The first sync',
-    )
-    expect(rule([peer({ state: 'waiting' })], { now: () => 40_000, startedAt: 0 })).toBeNull()
+  it('after a start nothing goes until the first clean sync, but not for long', () => {
+    const early = { now: () => 10_000, startedAt: 0 }
+    const firm = { by: 'The first sync', firm: true }
+    expect(rule([peer({ state: 'waiting', lastSyncAt: null })], early)).toEqual(firm)
+    expect(rule([peer({ state: 'down', lastSyncAt: null })], early)).toEqual(firm)
+    expect(rule([peer({ state: 'waiting', lastSyncAt: null })], { now: () => 40_000 })).toBeNull()
   })
 })

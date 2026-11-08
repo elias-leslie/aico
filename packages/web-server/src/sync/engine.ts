@@ -42,6 +42,8 @@ export interface SyncTable {
   unique?: string[]
   /** A column holding a blob hash (original file) the row needs. */
   blob?: string
+  /** Columns that belong to each host's copy: a peer's values never come in. */
+  localOnly?: string[]
   /** Two live rows with the same unique value are one thing made twice: the loser is also tombstoned. */
   dropDuplicate?: boolean
 }
@@ -404,7 +406,9 @@ function write(
   const row = { ...remote }
   for (const column of table.unique ?? []) claimUnique(handle, table, row, column, touched)
   const known = new Set(columnsOf(handle, table))
-  const columns = Object.keys(row).filter((column) => known.has(column) && column !== 'seq')
+  const columns = Object.keys(row).filter(
+    (column) => known.has(column) && column !== 'seq' && !table.localOnly?.includes(column),
+  )
   const names = [...columns, 'seq']
   const values = [...columns.map((column) => row[column] as SyncValue), nextSeq(handle)]
   const updates = names.filter((name) => !table.keys.includes(name))

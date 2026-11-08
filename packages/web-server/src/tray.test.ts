@@ -96,6 +96,7 @@ function read(
     approvals?: Approval[] | null
     rowAsks?: string[]
     choices?: NoticeChoices
+    hostName?: string
   } = {},
 ) {
   return buildTray({
@@ -109,11 +110,44 @@ function read(
     rowAsks: new Set(extra.rowAsks ?? []),
     approvals: extra.approvals === undefined ? [] : extra.approvals,
     ...(extra.choices ? { choices: extra.choices } : {}),
+    ...(extra.hostName ? { hostName: extra.hostName } : {}),
     // biome-ignore lint/suspicious/noExplicitAny: the tray's JSON is read by field in these tests
   }) as any
 }
 
 describe('the tray read', () => {
+  it("another Aico's notice: named on the card, and no pop once it is old news", () => {
+    const from = (raised_by: string, title: string, at: number) =>
+      notify.accept(
+        {
+          ...parseNotice({
+            v: 1,
+            source: 'agent',
+            severity: 'warning',
+            interrupt: 'needs-you',
+            title,
+            body: 'It built.',
+          }),
+          raised_by,
+        },
+        'local',
+        [],
+        at,
+      ).id
+    const fresh = from('gem', 'Fresh', NOW - 60_000)
+    const old = from('gem', 'Old', NOW - 11 * 60_000)
+    const mine = from('here', 'Mine', NOW - 11 * 60_000)
+    const tray = read({ hostName: 'here' })
+    const entry = (id: string) =>
+      (tray.read_marks.pushes as { id: string; push: { quiet?: boolean } }[]).find(
+        (one) => one.id === id,
+      )?.push
+    expect(entry(fresh)?.quiet).toBeUndefined()
+    expect(entry(old)?.quiet).toBe(true)
+    expect(entry(mine)?.quiet).toBeUndefined()
+    expect(JSON.stringify(tray)).toContain('From the Aico on gem')
+  })
+
   it('counts the open Status problems and names them', () => {
     status.upsert([
       machine(),

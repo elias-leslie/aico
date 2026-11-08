@@ -19,6 +19,7 @@ export const GIVE_UP_MS = 24 * 3600_000
 /** Waiting longer than this makes the Status row a problem. */
 const STUCK_MS = 10 * 60_000
 const DAY_MS = 24 * 3600_000
+const HOLD_MAX_MS = 3 * 60_000
 
 export function backoff(attempts: number): number {
   return Math.min(FIRST_BACKOFF_MS * 2 ** Math.max(0, attempts), MAX_BACKOFF_MS)
@@ -36,9 +37,12 @@ export interface OutboxOptions {
   choices?: NoticeChoices
   /**
    * One sender at a time across the full Aicos: the Aico that sends right now while this one holds
-   * the list, or null when this one sends. Held rows wait; word that they went drops them.
+   * the list, or null when this one sends. Held rows wait; word that they went drops them. `firm`:
+   * nothing goes at all (a start, until the first sync says what the others already sent).
    */
-  holding?: () => string | null
+  holding?: () => { by: string; firm?: boolean } | null
+  /** A held notice with no word by this age goes out from here anyway: a lost alert is worse. */
+  holdMaxMs?: number
   now?: () => number
 }
 
@@ -82,8 +86,13 @@ export class Outbox {
   /** One pass over the due rows; the number sent. */
   async pass(): Promise<number> {
     const { store, sender } = this.options
-    if (this.options.holding?.()) return 0
-    const rows = store.claimDue(this.now())
+    const hold = this.options.holding?.()
+    if (hold?.firm) return 0
+    const rows = store.claimDue(
+      this.now(),
+      undefined,
+      hold ? this.now() - (this.options.holdMaxMs ?? HOLD_MAX_MS) : undefined,
+    )
     if (rows.length === 0) return 0
     const paired = sender.devices()
     const devices = new Map((paired ?? []).map((device) => [device.id, device]))
@@ -110,6 +119,15 @@ export class Outbox {
         continue
       }
       const { notice } = stored
+      // Never tried and past its day (a takeover's queue): the news is too old to start now.
+      if (row.attempts === 0 && now - stored.receivedAt >= GIVE_UP_MS) {
+        store.finish(row.id, { state: 'failed', result: 'too old to send' }, now)
+        continue
+      }
+      if (store.alreadyPushed(stored.id)) {
+        store.dropOutboxRow(row.id)
+        continue
+      }
       if (phoneSilenced(notice, this.options.choices ?? NO_CHOICES)) {
         store.dropOutboxRow(row.id)
         store.rewriteNotice(stored.id, keptOffPhone(notice))
@@ -162,9 +180,9 @@ export class Outbox {
     const parts: string[] = []
     if (unreadable) parts.push("Can't read the paired phones, so alerts wait until it can.")
     else if (devices?.length === 0) parts.push('No phone is paired, so nothing reaches a phone.')
-    const holding = this.options.holding?.()
-    if (holding)
-      parts.push(`${holding} sends now; this Aico holds the list and takes over if it stops.`)
+    const hold = this.options.holding?.()
+    if (hold && !hold.firm)
+      parts.push(`${hold.by} sends now; this Aico holds the list and takes over if it stops.`)
     parts.push(`Sent ${plural(s.sent, 'alert')} to the phone in the last day.`)
     if (s.pending)
       parts.push(`${plural(s.pending, 'alert')} waiting${stuck ? ' over 10 min' : ''}.`)
