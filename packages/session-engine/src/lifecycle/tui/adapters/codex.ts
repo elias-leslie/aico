@@ -18,7 +18,7 @@ import {
 } from '../../../proc-fs'
 import { resolveLauncher } from '../context-support'
 import type { ContextStatus, TuiSpec } from '../spec'
-import type { AgentProbe, TuiAdapter } from './contract'
+import { type AgentProbe, BACKGROUND_SHELLS, type TuiAdapter } from './contract'
 
 const ROLLOUT_RE = /\/\.codex\/sessions\/.*\/rollout-[^/]*\.jsonl$/
 
@@ -534,14 +534,51 @@ async function codexHooks(spec: TuiSpec): Promise<ContextStatus> {
 // --- the adapter -----------------------------------------------------------------
 
 /** The Codex process and its rollout, kept (with its offset) while the thread is the same. */
+/** Set by Codex on the commands it runs, and on none of its helpers (MCP servers,
+ * the code-mode host). The rollout can't tell: a command that outlives its
+ * yield looks the same there as one whose exit went unrecorded. */
+const CODEX_SHELL_ENV = 'CODEX_THREAD_ID='
+
+/** Whether the Codex process still has a command running. Children hang off
+ * whichever thread spawned them, so every thread is read. */
+function codexShellRunning(fs: ProcFs, pid: number): boolean {
+  let tasks: string[]
+  try {
+    tasks = fs.readdir(`/proc/${pid}/task`)
+  } catch {
+    return false
+  }
+  for (const task of tasks) {
+    let children: string[]
+    try {
+      children = fs.readFile(`/proc/${pid}/task/${task}/children`).split(/\s+/).filter(Boolean)
+    } catch {
+      continue // the thread ended mid-walk
+    }
+    for (const child of children) {
+      try {
+        const environ = fs.readFile(`/proc/${child}/environ`).split('\0')
+        if (environ.some((entry) => entry.startsWith(CODEX_SHELL_ENV))) return true
+      } catch {
+        // the child ended mid-walk
+      }
+    }
+  }
+  return false
+}
+
 class CodexProbe implements AgentProbe {
+  /** `fs` reads the agent's own /proc; an entry home's pid is another namespace's. */
   constructor(
     readonly pid: number,
     readonly rollout: CodexRollout,
+    private readonly fs?: ProcFs,
   ) {}
 
   poll(): AgentSignal | null {
-    return this.rollout.poll()
+    const signal = this.rollout.poll()
+    if (signal?.state !== 'idle' || signal.detail || !this.fs) return signal
+    return codexShellRunning(this.fs, this.pid) ? { ...signal, detail: BACKGROUND_SHELLS } : signal
   }
 
   models() {
@@ -554,10 +591,11 @@ function codexProbe(
   codex: { path: string; threadId: string | null },
   previous: AgentProbe | null,
   tail: FileTail | undefined,
+  fs?: ProcFs,
 ): CodexProbe {
   if (previous instanceof CodexProbe && previous.rollout.path === codex.path)
-    return new CodexProbe(pid, previous.rollout)
-  return new CodexProbe(pid, new CodexRollout(codex.path, codex.threadId, tail))
+    return new CodexProbe(pid, previous.rollout, fs)
+  return new CodexProbe(pid, new CodexRollout(codex.path, codex.threadId, tail), fs)
 }
 
 export const codex: TuiAdapter = {
@@ -608,7 +646,7 @@ export const codex: TuiAdapter = {
   state: {
     find: (ctx, previous) => {
       const rollout = findCodexRollout(ctx.fs, ctx.pids)
-      return rollout ? codexProbe(rollout.pid, rollout, previous, ctx.tail) : null
+      return rollout ? codexProbe(rollout.pid, rollout, previous, ctx.tail, ctx.fs) : null
     },
     findInEntry: ({ entry, readers, tail }, previous) => {
       const rollout = entryCodexRollout(readers.fs, readers.home, readers.scan)

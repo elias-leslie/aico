@@ -21,9 +21,11 @@ import { claudeSignal, findClaude } from './lifecycle/tui/adapters/claude-code'
 import {
   CodexRollout,
   CodexTurn,
+  codex as codexAdapter,
   findCodexRollout,
   observeCodex,
 } from './lifecycle/tui/adapters/codex'
+import { BACKGROUND_SHELLS } from './lifecycle/tui/adapters/contract'
 import { findPiSession, PiSession } from './lifecycle/tui/adapters/pi'
 import type { FileTail, ProcFs } from './proc-fs'
 
@@ -401,6 +403,26 @@ describe('Codex rollout', () => {
     while (text.length < bytes) text += `${call}\n${quote}\n`
     return text
   }
+
+  it('reports a finished Codex turn with a command still running, until it exits', () => {
+    const shell = 'PATH=/bin\0CODEX_THREAD_ID=x\0'
+    const files: Record<string, string> = {
+      [ROLLOUT]: `${line('session_meta', { id: CODEX })}\n`,
+      '/proc/30/task/30/children': '41',
+      // A command hangs off whichever thread spawned it, not always the main one.
+      '/proc/30/task/31/children': '42 43',
+      '/proc/41/environ': 'PATH=/bin\0',
+      '/proc/43/environ': shell,
+    }
+    const { tail, file } = memoryTail(`${line('event_msg', { type: 'task_started' })}\n`)
+    const ctx = { fs: procfs(files, { '/proc/30/fd/5': ROLLOUT }), home: '/h', pids: [30], tail }
+    const probe = codexAdapter.state.find(ctx, null)
+    expect(probe?.poll()).toMatchObject({ state: 'working', detail: null })
+    file.content += `${line('event_msg', { type: 'task_complete' })}\n`
+    expect(probe?.poll()).toMatchObject({ state: 'idle', detail: BACKGROUND_SHELLS })
+    files['/proc/30/task/31/children'] = '42'
+    expect(probe?.poll()).toMatchObject({ state: 'idle', detail: null })
+  })
 
   it('finds a long turn that started before the tail it first reads', () => {
     const started = line('event_msg', { type: 'task_started' }, '2026-10-12T09:00:00.000Z')
