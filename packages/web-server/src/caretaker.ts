@@ -46,6 +46,10 @@ interface Episode {
   noticeKey?: string
   /** A notice that couldn't be sent yet: the next pass tries it again. */
   owed?: string
+  /** The row was told nothing was tried: a later pass may still try, without telling again. */
+  untried?: true
+  /** The row went well since its one attempt: if it comes back, the owner hears again. */
+  cleared?: true
 }
 
 export interface CaretakerState {
@@ -124,6 +128,9 @@ function isSerious(policy: Policy, row: ProblemRow): boolean {
   return majorOf(row, new Map()) === 'outage' || matches(policy.serious, row.id)
 }
 
+/** The notice rules refuse anything that looks like an unfilled template, and a model or a log can write `{x}`. */
+const withoutBraces = (text: string) => text.replace(/[{}]/g, '')
+
 /** The key of Status's own sustained notice (status-actions.ts sustainedKey): the owner hears once. */
 const noticeKey = (rowId: string) =>
   `status-sustained:${rowId.replace(/[^A-Za-z0-9_.:/@+=,-]/g, '_')}`.slice(0, 200)
@@ -140,7 +147,9 @@ function evidenceCommands(policy: Policy, row: ProblemRow): string[][] {
 async function evidence(policy: Policy, row: ProblemRow, deps: CaretakerDeps): Promise<string> {
   const parts: string[] = []
   for (const argv of evidenceCommands(policy, row)) {
-    const { code, output } = await deps.run(argv)
+    const { code, output } = await deps
+      .run(argv)
+      .catch((error: Error) => ({ code: 1, output: error.message }))
     parts.push(`$ ${argv.join(' ')} (exit ${code})\n${output}`)
   }
   const text = maskSecrets(parts.join('\n\n'))
@@ -287,7 +296,13 @@ export async function pass(
   const now = deps.now()
   const today = iso(now).slice(0, 10)
   if (state.day !== today) Object.assign(state, { day: today, actions: 0, calls: 0, said: [] })
-  const say = (event: Omit<CaretakerEvent, 'at'>) => deps.log({ at: iso(deps.now()), ...event })
+  const say = (event: Omit<CaretakerEvent, 'at'>) => {
+    try {
+      deps.log({ at: iso(deps.now()), ...event })
+    } catch {
+      // A full disk must not stop the owner hearing about it.
+    }
+  }
   const sayOnce = (key: string, event: Omit<CaretakerEvent, 'at'>) => {
     if (state.said.includes(key)) return
     state.said.push(key)
@@ -311,8 +326,8 @@ export async function pass(
         source: 'aico',
         kind: 'alert',
         severity: 'critical',
-        title: `${row.what} is still down`.slice(0, 200),
-        body: detail.slice(0, 1000),
+        title: withoutBraces(`${row.what} is still down`).slice(0, 200),
+        body: withoutBraces(detail).slice(0, 1000),
         key,
         cooldown: 7 * 24 * 3600,
         push: 'phone',
@@ -332,7 +347,8 @@ export async function pass(
   }
   /** A serious row where nothing can be tried: no model or no budget is no reason for silence. */
   const tellUntried = async (row: ProblemRow, why: string) => {
-    const quiet: Episode = { at: now, action: 'none', verifyAt: now, stage: 'done' }
+    if (state.episodes[row.id]?.untried) return
+    const quiet: Episode = { at: now, action: 'none', verifyAt: now, stage: 'done', untried: true }
     state.episodes[row.id] = quiet
     await tell(row, quiet, `${row.meaning ?? row.what} ${why}`)
   }
@@ -341,25 +357,39 @@ export async function pass(
   for (const [id, episode] of Object.entries(state.episodes)) {
     const row = bad.get(id)
     if (!row) {
-      const shown = byId.get(id)?.shown
-      if (episode.stage === 'waiting' && shown !== 'off')
+      const gone = byId.get(id)
+      const off = gone?.shown === 'off' || gone?.machine_off === true
+      if (episode.stage === 'waiting' && !off)
         say({ row: id, what: 'cleared', text: `${episode.action} cleared it.` })
+      episode.stage = 'done'
+      if (!off) episode.cleared = true
       delete episode.owed
-      if (episode.noticeKey)
-        await deps.resolve(episode.noticeKey, 'Back to normal.').catch((error: Error) =>
-          say({
+      if (episode.noticeKey) {
+        try {
+          await deps.resolve(episode.noticeKey, 'Back to normal.')
+          delete episode.noticeKey
+        } catch (error) {
+          // Kept for the next pass: an open notice would swallow the next real one as a repeat.
+          sayOnce(`resolve:${id}`, {
             row: id,
             what: 'notify-failed',
-            text: `Couldn't end the notice: ${error.message}`,
-          }),
-        )
-      // A problem that comes straight back is the same problem until retry_after_hours has passed.
-      if (now - episode.at >= policy.retry_after_hours * 3600_000) delete state.episodes[id]
-      else {
-        episode.stage = 'done'
-        delete episode.noticeKey
+            text: `Couldn't end the notice, trying again each pass: ${(error as Error).message}`,
+          })
+          continue
+        }
       }
+      // A problem that comes straight back is the same problem until retry_after_hours has passed.
+      if (episode.untried || now - episode.at >= policy.retry_after_hours * 3600_000)
+        delete state.episodes[id]
       continue
+    }
+    if (episode.cleared) {
+      delete episode.cleared
+      await tell(
+        row,
+        episode,
+        `${row.meaning ?? row.what} It came back after clearing; nothing more is tried for now.`,
+      )
     }
     if (episode.owed) await tell(row, episode, episode.owed)
     if (episode.stage === 'waiting' && now >= episode.verifyAt) {
@@ -376,7 +406,8 @@ export async function pass(
 
   // What has settled and has had no attempt.
   const settle = async (id: string, row: ProblemRow) => {
-    if (state.episodes[id]) return
+    const earlier = state.episodes[id]
+    if (earlier && !earlier.untried) return
     if (now - (state.seen[id] as number) < policy.settle_minutes * 60_000) return
     const candidates = actionsFor(policy, id)
     const serious = isSerious(policy, row)
@@ -418,7 +449,13 @@ export async function pass(
     }
     const { diagnosis, model } = answer
     say({ row: id, what: 'diagnosed', text: diagnosis, model })
-    const episode: Episode = { at: now, action: answer.action, verifyAt: now, stage: 'done' }
+    const episode: Episode = {
+      at: now,
+      action: answer.action,
+      verifyAt: now,
+      stage: 'done',
+      ...(earlier?.noticeKey && { noticeKey: earlier.noticeKey }),
+    }
     state.episodes[id] = episode
     const chosen = candidates.find((action) => action.id === answer.action)
     if (!chosen) {
@@ -433,7 +470,9 @@ export async function pass(
       return
     }
     state.actions += 1
-    const { code, output } = await deps.run(chosen.argv)
+    const { code, output } = await deps
+      .run(chosen.argv)
+      .catch((error: Error) => ({ code: 1, output: error.message }))
     say({ row: id, what: 'acted', text: `Ran ${chosen.id} (exit ${code}).`, model })
     if (code !== 0) {
       say({

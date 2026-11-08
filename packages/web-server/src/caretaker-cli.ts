@@ -158,11 +158,12 @@ function deps(
       if (!response.ok) throw new Error(`Aico web refused the notice (${response.status})`)
     },
     resolve: async (key, text) => {
-      await fetch(`${io.baseUrl}/api/notices/resolve`, {
+      const response = await fetch(`${io.baseUrl}/api/notices/resolve`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ key, text, source: 'aico' }),
       })
+      if (!response.ok) throw new Error(`Aico web refused to end the notice (${response.status})`)
     },
     log: (event) => {
       appendLog(io, policy, event)

@@ -70,7 +70,7 @@ export class ExtractWorker {
     this.kick()
   }
 
-  /** The folder reads work in, owner-only: one read's rules can't list a folder made after them. */
+  /** The folder reads work in, so a restart's leftovers can be found. A read's rules can't name a folder made after them. */
   private readsDir(): string {
     return this.options.workDir ?? join(tmpdir(), 'aico-reads')
   }

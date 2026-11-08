@@ -315,6 +315,105 @@ describe('caretaker reaches the owner whatever else fails', () => {
     expect(h.notices.map((notice) => notice.interrupt).sort()).toEqual(['needs-you', 'outage'])
   })
 
+  it('a diagnosis with braces in it still reaches the owner', async () => {
+    const h = harness([storage], () => ({ diagnosis: 'pid {pid:12} in {unit}', action: 'none' }))
+    await h.go()
+    h.advance(11)
+    await h.go()
+    expect(String(h.notices[0]?.body)).toContain('pid pid:12 in unit')
+  })
+
+  it('a serious row that clears and comes back is told again, unless it was only turned off', async () => {
+    const h = harness([storage], () => ({ diagnosis: 'full', action: 'none' }))
+    await h.go()
+    h.advance(11)
+    await h.go()
+    expect(h.notices).toHaveLength(1)
+    h.box.rows = [{ ...storage, shown: 'ok' }]
+    await h.go()
+    h.box.rows = [storage]
+    await h.go()
+    expect(h.notices).toHaveLength(2)
+    h.box.rows = [{ ...storage, shown: 'off', machine_off: true }]
+    await h.go()
+    h.box.rows = [storage]
+    await h.go()
+    expect(h.notices).toHaveLength(2)
+    expect(h.questions).toHaveLength(1)
+  })
+
+  it('a notice still owed when the row briefly clears is told when it comes back', async () => {
+    const h = harness([storage], () => ({ diagnosis: 'full', action: 'none' }))
+    const notify = h.deps.notify
+    let down = true
+    h.deps.notify = async (notice) => {
+      if (down) throw new Error('tray is down')
+      await notify(notice)
+    }
+    await h.go()
+    h.advance(11)
+    await h.go()
+    h.box.rows = [{ ...storage, shown: 'ok' }]
+    await h.go()
+    down = false
+    h.box.rows = [storage]
+    await h.go()
+    expect(h.notices).toHaveLength(1)
+  })
+
+  it('a notice that could not be ended is ended on the next pass', async () => {
+    const h = harness([storage], () => ({ diagnosis: 'full', action: 'none' }))
+    const resolve = h.deps.resolve
+    let down = true
+    h.deps.resolve = async (key, text) => {
+      if (down) throw new Error('tray is down')
+      await resolve(key, text)
+    }
+    await h.go()
+    h.advance(11)
+    await h.go()
+    h.box.rows = [{ ...storage, shown: 'ok' }]
+    await h.go()
+    expect(h.resolved).toHaveLength(0)
+    down = false
+    await h.go()
+    await h.go()
+    expect(h.resolved).toHaveLength(1)
+  })
+
+  it('told at the limit, the repair still runs once the day turns over, with no second notice', async () => {
+    const h = harness([web], () => ({ diagnosis: 'd', action: 'heal' }))
+    await h.go()
+    h.advance(11)
+    h.state.actions = POLICY_FOR_TEST.max_actions_per_day
+    await h.go()
+    expect(h.notices).toHaveLength(1)
+    expect(h.ran).toHaveLength(0)
+    h.advance(24 * 60)
+    await h.go()
+    expect(h.ran).toHaveLength(1)
+    expect(h.notices).toHaveLength(1)
+  })
+
+  it('a log that can not be written and an action that throws stop nothing', async () => {
+    const h = harness([storage, web], () => ({ diagnosis: 'd', action: 'none' }))
+    h.deps.log = () => {
+      throw new Error('disk full')
+    }
+    await h.go()
+    h.advance(11)
+    await h.go()
+    expect(h.notices).toHaveLength(2)
+    const r = harness([web], () => ({ diagnosis: 'd', action: 'heal' }))
+    r.deps.run = async () => {
+      throw new Error('no such command')
+    }
+    await r.go()
+    r.advance(11)
+    await r.go()
+    expect(r.notices).toHaveLength(1)
+  })
+
   it('reads the first object when a model says it twice, and caps a long action', () => {
     const one = '{"diagnosis":"d {x} \\" }","action":"none"}'
     expect(parseAnswer(`${one}\n${one}`)).toEqual({ diagnosis: 'd {x} " }', action: 'none' })
