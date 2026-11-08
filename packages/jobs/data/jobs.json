@@ -85,7 +85,7 @@
     },
     {
       "kind": "notes-export-aico",
-      "what": "Notes export to Drive (gem)",
+      "what": "Notes export to Drive (standby)",
       "project": "aico",
       "home": "aico",
       "at": "03:30",
@@ -96,7 +96,7 @@
     },
     {
       "kind": "aico-state-snapshot",
-      "what": "Consistent copies of the Aico databases for backup (gem)",
+      "what": "Consistent copies of the Aico databases for backup (standby)",
       "project": "aico",
       "home": "aico",
       "every_min": 60,
@@ -184,7 +184,7 @@
     },
     {
       "kind": "backups-append-aico",
-      "what": "Aico gem databases to CT 160",
+      "what": "Standby databases to CT 160",
       "project": "aico",
       "home": "aico",
       "every_min": 60,
@@ -195,7 +195,7 @@
     },
     {
       "kind": "backups-drive-aico",
-      "what": "Aico gem databases to Google Drive",
+      "what": "Standby databases to Google Drive",
       "project": "aico",
       "home": "aico",
       "at": "04:30",
@@ -206,7 +206,7 @@
     },
     {
       "kind": "backups-verify-aico",
-      "what": "Aico gem Drive backup read-back check",
+      "what": "Standby Drive backup read-back check",
       "project": "aico",
       "home": "aico",
       "at": "05:30",
@@ -228,7 +228,7 @@
     },
     {
       "kind": "wip-mirror-davion-sidarli",
-      "what": "Repo copies to the other full Aico",
+      "what": "Repo copies to the standby",
       "project": "aico",
       "home": "davion-sidarli",
       "every_min": 10,
@@ -239,7 +239,7 @@
     },
     {
       "kind": "wip-mirror-aico",
-      "what": "Repo copies to the other full Aico",
+      "what": "Repo copies to the workstation",
       "project": "aico",
       "home": "aico",
       "every_min": 10,

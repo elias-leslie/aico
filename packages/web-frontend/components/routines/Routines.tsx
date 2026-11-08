@@ -15,8 +15,10 @@ import {
   useRoutineAction,
   useRoutines,
 } from '@/lib/hooks/use-routines'
+import { machineLabel } from '@/lib/machine-name'
 import {
   chipOf,
+  clockSkip,
   groupRoutines,
   headOf,
   hostsText,
@@ -95,7 +97,7 @@ function whenTip(routine: Routine): string {
   const last =
     routine.lastRun === null
       ? 'Not run yet.'
-      : `Last run ${whenIn(routine, routine.lastRun)}${routine.lastMachine ? ` on ${routine.lastMachine}` : ''}.`
+      : `Last run ${whenIn(routine, routine.lastRun)}${routine.lastMachine ? ` on ${machineLabel(routine.lastMachine)}` : ''}.`
   return `${next} ${last}`
 }
 
@@ -105,19 +107,25 @@ function scheduleLine(routine: Routine): string {
   if (!routine.started || routine.paused || routine.nextRun === null)
     return schedule
   const delay = timerDelay(routine)
-  const delayed = delay ? ` (${delay} min random delay)` : ''
-  return `${schedule} · next ${whenIn(routine, routine.nextRun)}${delayed}`
+  const notes = [
+    clockSkip(routine),
+    delay ? `${delay} min random delay` : null,
+  ].filter(Boolean)
+  const why = notes.length ? ` (${notes.join(', ')})` : ''
+  return `${schedule} · next ${whenIn(routine, routine.nextRun)}${why}`
 }
 
 /** What the last run said, or why there is nothing to say. */
 function lastLine(routine: Routine): string {
   if (routine.unreadable)
-    return `Couldn’t read it from ${routine.home}: ${routine.unreadable}`
+    return `Couldn’t read it from ${machineLabel(routine.home)}: ${routine.unreadable}`
   if (routine.lastRun === null)
     return routine.started
       ? 'Not run yet.'
       : 'Registered. The scheduler picks it up within seconds.'
-  const where = routine.lastMachine ? ` on ${routine.lastMachine}` : ''
+  const where = routine.lastMachine
+    ? ` on ${machineLabel(routine.lastMachine)}`
+    : ''
   return `Last run ${whenIn(routine, routine.lastRun)}${where}: ${routine.lastMeaning || 'Finished.'}`
 }
 

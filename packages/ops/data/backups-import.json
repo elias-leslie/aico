@@ -508,7 +508,7 @@
     },
     {
       "id": "pve-ct-190-aico-data",
-      "name": "Aico gem container: notes, web and Tether databases (consistent snapshots), blobs and captures",
+      "name": "Standby container: notes, web and Tether databases (consistent snapshots), blobs and captures",
       "path": "proxmox://proxmox-gem/lxc/190/files?via=pct&path=/home/kasadis/.local/state/aico-snapshot&path=/home/kasadis/.local/state/aico&exclude=aico/*.db&exclude=aico/*.db-wal&exclude=aico/*.db-shm&exclude=aico/logs&exclude=aico/tmux&exclude=aico/tmux.conf",
       "source_type": "workspace",
       "project_id": null,

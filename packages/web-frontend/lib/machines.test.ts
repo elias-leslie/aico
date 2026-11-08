@@ -115,8 +115,8 @@ describe('buildMachines', () => {
     expect(list.machines.map((m) => m.name)).toEqual([
       'Workstation',
       'Proxmox host',
+      'Standby',
       'agent-work',
-      'aico',
       'apps',
       'ominull-hub',
     ])
@@ -131,7 +131,11 @@ describe('buildMachines', () => {
     expect(by.Workstation?.sessionHost).toBe(true)
     expect(by.Workstation?.power).toBeNull()
     expect(by['Proxmox host']?.sessionHost).toBe(false)
-    expect(by.aico).toMatchObject({ sessionHost: true, power: null, up: 'on' })
+    expect(by.Standby).toMatchObject({
+      sessionHost: true,
+      power: null,
+      up: 'on',
+    })
     expect(by['agent-work']).toMatchObject({
       up: 'off',
       power: 'on',
@@ -159,8 +163,8 @@ describe('buildMachines', () => {
     expect(list.partial).toBe(true)
     expect(list.machines.map((m) => m.name)).toEqual([
       'Workstation',
+      'Standby',
       'agent-work',
-      'aico',
     ])
     expect(machinesLine(list)).toContain('The other machines couldn’t be read')
   })
@@ -192,7 +196,7 @@ describe('buildMachines', () => {
 describe('sessionHostLabel', () => {
   it('names this computer and the Proxmox link the same as Machines', () => {
     expect(sessionHostLabel(null)).toBe('Workstation')
-    expect(sessionHostLabel('aico')).toBe('aico')
+    expect(sessionHostLabel('aico')).toBe('Standby')
     expect(sessionHostLabel('agent-work')).toBe('agent-work')
   })
 })

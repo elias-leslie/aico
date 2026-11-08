@@ -30,7 +30,7 @@ export function StandbyTag({
           backgroundColor: standby.ready ? 'var(--jade)' : 'var(--beacon)',
         }}
       />
-      Standby
+      {standby.ready ? 'Ready' : 'Behind'}
     </span>
   )
 }

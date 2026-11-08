@@ -108,7 +108,7 @@ describe('Routines', () => {
     fireEvent.click(rows[1]?.querySelector('button') as HTMLElement)
     expect(rows[1]?.textContent).toContain('Nothing new.')
     expect(rows[1]?.textContent).toContain(
-      'runs on either davion-sidarli or aico',
+      'runs on either davion-sidarli or Standby',
     )
     expect(rows[1]?.textContent).toContain('Daily at 19:00')
     expect(rows[1]?.textContent).toContain('Last run')
@@ -189,7 +189,7 @@ describe('Routines', () => {
     // A failed row opens by itself and wears the failed chip, like any routine.
     expect(timer.textContent).toContain('Failed')
     expect(timer.textContent).toContain(
-      'Systemd timer, read only · runs on aico',
+      'Systemd timer, read only · runs on Standby',
     )
     expect(timer.textContent).toContain('host-steward-heartbeat.timer')
     const names = Array.from(timer.querySelectorAll('button')).map(
@@ -276,7 +276,7 @@ describe('Routines', () => {
     expect(within(row).getByLabelText('Next run')).toBeInTheDocument()
     expect(
       row.querySelector('[title^="Next run"]')?.getAttribute('title'),
-    ).toMatch(/^Next run .+\. Last run Nov 7, 10:11 PM on aico\.$/)
+    ).toMatch(/^Next run .+\. Last run Nov 7, 10:11 PM on Standby\.$/)
   })
 
   it('groups by machine, groups with a problem first (by name), with the failed count in the head', async () => {
