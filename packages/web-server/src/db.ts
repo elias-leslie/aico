@@ -176,6 +176,33 @@ export function transactor(db: DatabaseSync): <T>(work: () => T) => T {
   }
 }
 
+/**
+ * A file's sync clock and change number, kept in `meta` (`hlc_last`, `seq`). Another process
+ * writes the same file (the `aico-web` CLI, `tnotes import-keep`), so each step reads the saved
+ * clock first and never saves an older one. Call inside a transaction.
+ */
+export function metaClock(db: DatabaseSync, wall: () => number) {
+  const clock = new HybridClock(Number(readMeta(db, 'hlc_last') ?? 0), wall)
+  const catchUp = () => clock.observe(Number(readMeta(db, 'hlc_last') ?? 0))
+  return {
+    /** The next change number and clock value for one write, saved with it. */
+    stamp(): { at: number; seq: number } {
+      const seq = Number(readMeta(db, 'seq') ?? 0) + 1
+      catchUp()
+      const at = clock.next()
+      writeMeta(db, 'seq', String(seq))
+      writeMeta(db, 'hlc_last', String(at))
+      return { at, seq }
+    },
+    /** Moves the clock past a stamp seen from a peer (sync), and remembers it. */
+    observe(remote: number): void {
+      catchUp()
+      clock.observe(remote)
+      writeMeta(db, 'hlc_last', String(clock.last))
+    },
+  }
+}
+
 type Row = Record<string, unknown>
 
 const now = () => new Date().toISOString()
@@ -207,7 +234,7 @@ type Value = string | number | null
 
 export class WebStore {
   private readonly db: DatabaseSync
-  private readonly clock: HybridClock
+  private readonly clock: ReturnType<typeof metaClock>
   private readonly wall: () => number
   private readonly run: <T>(work: () => T) => T
   readonly hostName: string
@@ -224,7 +251,7 @@ export class WebStore {
       const version = this.meta('schema_version')
       if (version !== null && Number(version) > SCHEMA_VERSION)
         throw new Error(`${path} has schema ${version}, newer than this Aico (${SCHEMA_VERSION})`)
-      this.clock = new HybridClock(Number(this.meta('hlc_last') ?? 0), this.wall)
+      this.clock = metaClock(this.db, this.wall)
       this.transaction(() => {
         if (this.meta('db_id') === null) this.setMeta('db_id', randomUUID())
         if (this.meta('seq') === null) this.setMeta('seq', '0')
@@ -259,17 +286,9 @@ export class WebStore {
     return this.run(work)
   }
 
-  /**
-   * The sync columns for one write: the next change number and clock value,
-   * saved in `meta` in the same transaction as the row. The `aico-web` CLI
-   * writes this file from its own process, so the clock is re-read first.
-   */
+  /** The sync columns for one write (`metaClock`), saved in the same transaction as the row. */
   private stamp(): { sync_at: number; origin: string; seq: number } {
-    const seq = Number(this.meta('seq') ?? 0) + 1
-    this.clock.observe(Number(this.meta('hlc_last') ?? 0))
-    const at = this.clock.next()
-    this.setMeta('seq', String(seq))
-    this.setMeta('hlc_last', String(at))
+    const { at, seq } = this.clock.stamp()
     return { sync_at: at, origin: this.hostName, seq }
   }
 
@@ -322,10 +341,7 @@ export class WebStore {
         const stamp = this.stamp()
         return { at: stamp.sync_at, origin: stamp.origin, seq: stamp.seq }
       },
-      observe: (at) => {
-        this.clock.observe(at)
-        this.setMeta('hlc_last', String(this.clock.last))
-      },
+      observe: (at) => this.clock.observe(at),
     }
   }
 

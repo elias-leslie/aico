@@ -237,6 +237,23 @@ describe('NotesStore', () => {
     expect(row.updated_at).toBe(wall + 10_000_001)
   })
 
+  it('stamps past what another process wrote to the same file', () => {
+    // tnotes import-keep opens notes.db beside the running aico-web.
+    const path = join(dir, 'notes.db')
+    const server = open(path)
+    const importer = open(path)
+    importer.observe(wall + 10_000_000)
+    const { capture: row } = importer.insertCapture(capture('hhhhhhhh'))
+    expect(server.insertCapture(capture('iiiiiiii')).capture.updated_at).toBeGreaterThan(
+      row.updated_at,
+    )
+    // A peer stamp seen by the server never saves a clock older than the importer's.
+    server.observe(wall)
+    expect(Number(server.meta('hlc_last'))).toBeGreaterThan(row.updated_at)
+    importer.close()
+    server.close()
+  })
+
   it('hides a tombstone from reads and lists', () => {
     const store = open()
     const { capture: row } = store.insertCapture(capture('ffffffff'))

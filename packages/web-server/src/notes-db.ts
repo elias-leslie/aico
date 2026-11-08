@@ -7,8 +7,7 @@
 import { randomBytes, randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import type { CaptureKind } from '@aico/notes/capture-files'
-import { HybridClock } from '@aico/shared/hlc'
-import { openPrivateDb, readMeta, transactor, writeMeta } from './db'
+import { metaClock, openPrivateDb, readMeta, transactor, writeMeta } from './db'
 import { NoteStore } from './notes-data'
 import { baseOf, type SyncHandle } from './sync/engine'
 import { NOTES_SYNC_TABLES } from './sync/registry'
@@ -268,7 +267,7 @@ export interface NotesStoreOptions {
 
 export class NotesStore {
   private readonly db: DatabaseSync
-  private readonly clock: HybridClock
+  private readonly clock: ReturnType<typeof metaClock>
   private readonly now: () => number
   private readonly run: <T>(work: () => T) => T
   readonly hostName: string
@@ -299,7 +298,7 @@ export class NotesStore {
       this.db.close()
       throw error
     }
-    this.clock = new HybridClock(Number(this.meta('hlc_last') ?? 0), this.now)
+    this.clock = metaClock(this.db, this.now)
     try {
       this.notes = new NoteStore({
         db: this.db,
@@ -332,22 +331,15 @@ export class NotesStore {
     return this.run(work)
   }
 
-  /**
-   * The sync columns for one write: the next change number and clock value,
-   * saved in `meta` in the same transaction as the row. Call inside `transaction`.
-   */
+  /** The sync columns for one write (`metaClock`). Call inside `transaction`. */
   private stamp(): Stamp {
-    const seq = Number(this.meta('seq') ?? 0) + 1
-    const updatedAt = this.clock.next()
-    this.setMeta('seq', String(seq))
-    this.setMeta('hlc_last', String(updatedAt))
-    return { updated_at: updatedAt, origin: this.hostName, seq }
+    const { at, seq } = this.clock.stamp()
+    return { updated_at: at, origin: this.hostName, seq }
   }
 
   /** Moves the clock past a stamp seen from a peer (sync), and remembers it. */
   observe(remote: number): void {
     this.clock.observe(remote)
-    this.setMeta('hlc_last', String(this.clock.last))
   }
 
   /** What the sync engine needs to read and write this file. */
