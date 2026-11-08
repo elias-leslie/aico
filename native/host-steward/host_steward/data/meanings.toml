@@ -161,6 +161,9 @@ what = "Swap is {pct}% full while {avail} GiB of memory is free"
 impact = "Things run slower than they need to"
 next = "Check what pinned pages into swap"
 
+[signal."perf.swap.cleared:ok"]
+what = "Swap was {pct}% full of old pages ({gib} GiB) while memory was free, so it was cleared"
+
 [signal."perf.swap.unreadable"]
 what = "Could not read memory use"
 

@@ -141,12 +141,25 @@ export interface TimerContext {
   run?: RunCommand
 }
 
-/** The command words that put `argv` on the timer's host. */
-function onHost(file: TimersFile, def: TimerDef, ctx: TimerContext, argv: string[]): string[] {
+/**
+ * The command words that put `argv` on the timer's host. `privileged` is for what needs root (Run
+ * now, Pause, Resume, the journal): systemctl show and list-timers read system units as any user,
+ * so reading the list never uses sudo (host-steward's sudo check counts every use).
+ */
+function onHost(
+  file: TimersFile,
+  def: TimerDef,
+  ctx: TimerContext,
+  argv: string[],
+  privileged = true,
+): string[] {
   const host = file.hosts[def.host]
   if (def.host === ctx.machine) {
     const root =
-      def.scope === 'system' && typeof process.getuid === 'function' && process.getuid() !== 0
+      privileged &&
+      def.scope === 'system' &&
+      typeof process.getuid === 'function' &&
+      process.getuid() !== 0
     return root ? ['sudo', '-n', ...argv] : argv
   }
   if (host?.fleet)
@@ -156,7 +169,7 @@ function onHost(file: TimersFile, def: TimerDef, ctx: TimerContext, argv: string
       ctx.env,
     )
   if (host?.exec) {
-    const needsSudo = def.scope === 'system' && !host.root
+    const needsSudo = privileged && def.scope === 'system' && !host.root
     return [...host.exec, ...(needsSudo ? ['sudo', '-n'] : []), ...argv]
   }
   throw new Error(`there is no route to ${def.host} in the timers file`)
@@ -229,6 +242,7 @@ export async function readTimerStatus(file: TimersFile, ctx: TimerContext): Prom
             first,
             ctx,
             systemctl(first, 'list-timers', '--all', '--output=json', '--no-pager', ...units),
+            false,
           ),
         ),
         run(
@@ -245,6 +259,7 @@ export async function readTimerStatus(file: TimersFile, ctx: TimerContext): Prom
               ...units,
               ...services,
             ),
+            false,
           ),
         ),
       ])

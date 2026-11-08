@@ -158,15 +158,17 @@ describe('systemd timers in Routines', () => {
     expect(h.calls.filter((c) => c.includes('list-timers'))).toHaveLength(5)
   })
 
-  it('reaches each host the way the file says: here, over a root hop, sudo on a plain hop, the fleet link', async () => {
+  it('reaches each host the way the file says, reading with no sudo anywhere: here, over a root hop, a plain hop, the fleet link', async () => {
     const h = harness()
     await h.run('list', '--json')
     const first = (unit: string) =>
       h.calls.find((c) => c.includes('list-timers') && c.includes(unit)) as string[]
-    expect(first('beat.timer').slice(0, 3)).toEqual(['sudo', '-n', 'systemctl'])
+    expect(first('beat.timer').slice(0, 2)).toEqual(['systemctl', 'list-timers'])
     expect(first('mine.timer').slice(0, 2)).toEqual(['systemctl', '--user'])
     expect(first('trim.timer').slice(0, 3)).toEqual(['ssh', 'pve', 'systemctl'])
-    expect(first('gone.timer').slice(0, 5)).toEqual(['ssh', 'box', 'sudo', '-n', 'systemctl'])
+    expect(first('gone.timer').slice(0, 3)).toEqual(['ssh', 'box', 'systemctl'])
+    // Neither list-timers nor show asks for root: reading the list is not a sudo use.
+    expect(h.calls.filter((c) => c.includes('sudo'))).toEqual([])
     const far = first('far.timer')
     expect(far.slice(1, 3)).toEqual(['fleet', 'exec'])
     expect(far[3]).toBe('/run/user/1000/aico/fleet/far/exec.sock')

@@ -22,6 +22,8 @@ housekeeping = true
 space_guard = true
 scrub = true
 nvme_tests = true
+# The perf check clears stale swap itself (swapoff, swapon) when memory available beats what swap holds by a margin.
+swap_clear = true
 
 # Signals the owner decided are record-only: they stay in the row's text but never past this state.
 # First matching pattern wins. GEM10 logs corrected memory errors without DRAM ECC (owner 2026-10-30).
@@ -97,6 +99,12 @@ meminfo = "/proc/meminfo"
 crash_restarts_per_hour = 6
 swap_used_pct = 80.0
 swap_mem_available_gib = 8.0
+# Swap this full while RAM is free is stale pages, not pressure: the check clears it when available memory exceeds the
+# swap in use by this much and memory stalls (PSI some avg10, percent) are under the limit. The clear is in [acting].
+swap_clear_headroom_gib = 4.0
+swap_clear_max_psi = 5.0
+swap_clear_timeout_s = 300
+psi = "/proc/pressure/memory"
 
 [checks.pve]
 what = "PVE host health"

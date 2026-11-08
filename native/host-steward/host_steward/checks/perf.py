@@ -59,6 +59,30 @@ def crash_loops(ctx: Ctx) -> Signal:
     return Signal("perf.crash_loop", "warn", {"n": len(loops), "units": names})
 
 
+def psi_some_avg10(ctx: Ctx) -> float | None:
+    """Memory pressure (the `some` avg10 percent), or None when it cannot be read."""
+    match = re.search(r"^some .*?avg10=([\d.]+)", ctx.read(ctx.cfg["psi"]) or "", re.MULTILINE)
+    return float(match.group(1)) if match else None
+
+
+def clear_stale_swap(ctx: Ctx, used_gib: float, avail_gib: float) -> bool:
+    """Gives parked pages back to RAM (swapoff, then swapon) when that is safe: switched on in [acting], memory
+    available beyond what swap holds by the headroom, and no memory stalls right now. Swap that is full of old pages
+    while RAM is free is nothing an owner or agent should chase, so the check clears it instead of warning."""
+    psi = psi_some_avg10(ctx)
+    if (
+        not ctx.acting.get("swap_clear")
+        or avail_gib < used_gib + float(ctx.cfg["swap_clear_headroom_gib"])
+        or psi is None
+        or psi >= float(ctx.cfg["swap_clear_max_psi"])
+    ):
+        return False
+    off = ctx.run(["swapoff", "-a"], timeout=float(ctx.cfg["swap_clear_timeout_s"]))
+    # Always bring swap back, even when swapoff stopped part way.
+    on = ctx.run(["swapon", "-a"], timeout=60)
+    return off.rc == 0 and on.rc == 0
+
+
 def swap_while_free(ctx: Ctx) -> Signal:
     text = ctx.read(ctx.cfg["meminfo"])
     if text is None:
@@ -71,6 +95,9 @@ def swap_while_free(ctx: Ctx) -> Signal:
     avail = info.get("MemAvailable", 0) / 1048576
     fields = {"pct": f"{pct:.0f}", "avail": f"{avail:.0f}"}
     if pct >= ctx.cfg["swap_used_pct"] and avail >= ctx.cfg["swap_mem_available_gib"]:
+        used_gib = (total - free) / 1048576
+        if clear_stale_swap(ctx, used_gib, avail):
+            return Signal("perf.swap.cleared", "ok", {"pct": fields["pct"], "gib": f"{used_gib:.0f}"}, note=True)
         return Signal("perf.swap", "warn", fields)
     return Signal("perf.swap", "ok", fields)
 

@@ -523,6 +523,29 @@ def agent_only(state: dict[str, Any], hour_keys: set[str], last24: dict[str, int
     return {fam for fam, n in ran.items() if n >= last24.get(fam, 0) > 0}
 
 
+def automation_and_agents(
+    state: dict[str, Any], hour_keys: set[str], last24: dict[str, int], rule: Rules
+) -> set[str]:
+    """Families every call of which came from a known automation service or one of our agent sessions, in any mix
+    (aico-web reading the Routines list while agents run `aico routines list`): neither source alone covers it, both
+    together do. A caller unit that is not automation, or an untraced call, keeps the family out."""
+    units: dict[str, dict[str, int]] = {}
+    agents: dict[str, int] = {}
+    for h in hour_keys:
+        for fam, by_unit in (state.get("callers") or {}).get(h, {}).items():
+            for u, n in by_unit.items():
+                units.setdefault(fam, {})[u] = units.setdefault(fam, {}).get(u, 0) + int(n)
+        for fam, n in (state.get("agent_calls") or {}).get(h, {}).items():
+            agents[fam] = agents.get(fam, 0) + int(n)
+    return {
+        fam
+        for fam, total in last24.items()
+        if total > 0
+        and all(automation_unit(u, rule) for u in units.get(fam, {}))
+        and sum(units.get(fam, {}).values()) + agents.get(fam, 0) >= total
+    }
+
+
 def _stats(state: dict[str, Any], now: float, cfg: dict[str, Any]) -> dict[str, Any]:
     hours: dict[str, dict[str, int]] = state.get("hours", {})
     cur_keys = {_hour(now - i * 3600) for i in range(24)}
@@ -605,7 +628,11 @@ def evaluate(
         # Families whose every call came from a known automation service (by the journal's caller unit) stay visible
         # but never warn: their volume follows that job's schedule and backlog.
         auto = automation_callers(state, st["keys"], last24, rule)
-        by_agents = agent_only(state, st["keys"], last24) if cfg.get("agent_runs_are_notes", True) else set()
+        by_agents = (
+            agent_only(state, st["keys"], last24) | automation_and_agents(state, st["keys"], last24, rule)
+            if cfg.get("agent_runs_are_notes", True)
+            else set()
+        )
         new = sorted(
             f for f in last24 if f not in seen and not any(fnmatch.fnmatchcase(f, k) for k in known)
         )

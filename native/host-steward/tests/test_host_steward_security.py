@@ -616,6 +616,25 @@ def test_new_family_run_only_by_agent_sessions_is_a_note_but_mixed_callers_still
     assert codes(evaluate(mixed, tmp_path))["sudo.new_family"] == "warn"
 
 
+def test_a_family_run_by_automation_and_agents_together_is_a_note_not_a_spike(tmp_path):
+    """aico-web reads the Routines list on a schedule and agents run the same command by hand: neither alone covers
+    every call, both together do, so the volume is a note. One call from anyone else keeps the warning."""
+    family = "systemctl list-timers"
+    state = hours_state(5, per_hour=0, family=family)
+    hour = sudo._hour(NOW)
+    state["hours"][hour][family] = 200
+    state["callers"] = {hour: {family: {"aico-web.service": 180}}}
+    state["agent_calls"] = {hour: {family: 20}}
+    site = site_for(tmp_path)
+    ctx = mkctx("sudo", site=site)
+    rule = sudo.Rules(**{**RULES.__dict__, "trusted": site["trusted_units"]})
+    out = codes(sudo.evaluate(state, NOW, ctx, rule, "h", 3))
+    assert "sudo.family_spike" not in out and out["sudo.family_spike.auto"] == "ok"
+    state["hours"][hour][family] = 201  # one call nobody traced
+    out = codes(sudo.evaluate(state, NOW, ctx, rule, "h", 3))
+    assert out["sudo.family_spike"] == "warn"
+
+
 def test_backup_guard_volume_from_aicos_backup_units_is_only_a_note(tmp_path):
     """The backup guard runs the window helper every 5 minutes from Aico's user unit: its volume follows that
     schedule (288 a day against an older baseline of 13) and never warns."""

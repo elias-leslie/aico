@@ -223,6 +223,36 @@ def test_perf_crash_loop_and_swap(tmp_path):
     assert set(states(calm).values()) == {"ok"}
 
 
+def test_perf_clears_stale_swap_itself_only_when_it_is_safe(tmp_path):
+    """Swap full of old pages with memory free is cleared by the check (no warning). It only does so when switched
+    on, with room to take the pages back and no memory stalls; otherwise it still warns."""
+    meminfo = tmp_path / "meminfo"
+    meminfo.write_text("MemAvailable: 20971520 kB\nSwapTotal: 8388608 kB\nSwapFree: 524288 kB\n")  # 20 GiB free, 7.5 swapped
+    psi = tmp_path / "psi"
+    psi.write_text("some avg10=0.10 avg60=0.2 avg300=0.2 total=1\nfull avg10=0.00 avg60=0.0 avg300=0.0 total=0\n")
+
+    def swap(acting, run=None, **over):
+        c = ctx("perf", run or Fake((["swapoff"], Result(0)), (["swapon"], Result(0))), meminfo=str(meminfo), psi=str(psi), **over)
+        c.acting = acting
+        return c, perf.swap_while_free(c)
+
+    c, sig = swap({"swap_clear": True})
+    assert (sig.code, sig.state, sig.note) == ("perf.swap.cleared", "ok", True)
+    assert [call[0] for call in c.run.calls] == [["swapoff", "-a"], ["swapon", "-a"]]
+    # switched off: no action, the warning stays
+    c, sig = swap({})
+    assert (sig.code, sig.state) == ("perf.swap", "warn") and not c.run.calls
+    # not enough memory beyond what swap holds, or memory stalls now: no action
+    assert swap({"swap_clear": True}, swap_clear_headroom_gib=20.0)[1].state == "warn"
+    psi.write_text("some avg10=12.00 avg60=1 avg300=1 total=1\n")
+    c, sig = swap({"swap_clear": True})
+    assert sig.state == "warn" and not c.run.calls
+    psi.write_text("some avg10=0.10 avg60=0.2 avg300=0.2 total=1\n")
+    # swapoff failed: warns, and swap is switched back on
+    c, sig = swap({"swap_clear": True}, Fake((["swapoff"], Result(1, "", "busy")), (["swapon"], Result(0))))
+    assert sig.state == "warn" and [call[0] for call in c.run.calls] == [["swapoff", "-a"], ["swapon", "-a"]]
+
+
 def test_perf_unreadable_inputs_warn(tmp_path):
     out = perf.run(ctx("perf", Fake((["journalctl"], Result(2, "", "boom"))), meminfo=str(tmp_path / "none")))
     assert states(out) == {"perf.crash_loop.unreadable": "warn", "perf.swap.unreadable": "warn"}
