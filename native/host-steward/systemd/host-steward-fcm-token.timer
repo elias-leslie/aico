@@ -2,7 +2,9 @@
 Description=Keep Aico's phone sender access token current
 
 [Timer]
+# 30s: a fresh token as early as possible. 3min: Aico answers by then, so the row posts; the first report at boot gets lost.
 OnBootSec=30s
+OnBootSec=3min
 OnUnitActiveSec=20min
 AccuracySec=30s
 
