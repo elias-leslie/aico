@@ -530,6 +530,7 @@ export class NotifyHub {
       try {
         const row = parseRow(item)
         if (!row.id.startsWith('ominull')) throw new RowError('id', 'starts with ominull')
+        if (row.guard) throw new RowError('guard', 'host guard events come from the native writer')
         return row
       } catch (error) {
         if (error instanceof RowError)

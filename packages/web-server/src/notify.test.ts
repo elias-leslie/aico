@@ -237,6 +237,27 @@ describe('POST /api/ominull/push', () => {
       status: 422,
       body: { detail: 'rows[0].id: starts with ominull' },
     })
+    const hostGuard = await push({
+      rows: [
+        {
+          ...row,
+          kind: 'check',
+          last_run: '2026-11-08T12:00:00Z',
+          guard: {
+            episode_id: 'x',
+            phase: 'hot',
+            temperature_c: 85,
+            cpu_quota_percent: 50,
+            admission_open: false,
+            delivery_machine: 'aico',
+          },
+        },
+      ],
+    })
+    expect(hostGuard).toMatchObject({
+      status: 422,
+      body: { detail: expect.stringMatching(/^rows\[0\]\.guard:/) },
+    })
     // Nothing of a refused push was taken.
     expect(hub.store.list()).toEqual([])
     expect(status.rows()).toEqual([])

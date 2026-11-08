@@ -37,12 +37,18 @@ let server: Server
 let status: StatusStore
 let port: number
 let running: string[] = []
+const rowsWritten = vi.fn()
 
 beforeEach(async () => {
   status = new StatusStore(':memory:', () => NOW)
   running = []
+  rowsWritten.mockClear()
   const router = new Router()
-  registerStatusRoutes(router, status, { machine: 'here', running: () => running })
+  registerStatusRoutes(router, status, {
+    machine: 'here',
+    running: () => running,
+    changed: { rowsWritten, rowRemoved: () => {} },
+  })
   server = createWebServer(guard, router, {} as TerminalHub)
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
   port = (server.address() as AddressInfo).port
@@ -89,6 +95,34 @@ function call(
 }
 
 describe('status routes', () => {
+  it('passes validated native guard warnings and recovery through the write callback', async () => {
+    const guardRow = {
+      ...ROW,
+      id: 'here/backup-guard',
+      kind: 'check',
+      last_run: '2026-11-08T12:00:00Z',
+      guard: {
+        episode_id: 'boot:1',
+        phase: 'hot',
+        temperature_c: 85,
+        cpu_quota_percent: 50,
+        admission_open: false,
+        delivery_machine: 'aico',
+      },
+    }
+    for (const phase of ['hot', 'recovered']) {
+      const body = {
+        ...guardRow,
+        state: phase === 'hot' ? 'warn' : 'ok',
+        guard: { ...guardRow.guard, phase },
+      }
+      expect((await call('POST', '/api/status/rows', { body })).status).toBe(200)
+      expect(rowsWritten).toHaveBeenLastCalledWith([expect.objectContaining({ guard: body.guard })])
+    }
+    const invalid = { ...guardRow, guard: { ...guardRow.guard, unexpected: true } }
+    expect((await call('POST', '/api/status/rows', { body: [guardRow, invalid] })).status).toBe(422)
+    expect(rowsWritten).toHaveBeenCalledTimes(2)
+  })
   it('takes a row from this machine and serves it late once its next run has passed', async () => {
     expect(await call('POST', '/api/status/rows', { body: [ROW, MACHINE] })).toEqual({
       status: 200,

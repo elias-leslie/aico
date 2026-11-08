@@ -24,6 +24,7 @@ export {
   ACTION_KINDS,
   type Action,
   type ActionKind,
+  GUARD_PHASES,
   jobEnv,
   jobSchedule,
   KINDS,
@@ -34,6 +35,7 @@ export {
   STATES,
   type State,
   type StatusRow,
+  type ThermalGuard,
 } from './row'
 export { deleteStatusRow, postStatusRows, type RowsRequest, statusRowsUrl } from './rows-api'
 export {

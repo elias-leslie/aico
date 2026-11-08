@@ -46,6 +46,11 @@ def test_lists_and_limits_match_the_schema():
     action = props["actions"]["items"]["properties"]
     assert tuple(action["kind"]["enum"]) == aico_status.ACTION_KINDS
     assert props["actions"]["maxItems"] == aico_status.MAX_ACTIONS
+    guard = props["guard"]
+    assert guard["additionalProperties"] is False
+    assert frozenset(guard["required"]) == aico_status.GUARD_FIELDS
+    assert frozenset(guard["properties"]) == aico_status.GUARD_FIELDS
+    assert tuple(guard["properties"]["phase"]["enum"]) == aico_status.GUARD_PHASES
     assert action["ref"]["maxLength"] == aico_status.MAX_ACTION_REF
     for field, (limit, pattern) in aico_status.TEXT_LIMITS.items():
         assert props[field]["maxLength"] == limit

@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import re
 import socket
@@ -45,7 +46,9 @@ TEXT_LIMITS: dict[str, tuple[int, re.Pattern[str] | None]] = {
     "meaning": (800, None),
 }
 REQUIRED = ("id", "what", "kind", "machine", "state", "meaning")
-FIELDS = frozenset(REQUIRED + ("project", "last_run", "next_run", "run_by", "run_id", "actions"))
+FIELDS = frozenset(REQUIRED + ("project", "last_run", "next_run", "run_by", "run_id", "actions", "guard"))
+GUARD_PHASES = ("hot", "critical", "recovered", "unavailable")
+GUARD_FIELDS = frozenset(("episode_id", "phase", "temperature_c", "cpu_quota_percent", "admission_open", "delivery_machine"))
 MAX_ACTIONS = 4
 MAX_ACTION_REF = 500
 
@@ -170,7 +173,34 @@ def check_row(row: Any) -> dict[str, Any]:
     if optional["run_by"] is not None and optional["next_run"] is None:
         raise RowError("run_by", "run_by needs next_run")
     checked.update({key: value for key, value in optional.items() if value is not None})
+    if "guard" in row:
+        checked["guard"] = _guard(row["guard"])
+        if checked["kind"] != "check" or optional["last_run"] is None:
+            raise RowError("guard", "a guard needs kind check and last_run")
     return checked
+
+
+def _guard(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping) or set(value) != GUARD_FIELDS:
+        raise RowError("guard", "guard needs exactly its declared fields")
+    try:
+        _one_of(value, "phase", GUARD_PHASES)
+        for field, limit in (("episode_id", "id"), ("delivery_machine", "machine")):
+            _text({limit: value[field]}, limit, True)
+        temperature = value["temperature_c"]
+        if temperature is not None and (
+            type(temperature) not in (int, float)
+            or not math.isfinite(temperature)
+        ):
+            raise RowError("guard", "temperature_c must be null or a finite number")
+        quota = value["cpu_quota_percent"]
+        if type(quota) not in (int, float) or not math.isfinite(quota) or quota < 0:
+            raise RowError("guard", "cpu_quota_percent must be a non-negative number")
+        if not isinstance(value["admission_open"], bool):
+            raise RowError("guard", "admission_open must be a boolean")
+    except RowError as error:
+        raise RowError("guard", str(error)) from error
+    return dict(value)
 
 
 def report(

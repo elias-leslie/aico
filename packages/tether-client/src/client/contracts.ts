@@ -298,6 +298,8 @@ export interface TetherTool {
   instructions?: boolean
   /** It draws its own status line (context, usage) under the session. */
   statusLine?: boolean
+  /** It accepts event lines through POST /v1/sessions/:id/deliveries. */
+  deliveries?: boolean
 }
 
 export interface TetherProject {

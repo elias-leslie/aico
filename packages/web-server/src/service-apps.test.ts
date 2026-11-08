@@ -270,6 +270,18 @@ it('accepts own rows atomically and refuses other projects, hosts and command ac
     { id: 'aico/service' },
     { machine: 'elsewhere' },
     { actions: [{ kind: 'run', ref: 'sh' }] },
+    {
+      kind: 'check',
+      last_run: '2026-11-08T12:00:00Z',
+      guard: {
+        episode_id: 'x',
+        phase: 'hot',
+        temperature_c: 85,
+        cpu_quota_percent: 50,
+        admission_open: false,
+        delivery_machine: 'aico',
+      },
+    },
   ])
     expect(
       (

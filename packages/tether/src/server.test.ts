@@ -337,6 +337,20 @@ describe('agent tools API', () => {
       ['shell', false],
     ])
 
+    // Clients can select agents for queued messages without duplicating the adapter registry.
+    expect(
+      (list.body as { items: { slug: string; deliveries: boolean }[] }).items.map((tool) => [
+        tool.slug,
+        tool.deliveries,
+      ]),
+    ).toEqual([
+      ['claude-code', true],
+      ['codex', true],
+      ['agy', true],
+      ['pi', true],
+      ['aico-agent', true],
+      ['shell', false],
+    ])
     // Which tools draw their own status line, so the header leaves context out.
     expect(
       (list.body as { items: { slug: string; statusLine: boolean }[] }).items.map((t) => [

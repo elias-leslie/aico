@@ -77,9 +77,13 @@ function ownRow(value: unknown, app: string, machine: string) {
       row.project !== app ||
       row.machine !== machine ||
       !row.id.startsWith(`${app}/`) ||
-      row.actions?.length
+      row.actions?.length ||
+      row.guard
     )
-      throw new HttpError(403, 'Write your own project rows, without command actions')
+      throw new HttpError(
+        403,
+        'Write your own project rows, without command actions or host guard events',
+      )
     return row
   } catch (error) {
     if (error instanceof RowError) throw new HttpError(422, `${error.field}: ${error.message}`)

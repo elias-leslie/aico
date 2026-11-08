@@ -27,6 +27,7 @@ import {
 import { supportsBlankSlate } from '@aico/session-engine/tui/blank-slate'
 import {
   drawsStatusLine,
+  isDeliveryTool,
   isRootCreateTool,
   supportsInstructions,
 } from '@aico/session-engine/tui/registry'
@@ -118,7 +119,7 @@ function withoutHost(path: string, query: URLSearchParams): string {
 /** `rootCapable`: the tool can be started as a root (`POST /v1/roots`).
  * `blankSlate`: it can start a Blank Slate session. `instructions`: it can
  * take chosen instructions (`instructions` on create). `statusLine`: it draws
- * its own status line under the session. */
+ * its own status line under the session. `deliveries`: it accepts queued event lines. */
 function toolJson(tool: AgentTool): Record<string, unknown> {
   return {
     ...tool,
@@ -126,6 +127,7 @@ function toolJson(tool: AgentTool): Record<string, unknown> {
     blankSlate: supportsBlankSlate(tool.slug),
     instructions: supportsInstructions(tool.slug),
     statusLine: drawsStatusLine(tool.slug),
+    deliveries: isDeliveryTool(tool.slug),
   }
 }
 

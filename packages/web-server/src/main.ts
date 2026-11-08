@@ -66,6 +66,7 @@ import {
 } from './status-actions'
 import { registerSyncRoutes, startSync } from './sync/start'
 import { TerminalHub } from './terminal'
+import { ThermalGuardDelivery } from './thermal-guard'
 import { registerTrayRoutes } from './tray'
 import { registerUsageRoutes } from './usage-routes'
 
@@ -101,6 +102,14 @@ function serve(): void {
     tether,
     historyLines: HISTORY_LINES,
     touched: (id) => store.touchLink(id),
+  })
+  const thermal = new ThermalGuardDelivery({
+    machine,
+    status,
+    store,
+    tether,
+    notices: notify.notifier,
+    publicHost: config.publicHost,
   })
   const shows = new Shows({ tether })
   const blobsDir = join(config.dataDir, 'blobs')
@@ -160,14 +169,28 @@ function serve(): void {
     ownerTether: config.ownerTether,
     uploads: config.uploads,
     maintenance: config.maintenance,
-    forward: (event) => terminals.event(event),
+    forward: (event) => {
+      terminals.event(event)
+      if (
+        event.type === 'session.created' ||
+        event.type === 'session.updated' ||
+        event.type === 'peer.resync'
+      )
+        void thermal
+          .tick()
+          .catch((error: unknown) =>
+            console.warn('[aico-web] thermal session delivery failed:', error),
+          )
+    },
     askChanged: async (data) => {
       const ask = validateAsk((data as { ask?: unknown })?.ask)
       if (!ask || !asks.routed(ask)) await notify.askChanged(data)
       if (ask?.session && !asks.routed(ask)) await chats.question(ask.session, ask.state === 'open')
       chats.changed()
     },
-    tick: () => router.tick(),
+    tick: async () => {
+      await Promise.all([router.tick(), thermal.tick()])
+    },
   })
   const api = buildApi({
     tether,
@@ -231,7 +254,19 @@ function serve(): void {
   registerMemoryRoutes(api, { dataDir: config.dataDir })
   registerSyncRoutes(api, sync.loop)
   const runs = new StatusRuns()
-  registerStatusRoutes(api, status, { changed: notify, machine, running: () => runs.ids() })
+  registerStatusRoutes(api, status, {
+    changed: {
+      rowsWritten(rows) {
+        notify.rowsWritten(rows)
+        thermal.rowsWritten(rows)
+      },
+      rowRemoved(id) {
+        notify.rowRemoved(id)
+      },
+    },
+    machine,
+    running: () => runs.ids(),
+  })
   registerStatusActions(api, { status, machine, tether, runs })
   const proxmox = proxmoxFrom(process.env)
     ? pveRequest(process.env, { timeoutMs: config.projects.pveTimeoutMs })
@@ -289,8 +324,10 @@ function serve(): void {
   // few minutes, so a backup or machine row that goes late is seen then too. A notice notify
   // refuses throws, and the batch is offered again on the next pass.
   status.onAlert((batch) => {
+    const changes = batch.changes.filter((change) => !change.row.guard)
+    if (!changes.length) return
     notify.notifier.receive(
-      statusNotice(batch, config.publicHost, config.status.alertCooldownS),
+      statusNotice({ ...batch, changes }, config.publicHost, config.status.alertCooldownS),
       'local',
     )
   })

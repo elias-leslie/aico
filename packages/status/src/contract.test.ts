@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { ACTION_KINDS, KINDS, LIMITS, parseRow, RowError, STATES } from './row'
+import { ACTION_KINDS, GUARD_PHASES, KINDS, LIMITS, parseRow, RowError, STATES } from './row'
 import { type StoredRow, view } from './show'
 
 const read = (name: string) =>
@@ -17,6 +17,7 @@ describe('row.ts matches the schema', () => {
     expect(schema.required).toEqual(['id', 'what', 'kind', 'machine', 'state', 'meaning'])
     expect(Object.keys(props).sort()).toEqual([
       'actions',
+      'guard',
       'id',
       'kind',
       'last_run',
@@ -46,7 +47,12 @@ describe('row.ts matches the schema', () => {
     expect(props.run_by.maxLength).toBe(LIMITS.id.max)
     expect(props.run_id.pattern).toBe(LIMITS.id.pattern.source)
     expect(props.run_id.maxLength).toBe(LIMITS.id.max)
-    expect(schema.dependentRequired).toEqual({ run_by: ['next_run'] })
+    expect(schema.dependentRequired).toEqual({ run_by: ['next_run'], guard: ['last_run'] })
+    expect(props.guard.additionalProperties).toBe(false)
+    expect(props.guard.properties.phase.enum).toEqual([...GUARD_PHASES])
+    expect(props.guard.required.slice().sort()).toEqual(Object.keys(props.guard.properties).sort())
+    expect(props.guard.properties.episode_id.pattern).toBe(LIMITS.id.pattern.source)
+    expect(props.guard.properties.delivery_machine.pattern).toBe(LIMITS.machine.pattern.source)
   })
 })
 

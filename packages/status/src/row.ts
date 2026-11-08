@@ -29,6 +29,19 @@ export interface Action {
   owner_only?: boolean
 }
 
+export const GUARD_PHASES = ['hot', 'critical', 'recovered', 'unavailable'] as const
+
+/** Native backup guard event; enforcement stays on the host when Aico is unavailable. */
+export interface ThermalGuard {
+  episode_id: string
+  phase: (typeof GUARD_PHASES)[number]
+  temperature_c: number | null
+  cpu_quota_percent: number
+  admission_open: boolean
+  /** One Aico machine id is responsible for delivery across the fleet. */
+  delivery_machine: string
+}
+
 export interface StatusRow {
   id: string
   what: string
@@ -47,6 +60,7 @@ export interface StatusRow {
   /** The exact scheduler execution, shared with the owning job's completed report. */
   run_id?: string
   actions?: Action[]
+  guard?: ThermalGuard
 }
 
 export const LIMITS = {
@@ -71,6 +85,7 @@ const FIELDS = new Set([
   'run_by',
   'run_id',
   'actions',
+  'guard',
 ])
 
 /** A row the contract refuses; `field` names the first offending field (`row` for the whole value). */
@@ -171,6 +186,48 @@ function actions(value: unknown): Action[] | undefined {
   })
 }
 
+function guard(value: unknown): ThermalGuard {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    throw new RowError('guard', 'guard must be an object')
+  const body = value as Record<string, unknown>
+  const fields = [
+    'episode_id',
+    'phase',
+    'temperature_c',
+    'cpu_quota_percent',
+    'admission_open',
+    'delivery_machine',
+  ]
+  if (
+    Object.keys(body).some((key) => !fields.includes(key)) ||
+    fields.some((key) => !Object.hasOwn(body, key))
+  )
+    throw new RowError('guard', 'guard needs exactly its declared fields')
+  try {
+    const episode_id = text(body, 'episode_id', LIMITS.id, true) as string
+    const phase = oneOf(body, 'phase', GUARD_PHASES)
+    const delivery_machine = text(body, 'delivery_machine', LIMITS.machine, true) as string
+    const { temperature_c, cpu_quota_percent, admission_open } = body
+    if (
+      temperature_c !== null &&
+      (typeof temperature_c !== 'number' || !Number.isFinite(temperature_c))
+    )
+      throw new RowError('guard', 'temperature_c must be null or a finite number')
+    if (
+      typeof cpu_quota_percent !== 'number' ||
+      !Number.isFinite(cpu_quota_percent) ||
+      cpu_quota_percent < 0
+    )
+      throw new RowError('guard', 'cpu_quota_percent must be a non-negative number')
+    if (typeof admission_open !== 'boolean')
+      throw new RowError('guard', 'admission_open must be a boolean')
+    return { episode_id, phase, temperature_c, cpu_quota_percent, admission_open, delivery_machine }
+  } catch (error) {
+    if (error instanceof RowError) throw new RowError('guard', error.message)
+    throw error
+  }
+}
+
 /** The row in `value`, times normalized to UTC; throws RowError when the contract refuses it. */
 export function parseRow(value: unknown): StatusRow {
   if (!value || typeof value !== 'object' || Array.isArray(value))
@@ -203,6 +260,11 @@ export function parseRow(value: unknown): StatusRow {
   if (runId !== undefined) row.run_id = runId
   const list = actions(body.actions)
   if (list !== undefined) row.actions = list
+  if (body.guard !== undefined) {
+    row.guard = guard(body.guard)
+    if (row.kind !== 'check' || lastRun === undefined)
+      throw new RowError('guard', 'a guard needs kind check and last_run')
+  }
   return row
 }
 

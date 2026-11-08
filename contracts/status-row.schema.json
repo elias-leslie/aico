@@ -18,7 +18,8 @@
     "required": ["next_run"]
   },
   "dependentRequired": {
-    "run_by": ["next_run"]
+    "run_by": ["next_run"],
+    "guard": ["last_run"]
   },
   "properties": {
     "id": {
@@ -106,6 +107,59 @@
           }
         }
       }
+    },
+    "guard": {
+      "description": "A native backup guard event. The host enforces CPU limits independently of Aico. One delivery_machine owns agent and owner delivery.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "episode_id",
+        "phase",
+        "temperature_c",
+        "cpu_quota_percent",
+        "admission_open",
+        "delivery_machine"
+      ],
+      "properties": {
+        "episode_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@-]*$"
+        },
+        "phase": {
+          "enum": ["hot", "critical", "recovered", "unavailable"]
+        },
+        "temperature_c": {
+          "type": ["number", "null"]
+        },
+        "cpu_quota_percent": {
+          "type": "number",
+          "minimum": 0
+        },
+        "admission_open": {
+          "type": "boolean"
+        },
+        "delivery_machine": {
+          "type": "string",
+          "maxLength": 100,
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        }
+      }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["guard"]
+      },
+      "then": {
+        "properties": {
+          "kind": {
+            "const": "check"
+          }
+        }
+      }
+    }
+  ]
 }

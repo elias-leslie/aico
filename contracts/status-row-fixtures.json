@@ -112,6 +112,86 @@
           }
         ]
       }
+    },
+    {
+      "name": "guard hot",
+      "row": {
+        "id": "gem/backup-guard",
+        "what": "Backup guard",
+        "kind": "check",
+        "machine": "gem",
+        "state": "warn",
+        "meaning": "Backup CPU use is limited.",
+        "last_run": "2026-11-08T12:00:00Z",
+        "guard": {
+          "episode_id": "boot:1",
+          "phase": "hot",
+          "temperature_c": 84.5,
+          "cpu_quota_percent": 100,
+          "admission_open": false,
+          "delivery_machine": "aico"
+        }
+      }
+    },
+    {
+      "name": "guard critical",
+      "row": {
+        "id": "gem/backup-guard",
+        "what": "Backup guard",
+        "kind": "check",
+        "machine": "gem",
+        "state": "warn",
+        "meaning": "Backup CPU use is limited.",
+        "last_run": "2026-11-08T12:00:00Z",
+        "guard": {
+          "episode_id": "boot:1",
+          "phase": "critical",
+          "temperature_c": 84.5,
+          "cpu_quota_percent": 100,
+          "admission_open": false,
+          "delivery_machine": "aico"
+        }
+      }
+    },
+    {
+      "name": "guard recovered",
+      "row": {
+        "id": "gem/backup-guard",
+        "what": "Backup guard",
+        "kind": "check",
+        "machine": "gem",
+        "state": "ok",
+        "meaning": "Backup CPU use is limited.",
+        "last_run": "2026-11-08T12:00:00Z",
+        "guard": {
+          "episode_id": "boot:1",
+          "phase": "recovered",
+          "temperature_c": 84.5,
+          "cpu_quota_percent": 100,
+          "admission_open": true,
+          "delivery_machine": "aico"
+        }
+      }
+    },
+    {
+      "name": "guard unavailable",
+      "row": {
+        "id": "gem/backup-guard",
+        "what": "Backup guard",
+        "kind": "check",
+        "machine": "gem",
+        "state": "warn",
+        "meaning": "Backup CPU use is limited.",
+        "last_run": "2026-11-08T12:00:00Z",
+        "guard": {
+          "episode_id": "boot:1",
+          "phase": "unavailable",
+          "temperature_c": null,
+          "cpu_quota_percent": 100,
+          "admission_open": false,
+          "delivery_machine": "aico"
+        }
+      }
     }
   ],
   "invalid": [
@@ -400,6 +480,350 @@
           }
         ]
       }
+    },
+    {
+      "name": "guard unknown field",
+      "row": {
+        "id": "gem/backup-guard",
+        "what": "Backup guard",
+        "kind": "check",
+        "machine": "gem",
+        "state": "warn",
+        "meaning": "Backup CPU use is limited.",
+        "last_run": "2026-11-08T12:00:00Z",
+        "guard": {
+          "episode_id": "boot:1",
+          "phase": "hot",
+          "temperature_c": 84.5,
+          "cpu_quota_percent": 100,
+          "admission_open": false,
+          "delivery_machine": "aico",
+          "extra": true
+        }
+      },
+      "field": "guard"
+    },
+    {
+      "name": "guard unknown phase",
+      "row": {
+        "id": "gem/backup-guard",
+        "what": "Backup guard",
+        "kind": "check",
+        "machine": "gem",
+        "state": "warn",
+        "meaning": "Backup CPU use is limited.",
+        "last_run": "2026-11-08T12:00:00Z",
+        "guard": {
+          "episode_id": "boot:1",
+          "phase": "normal",
+          "temperature_c": 84.5,
+          "cpu_quota_percent": 100,
+          "admission_open": false,
+          "delivery_machine": "aico"
+        }
+      },
+      "field": "guard"
+    },
+    {
+      "name": "guard nonboolean admission",
+      "row": {
+        "id": "gem/backup-guard",
+        "what": "Backup guard",
+        "kind": "check",
+        "machine": "gem",
+        "state": "warn",
+        "meaning": "Backup CPU use is limited.",
+        "last_run": "2026-11-08T12:00:00Z",
+        "guard": {
+          "episode_id": "boot:1",
+          "phase": "hot",
+          "temperature_c": 84.5,
+          "cpu_quota_percent": 100,
+          "admission_open": 1,
+          "delivery_machine": "aico"
+        }
+      },
+      "field": "guard"
+    },
+    {
+      "name": "guard boolean quota",
+      "row": {
+        "id": "gem/backup-guard",
+        "what": "Backup guard",
+        "kind": "check",
+        "machine": "gem",
+        "state": "warn",
+        "meaning": "Backup CPU use is limited.",
+        "last_run": "2026-11-08T12:00:00Z",
+        "guard": {
+          "episode_id": "boot:1",
+          "phase": "hot",
+          "temperature_c": 84.5,
+          "cpu_quota_percent": true,
+          "admission_open": false,
+          "delivery_machine": "aico"
+        }
+      },
+      "field": "guard"
+    },
+    {
+      "name": "guard negative quota",
+      "row": {
+        "id": "gem/backup-guard",
+        "what": "Backup guard",
+        "kind": "check",
+        "machine": "gem",
+        "state": "warn",
+        "meaning": "Backup CPU use is limited.",
+        "last_run": "2026-11-08T12:00:00Z",
+        "guard": {
+          "episode_id": "boot:1",
+          "phase": "hot",
+          "temperature_c": 84.5,
+          "cpu_quota_percent": -1,
+          "admission_open": false,
+          "delivery_machine": "aico"
+        }
+      },
+      "field": "guard"
+    },
+    {
+      "name": "guard string temperature",
+      "row": {
+        "id": "gem/backup-guard",
+        "what": "Backup guard",
+        "kind": "check",
+        "machine": "gem",
+        "state": "warn",
+        "meaning": "Backup CPU use is limited.",
+        "last_run": "2026-11-08T12:00:00Z",
+        "guard": {
+          "episode_id": "boot:1",
+          "phase": "hot",
+          "temperature_c": "84",
+          "cpu_quota_percent": 100,
+          "admission_open": false,
+          "delivery_machine": "aico"
+        }
+      },
+      "field": "guard"
+    },
+    {
+      "name": "guard invalid authority",
+      "row": {
+        "id": "gem/backup-guard",
+        "what": "Backup guard",
+        "kind": "check",
+        "machine": "gem",
+        "state": "warn",
+        "meaning": "Backup CPU use is limited.",
+        "last_run": "2026-11-08T12:00:00Z",
+        "guard": {
+          "episode_id": "boot:1",
+          "phase": "hot",
+          "temperature_c": 84.5,
+          "cpu_quota_percent": 100,
+          "admission_open": false,
+          "delivery_machine": "Aico"
+        }
+      },
+      "field": "guard"
+    },
+    {
+      "name": "guard invalid episode",
+      "row": {
+        "id": "gem/backup-guard",
+        "what": "Backup guard",
+        "kind": "check",
+        "machine": "gem",
+        "state": "warn",
+        "meaning": "Backup CPU use is limited.",
+        "last_run": "2026-11-08T12:00:00Z",
+        "guard": {
+          "episode_id": "bad id",
+          "phase": "hot",
+          "temperature_c": 84.5,
+          "cpu_quota_percent": 100,
+          "admission_open": false,
+          "delivery_machine": "aico"
+        }
+      },
+      "field": "guard"
+    },
+    {
+      "name": "guard missing episode_id",
+      "row": {
+        "id": "gem/backup-guard",
+        "what": "Backup guard",
+        "kind": "check",
+        "machine": "gem",
+        "state": "warn",
+        "meaning": "Backup CPU use is limited.",
+        "last_run": "2026-11-08T12:00:00Z",
+        "guard": {
+          "phase": "hot",
+          "temperature_c": 84.5,
+          "cpu_quota_percent": 100,
+          "admission_open": false,
+          "delivery_machine": "aico"
+        }
+      },
+      "field": "guard"
+    },
+    {
+      "name": "guard missing phase",
+      "row": {
+        "id": "gem/backup-guard",
+        "what": "Backup guard",
+        "kind": "check",
+        "machine": "gem",
+        "state": "warn",
+        "meaning": "Backup CPU use is limited.",
+        "last_run": "2026-11-08T12:00:00Z",
+        "guard": {
+          "episode_id": "boot:1",
+          "temperature_c": 84.5,
+          "cpu_quota_percent": 100,
+          "admission_open": false,
+          "delivery_machine": "aico"
+        }
+      },
+      "field": "guard"
+    },
+    {
+      "name": "guard missing temperature_c",
+      "row": {
+        "id": "gem/backup-guard",
+        "what": "Backup guard",
+        "kind": "check",
+        "machine": "gem",
+        "state": "warn",
+        "meaning": "Backup CPU use is limited.",
+        "last_run": "2026-11-08T12:00:00Z",
+        "guard": {
+          "episode_id": "boot:1",
+          "phase": "hot",
+          "cpu_quota_percent": 100,
+          "admission_open": false,
+          "delivery_machine": "aico"
+        }
+      },
+      "field": "guard"
+    },
+    {
+      "name": "guard missing cpu_quota_percent",
+      "row": {
+        "id": "gem/backup-guard",
+        "what": "Backup guard",
+        "kind": "check",
+        "machine": "gem",
+        "state": "warn",
+        "meaning": "Backup CPU use is limited.",
+        "last_run": "2026-11-08T12:00:00Z",
+        "guard": {
+          "episode_id": "boot:1",
+          "phase": "hot",
+          "temperature_c": 84.5,
+          "admission_open": false,
+          "delivery_machine": "aico"
+        }
+      },
+      "field": "guard"
+    },
+    {
+      "name": "guard missing admission_open",
+      "row": {
+        "id": "gem/backup-guard",
+        "what": "Backup guard",
+        "kind": "check",
+        "machine": "gem",
+        "state": "warn",
+        "meaning": "Backup CPU use is limited.",
+        "last_run": "2026-11-08T12:00:00Z",
+        "guard": {
+          "episode_id": "boot:1",
+          "phase": "hot",
+          "temperature_c": 84.5,
+          "cpu_quota_percent": 100,
+          "delivery_machine": "aico"
+        }
+      },
+      "field": "guard"
+    },
+    {
+      "name": "guard missing delivery_machine",
+      "row": {
+        "id": "gem/backup-guard",
+        "what": "Backup guard",
+        "kind": "check",
+        "machine": "gem",
+        "state": "warn",
+        "meaning": "Backup CPU use is limited.",
+        "last_run": "2026-11-08T12:00:00Z",
+        "guard": {
+          "episode_id": "boot:1",
+          "phase": "hot",
+          "temperature_c": 84.5,
+          "cpu_quota_percent": 100,
+          "admission_open": false
+        }
+      },
+      "field": "guard"
+    },
+    {
+      "name": "guard missing observation",
+      "row": {
+        "id": "gem/backup-guard",
+        "what": "Backup guard",
+        "kind": "check",
+        "machine": "gem",
+        "state": "warn",
+        "meaning": "Backup CPU use is limited.",
+        "guard": {
+          "episode_id": "boot:1",
+          "phase": "hot",
+          "temperature_c": 84.5,
+          "cpu_quota_percent": 100,
+          "admission_open": false,
+          "delivery_machine": "aico"
+        }
+      },
+      "field": "guard"
+    },
+    {
+      "name": "guard wrong kind",
+      "row": {
+        "id": "gem/backup-guard",
+        "what": "Backup guard",
+        "kind": "service",
+        "machine": "gem",
+        "state": "warn",
+        "meaning": "Backup CPU use is limited.",
+        "last_run": "2026-11-08T12:00:00Z",
+        "guard": {
+          "episode_id": "boot:1",
+          "phase": "hot",
+          "temperature_c": 84.5,
+          "cpu_quota_percent": 100,
+          "admission_open": false,
+          "delivery_machine": "aico"
+        }
+      },
+      "field": "guard"
+    },
+    {
+      "name": "guard not object",
+      "row": {
+        "id": "gem/backup-guard",
+        "what": "Backup guard",
+        "kind": "check",
+        "machine": "gem",
+        "state": "warn",
+        "meaning": "Backup CPU use is limited.",
+        "last_run": "2026-11-08T12:00:00Z",
+        "guard": null
+      },
+      "field": "guard"
     }
   ],
   "replay": [
