@@ -49,7 +49,7 @@ import { ensureBlankSlateWorkspace, isBlankSlateRoot } from '@aico/session-engin
 import { isResumeSessionId } from '@aico/session-engine/tui/launch'
 import { getTui, isDeliveryTool } from '@aico/session-engine/tui/registry'
 import { AgentAdmissionDenied } from '@aico/shared/host-pressure'
-import { HttpError, type Router, readJsonObject, sendJson } from '@aico/shared/http'
+import { HttpError, onlyFields, type Router, readJsonObject, sendJson } from '@aico/shared/http'
 import { DeliveryLog, registerDeliveryRoutes } from './deliveries'
 import type { LifecycleContext } from './lifecycle-context'
 import type { Continuity } from './reboot'
@@ -475,11 +475,6 @@ function entrySnapshot(id: string): { entry?: { name: string; arg: string } } {
   return entry ? { entry } : {}
 }
 
-function only(body: Record<string, unknown>, allowed: readonly string[]): void {
-  const unknown = Object.keys(body).filter((key) => !allowed.includes(key))
-  if (unknown.length) throw new HttpError(400, 'invalid_body', { fields: unknown })
-}
-
 function dueAt(value: unknown, now: number): number {
   if (
     typeof value !== 'number' ||
@@ -537,7 +532,7 @@ export function registerWakeRoutes(
     })
     .add('POST', '/v1/sessions/:id/wakes', async (req, res, params) => {
       const body = await readJsonObject(req)
-      only(body, ['dueAt', 'note', 'createdBy'])
+      onlyFields(body, ['dueAt', 'note', 'createdBy'])
       const policy = service.policy()
       const at = dueAt(body.dueAt, now())
       const note = cleanNote(body.note, policy.noteMaxChars)
@@ -556,7 +551,7 @@ export function registerWakeRoutes(
     })
     .add('PATCH', '/v1/wakes/:wakeId', async (req, res, params) => {
       const body = await readJsonObject(req)
-      only(body, ['dueAt', 'note'])
+      onlyFields(body, ['dueAt', 'note'])
       const wake = requireWake(service, params.wakeId)
       const patch: { dueAt?: number; note?: string } = {}
       if (body.dueAt !== undefined) patch.dueAt = dueAt(body.dueAt, now())

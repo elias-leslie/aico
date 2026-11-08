@@ -13,7 +13,7 @@ import { isAbsolute } from 'node:path'
 import type { Hub } from '@aico/fleet/hub/hub'
 import type { EventBus } from '@aico/session-engine/events'
 import type { Db } from '@aico/session-engine/store'
-import { HttpError, type Router, readJsonObject, sendJson } from '@aico/shared/http'
+import { HttpError, onlyFields, type Router, readJsonObject, sendJson } from '@aico/shared/http'
 import { ASK_LIMITS, ASK_OPEN_LINK, ASK_ORIGINS, type AskOrigin } from '@aico/tether-client/asks'
 import type { ShowConfig } from './config'
 import { realPaths, ShareStore } from './shares'
@@ -247,13 +247,8 @@ function multiLine(value: unknown, field: string, max: number): string | null {
   return text
 }
 
-function only(body: Record<string, unknown>, allowed: readonly string[]): void {
-  const unknown = Object.keys(body).filter((key) => !allowed.includes(key))
-  if (unknown.length) throw new HttpError(400, 'invalid_body', { fields: unknown })
-}
-
 function parseAsk(body: Record<string, unknown>): AskRequest {
-  only(body, [
+  onlyFields(body, [
     'session',
     'requester',
     'question',
@@ -1060,7 +1055,7 @@ export function registerAskRoutes(
     })
     .add('POST', '/v1/asks/:id/answer', async (req, res, params) => {
       const body = await readJsonObject(req)
-      only(body, ['option', 'text', 'note', 'files'])
+      onlyFields(body, ['option', 'text', 'note', 'files'])
       const ask = requireAsk(params.id)
       if (ask.state !== 'open' && ask.state !== 'answered')
         throw new HttpError(409, 'ask_closed', { state: ask.state })

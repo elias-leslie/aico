@@ -66,7 +66,7 @@
 
 import { AGENT_STATES, type AgentState } from '@aico/session-engine/agent-state'
 import type { Db } from '@aico/session-engine/store'
-import { HttpError, type Router, readJsonObject, sendJson } from '@aico/shared/http'
+import { HttpError, onlyFields, type Router, readJsonObject, sendJson } from '@aico/shared/http'
 import { type ModelSwitch, modelSwitchOf, modelSwitchText } from './model-switch'
 
 const LANE_OUTCOMES = ['finished', 'blocked', 'ended'] as const
@@ -1389,8 +1389,7 @@ export function registerLaneRoutes(
     })
     .add('POST', '/v1/sessions/:id/watches', async (req, res, params) => {
       const body = await readJsonObject(req)
-      const unknown = Object.keys(body).filter((key) => key !== 'lane' && key !== 'mode')
-      if (unknown.length) throw new HttpError(400, 'invalid_body', { fields: unknown })
+      onlyFields(body, ['lane', 'mode'])
       const watcher = watcherOf(params.id)
       if (typeof body.lane !== 'string' || !SESSION_ID.test(body.lane))
         throw new HttpError(400, 'invalid_body', { field: 'lane' })

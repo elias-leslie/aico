@@ -3,7 +3,7 @@
 // `PUT /v1/history/aico-agent/:run`: the Aico agent pushes a run's totals and
 // turns at its start and end (it keeps no transcript Tether reads).
 
-import { HttpError, type Router, readJsonObject, sendJson } from '@aico/shared/http'
+import { HttpError, onlyFields, type Router, readJsonObject, sendJson } from '@aico/shared/http'
 import type { History, PushedRun, RunTurn } from './history'
 import type { Outcome } from './types'
 
@@ -34,8 +34,7 @@ function parsePushedRun(runId: string, body: Record<string, unknown>): PushedRun
     'turns',
     'chat',
   ]
-  const extra = Object.keys(body).filter((key) => !known.includes(key))
-  if (extra.length) throw new HttpError(400, 'invalid_body', { fields: extra })
+  onlyFields(body, known)
   const n = (value: unknown, field: string): number =>
     Number.isSafeInteger(value) && (value as number) >= 0 ? (value as number) : bad(field)
   const text = (value: unknown, field: string, max: number): string =>

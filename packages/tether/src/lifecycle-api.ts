@@ -137,6 +137,7 @@ import { extractSignInLink, signInToolOf } from '@aico/session-engine/tui/sign-i
 import {
   type Handler,
   HttpError,
+  onlyFields,
   type Router,
   readJsonObject,
   sendError,
@@ -347,7 +348,7 @@ const HOOK_EVENTS = new Set(ADAPTERS.flatMap((adapter) => adapter.hooks.stateRep
 
 /** Validate an agent hook report (`POST /v1/sessions/:id/agent-event`). */
 export function parseHookReport(body: Record<string, unknown>): HookReport {
-  only(body, ['event', 'notificationType', 'agent', 'agentSessionId'])
+  onlyFields(body, ['event', 'notificationType', 'agent', 'agentSessionId'])
   const { event, notificationType, agent, agentSessionId } = body
   if (typeof event !== 'string' || !HOOK_EVENTS.has(event))
     throw new HttpError(400, 'invalid_body', { field: 'event' })
@@ -373,11 +374,6 @@ export function parseHookReport(body: Record<string, unknown>): HookReport {
 /** The event snapshot: the descriptor with the last verified status. */
 export function sessionSnapshot(row: WidgetRow): Record<string, unknown> {
   return descriptor(row, cachedSessionStatus(row))
-}
-
-function only(body: Record<string, unknown>, allowed: readonly string[]): void {
-  const unknown = Object.keys(body).filter((key) => !allowed.includes(key))
-  if (unknown.length) throw new HttpError(400, 'invalid_body', { fields: unknown })
 }
 
 function requireGeneration(body: Record<string, unknown>): string {
@@ -676,7 +672,7 @@ function createSession(context: LifecycleApiContext): Handler {
   const { store } = context
   return async (req, res) => {
     const body = await readJsonObject(req)
-    only(body, [
+    onlyFields(body, [
       'tool',
       'projectId',
       'projectRoot',
@@ -810,7 +806,7 @@ function transferSession(context: LifecycleApiContext): Handler {
   const { store } = context
   return async (req, res, params) => {
     const body = await readJsonObject(req)
-    only(body, ['generation', 'coordinatorId', 'coordinatorGeneration', 'fromCoordinatorId'])
+    onlyFields(body, ['generation', 'coordinatorId', 'coordinatorGeneration', 'fromCoordinatorId'])
     const generation = requireGeneration(body)
     if (
       typeof body.coordinatorId !== 'string' ||
@@ -913,7 +909,7 @@ function transferSession(context: LifecycleApiContext): Handler {
 function endSessionRoute(context: LifecycleApiContext): Handler {
   return async (req, res, params) => {
     const body = await readJsonObject(req)
-    only(body, ['generation', 'keepWakes', 'endedBy'])
+    onlyFields(body, ['generation', 'keepWakes', 'endedBy'])
     const generation = requireGeneration(body)
     if (body.keepWakes !== undefined && typeof body.keepWakes !== 'boolean')
       throw new HttpError(400, 'invalid_body', { field: 'keepWakes' })
@@ -1043,7 +1039,7 @@ function registerSessionCatalogRoutes(router: Router, context: LifecycleApiConte
     })
     .add('PATCH', '/v1/sessions/:id', async (req, res, params) => {
       const body = await readJsonObject(req)
-      only(body, ['generation', 'name'])
+      onlyFields(body, ['generation', 'name'])
       const generation = requireGeneration(body)
       if (!('name' in body)) throw new HttpError(400, 'invalid_body', { field: 'name' })
       let name: string | null = null
@@ -1067,7 +1063,7 @@ function registerSessionLifecycleRoutes(router: Router, context: LifecycleApiCon
     .add('POST', '/v1/sessions/:id/end', endSessionRoute(context))
     .add('POST', '/v1/sessions/:id/respawn', async (req, res, params) => {
       const body = await readJsonObject(req)
-      only(body, ['generation'])
+      onlyFields(body, ['generation'])
       const generation = requireGeneration(body)
       const row = requireSession(params.id)
       fence(row, generation)
@@ -1080,7 +1076,7 @@ function registerSessionLifecycleRoutes(router: Router, context: LifecycleApiCon
     })
     .add('POST', '/v1/sessions/:id/load-tui', async (req, res, params) => {
       const body = await readJsonObject(req)
-      only(body, ['generation', 'tool'])
+      onlyFields(body, ['generation', 'tool'])
       const generation = requireGeneration(body)
       if (typeof body.tool !== 'string') throw new HttpError(400, 'invalid_body', { field: 'tool' })
       const tool = context.store.resolveTool(body.tool)
@@ -1104,7 +1100,7 @@ function registerSessionLifecycleRoutes(router: Router, context: LifecycleApiCon
     })
     .add('POST', '/v1/sessions/:id/switch-project', async (req, res, params) => {
       const body = await readJsonObject(req)
-      only(body, ['generation', 'projectId', 'projectRoot'])
+      onlyFields(body, ['generation', 'projectId', 'projectRoot'])
       const generation = requireGeneration(body)
       // Exactly one of projectId (resolved once) or projectRoot (an absolute
       // directory with no project, as on create).
@@ -1259,7 +1255,7 @@ function registerTerminalInputRoutes(router: Router, context: LifecycleApiContex
   router
     .add('POST', '/v1/sessions/:id/inject', async (req, res, params) => {
       const body = await readJsonObject(req)
-      only(body, ['generation', 'text', 'mode', 'submit', 'model', 'thinkingLevel', 'from'])
+      onlyFields(body, ['generation', 'text', 'mode', 'submit', 'model', 'thinkingLevel', 'from'])
       const generation = requireGeneration(body)
       // The sending session (`st aico root send`): a wait it sets on this one
       // counts turns from here.
@@ -1301,7 +1297,7 @@ function registerTerminalInputRoutes(router: Router, context: LifecycleApiContex
     // switch names (docs/api-v1.md "Model switches"), through its rewind menu.
     .add('POST', '/v1/sessions/:id/rewind', async (req, res, params) => {
       const body = await readJsonObject(req)
-      only(body, ['generation'])
+      onlyFields(body, ['generation'])
       const generation = requireGeneration(body)
       const row = requireSession(params.id)
       fence(row, generation)
@@ -1353,7 +1349,7 @@ function registerTerminalInputRoutes(router: Router, context: LifecycleApiContex
     })
     .add('POST', '/v1/sessions/:id/resize-claim', async (req, res, params) => {
       const body = await readJsonObject(req)
-      only(body, ['generation', 'clientPid', 'cols', 'rows', 'viewer'])
+      onlyFields(body, ['generation', 'clientPid', 'cols', 'rows', 'viewer'])
       const generation = requireGeneration(body)
       const viewer = parseViewerLabel(body.viewer)
       if (viewer === null) throw new HttpError(400, 'invalid_viewer')

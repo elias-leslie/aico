@@ -35,7 +35,7 @@
 // more); a paste already going out cannot be stopped and says so.
 
 import type { Db } from '@aico/session-engine/store'
-import { HttpError, type Router, readJsonObject, sendJson } from '@aico/shared/http'
+import { HttpError, onlyFields, type Router, readJsonObject, sendJson } from '@aico/shared/http'
 import { RIDE_TOKEN, type Wake } from './wakes'
 
 const SESSION_ID = /^[0-9a-f]{8}$/
@@ -203,10 +203,7 @@ export function registerDeliveryRoutes(router: Router, deps: DeliveryRouteDeps):
     .add('POST', '/v1/sessions/:id/deliveries', async (req, res, params) => {
       const id = session(params.id)
       const body = await readJsonObject(req)
-      const unknown = Object.keys(body).filter(
-        (key) => !['source', 'line', 'ride', 'from', 'reply'].includes(key),
-      )
-      if (unknown.length) throw new HttpError(400, 'invalid_body', { fields: unknown })
+      onlyFields(body, ['source', 'line', 'ride', 'from', 'reply'])
       const source = deliverySource(body.source)
       if (source === null)
         throw new HttpError(400, 'invalid_body', {

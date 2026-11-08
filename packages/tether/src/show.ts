@@ -2,7 +2,7 @@ import { isAbsolute } from 'node:path'
 import type { Hub } from '@aico/fleet/hub/hub'
 import type { EventBus } from '@aico/session-engine/events'
 import type { Db } from '@aico/session-engine/store'
-import { HttpError, type Router, readJsonObject, sendJson } from '@aico/shared/http'
+import { HttpError, onlyFields, type Router, readJsonObject, sendJson } from '@aico/shared/http'
 import type { ShowConfig } from './config'
 import { realPaths, ShareStore, type ShowRequest } from './shares'
 
@@ -12,10 +12,7 @@ const MAX_SHARE_PATHS = 20
 const CONTROLS = /[\p{Cc}\p{Cf}\u2028\u2029]/u
 
 function parseShow(body: Record<string, unknown>): ShowRequest {
-  const unknown = Object.keys(body).filter(
-    (key) => !['session', 'title', 'url', 'path', 'paths'].includes(key),
-  )
-  if (unknown.length) throw new HttpError(400, 'invalid_body', { fields: unknown })
+  onlyFields(body, ['session', 'title', 'url', 'path', 'paths'])
   for (const key of ['session', 'title', 'url', 'path']) {
     if (body[key] !== undefined && typeof body[key] !== 'string') {
       throw new HttpError(400, 'invalid_body', { field: key })

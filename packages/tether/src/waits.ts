@@ -25,7 +25,7 @@
 
 import { randomBytes } from 'node:crypto'
 import type { Db } from '@aico/session-engine/store'
-import { HttpError, type Router, readJsonObject, sendJson } from '@aico/shared/http'
+import { HttpError, onlyFields, type Router, readJsonObject, sendJson } from '@aico/shared/http'
 import { BLOCKING_DETAILS, type LaneView, laneTitle, lineNames } from './lane-reports'
 import {
   isPullKind,
@@ -1222,11 +1222,6 @@ function where(wait: Pick<Wait, 'kind' | 'ref' | 'host'>): string {
 
 // --- routes ------------------------------------------------------------------------------
 
-function only(body: Record<string, unknown>, allowed: readonly string[]): void {
-  const unknown = Object.keys(body).filter((key) => !allowed.includes(key))
-  if (unknown.length) throw new HttpError(400, 'invalid_body', { fields: unknown })
-}
-
 function optionalSession(value: unknown, field: string): string | null {
   if (value === undefined || value === null) return null
   if (typeof value !== 'string' || !SESSION_ID.test(value))
@@ -1322,7 +1317,7 @@ export function registerWaitRoutes(
   router
     .add('POST', '/v1/waits', async (req, res) => {
       const body = await readJsonObject(req)
-      only(body, [
+      onlyFields(body, [
         'waiter',
         'by',
         'kind',
@@ -1402,7 +1397,7 @@ export function registerWaitRoutes(
     .add('POST', '/v1/waits/check', async (req, res) => {
       // A nudge: re-read now. A hint only; it carries no outcome or text.
       const body = await readJsonObject(req)
-      only(body, ['kind', 'ref'])
+      onlyFields(body, ['kind', 'ref'])
       const kind = waitKind(body.kind)
       const ref = body.ref === undefined || body.ref === null ? undefined : waitRef(kind, body.ref)
       sendJson(res, 200, { kind, ref: ref ?? null, armed: current().nudge(kind, ref) })

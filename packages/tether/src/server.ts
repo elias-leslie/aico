@@ -30,7 +30,14 @@ import {
   isRootCreateTool,
   supportsInstructions,
 } from '@aico/session-engine/tui/registry'
-import { HttpError, Router, readJsonObject, sendError, sendJson } from '@aico/shared/http'
+import {
+  HttpError,
+  onlyFields,
+  Router,
+  readJsonObject,
+  sendError,
+  sendJson,
+} from '@aico/shared/http'
 import { type AskDelivery, type NeedsYouFeed, registerAskRoutes } from './asks'
 import { API_VERSION, resolveShowConfig, type ShowConfig } from './config'
 import { CoordinationDocs, registerCoordinationRoutes } from './coordination/docs'
@@ -168,8 +175,7 @@ const TOOL_FIELDS = new Set([
 
 /** Shared create/patch parsing. `argv` or the web app's string `command`, not both. */
 function toolFields(body: Record<string, unknown>): ToolPatch & { slug?: string } {
-  const unknown = Object.keys(body).filter((key) => !TOOL_FIELDS.has(key))
-  if (unknown.length) throw new HttpError(400, 'invalid_body', { fields: unknown })
+  onlyFields(body, TOOL_FIELDS)
   if (body.argv !== undefined && body.command !== undefined) {
     throw new HttpError(400, 'invalid_body', { detail: 'send argv or command, not both' })
   }
@@ -299,8 +305,7 @@ function buildRouter(context: ServerContext): Router {
     })
     .add('POST', '/v1/projects', async (req, res) => {
       const body = await readJsonObject(req)
-      const unknown = Object.keys(body).filter((key) => !['id', 'name', 'root'].includes(key))
-      if (unknown.length) throw new HttpError(400, 'invalid_body', { fields: unknown })
+      onlyFields(body, ['id', 'name', 'root'])
       const id = str(body, 'id')
       const root = str(body, 'root')
       const name = nullableStr(body, 'name')
@@ -322,10 +327,7 @@ function buildRouter(context: ServerContext): Router {
     })
     .add('POST', '/v1/tools/import', async (req, res) => {
       const body = await readJsonObject(req)
-      const unknown = Object.keys(body).filter(
-        (key) => !['tools', 'dryRun', 'updateExisting'].includes(key),
-      )
-      if (unknown.length) throw new HttpError(400, 'invalid_body', { fields: unknown })
+      onlyFields(body, ['tools', 'dryRun', 'updateExisting'])
       if (!Array.isArray(body.tools) || body.tools.length > 200)
         throw new HttpError(400, 'invalid_body', { field: 'tools' })
       const seeds = body.tools.map((item, index) => {

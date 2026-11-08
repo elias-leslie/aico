@@ -3,7 +3,15 @@ import { createServer, request } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { HttpError, listenPrivateSocket, Router, readJsonObject, sendError, sendJson } from './http'
+import {
+  HttpError,
+  listenPrivateSocket,
+  onlyFields,
+  Router,
+  readJsonObject,
+  sendError,
+  sendJson,
+} from './http'
 
 async function withServer<T>(
   router: Router,
@@ -141,5 +149,25 @@ describe('listenPrivateSocket', () => {
     const path = join(dir, 'control.sock')
     writeFileSync(path, 'x')
     await expect(listenPrivateSocket(createServer(), path)).rejects.toThrow('non-socket')
+  })
+})
+
+describe('onlyFields', () => {
+  it('passes known fields and names every unknown one in a 400 invalid_body', () => {
+    expect(() => onlyFields({ a: 1 }, ['a', 'b'])).not.toThrow()
+    expect(() => onlyFields({}, new Set(['a']))).not.toThrow()
+    for (const allowed of [['a'], new Set(['a'])]) {
+      try {
+        onlyFields({ a: 1, x: 2, y: 3 }, allowed)
+        expect.unreachable()
+      } catch (error) {
+        expect(error).toBeInstanceOf(HttpError)
+        expect(error).toMatchObject({
+          status: 400,
+          code: 'invalid_body',
+          extra: { fields: ['x', 'y'] },
+        })
+      }
+    }
   })
 })

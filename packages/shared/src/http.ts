@@ -15,6 +15,16 @@ export class HttpError extends Error {
   }
 }
 
+/** Refuses body fields outside `allowed`: 400 invalid_body naming them. */
+export function onlyFields(
+  body: Record<string, unknown>,
+  allowed: readonly string[] | ReadonlySet<string>,
+): void {
+  const known = (key: string) => ('has' in allowed ? allowed.has(key) : allowed.includes(key))
+  const unknown = Object.keys(body).filter((key) => !known(key))
+  if (unknown.length) throw new HttpError(400, 'invalid_body', { fields: unknown })
+}
+
 export function sendJson(response: ServerResponse, status: number, value: unknown): void {
   const body = JSON.stringify(value)
   response.writeHead(status, {
