@@ -163,8 +163,14 @@ describe('agent reports', () => {
     expect(tray.read_marks.pushes).toHaveLength(0)
   })
 
-  it('pops a corner card for a critical, a reason to interrupt or a todo, and for nothing quieter', () => {
-    const critical = send({ severity: 'critical', title: 'Disk full', body: 'x' })
+  it('pops a corner card for a reason to interrupt or a todo, and for nothing quieter, critical included', () => {
+    const outage = send({
+      severity: 'critical',
+      interrupt: 'outage',
+      title: 'Host down',
+      body: 'x',
+    })
+    send({ severity: 'critical', title: 'Disk full', body: 'x' }) // severity alone never pops
     const asked = send({ severity: 'warning', kind: 'todo', title: 'Renew the cert', body: 'x' })
     const reason = send({
       severity: 'warning',
@@ -176,12 +182,18 @@ describe('agent reports', () => {
     send({ severity: 'info', title: 'FYI', body: 'x' })
     send({ severity: 'ok', title: 'All good', body: 'x' })
     const pushes = read().read_marks.pushes.map((p: { id: string }) => p.id)
-    expect(pushes.sort()).toEqual([critical, asked, reason].sort())
+    expect(pushes.sort()).toEqual([outage, asked, reason].sort())
   })
 
   it('a resolve ends the earlier notice for the tray and is no new card or item', () => {
     const alert = send(
-      { severity: 'critical', key: 'hand-off:x', title: 'Needs you', body: 'x' },
+      {
+        severity: 'warning',
+        interrupt: 'needs-you',
+        key: 'hand-off:x',
+        title: 'Needs you',
+        body: 'x',
+      },
       NOW - 300_000,
     )
     expect(read().read_marks.pushes.map((p: { id: string }) => p.id)).toEqual([alert])
@@ -216,7 +228,10 @@ describe('agent reports', () => {
   })
 
   it('an alert that ended on its own leaves the tray and counts as nothing', () => {
-    const alert = send({ severity: 'critical', key: 'disk:root', title: 'Disk 90%' }, NOW - 300_000)
+    const alert = send(
+      { severity: 'critical', interrupt: 'outage', key: 'disk:root', title: 'Disk 90%' },
+      NOW - 300_000,
+    )
     expect(read().notifications.map((n: { id: string }) => n.id)).toEqual([alert])
     const back = send({ severity: 'ok', key: 'disk:root', title: 'Back to normal' }, NOW - 100_000)
     const tray = read()
@@ -230,7 +245,10 @@ describe('agent reports', () => {
   it('lists every unread report, however many newer notices came after it', () => {
     const old = send({ severity: 'warning', title: 'Old report', body: 'x' }, NOW - 3_000_000)
     for (let i = 0; i < 70; i++)
-      send({ severity: 'critical', title: `Newer ${i}`, body: 'x' }, NOW - 2_000_000 + i * 1000)
+      send(
+        { severity: 'critical', interrupt: 'outage', title: `Newer ${i}`, body: 'x' },
+        NOW - 2_000_000 + i * 1000,
+      )
     const tray = read()
     expect(tray.notifications).toHaveLength(71)
     expect(tray.notifications.map((n: { id: string }) => n.id)).toContain(old)
@@ -338,10 +356,18 @@ describe('the tray door and the native tray agree', () => {
       row('here/disk', 'Disk', 'ok'),
     ])
     send(
-      { severity: 'critical', title: 'Disk full', body: 'The root disk is full.' },
+      {
+        severity: 'critical',
+        interrupt: 'outage',
+        title: 'Disk full',
+        body: 'The root disk is full.',
+      },
       NOW - 600_000,
     )
-    send({ severity: 'critical', key: 'vpn:down', title: 'VPN down', body: 'x' }, NOW - 900_000)
+    send(
+      { severity: 'critical', interrupt: 'outage', key: 'vpn:down', title: 'VPN down', body: 'x' },
+      NOW - 900_000,
+    )
     send({ severity: 'ok', key: 'vpn:down', title: 'VPN back', body: 'x' }, NOW - 300_000)
     const id = 'e'.repeat(32)
     return read({

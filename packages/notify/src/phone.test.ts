@@ -139,7 +139,7 @@ describe('what pops up as a corner card', () => {
       expect([popped(item), item.notice.title]).toEqual([false, item.notice.title])
   })
 
-  it('pops what asks the owner or fails, and not a late row or a report', () => {
+  it('pops what asks the owner or names a reason, and not a failed or late row', () => {
     const titles = (want: boolean) =>
       replay.notices
         .filter((item) => popped(item) === want)
@@ -148,7 +148,8 @@ describe('what pops up as a corner card', () => {
       expect.arrayContaining(['Browser needs you', 'An agent is waiting on you']),
     )
     expect(titles(true).join('\n')).toContain('Open your main Chrome')
-    expect(titles(true).join('\n')).toMatch(/\d failed:/)
+    expect(titles(true).join('\n')).not.toMatch(/\d failed:/) // a failing row alone is Status, not a card
+    expect(titles(false).join('\n')).toMatch(/\d failed:/)
     expect(titles(false).join('\n')).toMatch(/\d late:/)
     expect(titles(false).join('\n')).toContain('The session was resumed; nothing left to do.')
   })

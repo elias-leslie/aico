@@ -1,5 +1,5 @@
 {
-  "description": "Notices aico-web took in the three days to 2026-11-07, one per distinct kind (titles and keys anonymised, bodies dropped, no secrets), with the push the sender asked for. interrupt is what the sender now declares for it (the in-repo senders are tested on their own). wasPushed: it reached the phone then. expectPush: where the one rule (packages/notify/src/phone.ts) sends it now. expectToast: whether it pops up as a corner card on the desktop (packages/notify/src/phone.ts popsUp): only something to look at now.",
+  "description": "Notices aico-web took in the three days to 2026-11-07, one per distinct kind (titles and keys anonymised, bodies dropped, no secrets), with the push the sender asked for. interrupt is what the sender now declares for it (the in-repo senders are tested on their own). wasPushed: it reached the phone then. expectPush: where the one rule (packages/notify/src/phone.ts) sends it now. expectToast: whether it pops up as a corner card on the desktop (packages/notify/src/phone.ts popsUp): a reason to interrupt, or a todo/question; severity alone, critical included, never pops.",
   "notices": [
     {
       "notice": {
@@ -15,7 +15,7 @@
       "wasPushed": false,
       "count": 3,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -31,7 +31,7 @@
       "wasPushed": false,
       "count": 2,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -47,7 +47,7 @@
       "wasPushed": false,
       "count": 3,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -63,7 +63,7 @@
       "wasPushed": false,
       "count": 3,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -79,7 +79,7 @@
       "wasPushed": false,
       "count": 2,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -95,7 +95,7 @@
       "wasPushed": false,
       "count": 4,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -111,7 +111,7 @@
       "wasPushed": false,
       "count": 1,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -127,7 +127,7 @@
       "wasPushed": false,
       "count": 2,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -159,7 +159,7 @@
       "wasPushed": false,
       "count": 1,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -207,7 +207,7 @@
       "wasPushed": false,
       "count": 2,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -240,7 +240,7 @@
       "wasPushed": false,
       "count": 6,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -322,7 +322,7 @@
       "wasPushed": false,
       "count": 2,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -338,7 +338,7 @@
       "wasPushed": false,
       "count": 2,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -370,7 +370,7 @@
       "wasPushed": false,
       "count": 1,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -386,7 +386,7 @@
       "wasPushed": false,
       "count": 1,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -418,7 +418,7 @@
       "wasPushed": false,
       "count": 1,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -434,7 +434,7 @@
       "wasPushed": false,
       "count": 2,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -450,7 +450,7 @@
       "wasPushed": false,
       "count": 2,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -466,7 +466,7 @@
       "wasPushed": false,
       "count": 2,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -482,7 +482,7 @@
       "wasPushed": false,
       "count": 3,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -498,7 +498,7 @@
       "wasPushed": false,
       "count": 1,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -514,7 +514,7 @@
       "wasPushed": false,
       "count": 2,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -530,7 +530,7 @@
       "wasPushed": false,
       "count": 1,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -546,7 +546,7 @@
       "wasPushed": false,
       "count": 2,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -562,7 +562,7 @@
       "wasPushed": false,
       "count": 1,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -578,7 +578,7 @@
       "wasPushed": false,
       "count": 1,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -610,7 +610,7 @@
       "wasPushed": false,
       "count": 1,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -642,7 +642,7 @@
       "wasPushed": false,
       "count": 1,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -658,7 +658,7 @@
       "wasPushed": false,
       "count": 1,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -674,7 +674,7 @@
       "wasPushed": false,
       "count": 1,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -690,7 +690,7 @@
       "wasPushed": true,
       "count": 1,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -706,7 +706,7 @@
       "wasPushed": true,
       "count": 2,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -754,7 +754,7 @@
       "wasPushed": false,
       "count": 1,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -770,7 +770,7 @@
       "wasPushed": false,
       "count": 1,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -786,7 +786,7 @@
       "wasPushed": true,
       "count": 1,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -818,7 +818,7 @@
       "wasPushed": false,
       "count": 1,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -834,7 +834,7 @@
       "wasPushed": true,
       "count": 1,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -850,7 +850,7 @@
       "wasPushed": false,
       "count": 1,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -866,7 +866,7 @@
       "wasPushed": true,
       "count": 1,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -915,7 +915,7 @@
       "wasPushed": true,
       "count": 1,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -931,7 +931,7 @@
       "wasPushed": false,
       "count": 1,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -947,7 +947,7 @@
       "wasPushed": false,
       "count": 1,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -979,7 +979,7 @@
       "wasPushed": false,
       "count": 1,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -1027,7 +1027,7 @@
       "wasPushed": false,
       "count": 1,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -1043,7 +1043,7 @@
       "wasPushed": false,
       "count": 1,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -1059,7 +1059,7 @@
       "wasPushed": false,
       "count": 2,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -1075,7 +1075,7 @@
       "wasPushed": false,
       "count": 1,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -1237,7 +1237,7 @@
       "wasPushed": false,
       "count": 1,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -1301,7 +1301,7 @@
       "wasPushed": false,
       "count": 1,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -1365,7 +1365,7 @@
       "wasPushed": true,
       "count": 1,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -1381,7 +1381,7 @@
       "wasPushed": false,
       "count": 1,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -1429,7 +1429,7 @@
       "wasPushed": false,
       "count": 1,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -1445,7 +1445,7 @@
       "wasPushed": false,
       "count": 1,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
@@ -1461,7 +1461,7 @@
       "wasPushed": false,
       "count": 1,
       "expectPush": "tray",
-      "expectToast": true
+      "expectToast": false
     },
     {
       "notice": {
