@@ -10,7 +10,7 @@ import { useStatusSessions } from '@/lib/hooks/use-status-sessions'
 import { machineCount } from '@/lib/machines'
 import {
   type ActionContext,
-  isProblem,
+  isCounted,
   matches,
   NO_FILTER,
   rollup,
@@ -115,7 +115,7 @@ export function StatusPage({
     scope.filter((row) => matches(row, filter)),
     filter.sort,
   )
-  const problemCount = shown.filter((row) => isProblem(row.shown)).length
+  const problemCount = shown.filter(isCounted).length
 
   const patch = (next: Partial<StatusFilter>) =>
     setFilter((current) => ({ ...current, ...next }))

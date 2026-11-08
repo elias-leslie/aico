@@ -12,6 +12,7 @@ import { machineCount } from '@/lib/machines'
 import {
   type ActionContext,
   type ButtonKind,
+  isCounted,
   isProblem,
   matches,
   NO_FILTER,
@@ -224,7 +225,7 @@ export function GlanceStatus() {
     scope.filter((row) => matches(row, filter)),
     filter.sort,
   )
-  const problems = shown.filter((row) => isProblem(row.shown))
+  const problems = shown.filter(isCounted)
   const healthy = shown.filter((row) => row.shown === 'ok')
   const off = shown.filter((row) => row.shown === 'off')
   const searching = !!filter.search.trim()

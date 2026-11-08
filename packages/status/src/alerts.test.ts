@@ -166,6 +166,9 @@ describe('alerts', () => {
     const waiting = store.read().rows.find((item) => item.id === 'a/backup')
     expect([waiting?.shown, waiting?.unknown_why]).toEqual(['unknown', 'back'])
     expect(store.read().summary.problems).toBe(0)
+    // The rollup and the summary give one count, in the API and in aico status --json.
+    expect(store.read().rollup.problems).toBe(0)
+    expect(store.read().rollup.healthy).toBe(store.read().summary.healthy)
     expect(batches).toEqual([])
     // It runs within its interval: never late.
     clock.now += 2 * HOUR

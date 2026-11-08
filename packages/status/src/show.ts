@@ -263,9 +263,10 @@ function select(rows: readonly ShownRow[], filter: Filter = {}): ShownRow[] {
 }
 
 function rollup(rows: readonly ShownRow[]): Rollup {
-  const counts = countShown(rows)
+  // One count everywhere: a row left out of the badge is left out of the rollup too.
+  const counts = countShown(rows.filter((row) => !QUIET.includes(row.unknown_why)))
   const problems = PROBLEMS.reduce((sum, state) => sum + counts[state], 0)
-  return { problems, healthy: rows.length - problems, counts }
+  return { problems, healthy: rows.filter((row) => !isProblem(row.shown)).length, counts }
 }
 
 /** Unknown rows the badge leaves out: their machine just came back. */

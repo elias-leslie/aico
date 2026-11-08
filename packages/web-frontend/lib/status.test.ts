@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  isCounted,
   lookMessage,
   lookProject,
   matches,
@@ -344,5 +345,30 @@ describe('sessions a row names', () => {
       'look',
       'run',
     ])
+  })
+})
+
+describe('one problem count', () => {
+  it('leaves out a row waiting after its machine came back', () => {
+    const base = { id: 'a/job', what: 'Job' } as unknown as StatusRow
+    const waiting: StatusRow = {
+      ...base,
+      shown: 'unknown',
+      unknown_why: 'back',
+    }
+    const silent: StatusRow = {
+      ...base,
+      shown: 'unknown',
+      unknown_why: 'missing',
+    }
+    const failed: StatusRow = { ...base, shown: 'failed' }
+    expect([waiting, silent, failed].filter(isCounted)).toEqual([
+      silent,
+      failed,
+    ])
+    expect(rollup([waiting, silent, failed])).toMatchObject({
+      unknown: 1,
+      failed: 1,
+    })
   })
 })

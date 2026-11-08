@@ -135,7 +135,11 @@ export function sortRows(rows: readonly StatusRow[], sort: Sort): StatusRow[] {
 }
 
 export const rollup = (rows: readonly StatusRow[]): Record<Shown, number> =>
-  countShown(rows)
+  countShown(rows.filter((row) => row.unknown_why !== 'back'))
+
+/** A problem the headline counts. A row waiting after its machine came back is not one yet. */
+export const isCounted = (row: StatusRow): boolean =>
+  isProblem(row.shown) && row.unknown_why !== 'back'
 
 export const plural = (n: number, one: string, many = `${one}s`) =>
   `${n} ${n === 1 ? one : many}`

@@ -5,6 +5,7 @@ import type { ReactNode } from 'react'
 import {
   type ActionContext,
   type ButtonKind,
+  isCounted,
   isProblem,
   plural,
   type StatusFilter,
@@ -138,10 +139,13 @@ export function StatusBody({
       </Empty>
     )
 
-  const problems = shown.filter((row) => isProblem(row.shown))
+  const problems = shown.filter(isCounted)
   // Off is not healthy: a row of a machine that is off has nothing to report, so it folds apart.
   const healthy = shown.filter((row) => row.shown === 'ok')
-  const offRows = shown.filter((row) => row.shown === 'off')
+  // Rows waiting after their machine came back sit with the off rows until they report.
+  const offRows = shown.filter(
+    (row) => row.shown === 'off' || (isProblem(row.shown) && !isCounted(row)),
+  )
   const hasSearch = !!filter.search.trim()
   const filteredStates = (state: 'ok' | 'off') =>
     hasSearch ||
