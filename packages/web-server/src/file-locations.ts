@@ -114,8 +114,14 @@ async function streamFile(ctx: RequestContext, target: string): Promise<typeof R
       position += bytesRead
       if (!res.write(chunk.subarray(0, bytesRead)))
         await new Promise<void>((resolve) => {
-          res.once('drain', resolve)
-          res.once('close', resolve)
+          // Both go when either fires: this runs once per chunk on the same response.
+          const done = () => {
+            res.off('drain', done)
+            res.off('close', done)
+            resolve()
+          }
+          res.once('drain', done)
+          res.once('close', done)
         })
       if (res.destroyed) break
     }

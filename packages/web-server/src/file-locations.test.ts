@@ -289,6 +289,21 @@ describe('file locations anywhere', () => {
     expect(response.headers.get('content-disposition')).toBe('attachment; filename="big.txt"')
     expect((await response.arrayBuffer()).byteLength).toBe(26 * 1024 * 1024)
   })
+
+  it('does not pile up listeners on the response while streaming a large file', async () => {
+    writeFileSync(join(top, 'work', 'big.txt'), Buffer.alloc(2_000_000, 97))
+    const warnings: string[] = []
+    const onWarning = (warning: Error) => warnings.push(warning.name)
+    process.on('warning', onWarning)
+    try {
+      const response = await get('raw', join(top, 'work'), 'big.txt')
+      expect((await response.arrayBuffer()).byteLength).toBe(2_000_000)
+      await new Promise((resolve) => setImmediate(resolve))
+    } finally {
+      process.off('warning', onWarning)
+    }
+    expect(warnings).not.toContain('MaxListenersExceededWarning')
+  })
 })
 
 describe('rawType', () => {
