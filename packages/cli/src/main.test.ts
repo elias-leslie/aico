@@ -143,6 +143,16 @@ describe('CLI cutover', () => {
       expect(h.calls[0]?.argv.slice(1)).toEqual(sent)
     },
   )
+  it('routines add hands its --command line on whole, including a -h of its own', async () => {
+    const h = harness({ AICO_CLI_NAME: 'aico' })
+    const argv = ['routines', 'add', '--project', 'p', '--kind', 'k', '--command', 'df', '-h']
+    expect(await h.go(argv)).toBe(0)
+    expect(h.calls[0]?.argv.slice(1)).toEqual(argv)
+    // A --help before --command still asks about the command.
+    const asked = harness({ AICO_CLI_NAME: 'aico' })
+    expect(await asked.go(['routines', 'add', '--help', '--command', 'true'])).toBe(0)
+    expect(asked.calls[0]?.argv.slice(1)).toEqual(['routines', '--help'])
+  })
   it.each(['note', 'notes', 'share', 'files'])(
     '%s points at tether, acting on nothing',
     async (verb) => {

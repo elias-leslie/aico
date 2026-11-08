@@ -668,7 +668,10 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
       return 0
     }
     // `X sub --help` asks about X: never let the sub-command take --help as a name or act on it.
-    const beforeDashes = rest.includes('--') ? rest.slice(0, rest.indexOf('--')) : rest
+    // What follows `routines add ... --command` is the routine's own command line (df -h).
+    const stop = verb === 'routines' && rest[0] === 'add' ? rest.indexOf('--command') : -1
+    const scanned = stop >= 0 ? rest.slice(0, stop) : rest
+    const beforeDashes = scanned.includes('--') ? scanned.slice(0, scanned.indexOf('--')) : scanned
     if (beforeDashes.slice(1).some((word) => ['--help', '-h'].includes(word))) {
       // wait has help per kind and send explains TO; the rest are one line of the sessions help.
       if (verb === 'sessions' && rest[0] === 'send')
