@@ -1326,7 +1326,7 @@ def resolve_instructions(selection: str) -> dict:
 
 
 # Tools whose model, effort and Daybreak create fills from Aico's launch table.
-LAUNCH_TOOLS = ("claude-code", "codex", "pi")
+LAUNCH_TOOLS = ("claude-code", "codex", "pi", "agy")
 EFFORTS = ("none", "off", "minimal", "low", "medium", "high", "xhigh", "max")
 
 

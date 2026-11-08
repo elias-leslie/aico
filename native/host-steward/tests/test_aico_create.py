@@ -759,6 +759,14 @@ def test_a_row_the_owner_ruled_out_applies_nothing_and_says_why(monkeypatch):
     assert "model" not in calls[0] and output[0]["launchDefault"]["note"] == "Owner 2026-11-01: no Codex reviews."
 
 
+def test_antigravity_gets_the_table_model(monkeypatch):
+    calls, output = served(monkeypatch, table_row(job="implementation", model="gemini-3.8-flash-high", context="full"))
+    assert admin.main(["create", "agy-1", "Fix it.", "--tool", "agy", "--work-role", "implementation",
+                       "--project", "sample-app", "--project-root", "/fixture/project"]) == 0
+    assert calls[0]["model"] == "gemini-3.8-flash-high"
+    assert output[0]["launchDefault"]["applied"]["model"] == "gemini-3.8-flash-high"
+
+
 def test_resume_takes_no_table_model(monkeypatch):
     calls, output = served(monkeypatch, table_row(job="implementation", model="claude-sonnet-5-5", context="full"))
     argv = [arg if arg != "codex" else "claude-code" for arg in BASE]
