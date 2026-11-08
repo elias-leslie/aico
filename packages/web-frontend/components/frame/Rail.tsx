@@ -1,99 +1,15 @@
 'use client'
 
-import {
-  Activity,
-  Clock,
-  Database,
-  Folder,
-  Gauge,
-  Plus,
-  Server,
-  StickyNote,
-} from 'lucide-react'
-import type { ComponentType, ReactNode } from 'react'
-import { quotaGlances, quotaLine } from '@/lib/frame/quota'
-import { useSessionAttention } from '@/lib/hooks/use-session-attention'
-import { useUsage } from '@/lib/hooks/use-usage'
-import { openNotes } from '@/lib/notes-window'
-import { plural } from '@/lib/status'
+import { Folder, Plus, Server } from 'lucide-react'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
 import { NeedsYouLauncher } from '../asks/NeedsYou'
-import { CaptureLauncher } from '../capture/CaptureLauncher'
-import { SessionRail } from '../SessionList'
 import { useFrame } from './FrameContext'
-import { GlanceBackups, useBackupsGlance } from './glance/GlanceBackups'
-import { GlanceMachines, useMachinesGlance } from './glance/GlanceMachines'
 import { GlancePopover } from './glance/GlancePopover'
-import { GlanceProjects, useProjectsGlance } from './glance/GlanceProjects'
-import { GlanceQuota, useQuotaGlance } from './glance/GlanceQuota'
-import { GlanceRecent, useRecentGlance } from './glance/GlanceRecent'
-import { GlanceStatus, useStatusGlance } from './glance/GlanceStatus'
-import type { GlanceHead } from './glance/glance-types'
+import { ProjectsSection, useProjectTree } from './ProjectsSection'
+import { QuotaMeter } from './QuotaMeter'
 import { RailPopover } from './RailPopover'
 import { SettingsMenu } from './Settings'
-
-type Icon = ComponentType<{ className?: string; strokeWidth?: number }>
-
-function RailButton({
-  icon: Glyph,
-  label,
-  onClick,
-}: {
-  icon: Icon
-  label: string
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      className="lantern-icon-btn compact relative"
-      onClick={onClick}
-      aria-label={label}
-      title={label}
-    >
-      <Glyph className="h-[18px] w-[18px]" strokeWidth={1.7} />
-    </button>
-  )
-}
-
-/** A data icon: its tooltip is the one line, a click opens the same glance the Panel's section holds. */
-function GlanceButton({
-  icon: Glyph,
-  label,
-  title,
-  count,
-  head,
-  children,
-}: {
-  icon: Icon
-  label: string
-  title: string
-  count?: number | null
-  head: GlanceHead
-  children: ReactNode
-}) {
-  return (
-    <RailPopover
-      label={label}
-      panelLabel={title}
-      className="lantern-icon-btn compact relative"
-      icon={
-        <>
-          <Glyph className="h-[18px] w-[18px]" strokeWidth={1.7} />
-          {count ? (
-            <span aria-hidden="true" className="lantern-rail-count">
-              {count}
-            </span>
-          ) : null}
-        </>
-      }
-    >
-      <GlancePopover title={title} head={head}>
-        {children}
-      </GlancePopover>
-    </RailPopover>
-  )
-}
+import { SystemSection, useSystemState } from './SystemSection'
 
 const Divider = () => (
   <span
@@ -103,11 +19,17 @@ const Divider = () => (
   />
 )
 
-/** The rail: icons and counts. New session, Needs you, one mark per session
- * with its state (a coordinator's opens its team), then Status, Quota, Projects,
- * Backups, Machines and Recent (each opens its glance beside the rail without
- * widening it), and at the bottom Notes, Capture and Settings. The side's one toggle
- * sits above, in the head. */
+const DOT: Record<string, string> = {
+  ok: 'var(--jade)',
+  warn: 'var(--lantern)',
+  failed: 'var(--ember)',
+  pending: 'var(--mist)',
+}
+
+/** The rail: one icon for each section of the Panel. Needs you carries its count, System the dot of its
+ * worst state, Projects what is running; each pops out beside the rail with the same content the
+ * Panel shows, without widening it. New session sits above; the Quota meter and Settings below. The
+ * side's one toggle sits above, in the head. */
 export function Rail({
   slots,
   currentId,
@@ -120,16 +42,17 @@ export function Rail({
   onNewSession?: () => void
 }) {
   const frame = useFrame()
-  const attention = useSessionAttention()
-  const status = useStatusGlance()
-  const problems = status.problems
-  const { report } = useUsage()
-  const glances = quotaGlances(report)
-  const quota = useQuotaGlance()
-  const backups = useBackupsGlance()
-  const recent = useRecentGlance()
-  const machines = useMachinesGlance()
-  const projects = useProjectsGlance()
+  const system = useSystemState()
+  const { tree } = useProjectTree(slots)
+  const sessions = tree.groups.reduce(
+    (total, group) => total + group.teams.length + group.finished.length,
+    0,
+  )
+  const systemLabel = system.chips.length
+    ? `System: ${system.chips.map((chip) => chip.text).join(', ')}`
+    : system.pending
+      ? 'System: checking'
+      : `System: all OK${system.machines ? `, ${system.machines}` : ''}`
   return (
     <div
       data-testid="session-sidebar"
@@ -148,78 +71,79 @@ export function Rail({
           <Plus className="h-[18px] w-[18px]" strokeWidth={1.7} />
         </button>
       )}
-      <NeedsYouLauncher />
       <Divider />
-      <nav
-        aria-label="Sessions"
-        data-testid="session-list"
-        className="flex min-h-0 w-full flex-1 flex-col items-center gap-1 overflow-y-auto overscroll-contain py-1"
-      >
-        <SessionRail
-          slots={slots}
-          currentId={currentId}
-          attention={attention}
-          onSelect={onSelect}
-        />
-      </nav>
-      <Divider />
-      <GlanceButton
-        icon={Activity}
-        title="Status"
-        label={
-          problems === null
-            ? 'Status'
-            : problems
-              ? `Status: ${plural(problems, 'problem')}`
-              : 'Status: all healthy'
-        }
-        count={problems}
-        head={status}
-      >
-        <GlanceStatus />
-      </GlanceButton>
-      <GlanceButton
-        icon={Gauge}
-        title="Quota"
-        label={glances.length ? `Quota: ${quotaLine(glances)}` : 'Quota'}
-        head={quota}
-      >
-        <GlanceQuota />
-      </GlanceButton>
-      <GlanceButton
-        icon={Folder}
-        title="Projects"
-        label="Projects"
-        head={projects}
-      >
-        <GlanceProjects />
-      </GlanceButton>
-      <GlanceButton
-        icon={Database}
-        title="Backups"
-        label="Backups"
-        head={backups}
-      >
-        <GlanceBackups />
-      </GlanceButton>
-      <GlanceButton
-        icon={Server}
-        title="Machines"
-        label="Machines"
-        head={machines}
-      >
-        <GlanceMachines />
-      </GlanceButton>
-      <GlanceButton icon={Clock} title="Recent" label="Recent" head={recent}>
-        <GlanceRecent />
-      </GlanceButton>
-      <Divider />
-      <RailButton
-        icon={StickyNote}
-        label="Notes: opens in its own window"
-        onClick={() => openNotes()}
+      <NeedsYouLauncher
+        slots={slots}
+        currentId={currentId}
+        onSelect={onSelect}
       />
-      <CaptureLauncher variant="icon" />
+      <RailPopover
+        label={systemLabel}
+        panelLabel="System"
+        className="lantern-icon-btn compact relative"
+        extra={{ 'data-testid': 'rail-system', 'data-worst': system.worst }}
+        icon={
+          <>
+            <Server className="h-[18px] w-[18px]" strokeWidth={1.7} />
+            <span
+              aria-hidden="true"
+              className="lantern-mark"
+              style={{
+                position: 'absolute',
+                top: 6,
+                right: 6,
+                background: DOT[system.worst],
+              }}
+            />
+          </>
+        }
+      >
+        <SystemSection popout />
+      </RailPopover>
+      <RailPopover
+        label={
+          sessions
+            ? `Projects: ${sessions} ${sessions === 1 ? 'session' : 'sessions'} in ${tree.groups.length} ${tree.groups.length === 1 ? 'project' : 'projects'}`
+            : 'Projects'
+        }
+        panelLabel="Projects"
+        className="lantern-icon-btn compact relative"
+        extra={{ 'data-testid': 'rail-projects' }}
+        icon={
+          <>
+            <Folder className="h-[18px] w-[18px]" strokeWidth={1.7} />
+            {sessions > 0 && (
+              <span
+                aria-hidden="true"
+                className="lantern-rail-count"
+                data-calm=""
+              >
+                {sessions}
+              </span>
+            )}
+          </>
+        }
+      >
+        <GlancePopover
+          title="Projects"
+          head={{
+            value: tree.groups.length
+              ? `${tree.groups.length} with sessions`
+              : 'No sessions',
+            tone: null,
+          }}
+        >
+          <ProjectsSection
+            slots={slots}
+            currentId={currentId}
+            onSelect={onSelect}
+            bare
+          />
+        </GlancePopover>
+      </RailPopover>
+      <span className="flex-1" />
+      <Divider />
+      <QuotaMeter icon />
       <SettingsMenu frame={frame} icon />
     </div>
   )

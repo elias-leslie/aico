@@ -1,11 +1,5 @@
 'use client'
 
-import {
-  foldTeams,
-  laneTitle,
-  type TeamRow,
-  teamMembers,
-} from '@aico/tether-client/teams'
 import { clsx } from 'clsx'
 import { ChevronRight } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
@@ -36,120 +30,17 @@ import { AgentIcon, getAgentColor } from './AgentIcon'
 import { CheckInBadge } from './CheckInBadge'
 import { CoordinatorBadge } from './CoordinatorBadge'
 import {
-  LANE_HINT,
-  type LaneChip,
-  LaneList,
-  type LaneRow,
-} from './frame/LaneList'
-import { RailPopover } from './frame/RailPopover'
+  foldSessionEntries,
+  laneTitle,
+  type SessionListEntry,
+  slotMode,
+  sortSessionEntries,
+  type TeamEntry,
+  type TeamRow,
+  teamMembers,
+} from './frame/session-entries'
 import { HostBadge } from './HostBadge'
 import { KeptCheckIns } from './KeptCheckIns'
-
-/** The agent a session runs (its tool slug), or `shell`. */
-function slotMode(slot: TerminalSlot | PaneSlot): string {
-  if (slot.type === 'project') {
-    return slot.activeMode
-  }
-  return slot.sessionMode ?? 'shell'
-}
-
-interface SessionListEntry {
-  id: string
-  label: string
-  mode: string
-  slot: TerminalSlot | PaneSlot
-  state: Attention | null
-  asks: AskCounts
-}
-
-/** Sessions oldest first, so a state change never moves one (foldSessionEntries
- * lifts Needs you to the top); the same name with the same agent is numbered. */
-function sortSessionEntries(
-  slots: Array<TerminalSlot | PaneSlot>,
-  attention?: SessionAttention,
-): SessionListEntry[] {
-  const key = (slot: TerminalSlot | PaneSlot) =>
-    `${getSlotName(slot)} [${slotMode(slot)}]`
-  // No start time sorts last.
-  const created = (slot: TerminalSlot | PaneSlot) => slot.createdAt || '\uffff'
-  const sorted = [...slots].sort(
-    (slotA, slotB) =>
-      created(slotA).localeCompare(created(slotB)) ||
-      getSlotPanelId(slotA).localeCompare(getSlotPanelId(slotB)),
-  )
-  const seenCounts = new Map<string, number>()
-  return sorted.map((slot) => {
-    const count = (seenCounts.get(key(slot)) ?? 0) + 1
-    seenCounts.set(key(slot), count)
-    const name = getSlotName(slot)
-    return {
-      id: getSlotPanelId(slot),
-      label: count > 1 ? `${name} #${count}` : name,
-      mode: slotMode(slot),
-      slot,
-      state: attention?.forSlot(slot) ?? null,
-      asks: attention?.asksFor?.(slot) ?? NO_ASKS,
-    }
-  })
-}
-
-/** A list entry as a team member (@aico/tether-client/teams): lineage by row id. A row is
- * a session (`entry`) or a running workflow step shown as a child agent (`step`). */
-interface TeamEntry {
-  id: string
-  coordinator: boolean
-  coordinatorId: string | null
-  parentId: string | null
-  group: Attention['group']
-  at: number | null
-  entry: SessionListEntry
-}
-
-/** Fold entries into coordinator teams. A lane names its coordinator and
- * the session that launched it by session id, and nests under that session
- * while it is listed; rows are keyed by slot. A workflow step that is running
- * or waiting for the owner folds under the session that launched its run,
- * like any other child agent. */
-function foldSessionEntries(
-  entries: readonly SessionListEntry[],
-): TeamRow<TeamEntry>[] {
-  const rowOf = new Map<string, string>()
-  for (const entry of entries) {
-    const sessionId = getSlotSessionId(entry.slot)
-    if (sessionId) rowOf.set(sessionId, entry.id)
-  }
-  const sessions: TeamEntry[] = entries.map((entry) => {
-    const lead = entry.slot.coordinatorId ?? null
-    const parent = entry.slot.parentId ?? null
-    return {
-      id: entry.id,
-      coordinator: entry.slot.coordinator === true,
-      // A coordinator that is not listed here has ended.
-      coordinatorId: lead ? (rowOf.get(lead) ?? lead) : null,
-      // An unlisted launcher leaves the lane under its coordinator.
-      parentId: parent ? (rowOf.get(parent) ?? null) : null,
-      group: entry.state?.group ?? 'no-status',
-      at: entry.state?.at ?? null,
-      entry,
-    }
-  })
-  const teams = foldTeams(sessions)
-  const order = {
-    'needs-you': 0,
-    working: 1,
-    idle: 2,
-    'no-status': 2,
-    finished: 3,
-  }
-  // Grouped by state; inside a group the order is stable (oldest first), so
-  // a session only moves when its own state changes.
-  return teams
-    .map((row, index) => ({ row, index }))
-    .sort(
-      (a, b) => order[a.row.group] - order[b.row.group] || a.index - b.index,
-    )
-    .map(({ row }) => row)
-}
 
 /** The state word on a row, only where its group heading doesn't say it
  * already (Needs you, Working, Finished and Idle carry their own words and the
@@ -240,7 +131,7 @@ const TEAMS_OPEN_KEY = 'aico:teams-open'
 
 /** Which teams show their lanes. A desktop remembers each coordinator in
  * this browser (open by default); a phone starts every team folded. */
-function useTeamFolds(phone: boolean) {
+export function useTeamFolds(phone: boolean) {
   const [remembered, setRemembered] = useLocalStorageState<
     Record<string, boolean>
   >(TEAMS_OPEN_KEY, {})
@@ -464,160 +355,4 @@ export function SessionList({
       <KeptCheckIns />
     </>
   )
-}
-
-const LANE_CHIP: Partial<Record<Attention['group'], LaneChip>> = {
-  'needs-you': { text: 'Needs you', kind: 'warn' },
-  working: { text: 'Working', kind: 'ok' },
-  finished: { text: 'Finished', kind: 'off' },
-  idle: { text: 'Idle', kind: 'off' },
-}
-
-/** The collapsed list: one agent mark per row, in the list's order and with
- * its teams folded, so the rail never disagrees with the list. A row holding
- * the session on screen is marked current, even when that session is a lane.
- * A coordinator's mark carries its lane count and opens its team as a
- * pop-out instead of opening the session. */
-export function SessionRail({
-  slots,
-  currentId,
-  attention,
-  onSelect,
-}: Omit<SessionListProps, 'phone'>) {
-  const { agentTools } = useAgentTools()
-  const teams = useMemo(
-    () => foldSessionEntries(sortSessionEntries(slots, attention)),
-    [slots, attention],
-  )
-  const live = useLiveSessions()
-  const now = useClock(30_000)
-  const stateOf = (item: TeamEntry) => {
-    const sessionId = getSlotSessionId(item.entry.slot)
-    return rowState(
-      item.entry.state,
-      sessionId ? live.bySession.get(sessionId) : undefined,
-      now,
-      item.entry.mode === 'shell',
-    )
-  }
-  /** The coordinator first, then its lanes and their helpers in the list's order. */
-  const teamRows = (team: TeamRow<TeamEntry>): LaneRow[] => {
-    const lead = team.item.entry
-    const rows: LaneRow[] = []
-    const add = (row: TeamRow<TeamEntry>, depth: number) => {
-      const { entry } = row.item
-      const shown = stateOf(row.item)
-      const tool = agentTools.find((t) => t.slug === entry.mode)
-      rows.push({
-        id: entry.id,
-        slot: entry.slot,
-        title: depth === 0 ? entry.label : laneTitle(entry.label, lead.label),
-        mode: entry.mode,
-        color: getAgentColor(entry.mode, tool?.color),
-        chip: LANE_CHIP[entry.state?.group ?? 'no-status'] ?? null,
-        badge: entry.slot.badge ?? null,
-        age: entry.state?.age ?? '',
-        line:
-          (shown.tone === 'work' || shown.tone === 'quiet'
-            ? entry.slot.doing
-            : null) ||
-          askText(entry.asks) ||
-          shown.text,
-        depth,
-        current: entry.id === currentId,
-        needs: entry.state?.group === 'needs-you',
-      })
-      for (const child of row.children) add(child, Math.min(depth + 1, 2))
-    }
-    add(team, 0)
-    return rows
-  }
-  return (
-    <>
-      {teams.map((row) => {
-        const { id } = row.item
-        const { label, mode, state, slot } = rowFacts(row.item)
-        const tool = agentTools.find((t) => t.slug === mode)
-        const agent = toolName(agentTools, mode)
-        const needs = row.group === 'needs-you'
-        const current = teamMembers(row).some((m) => m.id === currentId)
-        const shown = stateOf(row.item)
-        const name = [
-          rowSummary(label, agent, shown, row.item.entry.asks),
-          row.summary,
-        ]
-          .filter(Boolean)
-          .join(' · ')
-        const mark = (
-          <>
-            <AgentIcon
-              slug={mode}
-              size={18}
-              color={getAgentColor(mode, tool?.color)}
-            />
-            <span
-              aria-hidden="true"
-              className="dot lantern-mark"
-              data-tone={needs ? 'need' : shown.tone}
-            />
-          </>
-        )
-        const className = clsx('lantern-rail-item', needs && 'needs')
-        if (row.children.length === 0)
-          return (
-            <button
-              key={id}
-              type="button"
-              onClick={() => onSelect(slot)}
-              aria-current={current ? 'true' : undefined}
-              aria-label={name}
-              title={name}
-              className={className}
-            >
-              {mark}
-            </button>
-          )
-        const rows = teamRows(row)
-        const lanes = rows.length - 1
-        return (
-          <RailPopover
-            key={id}
-            label={name}
-            panelLabel={`${label} team`}
-            className={className}
-            hint={LANE_HINT}
-            extra={{ 'aria-current': current ? 'true' : undefined }}
-            icon={
-              <>
-                {mark}
-                <span
-                  aria-hidden="true"
-                  className="lantern-rail-count"
-                  data-calm={
-                    rows.some((r) => r.needs && r.depth > 0) ? undefined : ''
-                  }
-                  data-testid="lane-count"
-                >
-                  {lanes}
-                </span>
-              </>
-            }
-          >
-            <LaneList heading={label} rows={rows} onOpen={onSelect} />
-          </RailPopover>
-        )
-      })}
-    </>
-  )
-}
-
-/** The list's heading: `Sessions · 5`, and `· 1 needs you` when anything waits. */
-export function sessionsHeading(count: number, needsYou: number): string {
-  return [
-    'Sessions',
-    String(count),
-    needsYou > 0 ? `${needsYou} need${needsYou === 1 ? 's' : ''} you` : null,
-  ]
-    .filter(Boolean)
-    .join(' · ')
 }

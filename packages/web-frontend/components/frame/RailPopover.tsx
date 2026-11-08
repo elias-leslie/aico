@@ -22,6 +22,7 @@ import { type Widen, WidenContext } from './Widen'
 /** A pop-out while something in it needs room. */
 const WIDER = 'min(620px, calc(100vw - 96px))'
 const GAP = 8
+const POPOVER_WIDTH = 380
 const MARGIN = 12
 const TABBABLE =
   'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
@@ -42,6 +43,7 @@ export function usePopoverClose(): (() => void) | null {
 export function useBeside(
   button: RefObject<HTMLElement | null>,
   open: boolean,
+  placement: 'beside' | 'above' = 'beside',
 ): CSSProperties | undefined {
   const [style, setStyle] = useState<CSSProperties>()
   useLayoutEffect(() => {
@@ -51,8 +53,22 @@ export function useBeside(
     const side = button.current
       ?.closest('[data-frame-side]')
       ?.getBoundingClientRect()
-    const left = (side?.right ?? rect.right) + GAP
     const height = window.innerHeight
+    if (placement === 'above') {
+      // From a button in the side's own footer: over the button, kept inside the window.
+      const width = Math.min(POPOVER_WIDTH, window.innerWidth - 2 * MARGIN)
+      setStyle({
+        left: Math.max(
+          MARGIN,
+          Math.min(rect.left, window.innerWidth - width - MARGIN),
+        ),
+        bottom: height - rect.top + GAP,
+        maxHeight: rect.top - GAP - MARGIN,
+        width,
+      })
+      return
+    }
+    const left = (side?.right ?? rect.right) + GAP
     setStyle(
       rect.top + rect.height / 2 > height / 2
         ? {
@@ -66,7 +82,7 @@ export function useBeside(
             maxHeight: height - rect.top + 4 - MARGIN,
           },
     )
-  }, [open, button])
+  }, [open, button, placement])
   return style
 }
 
@@ -87,6 +103,7 @@ export function RailPopover({
   icon,
   hint = 'Esc closes',
   extra,
+  placement = 'beside',
   children,
 }: {
   /** The icon's tooltip and accessible name. */
@@ -100,6 +117,8 @@ export function RailPopover({
   hint?: string
   /** More attributes for the icon button (test ids, aria-current). */
   extra?: Record<string, string | number | undefined>
+  /** Beside the side (a rail icon), or over the button (one in the side's footer). */
+  placement?: 'beside' | 'above'
   children: ReactNode
 }) {
   const [open, setOpen] = useState(false)
@@ -108,7 +127,7 @@ export function RailPopover({
   const frame = useFrame()
   const close = useCallback(() => setOpen(false), [])
   const refs = useMemo(() => [button, dialog], [])
-  const place = useBeside(button, open)
+  const place = useBeside(button, open, placement)
   // Content that needs room while it is expanded widens this pop-out, not the side.
   const [wanting, setWanting] = useState(0)
   const widen = useCallback<Widen>(() => {

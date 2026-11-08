@@ -641,7 +641,7 @@
   },
   {
     "type": "dependency",
-    "from": "packages/web-frontend/components/SessionList.tsx",
+    "from": "packages/web-frontend/components/frame/session-entries.ts",
     "to": "packages/tether-client/src/client/teams.ts",
     "unresolvedTo": "@aico/tether-client/teams",
     "dependencyTypes": [

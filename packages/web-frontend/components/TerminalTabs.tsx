@@ -2,6 +2,7 @@
 
 import { clsx } from 'clsx'
 import { useEffect, useState } from 'react'
+import { useNewSessionRequests } from '@/lib/frame/new-session-request'
 import { useServerReach } from '@/lib/frame/server-reach'
 import { useAgentTools } from '@/lib/hooks/use-agent-tools'
 import { timesLabel } from '@/lib/hooks/use-check-ins'
@@ -91,6 +92,12 @@ export function TerminalTabs({
   // the count of sessions waiting on the owner.
   useMarkActiveSeen(activeSessionId)
   useAttentionTitle(useSessionAttention().needsYouCount)
+  // "New session here" on a quiet project opens the dialog on that project.
+  const [requestedProject, setRequestedProject] = useState<string | null>(null)
+  useNewSessionRequests((id) => {
+    setRequestedProject(id)
+    handleOpenTerminalManager()
+  })
   // A sign-in session opened from Hosts ends: check that host's sign-in again.
   useSignInWatch(sessions, !isLoading)
 
@@ -229,10 +236,15 @@ export function TerminalTabs({
       {showChat && <NewChatDialog onClose={() => setShowChat(false)} />}
       <NewSessionDialog
         isOpen={showTerminalManager}
-        onClose={handleCloseTerminalManager}
+        onClose={() => {
+          setRequestedProject(null)
+          handleCloseTerminalManager()
+        }}
         defaultProjectId={
+          requestedProject ??
           sessions.find((session) => session.id === activeSessionId)
-            ?.project_id ?? projectId
+            ?.project_id ??
+          projectId
         }
         onStart={(projectId, rootPath, mode, host, name) =>
           handleNewTerminalForProject(projectId, mode, rootPath, host, name)

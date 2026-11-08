@@ -3,13 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Attention } from '@/lib/attention'
 import { type AdHocSlot, getSlotPanelId } from '@/lib/utils/slot'
 import { SLOT_BASE } from '@/test-stubs/session-fixtures'
-import {
-  alsoRunningText,
-  endAlongsideNote,
-  SessionList,
-  SessionRail,
-  sessionsHeading,
-} from './SessionList'
+import { alsoRunningText, endAlongsideNote, SessionList } from './SessionList'
 
 vi.mock('@/lib/frame/live', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/frame/live')>()),
@@ -84,6 +78,7 @@ const states: Record<string, Attention> = {
 const attention = {
   forSlot: (s: unknown) => states[(s as AdHocSlot).sessionId] ?? null,
   needsYouCount: 1,
+  waitingNoAsk: 0,
   asksFor: () => ({ blocking: 0, other: 0 }),
 }
 const slots = [lead, ask, busy, done, left, solo]
@@ -175,6 +170,7 @@ describe('SessionList teams', () => {
         attention={{
           forSlot: (s: unknown) => map[(s as AdHocSlot).sessionId] ?? null,
           needsYouCount: 0,
+          waitingNoAsk: 0,
           asksFor: () => ({ blocking: 0, other: 0 }),
         }}
         onSelect={vi.fn()}
@@ -268,136 +264,6 @@ describe('SessionList launch tree', () => {
     expect(rowNames(team('Hunter team'))).toEqual(['Probe'])
     // Every session appears once.
     expect(rowNames(container)).toHaveLength(tree.length)
-  })
-})
-
-describe('SessionRail', () => {
-  it("shows the list's rows as marks: teams folded, Needs you first, a lane's team current", () => {
-    const onSelect = vi.fn()
-    const { container } = render(
-      <SessionRail
-        slots={slots}
-        currentId={getSlotPanelId(ask)}
-        attention={attention}
-        onSelect={onSelect}
-      />,
-    )
-    const items = [...container.querySelectorAll('.lantern-rail-item')]
-    expect(items.map((el) => el.getAttribute('aria-label'))).toEqual([
-      'Neri — Daybreak lead · codex · working · 1 working, 1 needs you, 1 idle',
-      'Aico — Tray · codex · working',
-      expect.stringMatching(/^Docs — Notes · codex · idle since /),
-    ])
-    const team = items[0] as HTMLElement
-    expect(team.className).toContain('needs')
-    expect(team.getAttribute('aria-current')).toBe('true')
-    expect(team.querySelector('.dot')).not.toBeNull()
-    expect(items[1]?.getAttribute('aria-current')).toBeNull()
-    fireEvent.click(items[1] as HTMLElement)
-    expect(onSelect).toHaveBeenCalledWith(solo)
-  })
-})
-
-describe('SessionRail coordinator pop-out', () => {
-  const open = () => {
-    const onSelect = vi.fn()
-    const view = render(
-      <SessionRail
-        slots={slots}
-        currentId={getSlotPanelId(done)}
-        attention={attention}
-        onSelect={onSelect}
-      />,
-    )
-    const icon = view.container.querySelector(
-      '.lantern-rail-item[aria-haspopup="dialog"]',
-    ) as HTMLElement
-    return { ...view, icon, onSelect }
-  }
-
-  it('gives only a coordinator a lane count and a pop-out; a solo session opens directly', () => {
-    const { container, icon, onSelect } = open()
-    expect(
-      container.querySelectorAll('.lantern-rail-item[aria-haspopup]'),
-    ).toHaveLength(1)
-    expect(icon.getAttribute('aria-label')).toMatch(/^Neri — Daybreak lead/)
-    const count = within(icon).getByTestId('lane-count')
-    expect(count.textContent).toBe('3')
-    // A lane waits on the owner: the badge stays amber, not calm.
-    expect(count.hasAttribute('data-calm')).toBe(false)
-    expect(icon.getAttribute('aria-current')).toBe('true')
-    fireEvent.click(
-      container.querySelector(
-        '.lantern-rail-item:not([aria-haspopup])',
-      ) as HTMLElement,
-    )
-    expect(onSelect).toHaveBeenCalledWith(solo)
-  })
-
-  it('lists the coordinator first, then its lanes with state chip, title, age and last line', () => {
-    const { icon } = open()
-    fireEvent.click(icon)
-    const dialog = screen.getByRole('dialog', {
-      name: 'Neri — Daybreak lead team',
-    })
-    const rows = within(dialog).getAllByRole('button')
-    expect(rows.map((row) => row.querySelector('.name')?.textContent)).toEqual([
-      'Neri — Daybreak lead',
-      'Matomo pair lead',
-      'Scanner',
-      'Report',
-    ])
-    expect(rows[0]?.textContent).toContain('Coordinator')
-    expect(rows[1]?.textContent).toContain('Needs you')
-    expect(rows[1]?.textContent).toContain('1m')
-    expect(rows[2]?.textContent).toContain('Working')
-    expect(rows[3]?.textContent).toContain('Finished')
-    expect(rows[3]?.getAttribute('aria-current')).toBe('true')
-    expect(
-      within(dialog).getByText(
-        'Up and Down move · Enter opens the session · Esc closes',
-      ),
-    ).toBeVisible()
-  })
-
-  it('moves with Up and Down from the coordinator, and a row opens its session and closes the pop-out', () => {
-    const { icon, onSelect } = open()
-    fireEvent.click(icon)
-    const dialog = screen.getByRole('dialog')
-    const rows = within(dialog).getAllByRole('button')
-    expect(rows[0]).toHaveFocus()
-    fireEvent.keyDown(rows[0] as HTMLElement, { key: 'ArrowDown' })
-    expect(rows[1]).toHaveFocus()
-    fireEvent.keyDown(rows[1] as HTMLElement, { key: 'ArrowDown' })
-    fireEvent.keyDown(rows[2] as HTMLElement, { key: 'ArrowDown' })
-    fireEvent.keyDown(rows[3] as HTMLElement, { key: 'ArrowDown' })
-    expect(rows[3]).toHaveFocus()
-    fireEvent.keyDown(rows[3] as HTMLElement, { key: 'ArrowUp' })
-    expect(rows[2]).toHaveFocus()
-    fireEvent.click(rows[2] as HTMLElement)
-    expect(onSelect).toHaveBeenCalledWith(busy)
-    expect(screen.queryByRole('dialog')).toBeNull()
-  })
-
-  it('closes on Esc with focus back on the coordinator icon', () => {
-    const { icon } = open()
-    fireEvent.click(icon)
-    fireEvent.keyDown(
-      within(screen.getByRole('dialog')).getAllByRole(
-        'button',
-      )[0] as HTMLElement,
-      { key: 'Escape' },
-    )
-    expect(screen.queryByRole('dialog')).toBeNull()
-    expect(icon).toHaveFocus()
-  })
-})
-
-describe('sessionsHeading', () => {
-  it('counts sessions and says when any need you', () => {
-    expect(sessionsHeading(5, 0)).toBe('Sessions · 5')
-    expect(sessionsHeading(5, 1)).toBe('Sessions · 5 · 1 needs you')
-    expect(sessionsHeading(5, 2)).toBe('Sessions · 5 · 2 need you')
   })
 })
 

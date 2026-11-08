@@ -1,7 +1,7 @@
 'use client'
 
 import { Inbox } from 'lucide-react'
-import { type ReactNode, useRef, useState } from 'react'
+import { type ReactNode, useMemo, useRef, useState } from 'react'
 import {
   openNeedsYou,
   useNeedsYouRequests,
@@ -19,13 +19,17 @@ import {
 } from '@/lib/hooks/use-asks'
 import { useClock } from '@/lib/hooks/use-clock'
 import { useNeedsYouCounts } from '@/lib/hooks/use-needs-you'
+import { useSessionAttention } from '@/lib/hooks/use-session-attention'
 import { PRODUCT_NAME } from '@/lib/project-branding'
 import { at, plural } from '@/lib/status'
+import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
 import { useFrame } from '../frame/FrameContext'
 import { Disclosure } from '../frame/glance/Disclosure'
 import { GlancePopover } from '../frame/glance/GlancePopover'
 import type { GlanceHead } from '../frame/glance/glance-types'
 import { RailPopover, usePopoverClose } from '../frame/RailPopover'
+import { SessionRow } from '../frame/SessionRows'
+import { asTeamRow, sortSessionEntries } from '../frame/session-entries'
 import { AnsweredCard } from './AnsweredCard'
 import { ApprovalCard } from './ApprovalCard'
 import { AttachedFileView } from './AskAttached'
@@ -33,9 +37,17 @@ import { AskCard } from './AskCard'
 import { AsksState, askTitle, Note, useSentNote } from './ask-shared'
 
 type Tab = 'asks' | 'approvals' | 'answered'
+type Slot = TerminalSlot | PaneSlot
+
+/** What the side's Needs you reads besides the asks: the sessions to open when one waits. */
+interface WaitingSessions {
+  slots: Slot[]
+  currentId?: string
+  onSelect: (slot: Slot) => void
+}
 
 /** The Rail's Needs you icon with its count: it opens the same section the side's list starts with, as a pop-out. */
-export function NeedsYouLauncher() {
+export function NeedsYouLauncher(props: Partial<WaitingSessions>) {
   const { count, summary } = useNeedsYouCounts()
   return (
     <RailPopover
@@ -54,7 +66,7 @@ export function NeedsYouLauncher() {
         </>
       }
     >
-      <NeedsYouSection popout />
+      <NeedsYouSection popout {...props} />
     </RailPopover>
   )
 }
@@ -354,8 +366,24 @@ function SegmentButton({
  * that waits whenever something does, and to what was answered when it is
  * opened with nothing waiting. A push link or a session's own question opens
  * it on that question. */
-export function NeedsYouSection({ popout = false }: { popout?: boolean }) {
+export function NeedsYouSection({
+  popout = false,
+  slots = [],
+  currentId,
+  onSelect,
+}: { popout?: boolean } & Partial<WaitingSessions>) {
   const { asks, known, isLoading, isError, refetch } = useOwnerAsks()
+  const attention = useSessionAttention()
+  // Sessions stopped for the owner that carry no question of their own (a question is listed as itself).
+  const waitingSessions = useMemo(
+    () =>
+      sortSessionEntries(slots, attention).filter(
+        (entry) =>
+          entry.state?.group === 'needs-you' &&
+          entry.asks.blocking + entry.asks.other === 0,
+      ),
+    [slots, attention],
+  )
   const { approvals } = useApprovals()
   const unreachable = useServerReach().down && !known
   const frame = useFrame()
@@ -383,7 +411,7 @@ export function NeedsYouSection({ popout = false }: { popout?: boolean }) {
       ref.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }),
     )
   })
-  const total = waiting.length + taps.length
+  const total = waiting.length + taps.length + waitingSessions.length
   const problem = unreachable || isError
   const head: GlanceHead = problem
     ? { value: unreachable ? 'Can’t reach' : 'Couldn’t read', tone: 'failed' }
@@ -444,6 +472,22 @@ export function NeedsYouSection({ popout = false }: { popout?: boolean }) {
                   onSent={setSent}
                   onOpenSession={leave}
                 />
+              ))}
+              {waitingSessions.map((entry) => (
+                <li key={entry.id}>
+                  <SessionRow
+                    row={asTeamRow(entry)}
+                    showProject
+                    ctx={{
+                      currentId,
+                      severalHosts: false,
+                      onSelect: (slot) => {
+                        onSelect?.(slot)
+                        if (frame && !frame.docked) frame.close()
+                      },
+                    }}
+                  />
+                </li>
               ))}
             </ul>
           )

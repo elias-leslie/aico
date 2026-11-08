@@ -51,6 +51,9 @@ export interface SessionAttention {
   /** The open questions on a slot's sessions, split by whether they stop it. */
   asksFor(slot: TerminalSlot | PaneSlot): AskCounts
   needsYouCount: number
+  /** Sessions waiting on the owner with no open question of their own: the
+   * ones Needs you lists as sessions (a question is listed as itself). */
+  waitingNoAsk: number
 }
 
 const NO_SESSIONS: TerminalSession[] = []
@@ -88,6 +91,9 @@ export function useSessionAttention(): SessionAttention {
       },
       needsYouCount: [...byId.values()].filter((a) => a.group === 'needs-you')
         .length,
+      waitingNoAsk: sessions.filter(
+        (s) => byId.get(s.id)?.group === 'needs-you' && !s.asks?.length,
+      ).length,
     }
   }, [sessions, seen, now])
 }
