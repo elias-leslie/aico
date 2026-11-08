@@ -21,7 +21,7 @@
   },
   {
     "surface": "st.prompt",
-    "tier": "mandate",
+    "tier": "reference",
     "cmd": "st prompt list | get | update | measure",
     "when": "editing agent prompts in DB",
     "precautions": [
