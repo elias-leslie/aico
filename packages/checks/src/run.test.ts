@@ -5,6 +5,15 @@ import { describe, expect, it } from 'vitest'
 import { failureLines, pruneDetails, resultLine } from './run'
 
 describe('a failed check says what failed', () => {
+  it('names the failed tests before errors that passing tests logged', () => {
+    const output = [
+      '[notify] could not read the choice: Error: disk',
+      '[status] alert hook failed: Error: notify is down',
+      ' × keeps the old data age 4ms',
+    ].join('\n')
+    expect(failureLines(output, 'none')[0]).toBe('× keeps the old data age 4ms')
+  })
+
   it('lists the failing lines past the hint, cleaned and without the command', () => {
     const output = [
       '$ biome check --no-errors-on-unmatched src/a.ts',

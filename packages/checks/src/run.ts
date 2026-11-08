@@ -126,17 +126,20 @@ function outputLines(output: string): string[] {
   )
 }
 
-/** The line a reader needs first: an error line on failure, else the last line. */
+/** A test runner naming a failed test. Passing tests log errors too, so this outranks them. */
+const TEST_FAILED = /^(×|✗|FAIL(ED)?\b)/
+
+/** The line a reader needs first: the failed test or an error line on failure, else the last line. */
 function hint(output: string, failed: boolean): string {
   const lines = outputLines(output)
   const pick = failed
-    ? (lines.find((line) => /\berror\b|\bFAIL(ED)?\b|Error:|✗|×|Found \d+ errors?/.test(line)) ??
+    ? (lines.find((line) => TEST_FAILED.test(line)) ??
+      lines.find((line) => /\berror\b|\bFAIL(ED)?\b|Error:|✗|×|Found \d+ errors?/.test(line)) ??
       lines.at(-1))
     : (lines.findLast((line) => /\b(passed|no fixes|checked|ok)\b/i.test(line)) ?? lines.at(-1))
   return (pick ?? '-').slice(0, LINE_CHARS)
 }
 
-/** What failed, past the hint: the failing lines, or the output's end if none look like one. */
 /** Past this many skipped checks the line gives a count. */
 const SKIP_NAMES_SHOWN = 8
 /** Skip reasons that only mean this change or repo gives the check no work; others may be a gap. */
@@ -148,9 +151,12 @@ const NOTHING_TO_DO = new Set([
   'no declared biome configuration',
 ])
 
+/** What failed, past the hint: failed tests first, then failing lines, or the output's end if none look like one. */
 export function failureLines(output: string, shown: string): string[] {
   const lines = outputLines(output).filter((line) => !line.startsWith('$ '))
-  const failing = lines.filter((line) => FAILURE_LINE.test(line))
+  const failing = lines
+    .filter((line) => FAILURE_LINE.test(line))
+    .sort((a, b) => Number(TEST_FAILED.test(b)) - Number(TEST_FAILED.test(a)))
   const unique = [
     ...new Set(
       (failing.length ? failing : lines.slice(-FAILURE_LINES)).map((line) =>
