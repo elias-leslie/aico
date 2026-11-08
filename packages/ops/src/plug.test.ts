@@ -143,11 +143,7 @@ it('reads a reply split over several packets and says nothing answered on silenc
 })
 
 it('says the plug did not answer when nothing listens', async () => {
-  server = createServer()
-  await new Promise<void>((done) => server?.listen(0, '127.0.0.1', done))
-  const port = (server.address() as { port: number }).port
-  server.close()
-  await expect(socketSend({ ...shed, address: '127.0.0.1', port }, 1)({})).rejects.toThrow(
+  await expect(socketSend({ ...shed, address: '127.0.0.1', port: 1 }, 1)({})).rejects.toThrow(
     "The power plug at 127.0.0.1 didn't answer",
   )
 })

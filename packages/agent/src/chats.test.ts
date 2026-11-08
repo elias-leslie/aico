@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { Catalog, type Facts, type LaunchPolicy } from '@aico/context'
 import { openDatabase } from '@aico/store'
 import { createModels, fauxAssistantMessage, fauxProvider } from '@earendil-works/pi-ai'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ChatSessions } from './chats'
 import { contextMessages } from './compaction'
 import policyData from './fixtures/policy.json' with { type: 'json' }
@@ -104,6 +104,14 @@ describe('queued messages after a reply that did not finish', () => {
 })
 
 describe('chat model choice and used-up subscriptions', () => {
+  // The readings below reset on Nov 11, and a passed reset reads as room: without a fixed clock this
+  // starts failing that day.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-06T20:00:00.000Z') })
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
   const policy = policyData as unknown as LaunchPolicy
   const reading = (provider: string, usedPercent: number) => ({
     provider,

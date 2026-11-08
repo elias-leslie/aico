@@ -220,11 +220,7 @@ describe('capture router and the portfolio-ai owner', () => {
     })
 
     // Connection refused (the forwarder is down) waits too.
-    const dead = createServer()
-    await new Promise<void>((resolve) => dead.listen(0, '127.0.0.1', resolve))
-    const deadUrl = `http://127.0.0.1:${(dead.address() as AddressInfo).port}`
-    await new Promise<void>((resolve) => dead.close(() => resolve()))
-    const offline = router(new Map([['portfolio-ai', owner(deadUrl)]]))
+    const offline = router(new Map([['portfolio-ai', owner('http://127.0.0.1:1')]]))
     const second = await ready(offline, 'receipt', 'second')
     const result = await offline.act(second?.id as string, 'send')
     expect(result).toMatchObject({
