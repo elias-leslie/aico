@@ -50,22 +50,27 @@ const STANDBY = {
 export const STANDBY_TIP =
   'Standby: keeps working while the workstation is down. It runs the same release, gets copies of your memories, prompts and projects, and runs note reminders and the morning digest.'
 
-/** Whether the standby is ready to take over: every row that keeps it ready is fine; `behind` names
- * the ones that are not. */
+/** Whether the standby is ready to take over. `ready` only when the machine is up and the rows that
+ * keep it ready exist and are all fine; `behind` names the ones that are not. `off` is a machine that
+ * is not up, `unknown` is no row to judge it by (Status could not say). */
 export interface Standby {
   ready: boolean
+  state: 'ready' | 'behind' | 'off' | 'unknown'
   behind: string[]
 }
 
-function standbyOf(rows: readonly StatusRow[]): Standby {
-  const behind = rows
-    .filter(
-      (row) =>
-        STANDBY.rows.some((pattern) => pattern.test(row.id)) &&
-        isProblem(row.shown),
-    )
+function standbyOf(rows: readonly StatusRow[], up: Up): Standby {
+  if (up !== 'on') return { ready: false, state: 'off', behind: [] }
+  const mine = rows.filter((row) =>
+    STANDBY.rows.some((pattern) => pattern.test(row.id)),
+  )
+  if (mine.length === 0) return { ready: false, state: 'unknown', behind: [] }
+  const behind = mine
+    .filter((row) => isProblem(row.shown) || row.shown === 'off')
     .map((row) => `${row.what}: ${row.meaning}`)
-  return { ready: behind.length === 0, behind }
+  return behind.length === 0
+    ? { ready: true, state: 'ready', behind }
+    : { ready: false, state: 'behind', behind }
 }
 
 /** What a session host is called in lists of places to start a session. */
@@ -384,7 +389,8 @@ export function buildMachines(
       isWorkstation,
       guest,
       facts: guest ? guestFacts(guest, now) : '',
-      standby: key === STANDBY.machine && view ? standbyOf(view.rows) : null,
+      standby:
+        key === STANDBY.machine && view ? standbyOf(view.rows, up) : null,
     }
   })
   const rank = (m: Machine) =>

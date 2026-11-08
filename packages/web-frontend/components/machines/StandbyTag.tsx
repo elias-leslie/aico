@@ -2,8 +2,28 @@
 
 import { STANDBY_TIP, type Standby } from '@/lib/machines'
 
-/** The standby's badge: a dot that is green when it is ready to take over and amber when some
- * copy it needs is behind; the tooltip says what it does and what is behind. */
+const WORD = {
+  ready: 'Ready',
+  behind: 'Behind',
+  off: 'Off',
+  unknown: 'Unknown',
+} as const
+const DOT = {
+  ready: 'var(--jade)',
+  behind: 'var(--beacon)',
+  off: 'var(--mist)',
+  unknown: 'var(--mist)',
+} as const
+const LABEL = {
+  ready: 'Standby, ready',
+  behind: 'Standby, not fully in sync',
+  off: 'Standby, off',
+  unknown: 'Standby, state unknown',
+} as const
+
+/** The standby's badge: a dot that is green only when it is up and every copy it needs is fine,
+ * amber when some copy is behind, grey when it is off or can't be judged; the tooltip says what it
+ * does and what is behind. */
 export function StandbyTag({
   standby,
   name,
@@ -14,27 +34,27 @@ export function StandbyTag({
   name: string
   className: string
 }) {
-  const state = standby.ready ? 'Ready' : 'Behind'
-  const tip = standby.ready
-    ? `${STANDBY_TIP}\nReady to take over.`
-    : `${STANDBY_TIP}\nNot fully in sync:\n${standby.behind.map((line) => `• ${line}`).join('\n')}`
+  const { state } = standby
+  const detail = {
+    ready: 'Ready to take over.',
+    behind: `Not fully in sync:\n${standby.behind.map((line) => `• ${line}`).join('\n')}`,
+    off: 'It is not up, so it can’t take over.',
+    unknown:
+      'Status has nothing on its copies yet, so it can’t be called ready.',
+  }[state]
   return (
     <span
       className={`${className} gap-[5px]`}
-      title={tip}
-      aria-label={
-        standby.ready ? 'Standby, ready' : 'Standby, not fully in sync'
-      }
+      title={`${STANDBY_TIP}\n${detail}`}
+      aria-label={LABEL[state]}
       data-testid="standby-tag"
     >
       <span
         aria-hidden="true"
         className="h-1.5 w-1.5 flex-none rounded-full"
-        style={{
-          backgroundColor: standby.ready ? 'var(--jade)' : 'var(--beacon)',
-        }}
+        style={{ backgroundColor: DOT[state] }}
       />
-      {name === 'Standby' ? state : `Standby · ${state}`}
+      {name === 'Standby' ? WORD[state] : `Standby · ${WORD[state]}`}
     </span>
   )
 }

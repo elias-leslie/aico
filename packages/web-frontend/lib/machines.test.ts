@@ -69,7 +69,10 @@ describe('buildMachines', () => {
     )
     const standby = (list: typeof ready) =>
       list.machines.map((m) => [m.key, m.standby])
-    expect(standby(ready)).toContainEqual(['aico', { ready: true, behind: [] }])
+    expect(standby(ready)).toContainEqual([
+      'aico',
+      { ready: true, state: 'ready', behind: [] },
+    ])
     expect(
       ready.machines.filter((m) => m.key !== 'aico').map((m) => m.standby),
     ).toEqual(ready.machines.slice(1).map(() => null))
@@ -99,6 +102,7 @@ describe('buildMachines', () => {
       'aico',
       {
         ready: false,
+        state: 'behind',
         behind: [
           'Standby checkout: dadbot: left as it is: it has its own changes',
         ],
@@ -108,6 +112,46 @@ describe('buildMachines', () => {
       buildMachines(null, HOSTS, NOW).machines.find((m) => m.key === 'aico')
         ?.standby,
     ).toBeNull()
+  })
+
+  it('does not call the standby ready when its copies are off, it is not up, or nothing says', () => {
+    const standbyOf = (rows: StatusRow[], hosts = HOSTS) =>
+      buildMachines(view(rows), hosts, NOW).machines.find(
+        (m) => m.key === 'aico',
+      )?.standby
+    const sync = row({
+      id: 'jobs/context-sync',
+      what: 'Context copy',
+      kind: 'job',
+      machine: 'davion-sidarli',
+    })
+    expect(standbyOf([...ROWS, sync])?.state).toBe('ready')
+    expect(
+      standbyOf([
+        ...ROWS,
+        { ...sync, shown: 'off', state: 'off', meaning: 'Switched off.' },
+      ]),
+    ).toEqual({
+      ready: false,
+      state: 'behind',
+      behind: ['Context copy: Switched off.'],
+    })
+    expect(
+      standbyOf(
+        ROWS.filter((r) => !r.id.startsWith('fleet/davion-sidarli/aico')),
+      ),
+    ).toEqual({ ready: false, state: 'unknown', behind: [] })
+    const down = ROWS.map((r) =>
+      r.id === 'fleet/davion-sidarli/aico'
+        ? { ...r, shown: 'off' as const, state: 'off' as const }
+        : r,
+    )
+    expect(
+      standbyOf(
+        [...down, sync],
+        [{ name: 'aico', state: 'powered_off', canSleep: false, sessions: 0 }],
+      ),
+    ).toEqual({ ready: false, state: 'off', behind: [] })
   })
 
   it('lists every machine once, aico (CT 190) with its own session link', () => {
