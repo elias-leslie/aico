@@ -201,6 +201,7 @@ function optionLines(row: LaunchRow): string[] {
   if (!row.allowed) return [`${row.tool}  DENIED: ${row.deny_reason || '-'}`]
   if (!row.launchable) return [`${row.tool}  not launchable from here: ${row.why || '-'}`]
   if (!row.model) return [`${row.tool}  ${row.why || 'no model set'}`]
+  if (row.usage?.status === 'no_plan') return [`${row.tool}  ${usageLine(row.usage)}`]
   const usage = row.usage ?? {}
   const whenText = row.when ? ` (when ${row.when})` : ''
   let head = `${row.tool}  ${modelEffort(row)}${projectTag(row)}${whenText}  ${statusText(usage)}`
@@ -237,7 +238,7 @@ export function formatLaunch(payload: RoutePayload): string {
   const row = payload.rows[0] as LaunchRow
   const lines = [
     `LAUNCH[${payload.role} ${row.tool}] job=${row.job} (${row.label}) policy=v${payload.version}`,
-    `  model=${row.model || '-'} effort=${row.effort || '-'} daybreak=${daybreakWord(row.daybreak)} context=${row.context}${row.use && row.launchable ? '' : ' (not used: no default applies)'}${projectTag(row)}`,
+    `  model=${row.model || '-'} effort=${row.effort || '-'} daybreak=${daybreakWord(row.daybreak)} context=${row.context}${row.use && row.launchable ? '' : row.usage?.status === 'no_plan' ? ' (not used: no plan)' : ' (not used: no default applies)'}${projectTag(row)}`,
   ]
   if (!row.allowed) lines.push(`  DENIED: ${row.deny_reason || '-'}`)
   if (row.note) lines.push(`  note=${row.note}`)

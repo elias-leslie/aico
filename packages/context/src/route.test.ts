@@ -210,6 +210,9 @@ describe('route', () => {
     expect(options).not.toContain('has room')
     expect(options).not.toContain('% left')
     expect(ended.payload.rows[0]?.allowed).toBe(true)
+    // It isn't offered: no default, and no model or fallback beside it.
+    expect(ended.payload.rows[0]?.use).toBe(false)
+    expect(options).toMatch(/^codex {2}no plan since Oct 30/m)
     // An explicit model is judged by its own subscription: a Pi model elsewhere isn't OpenCode's.
     const pi = (model: string) =>
       route(

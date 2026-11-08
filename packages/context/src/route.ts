@@ -330,6 +330,8 @@ function attachFacts(
       row.tool,
       (row.allowed ? requestedModel : null) ?? row.model,
     )
+    // A subscription that ended is no default: `st aico create` refuses it too.
+    if (row.usage.status === 'no_plan') row.use = false
     row.last_refusal = row.allowed ? lastRefusal(catalog, row.model, facts.refusals) : null
     for (const alt of row.alternates)
       alt.last_refusal = row.allowed
