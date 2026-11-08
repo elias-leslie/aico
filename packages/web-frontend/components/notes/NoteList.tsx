@@ -50,7 +50,7 @@ function Message({
   )
 }
 
-const TextButton = ({
+const SmallButton = ({
   onClick,
   children,
 }: {
@@ -59,8 +59,7 @@ const TextButton = ({
 }) => (
   <button
     type="button"
-    className="inline-flex min-h-11 items-center underline underline-offset-2 md:min-h-0"
-    style={{ color: 'var(--lantern)' }}
+    className="lantern-btn small align-middle max-md:!h-11"
     onClick={onClick}
   >
     {children}
@@ -424,7 +423,7 @@ export function NoteList({
       ) : list.isError ? (
         <Message testId="notes-failed">
           Couldn&apos;t load notes{list.error ? `: ${list.error}` : ''}.{' '}
-          <TextButton onClick={list.refetch}>Try again</TextButton>
+          <SmallButton onClick={list.refetch}>Try again</SmallButton>
         </Message>
       ) : (
         <>
@@ -432,7 +431,7 @@ export function NoteList({
             <Message tone="beacon" testId="notes-stale">
               Couldn&apos;t refresh. This is the list from{' '}
               {formatAge(Date.now() - list.updatedAt)} ago.{' '}
-              <TextButton onClick={list.refetch}>Try again</TextButton>
+              <SmallButton onClick={list.refetch}>Try again</SmallButton>
             </Message>
           )}
           {shown.length === 0 ? (
@@ -451,9 +450,9 @@ export function NoteList({
               {where && (
                 <>
                   {' '}
-                  <TextButton onClick={() => onScope(true)}>
+                  <SmallButton onClick={() => onScope(true)}>
                     Show all notes
-                  </TextButton>
+                  </SmallButton>
                 </>
               )}
             </Message>
