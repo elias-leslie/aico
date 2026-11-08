@@ -14,10 +14,10 @@ Not a bug. Rows 0, 1, 5, 20 and 40 all opened by tap and click at both sizes and
 | Routines | A long name stayed cut in an open row | The open row shows the whole name |
 | Routines | "Sundays at 05:15 UTC (12:38 AM here)": a timer's random delay moved the scheduled time | The here-time is the scheduled time |
 | Routines | "12:15 AM here · next 12:38 AM" with no reason | "(23 min random delay)" on the next run |
-| New session | Pi showed nothing though its subscription was used up | Pi carries OpenCode Go's label, and the tooltip names OpenCode Go |
+| New session | Pi showed nothing though its subscription was used up | Pi's label reads "OpenCode Go used up" |
 | Logins | Activity said "changed" beside a Replace button | "replaced" |
 | Logins | "Replaced: Not recorded" | "Not replaced yet" |
-| Notes | Delete warning named items and photos a note didn't have | Names only what this note has |
+| Notes | Delete warning named items and photos a note didn't have | Names the items and files that go, and Captures only when something stays there |
 | CLI | `aico away`: unknown command | The launcher routes it; a test fails when it misses a command |
 
 ## Not defects
@@ -43,3 +43,9 @@ Not a bug. Rows 0, 1, 5, 20 and 40 all opened by tap and click at both sizes and
 ## For the next round
 
 - A tester saw a real Aico session title about the owner's family, and a real file name in the home folder; neither was opened. lib.cjs now masks such titles and RULES.md limits Files to test folders.
+
+## Refactors not taken
+
+- web-server `serve()` can't be imported, so there's no boot test; the route wiring test covers the failure seen so far.
+- The launcher's six rebuild blocks: `jobs` imports fleet and shared but watches neither, so a change there may not rebuild it.
+- A phone 44 px tap-size check; `globals.css` split only moves code.
