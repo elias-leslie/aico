@@ -6,16 +6,19 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { peerDir } from '@aico/fleet/hosts'
 import { drainOutbox, machineId, outboxDir, type StatusRow } from '@aico/status'
-import { act, postJob, systemdUnits, unitInFlight } from './act'
+import { act, postJob, systemdUnits, unitInFlight, whereOf } from './act'
 import { remoteAuthority, serveLeases } from './fleet-leases'
-import { type JobDef, readJobs } from './jobs'
+import type { JobDef } from './jobs'
 import { type JobState, JobStore, jobsDbPath } from './leases'
+import { loadJobs } from './routines'
+import { routinesCommand } from './routines-cli'
 import { jobRow, type LeaseAuthority, Runner } from './runner'
 
-const USAGE = `Usage: aico jobs <command>
+const USAGE = `Usage: aico jobs <command>   (routines: aico routines --help)
   list           each job: its home machine and lease holder, when it runs next, who holds it, how it last went
   run KIND       make KIND due at its lease holder; an eligible worker runs it
   serve          run the scheduler (aico-jobs.service): eligible jobs, using their configured lease holders
+  routines ...   the owner-facing routines: list, add, remove, pause, resume, run, log (aico routines --help)
   post PATH      POST to aico-web and print the result as JSON (what a POST job's unit runs)
   --machine M    act as machine M (tests and drills on one host)
 Settings: AICO_JOBS_FILE (job list, default data/jobs.json), AICO_JOBS_DB (default jobs.db in
@@ -57,6 +60,13 @@ async function postRows(webUrl: string, rows: StatusRow[]): Promise<void> {
   })
   if (!res.ok)
     throw new Error(`aico-web answered ${res.status}: ${(await res.text()).slice(0, 200)}`)
+}
+
+async function removeRow(webUrl: string, id: string): Promise<void> {
+  await fetch(new URL(`/api/status/rows?id=${encodeURIComponent(id)}`, webUrl), {
+    method: 'DELETE',
+    signal: AbortSignal.timeout(10_000),
+  })
 }
 
 const time = (ms: number | null) => (ms === null ? '-' : new Date(ms).toLocaleString('sv-SE'))
@@ -102,21 +112,34 @@ export async function main(argv: string[], env = process.env): Promise<number> {
     console.log(JSON.stringify(await postJob(settings(env).webUrl, rest[0])))
     return 0
   }
-  const flag = rest.indexOf('--machine')
+  const flag = command === 'routines' ? -1 : rest.indexOf('--machine')
   const machine = flag >= 0 ? (rest[flag + 1] ?? '').toLowerCase() : machineId()
   if (!machine) {
     console.error('aico jobs: --machine needs a name')
     return 2
   }
   const { dataDir, jobsFile, dbPath, webUrl, socket } = settings(env)
-  const jobs = readJobs(jobsFile)
   const store = new JobStore(dbPath)
+  const jobs = loadJobs(jobsFile, store)
   const authority = (job: JobDef) =>
     (job.lease_host ?? job.home) === machine
       ? store
       : remoteAuthority(
           join(peerDir(env, process.getuid?.(), job.lease_host ?? job.home), 'jobs.sock'),
         )
+  if (command === 'routines') {
+    const code = await routinesCommand(rest, {
+      jobs,
+      store,
+      machine,
+      env,
+      dataDir,
+      postRows: (rows) => postRows(webUrl, rows),
+      removeRow: (id) => removeRow(webUrl, id),
+    })
+    store.close()
+    return code
+  }
   if (command === 'list') {
     if (rest.includes('--json')) {
       const result = []
@@ -174,18 +197,20 @@ export async function main(argv: string[], env = process.env): Promise<number> {
   const rowsUrl = new URL('/api/status/rows', webUrl).toString()
   const runner = new Runner({
     store,
-    jobs,
+    jobs: () => loadJobs(jobsFile, store),
     machine,
     holder: `${machine}:${process.pid}`,
     authority,
     act: act([process.execPath, process.argv[1] as string], units),
-    inFlight: (job) => unitInFlight(job.kind, units),
+    inFlight: (job) => unitInFlight(job.kind, units, whereOf(job)),
     drain: async () => void (await drainOutbox(rowsUrl, outbox)),
     postRows: (rows) => postRows(webUrl, rows),
   })
   runner.start()
-  await serveLeases(socket, store, jobs, machine)
-  console.log(`[jobs] serving ${jobs.length} job(s) as ${machine} from ${jobsFile}`)
+  await serveLeases(socket, store, () => loadJobs(jobsFile, store), machine)
+  console.log(
+    `[jobs] serving ${jobs.length} job(s) (routines included, read at every tick) as ${machine} from ${jobsFile}`,
+  )
   let ticking = false
   const tick = async () => {
     if (ticking) return

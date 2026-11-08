@@ -9,7 +9,7 @@
 // guard: a run that finds it live attaches instead of starting a second.
 
 import { execFile, spawn } from 'node:child_process'
-import { mkdirSync, readFileSync, rmSync } from 'node:fs'
+import { mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs'
 import { request } from 'node:http'
 import { join } from 'node:path'
 import type { JobDef } from './jobs'
@@ -114,8 +114,14 @@ export function commandJob(argv: readonly string[]): Promise<JobResult> {
 
 /** Where a job's transient unit runs: start it, ask whether it is live. */
 export interface UnitHost {
-  active(unit: string): Promise<boolean>
-  start(unit: string, argv: readonly string[]): Promise<void>
+  active(unit: string, where?: UnitWhere): Promise<boolean>
+  start(unit: string, argv: readonly string[], where?: UnitWhere): Promise<void>
+}
+
+/** Where a unit runs: a user unit (default) or a system unit as root; and its working folder. */
+export interface UnitWhere {
+  scope?: 'user' | 'system'
+  cwd?: string
 }
 
 const run = (file: string, args: string[]) =>
@@ -135,19 +141,30 @@ export function systemdUnits(env: NodeJS.ProcessEnv = process.env): UnitHost {
     .filter((key) => passed.includes(key) || key.startsWith('AICO_'))
     .flatMap((key) => (env[key] ? [`--setenv=${key}=${env[key]}`] : []))
   return {
-    active: async (unit) =>
-      (await run('systemctl', ['--user', 'is-active', '--quiet', unit])).code === 0,
-    start: async (unit, argv) => {
-      const started = await run('systemd-run', [
-        '--user',
+    active: async (unit, where) =>
+      (
+        await run('systemctl', [
+          ...(where?.scope === 'system' ? [] : ['--user']),
+          'is-active',
+          '--quiet',
+          unit,
+        ])
+      ).code === 0,
+    start: async (unit, argv, where) => {
+      const system = where?.scope === 'system'
+      const args = [
+        ...(system ? [] : ['--user']),
         '--no-ask-password',
         '--quiet',
         '--collect',
         `--unit=${unit}`,
-        `--working-directory=${process.cwd()}`,
+        `--working-directory=${where?.cwd ?? process.cwd()}`,
         ...setenv,
         ...argv,
-      ])
+      ]
+      const started = system
+        ? await run('sudo', ['-n', 'systemd-run', ...args])
+        : await run('systemd-run', args)
       if (started.code !== 0) throw new Error(started.out || `systemd-run exited ${started.code}`)
     },
   }
@@ -186,9 +203,13 @@ function readIf(path: string): string | null {
 }
 
 /** True when the job's unit is live, or it finished and nobody has recorded its code yet. */
-export async function unitInFlight(kind: string, options: UnitJobOptions): Promise<boolean> {
+export async function unitInFlight(
+  kind: string,
+  options: UnitJobOptions,
+  where?: UnitWhere,
+): Promise<boolean> {
   return (
-    (await options.host.active(unitName(kind))) ||
+    (await options.host.active(unitName(kind), where)) ||
     readIf(join(options.dir, `${kind}.code`)) !== null
   )
 }
@@ -200,28 +221,32 @@ export async function unitJob(
   argv: readonly string[],
   options: UnitJobOptions,
   read: (code: number, tail: string) => JobResult = (code, tail) => exitResult(code, null, tail),
+  where?: UnitWhere,
 ): Promise<JobResult> {
   const { host, dir } = options
   const unit = unitName(kind)
   const base = join(dir, kind)
   mkdirSync(dir, { recursive: true, mode: 0o700 })
-  if (!(await host.active(unit)) && readIf(`${base}.code`) === null) {
+  if (!(await host.active(unit, where)) && readIf(`${base}.code`) === null) {
     // No log cleanup here: the wrapper truncates it as the run begins, and a second caller racing this
     // start would otherwise delete the log the first caller's run is already writing.
     try {
-      await host.start(unit, unitArgv(base, argv))
+      await host.start(unit, unitArgv(base, argv), where)
     } catch (error) {
       // A concurrent start (or a scheduler racing us) won: join its run rather than failing.
-      if (!(await host.active(unit)))
+      if (!(await host.active(unit, where)))
         return { state: 'failed', meaning: `Could not start: ${(error as Error).message}` }
     }
   }
-  while (await host.active(unit))
+  while (await host.active(unit, where))
     await new Promise((resolve) => setTimeout(resolve, options.pollMs ?? 2_000))
   const code = readIf(`${base}.code`)
   const log = readIf(`${base}.log`) ?? ''
   rmSync(`${base}.code`, { force: true })
-  rmSync(`${base}.log`, { force: true })
+  // The last run's output stays for `aico routines log KIND`; the next run writes a fresh .log.
+  try {
+    renameSync(`${base}.log`, `${base}.last.log`)
+  } catch {}
   if (code === null) return { state: 'failed', meaning: 'It was stopped before it left a result.' }
   return read(Number(code.trim()), log.slice(-TAIL_BYTES))
 }
@@ -245,6 +270,12 @@ export function postedResult(code: number, tail: string): JobResult {
   return exitResult(code, null, tail)
 }
 
+/** A job's unit placement: its scope and working folder (neither set for most built-in jobs). */
+export const whereOf = (job: JobDef): UnitWhere => ({
+  ...(job.scope ? { scope: job.scope } : {}),
+  ...(job.cwd ? { cwd: job.cwd } : {}),
+})
+
 /**
  * Runs each job in its own unit. `self` is how to start this program again (node and the
  * aico-jobs bundle), for a POST job's `aico jobs post PATH` unit.
@@ -253,8 +284,10 @@ export function act(
   self: readonly string[],
   units: UnitJobOptions,
 ): (job: JobDef) => Promise<JobResult> {
-  return (job) =>
-    'post' in job.run
-      ? unitJob(job.kind, [...self, 'post', job.run.post], units, postedResult)
-      : unitJob(job.kind, job.run.command, units)
+  return (job) => {
+    const where = whereOf(job)
+    return 'post' in job.run
+      ? unitJob(job.kind, [...self, 'post', job.run.post], units, postedResult, where)
+      : unitJob(job.kind, job.run.command, units, undefined, where)
+  }
 }

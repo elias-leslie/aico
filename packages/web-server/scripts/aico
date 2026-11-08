@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # `aico memory | prompt | models | context`: context.db (memories, prompts, roles, launch options).
 # `aico usage`: usage.db (what each subscription has left; packages/usage).
-# `aico jobs`: the scheduler's jobs (packages/jobs, jobs.db).
+# `aico jobs | routines`: the scheduler's jobs and the owner-facing routines (packages/jobs, jobs.db).
 # `aico recent`: the session history, from the running Tether (`tether history`; `aico sessions list|show|events` still works).
 # `aico lease`, `aico sessions send|ack|confirm|inbox`: file leases and the agent handshakes (aico-hook).
 # `aico pulse`: live sessions, claims, leases, open handshakes and Status problems; --brief is the startup brief.
@@ -114,8 +114,8 @@ case "${1:-}" in
   deploy | logs | snapshots | vm | plug | backups | wip) aico_ops "$@" ;;
   web) shift; aico_webtools "$@" ;;
   video) shift; aico_video "$@" ;;
-  jobs)
-    shift
+  jobs | routines)
+    [ "$1" != jobs ] || shift
     jobs_dir="$AICO_REPO_ROOT/packages/jobs"
     jobs_bundle="$jobs_dir/dist/aico-jobs.mjs"
     node="$(aico_web_node)"

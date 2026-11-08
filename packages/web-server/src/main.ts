@@ -47,6 +47,7 @@ import type { OwnerAdapter } from './owners/types'
 import { VehiclesOwner } from './owners/vehicles'
 import { Places } from './places'
 import { ProjectsService, registerProjectRoutes } from './projects'
+import { registerRoutineRoutes } from './routines'
 import { createWebServer } from './server'
 import { createServiceAppsServer } from './service-apps'
 import { registerSharedPageRoutes } from './shared-pages'
@@ -247,6 +248,7 @@ function serve(): void {
   const canaryPoller = new CanaryPoller(canaryFolder, notify.notifier, canaryEvents)
   registerCanaryRoutes(api, notify.notifier, canaryFolder, canaryEvents, canaryPoller)
   registerBackupRoutes(api)
+  registerRoutineRoutes(api)
   registerUsageRoutes(api, {
     dataDir: config.dataDir,
     projects: () => registry.list().map((project) => ({ id: project.id, name: project.name })),

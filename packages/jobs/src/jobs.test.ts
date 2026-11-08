@@ -272,9 +272,8 @@ describe('the runner', () => {
     const state = store.get('export')
     if (!state) throw new Error('no job')
     expect(jobRow(job, state).meaning).toBe('Not run yet. Runs daily at 03:30 on a.')
-    // The log action never pages and shows a bounded tail.
-    const log = jobRow(job, state).actions?.find((action) => action.kind === 'log')
-    expect(log?.ref).toBe('journalctl --user -u aico-jobs.service -g export -n 200 --no-pager')
+    const refs = jobRow(job, state).actions?.map((action) => action.ref)
+    expect(refs).toEqual(['aico routines run export', 'aico routines log export'])
   })
 })
 

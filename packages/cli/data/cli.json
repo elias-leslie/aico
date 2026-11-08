@@ -144,7 +144,8 @@
         ["service", "build, restart and check a project's services (service rebuild)"],
         ["deploy", "put a commit live; deploy wait JOB follows one"],
         ["logs", "a unit's or a project's logs"],
-        ["jobs", "Aico's scheduled jobs: list, run"]
+        ["jobs", "Aico's scheduler: list, run"],
+        ["routines", "scheduled routines: list, add, pause, resume, run"]
       ]
     },
     {

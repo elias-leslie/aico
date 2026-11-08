@@ -22,6 +22,23 @@ const MIGRATIONS = [
      last_meaning TEXT,
      last_machine TEXT
    ) STRICT`,
+  // Pause, Run now while paused, and the routines other projects register (data, not jobs.json).
+  `ALTER TABLE jobs ADD COLUMN paused INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE jobs ADD COLUMN run_now INTEGER NOT NULL DEFAULT 0;
+   CREATE TABLE routines (
+     kind TEXT PRIMARY KEY,
+     project TEXT NOT NULL,
+     what TEXT NOT NULL,
+     host TEXT NOT NULL,
+     at TEXT,
+     every_min INTEGER,
+     command TEXT,
+     post TEXT,
+     cwd TEXT,
+     scope TEXT NOT NULL DEFAULT 'user',
+     lease_s INTEGER NOT NULL,
+     created_at INTEGER NOT NULL
+   ) STRICT`,
 ]
 
 export function jobsDbPath(dataDir: string): string {
@@ -40,6 +57,10 @@ export interface JobState {
   lastState: string | null
   lastMeaning: string | null
   lastMachine: string | null
+  /** Scheduled runs are off; Run now still runs it once. */
+  paused: boolean
+  /** Run now was asked and not yet started. */
+  runNow: boolean
 }
 
 export interface Lease {
@@ -55,6 +76,26 @@ export interface JobResult {
   meaning: string
   /** Another run of this job holds its lock: nothing ran here, so nothing is recorded or alerted. */
   busy?: true
+}
+
+/** A routine another project registered: the data behind one job (routines table). */
+export interface Routine {
+  kind: string
+  project: string
+  what: string
+  /** The machine that runs it; registered on that machine. */
+  host: string
+  at?: string
+  every_min?: number
+  command?: string[]
+  /** A path on aico-web to POST to, as jobs.json's run.post. */
+  post?: string
+  /** Where a command runs; default the scheduler's. */
+  cwd?: string
+  /** user: a systemd user unit; system: a system unit (root). */
+  scope: 'user' | 'system'
+  lease_s: number
+  created_at: number
 }
 
 /** A write by a holder that no longer holds the lease (expired and taken over). */
@@ -80,6 +121,8 @@ function state(row: Raw): JobState {
     lastState: row.last_state as string | null,
     lastMeaning: row.last_meaning as string | null,
     lastMachine: row.last_machine as string | null,
+    paused: row.paused === 1,
+    runNow: row.run_now === 1,
   }
 }
 
@@ -120,6 +163,7 @@ export class JobStore {
     return transaction(this.db, () => {
       const job = this.get(kind)
       if (!job || now < job.nextRun + delayMs) return null
+      if (job.paused && !job.runNow) return null
       if (job.leaseId && (job.leaseExpires ?? 0) > now) return null
       const lease: Lease = {
         kind,
@@ -153,7 +197,7 @@ export class JobStore {
       .prepare(
         `UPDATE jobs SET next_run = ?, last_run = ?, last_state = ?, last_meaning = ?,
            last_machine = ?, lease_id = NULL, holder = NULL, holder_machine = NULL,
-           lease_expires = NULL
+           lease_expires = NULL, run_now = 0
          WHERE kind = ? AND lease_id = ? AND fence = ?`,
       )
       .run(
@@ -208,7 +252,7 @@ export class JobStore {
     const changes = this.db
       .prepare(
         `UPDATE jobs SET next_run = ?, lease_id = NULL, holder = NULL, holder_machine = NULL,
-           lease_expires = NULL
+           lease_expires = NULL, run_now = 0
          WHERE kind = ? AND lease_id = ? AND fence = ?`,
       )
       .run(retryAt, lease.kind, lease.leaseId, lease.fence).changes
@@ -217,7 +261,74 @@ export class JobStore {
 
   /** Makes the job due now (its home machine runs it at its next tick). */
   runNow(kind: string, now: number): boolean {
-    return this.db.prepare('UPDATE jobs SET next_run = ? WHERE kind = ?').run(now, kind).changes > 0
+    return (
+      this.db.prepare('UPDATE jobs SET next_run = ?, run_now = 1 WHERE kind = ?').run(now, kind)
+        .changes > 0
+    )
+  }
+
+  /** Pauses the job's scheduled runs, or resumes them with the next due time `resumeAt`. */
+  setPaused(kind: string, paused: boolean, resumeAt: number): boolean {
+    return (
+      this.db
+        .prepare(
+          paused
+            ? 'UPDATE jobs SET paused = 1 WHERE kind = ?'
+            : 'UPDATE jobs SET paused = 0, run_now = 0, next_run = ? WHERE kind = ?',
+        )
+        .run(...(paused ? [kind] : [resumeAt, kind])).changes > 0
+    )
+  }
+
+  /** Forgets a job's state (its routine was removed). */
+  forget(kind: string): void {
+    this.db.prepare('DELETE FROM jobs WHERE kind = ?').run(kind)
+  }
+
+  addRoutine(routine: Routine): void {
+    this.db
+      .prepare(
+        `INSERT INTO routines (kind, project, what, host, at, every_min, command, post, cwd, scope, lease_s, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        routine.kind,
+        routine.project,
+        routine.what,
+        routine.host,
+        routine.at ?? null,
+        routine.every_min ?? null,
+        routine.command ? JSON.stringify(routine.command) : null,
+        routine.post ?? null,
+        routine.cwd ?? null,
+        routine.scope,
+        routine.lease_s,
+        routine.created_at,
+      )
+  }
+
+  /** True when a routine of this kind was registered and is now gone. */
+  removeRoutine(kind: string): boolean {
+    const removed = this.db.prepare('DELETE FROM routines WHERE kind = ?').run(kind).changes > 0
+    if (removed) this.forget(kind)
+    return removed
+  }
+
+  routines(): Routine[] {
+    return (this.db.prepare('SELECT * FROM routines ORDER BY kind').all() as Raw[]).map((row) => ({
+      kind: row.kind as string,
+      project: row.project as string,
+      what: row.what as string,
+      host: row.host as string,
+      ...(row.at !== null ? { at: row.at as string } : {}),
+      ...(row.every_min !== null ? { every_min: row.every_min as number } : {}),
+      ...(row.command !== null ? { command: JSON.parse(row.command as string) as string[] } : {}),
+      ...(row.post !== null ? { post: row.post as string } : {}),
+      ...(row.cwd !== null ? { cwd: row.cwd as string } : {}),
+      scope: row.scope as Routine['scope'],
+      lease_s: row.lease_s as number,
+      created_at: row.created_at as number,
+    }))
   }
 
   close(): void {

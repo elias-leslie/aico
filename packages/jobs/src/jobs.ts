@@ -18,6 +18,12 @@ export interface JobDef {
   lease_host?: string
   workers?: string[]
   lease_s: number
+  /** jobs.json (built-in) or a routine another project registered. */
+  source?: 'built-in' | 'registered'
+  /** user (default): a systemd user unit; system: a system unit run as root. */
+  scope?: 'user' | 'system'
+  /** Where a command runs (registered routines). */
+  cwd?: string
 }
 
 const KIND = /^[a-z0-9][a-z0-9-]{0,63}$/
@@ -88,6 +94,9 @@ export function parseJobs(value: unknown): JobDef[] {
         workers.some((name) => typeof name !== 'string' || !KIND.test(name)))
     )
       fail(`${where}.workers`, 'a list of machine names')
+    const scope = job.scope
+    if (scope !== undefined && scope !== 'user' && scope !== 'system')
+      fail(`${where}.scope`, 'user or system')
     return {
       kind,
       what: text(job, 'what', where, 120),
@@ -97,6 +106,7 @@ export function parseJobs(value: unknown): JobDef[] {
       run: action,
       ...(leaseHost !== undefined ? { lease_host: leaseHost as string } : {}),
       ...(workers !== undefined ? { workers: workers as string[] } : {}),
+      ...(scope !== undefined ? { scope } : {}),
       lease_s: seconds(job, 'lease_s', where),
     }
   })
@@ -136,4 +146,9 @@ export function schedule(job: Pick<JobDef, 'at' | 'every_min'>): string {
   return job.every_min !== undefined
     ? `every ${job.every_min === 1 ? 'minute' : `${job.every_min} minutes`}`
     : `daily at ${job.at}`
+}
+
+/** When a resumed job is first due: an interval job at once, a daily job at its next time. */
+export function resumeAt(job: Pick<JobDef, 'at' | 'every_min'>, now: number): number {
+  return job.every_min !== undefined ? now : nextAt(job.at as string, now)
 }

@@ -27,7 +27,8 @@ export type Act = (job: JobDef) => Promise<JobResult>
 export interface RunnerOptions {
   store: JobStore
   authority?: (job: JobDef) => LeaseAuthority
-  jobs: readonly JobDef[]
+  /** The jobs to run; a function is read at every tick, so a newly registered routine starts without a restart. */
+  jobs: readonly JobDef[] | (() => readonly JobDef[])
   /** This machine's id. */
   machine: string
   /** This process, as named on the leases it holds. */
@@ -52,6 +53,7 @@ const iso = (ms: number) => new Date(ms).toISOString()
 export class Runner {
   private readonly running = new Map<string, Promise<void>>()
   private readonly unsent = new Map<string, StatusRow>()
+  private readonly announced = new Set<string>()
   private readonly now: () => number
   private readonly log: (line: string) => void
 
@@ -60,16 +62,29 @@ export class Runner {
     this.log = options.log ?? ((line) => console.log(`[jobs] ${line}`))
   }
 
+  private get jobs(): readonly JobDef[] {
+    const { jobs } = this.options
+    return typeof jobs === 'function' ? jobs() : jobs
+  }
+
   private get who() {
     return { holder: this.options.holder, machine: this.options.machine }
   }
 
   /** Adds the new kinds homed here (first due at their next scheduled time) and queues their rows. */
   start(): void {
-    const { store, jobs, machine } = this.options
-    for (const job of jobs) {
+    this.announced.clear()
+    this.sync()
+  }
+
+  /** Ensures every job homed here has its state, and queues the row of each not seen since start. */
+  private sync(): void {
+    const { store, machine } = this.options
+    for (const job of this.jobs) {
       if ((job.lease_host ?? job.home) !== machine) continue
       store.ensure(job.kind, job.every_min === undefined ? nextRun(job, this.now()) : this.now())
+      if (this.announced.has(job.kind)) continue
+      this.announced.add(job.kind)
       const state = store.get(job.kind)
       if (state) this.queueRow(job, state)
     }
@@ -77,8 +92,9 @@ export class Runner {
 
   /** Claims and starts what is due among the jobs homed here, then sends the rows waiting to go out. */
   async tick(): Promise<void> {
-    const { store, jobs, machine } = this.options
-    for (const job of jobs) {
+    const { store, machine } = this.options
+    this.sync()
+    for (const job of this.jobs) {
       if (!(job.workers ?? [job.home]).includes(machine) || this.running.has(job.kind)) continue
       const authority = this.options.authority?.(job) ?? store
       let lease: Lease | null
@@ -208,6 +224,21 @@ export class Runner {
 /** The job's one Status row: where and how it last ran, and when it is due next. */
 export function jobRow(job: JobDef, state: JobState): StatusRow {
   const ran = state.lastRun !== null
+  if (state.paused)
+    return {
+      id: `jobs/${job.kind}`,
+      what: job.what,
+      kind: 'job',
+      machine: state.lastMachine ?? job.home,
+      project: job.project,
+      // Off, not late: a paused routine is stopped on purpose and has no next run.
+      state: 'off',
+      meaning: ran
+        ? cut(`Paused. Last run ${state.lastState}: ${state.lastMeaning || 'Finished.'}`)
+        : `Paused. ${schedule(job)} on ${job.home} once resumed.`,
+      ...(ran ? { last_run: iso(state.lastRun as number) } : {}),
+      actions: actionsOf(job),
+    }
   return {
     id: `jobs/${job.kind}`,
     what: job.what,
@@ -220,12 +251,11 @@ export function jobRow(job: JobDef, state: JobState): StatusRow {
       : `Not run yet. Runs ${schedule(job)} on ${job.home}.`,
     ...(ran ? { last_run: iso(state.lastRun as number) } : {}),
     next_run: iso(state.nextRun),
-    actions: [
-      { kind: 'run', ref: `aico jobs run ${job.kind}` },
-      {
-        kind: 'log',
-        ref: `journalctl --user -u aico-jobs.service -g ${job.kind} -n 200 --no-pager`,
-      },
-    ],
+    actions: actionsOf(job),
   }
 }
+
+const actionsOf = (job: JobDef): StatusRow['actions'] => [
+  { kind: 'run', ref: `aico routines run ${job.kind}` },
+  { kind: 'log', ref: `aico routines log ${job.kind}` },
+]

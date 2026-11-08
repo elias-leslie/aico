@@ -618,7 +618,7 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
     }
     if (
       verb in config.removed &&
-      !(env.AICO_CLI_NAME === 'aico' && ['context', 'jobs', 'agent'].includes(verb))
+      !(env.AICO_CLI_NAME === 'aico' && ['context', 'jobs', 'routines', 'agent'].includes(verb))
     ) {
       err(`${name} ${verb}: ${config.removed[verb as keyof typeof config.removed]}.`)
       return 2
@@ -695,7 +695,7 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
     if (verb === 'service') return await serviceCommand(cli, rest)
     if (verb === 'skills')
       return execute([join(root, 'native/service-tools/st-skills'), ...rest], cli.selectedEnv)
-    if (env.AICO_CLI_NAME === 'aico' && ['context', 'jobs', 'agent'].includes(verb))
+    if (env.AICO_CLI_NAME === 'aico' && ['context', 'jobs', 'routines', 'agent'].includes(verb))
       return delegate([verb, ...rest])
     if (verb === 'projects')
       return delegate(

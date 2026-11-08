@@ -5,12 +5,12 @@ import { createServer, request } from 'node:http'
 import { createServer as createCarrier, createConnection, type Server, type Socket } from 'node:net'
 import { dirname } from 'node:path'
 import type { JobDef } from './jobs'
-import { nextRun } from './jobs'
+import { nextRun, resumeAt } from './jobs'
 import { type JobResult, type JobState, type JobStore, type Lease, StaleLease } from './leases'
 import type { LeaseAuthority } from './runner'
 
 export interface LeaseCall {
-  op: 'claim' | 'renew' | 'complete' | 'release' | 'get' | 'run'
+  op: 'claim' | 'renew' | 'complete' | 'release' | 'get' | 'run' | 'pause' | 'resume'
   kind: string
   who?: { holder: string; machine: string }
   lease?: Lease
@@ -35,6 +35,8 @@ export function leaseCall(
   const workers = job.workers ?? [job.home]
   if (call.op === 'get') return store.get(job.kind)
   if (call.op === 'run') return store.runNow(job.kind, now)
+  if (call.op === 'pause') return store.setPaused(job.kind, true, now)
+  if (call.op === 'resume') return store.setPaused(job.kind, false, resumeAt(job, now))
   if (call.op === 'claim') {
     const who = call.who
     if (who?.machine !== caller) throw new Error('Job caller does not match the pinned machine')
@@ -77,7 +79,7 @@ export function leaseCall(
 export async function serveLeases(
   path: string,
   store: JobStore,
-  jobs: readonly JobDef[],
+  jobs: readonly JobDef[] | (() => readonly JobDef[]),
   authority: string,
 ): Promise<Server & { closeAllConnections(): void }> {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
@@ -107,7 +109,7 @@ export async function serveLeases(
         if (req.method !== 'POST' || req.url !== '/lease') throw new Error('Unknown lease route')
         const value = leaseCall(
           store,
-          jobs,
+          typeof jobs === 'function' ? jobs() : jobs,
           authority,
           JSON.parse(text) as LeaseCall,
           callers.get(req.socket) ?? '',
@@ -209,9 +211,11 @@ async function remoteCall(socketPath: string, body: LeaseCall): Promise<unknown>
   })
 }
 
-export function remoteAuthority(
-  socket: string,
-): LeaseAuthority & { run(kind: string): Promise<boolean> } {
+export function remoteAuthority(socket: string): LeaseAuthority & {
+  run(kind: string): Promise<boolean>
+  pause(kind: string): Promise<boolean>
+  resume(kind: string): Promise<boolean>
+} {
   return {
     claim: async (kind, who) =>
       (await remoteCall(socket, { op: 'claim', kind, who })) as Lease | null,
@@ -225,5 +229,7 @@ export function remoteAuthority(
     },
     get: async (kind) => (await remoteCall(socket, { op: 'get', kind })) as JobState | null,
     run: async (kind) => (await remoteCall(socket, { op: 'run', kind })) as boolean,
+    pause: async (kind) => (await remoteCall(socket, { op: 'pause', kind })) as boolean,
+    resume: async (kind) => (await remoteCall(socket, { op: 'resume', kind })) as boolean,
   }
 }
