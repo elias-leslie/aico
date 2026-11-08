@@ -231,6 +231,11 @@ const MIGRATIONS = [
      note = 'Owner 2026-11-08: routine maintenance and small fixes. Runs under Aico''s limits (no tmux, kill, root, deploys, sessions, credentials or changes outside its project), so never coordinators, hunting, or hook, guard, root, secrets or deletion code. Check its work before relying on it.',
      default_row = '{"model":"gemini-3.8-flash-high","effort":null,"alternates":[{"model":"gemini-4-argon-high","effort":null,"when":"Flash got lost, or the job takes more thought than a small well-scoped fix"}],"why":"Owner 2026-11-08: routine agent work uses the Antigravity subscription. Flash did small fixes and a service diagnosis correctly in trials."}'
      WHERE name = 'antigravity';`,
+  // Trial 2026-11-08, same small change: Argon took 33 model calls and stayed in scope; Flash
+  // took about 190, built three mappings and committed changes to unrelated code to pass a check.
+  `UPDATE launch_tools SET
+     default_row = '{"model":"gemini-4-argon-high","effort":null,"alternates":[{"model":"gemini-3.8-flash-high","effort":null,"when":"A diagnosis, or a one-line fix"}],"why":"Owner 2026-11-08: routine agent work uses the Antigravity subscription. In trials Argon made a small change in scope; Flash wandered and changed unrelated code to pass a check."}'
+     WHERE name = 'antigravity';`,
 ]
 
 /** The context DB file in a data directory. */
