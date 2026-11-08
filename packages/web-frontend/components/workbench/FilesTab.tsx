@@ -1,7 +1,11 @@
 'use client'
 
-import { useRouter, useSearchParams } from 'next/navigation'
-import { useCallback, useMemo, useState } from 'react'
+import {
+  type ReadonlyURLSearchParams,
+  useRouter,
+  useSearchParams,
+} from 'next/navigation'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FilesPanel } from '@/components/files/FilesPanel'
 import type { FilePlace, ProjectSource } from '@/lib/api/pane-files'
 import type { FilesRequest } from '@/lib/files-opener'
@@ -14,16 +18,31 @@ import { workbenchHref } from '@/lib/workbench'
  * window can be reloaded or bookmarked. The address that opened it decides where
  * it starts; moving about only updates the address.
  */
+const startAt = (params: ReadonlyURLSearchParams) => ({
+  path: params.get('path'),
+  shared: params.get('view') === 'shared',
+  show: params.get('show') ?? undefined,
+})
+
+/** Where an address points, to tell an address this tab wrote from Back or Forward. */
+const placeOf = (shared: boolean, path: string | null) =>
+  `${shared ? 'shared' : ''}|${path ?? ''}`
+
 export function FilesTab() {
   const router = useRouter()
   const params = useSearchParams()
   const project = params.get('project')
   const session = params.get('session')
-  const [start] = useState(() => ({
-    path: params.get('path'),
-    shared: params.get('view') === 'shared',
-    show: params.get('show') ?? undefined,
-  }))
+  const [start, setStart] = useState(() => startAt(params))
+  const address = placeOf(params.get('view') === 'shared', params.get('path'))
+  // Back and Forward move the view; an address this tab wrote itself doesn't.
+  const wrote = useRef(address)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only a new address moves the view
+  useEffect(() => {
+    if (address === wrote.current) return
+    wrote.current = address
+    setStart(startAt(params))
+  }, [address])
   const { projects, isLoading } = useProjectSettings()
   const found = projects.find((entry) => entry.id === project)
   const root = found?.root_path ?? null
@@ -47,16 +66,19 @@ export function FilesTab() {
   )
 
   const onLocate = useCallback(
-    (folder: string | null) =>
-      router.replace(
-        workbenchHref('files', {
-          project,
-          session: project ? null : session,
-          path: folder,
-          view: folder ? null : 'shared',
-        }),
-      ),
-    [router, project, session],
+    (folder: string | null) => {
+      wrote.current = placeOf(!folder, folder)
+      const href = workbenchHref('files', {
+        project,
+        session: project ? null : session,
+        path: folder,
+        view: folder ? null : 'shared',
+      })
+      // Leaving Shared for a file's folder is a step Back can undo.
+      if (folder && address.startsWith('shared|')) router.push(href)
+      else router.replace(href)
+    },
+    [router, project, session, address],
   )
 
   if (waiting) return <p className="files-state">Finding {project}’s folder</p>
