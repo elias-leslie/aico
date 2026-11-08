@@ -63,3 +63,13 @@ AGENT_AUDIT.md
 
 # Rust (native/tray)
 native/tray/target/
+
+# Screenshots and recordings from agent checks: regenerable evidence, kept on disk, not in Git
+# (findings .md/.txt/.json next to them still commit; already-tracked images stay tracked)
+/evidence/**/*.png
+/evidence/**/*.jpg
+/evidence/**/*.jpeg
+/evidence/**/*.webp
+/evidence/**/*.gif
+/evidence/**/*.webm
+/evidence/**/*.mp4
