@@ -712,6 +712,22 @@ describe('Claude Code transcripts', () => {
     expect(stored).not.toContain('neri')
     expect(stored).not.toContain('s3')
   })
+  it('drops the path cursor of a transcript that turns private on a later pass', async () => {
+    const db = openUsage(':memory:')
+    const path = join(folder(), 's4.jsonl')
+    write(path, [assistant('m1', 'claude-opus-5-5', { input: 1, output: 2 }, { cwd: '' })])
+    await run(db)
+    expect(db.prepare('SELECT path FROM cursors WHERE path = ?').get(path)).toBeTruthy()
+    appendFileSync(
+      path,
+      `${assistant('m2', 'claude-opus-5-5', { input: 1, output: 2 }, { cwd: '/srv/workspaces/projects/neri-hunters/case' })}\n`,
+    )
+    await run(db)
+    const stored = JSON.stringify(db.prepare('SELECT path, state FROM cursors').all())
+    expect(stored).not.toContain('s4')
+    expect(stored).not.toContain('neri')
+    expect(stored).toContain('private:')
+  })
 })
 
 describe('a used-up subscription', () => {

@@ -15,18 +15,29 @@
 // A file in a home or working directory marked private contributes numbers only: its cursor
 // is keyed by a hash of its path, and neither its working directory nor its id is kept.
 
-import { createHash } from 'node:crypto'
-import { closeSync, existsSync, openSync, readdirSync, readSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { transaction } from '@aico/store'
 import config from '../data/usage.json' with { type: 'json' }
 import { type Database, getState, putState } from './db'
 import { localDay } from './plans'
 import { type ReadingEvent, storeReading } from './readings'
+import {
+  type Found,
+  gatherFiles,
+  newLines,
+  num,
+  parseLine,
+  privateKey,
+  projectOf,
+  resumeFile,
+  saveCursors,
+  sha,
+  speedOf,
+  startFile,
+} from './transcripts'
 
 const CODEX_SOURCE = 'codex_session_log'
-
-const CHUNK = 8 * 1024 * 1024
 
 interface FileState {
   cwd?: string
@@ -41,21 +52,6 @@ interface FileState {
   head?: string
   /** What this file added to the daily rows (key to requests, input, cached, output). */
   rolls?: Record<string, [number, number, number, number]>
-}
-
-const sha = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex').slice(0, 16)
-
-/** The first bytes' hash of a file (a rewritten file starts differently), or '' when empty. */
-export function headHash(path: string, size: number): string {
-  if (size === 0) return ''
-  const fd = openSync(path, 'r')
-  try {
-    const buffer = Buffer.alloc(Math.min(256, size))
-    const read = readSync(fd, buffer, 0, buffer.length, 0)
-    return sha(buffer.subarray(0, read).toString('latin1'))
-  } finally {
-    closeSync(fd)
-  }
 }
 
 interface Balance {
@@ -82,129 +78,6 @@ export interface CodexResult {
   /** Session folders that exist, and how many of them could not be read (counts only, never names). */
   roots: number
   unreadable: number
-}
-
-/** The project a working directory belongs to: the first folder under a workspaces root, else its name. */
-export function projectOf(cwd: string | undefined, homes: readonly string[]): string {
-  if (!cwd) return 'unknown'
-  const path = cwd.replace(/\/+$/, '')
-  for (const prefix of ['/srv/workspaces/projects/', '/srv/workspaces/', '/srv/scratch/', ...homes])
-    if (path.startsWith(prefix)) return path.slice(prefix.length).split('/', 1)[0] || 'unknown'
-  return path.split('/').pop() || 'unknown'
-}
-
-/** Complete lines appended after `offset` (up to `end`), with the offset after the last one. */
-export function* newLines(path: string, offset: number, end: number): Generator<[string, number]> {
-  const fd = openSync(path, 'r')
-  try {
-    let pos = offset
-    let carry = Buffer.alloc(0)
-    while (pos < end) {
-      const buffer = Buffer.alloc(Math.min(CHUNK, end - pos))
-      const read = readSync(fd, buffer, 0, buffer.length, pos)
-      if (read <= 0) break
-      pos += read
-      let data = Buffer.concat([carry, buffer.subarray(0, read)])
-      const base = pos - data.length
-      let from = 0
-      for (;;) {
-        const nl = data.indexOf(10, from)
-        if (nl < 0) break
-        yield [data.toString('utf8', from, nl), base + nl + 1]
-        from = nl + 1
-      }
-      carry = Buffer.from(data.subarray(from))
-      data = Buffer.alloc(0)
-    }
-  } finally {
-    closeSync(fd)
-  }
-}
-
-export type Found = { path: string; size: number; mtime: number }
-
-export interface SavedCursor {
-  offset: number
-  state: string
-}
-
-/**
- * The transcript files a pass reads: those under the existing `roots` changed since `sinceMs`,
- * plus any file with a saved cursor (`cursorSql` lists them) that changed in size, wherever its
- * folder is (a session that runs for days appends to the folder it began in). Sets the folder
- * counts on `result`. `hashedKey` is how a private file's cursor is stored.
- */
-export function gatherFiles(
-  db: Database,
-  rootPaths: string[],
-  sinceMs: number,
-  recentFiles: (root: string, sinceMs: number) => Found[],
-  cursorSql: string,
-  result: { roots: number; unreadable: number },
-): {
-  files: Map<string, Found>
-  saved: Map<string, SavedCursor>
-  hashedKey: (path: string) => string
-} {
-  const files = new Map<string, Found>()
-  const roots = rootPaths.filter((root) => existsSync(root))
-  result.roots = roots.length
-  for (const root of roots) {
-    try {
-      for (const file of recentFiles(root, sinceMs)) files.set(file.path, file)
-    } catch {
-      result.unreadable += 1
-    }
-  }
-  const hashedKey = (path: string) => `private:${sha(path)}`
-  const saved = new Map<string, SavedCursor>()
-  for (const row of db.prepare(cursorSql).all() as unknown as (SavedCursor & { path: string })[]) {
-    saved.set(row.path, row)
-    if (row.path.startsWith('private:') || files.has(row.path)) continue
-    if (!roots.some((root) => row.path.startsWith(`${root}/`))) continue
-    try {
-      const stat = statSync(row.path)
-      if (stat.size !== row.offset)
-        files.set(row.path, { path: row.path, size: stat.size, mtime: stat.mtimeMs })
-    } catch {
-      // gone
-    }
-  }
-  return { files, saved, hashedKey }
-}
-
-/**
- * Where a pass resumes a file: its saved state and offset, or a fresh start when the file shrank
- * or its first bytes changed (it was replaced), after `takeBack` undoes what each of the old
- * file's rollups added. Null when its first bytes cannot be read now: left for a later pass.
- */
-export function resumeFile<
-  S extends { private?: boolean; head?: string; rolls?: Record<string, number[]> },
->(
-  file: Found,
-  prior: SavedCursor | undefined,
-  isPrivate: (path: string) => boolean,
-  takeBack: (key: string, rolled: NonNullable<S['rolls']>[string]) => void,
-): { state: S; offset: number } | null {
-  let state = (prior ? JSON.parse(prior.state) : { private: isPrivate(file.path) }) as S
-  let offset = prior?.offset ?? 0
-  if (prior) {
-    let replaced = prior.offset > file.size
-    if (!replaced && state.head) {
-      try {
-        replaced = headHash(file.path, file.size) !== state.head
-      } catch {
-        return null
-      }
-    }
-    if (replaced) {
-      for (const [key, rolled] of Object.entries(state.rolls ?? {}))
-        takeBack(key, rolled as NonNullable<S['rolls']>[string])
-      state = { private: state.private } as S
-      offset = 0
-    }
-  }
-  return { state, offset }
 }
 
 /** The JSONL files under the sessions root changed since `sinceMs`, newest day folders only. */
@@ -234,9 +107,6 @@ function recentFiles(root: string, sinceMs: number): Found[] {
   }
   return out
 }
-
-const num = (value: unknown): number =>
-  typeof value === 'number' && Number.isFinite(value) ? value : 0
 
 export interface CodexOptions {
   /** The sessions roots, one per native home (HOME/.codex/sessions). */
@@ -277,7 +147,7 @@ function pass(db: Database, options: CodexOptions): CodexResult {
   // every folder since it): an older file is read only when it has a cursor.
   // A private file's cursor is keyed by a hash, so it can only be found again in the recent
   // day folders.
-  const { files, saved, hashedKey } = gatherFiles(
+  const { files, saved } = gatherFiles(
     db,
     options.roots,
     lookbackMs,
@@ -297,7 +167,7 @@ function pass(db: Database, options: CodexOptions): CodexResult {
   }
 
   for (const file of [...files.values()].sort((a, b) => a.mtime - b.mtime)) {
-    const prior = saved.get(hashedKey(file.path)) ?? saved.get(file.path)
+    const prior = saved.get(privateKey(file.path)) ?? saved.get(file.path)
     const resumed = resumeFile<FileState>(
       file,
       prior,
@@ -316,13 +186,7 @@ function pass(db: Database, options: CodexOptions): CodexResult {
     // Untouched since before the cutover and never read: its tail is all that can still matter.
     const old = !prior && file.mtime < cutoverMs
     if (old) offset = Math.max(file.size - cfg.tail_bytes, 0)
-    if (offset >= file.size) {
-      if (file.size === 0 || state.head) continue
-      state.head = headHash(file.path, file.size)
-      cursors.set(file.path, { offset, state })
-      continue
-    }
-    state.head ??= headHash(file.path, file.size)
+    if (!startFile(file, offset, state, cursors)) continue
     state.rolls ??= {}
     const mine = state.rolls
     let first = old && offset > 0
@@ -336,7 +200,7 @@ function pass(db: Database, options: CodexOptions): CodexResult {
       }
       const head = line.slice(0, 400)
       if (head.includes('"session_meta"')) {
-        const meta = safe(line)?.payload
+        const meta = parseLine(line)?.payload
         if (meta) {
           const hide = state.private || options.isPrivate(String(meta.cwd ?? ''))
           const id = hide && meta.id !== undefined ? sha(String(meta.id)) : meta.id
@@ -353,17 +217,15 @@ function pass(db: Database, options: CodexOptions): CodexResult {
         continue
       }
       if (head.includes('"turn_context"')) {
-        const context = safe(line)?.payload
+        const context = parseLine(line)?.payload
         if (context) {
           state.model = context.model ?? state.model
-          state.speed = ['standard', 'fast', 'flex', 'priority'].includes(context.service_tier)
-            ? context.service_tier
-            : 'standard'
+          state.speed = speedOf(context.service_tier)
         }
         continue
       }
       if (!head.includes('"token_count"')) continue
-      const record = safe(line)
+      const record = parseLine(line)
       const payload = record?.payload
       const at = Date.parse(record?.timestamp ?? '')
       if (payload?.type !== 'token_count' || Number.isNaN(at)) continue
@@ -486,15 +348,7 @@ function pass(db: Database, options: CodexOptions): CodexResult {
   result.newLots = newLots.length
   for (const event of events.sort((a, b) => a.observedAt - b.observedAt))
     if (storeReading(db, event, config.reading_min_interval_s)) result.readings += 1
-  const save = db.prepare(
-    'INSERT INTO cursors (path, offset, state) VALUES (?, ?, ?) ON CONFLICT (path) DO UPDATE SET offset = excluded.offset, state = excluded.state',
-  )
-  for (const [path, cursor] of cursors) {
-    // A private file's cursor is keyed by a hash, so its path is not stored.
-    const key = cursor.state.private ? hashedKey(path) : path
-    if (key !== path) db.prepare('DELETE FROM cursors WHERE path = ?').run(path)
-    save.run(key, cursor.offset, JSON.stringify(cursor.state))
-  }
+  saveCursors(db, cursors)
   putState(db, 'codex.runmin', runmin)
   return result
 }
@@ -518,18 +372,8 @@ function hidePrivateCursors(
     if (state.id) hidden.id = sha(state.id)
     drop.run(path)
     saved.delete(path)
-    const key = `private:${sha(path)}`
+    const key = privateKey(path)
     put.run(key, cursor.offset, JSON.stringify(hidden))
     saved.set(key, { offset: cursor.offset, state: JSON.stringify(hidden) })
-  }
-}
-
-/** A parsed JSON line, or undefined when it is not JSON. Codex's log shape is its own: every field is checked where used. */
-// biome-ignore lint/suspicious/noExplicitAny: provider log lines, read defensively field by field
-function safe(line: string): any {
-  try {
-    return JSON.parse(line)
-  } catch {
-    return undefined
   }
 }

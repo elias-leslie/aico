@@ -14,9 +14,21 @@ import { existsSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { transaction } from '@aico/store'
 import config from '../data/usage.json' with { type: 'json' }
-import { type Found, gatherFiles, headHash, newLines, projectOf, resumeFile } from './codex'
 import type { Database } from './db'
 import { localDay } from './plans'
+import {
+  type Found,
+  gatherFiles,
+  newLines,
+  num,
+  parseLine,
+  privateKey,
+  projectOf,
+  resumeFile,
+  saveCursors,
+  speedOf,
+  startFile,
+} from './transcripts'
 
 interface FileState {
   cwd?: string
@@ -50,9 +62,6 @@ export interface ClaudeTranscriptResult {
   roots: number
   unreadable: number
 }
-
-const num = (value: unknown): number =>
-  typeof value === 'number' && Number.isFinite(value) ? value : 0
 
 /** The transcript files under a root changed since `sinceMs`: session files and their subagent sidechains. */
 function recentFiles(root: string, sinceMs: number): Found[] {
@@ -102,7 +111,7 @@ function pass(db: Database, options: ClaudeTranscriptOptions): ClaudeTranscriptR
   }
   const [y, m, d] = cutoverDay.split('-').map(Number) as [number, number, number]
   const sinceMs = Math.max(new Date(y, m - 1, d).getTime(), now - config.lookback_days * 86400_000)
-  const { files, saved, hashedKey } = gatherFiles(
+  const { files, saved } = gatherFiles(
     db,
     options.roots,
     sinceMs,
@@ -122,7 +131,7 @@ function pass(db: Database, options: ClaudeTranscriptOptions): ClaudeTranscriptR
   for (const file of [...files.values()].sort((a, b) => a.mtime - b.mtime)) {
     const resumed = resumeFile<FileState>(
       file,
-      saved.get(hashedKey(file.path)) ?? saved.get(file.path),
+      saved.get(privateKey(file.path)) ?? saved.get(file.path),
       options.isPrivate,
       (key, back) =>
         roll(key).forEach((_, i, own) => {
@@ -131,13 +140,7 @@ function pass(db: Database, options: ClaudeTranscriptOptions): ClaudeTranscriptR
     )
     if (!resumed) continue
     const { state, offset } = resumed
-    if (offset >= file.size) {
-      if (file.size === 0 || state.head) continue
-      state.head = headHash(file.path, file.size)
-      cursors.set(file.path, { offset, state })
-      continue
-    }
-    state.head ??= headHash(file.path, file.size)
+    if (!startFile(file, offset, state, cursors)) continue
     state.rolls ??= {}
     state.seen ??= {}
     const mine = state.rolls
@@ -146,7 +149,7 @@ function pass(db: Database, options: ClaudeTranscriptOptions): ClaudeTranscriptR
     for (const [line, after] of newLines(file.path, offset, file.size)) {
       end = after
       if (!line.includes('"usage"')) continue
-      const record = safe(line)
+      const record = parseLine(line)
       const message = record?.message
       const usage = message?.usage
       if (record?.type !== 'assistant' || !usage || typeof message.model !== 'string') continue
@@ -159,9 +162,7 @@ function pass(db: Database, options: ClaudeTranscriptOptions): ClaudeTranscriptR
       }
       const day = localDay(at)
       if (day < cutoverDay) continue
-      const speed = ['standard', 'fast', 'flex', 'priority'].includes(usage.speed)
-        ? usage.speed
-        : 'standard'
+      const speed = speedOf(usage.speed)
       const now4: [number, number, number, number] = [
         num(usage.input_tokens),
         num(usage.cache_read_input_tokens),
@@ -228,22 +229,6 @@ function pass(db: Database, options: ClaudeTranscriptOptions): ClaudeTranscriptR
     const [day, model, project, speed] = key.split('\n') as [string, string, string, string]
     upsert.run(day, model.slice(0, 100), project.slice(0, 200), speed, ...entry)
   }
-  const save = db.prepare(
-    'INSERT INTO cursors (path, offset, state) VALUES (?, ?, ?) ON CONFLICT (path) DO UPDATE SET offset = excluded.offset, state = excluded.state',
-  )
-  for (const [path, cursor] of cursors) {
-    const key = cursor.state.private ? hashedKey(path) : path
-    save.run(key, cursor.offset, JSON.stringify(cursor.state))
-  }
+  saveCursors(db, cursors)
   return result
-}
-
-/** A parsed JSON line, or undefined when it is not JSON. Claude Code's transcript shape is its own: every field is checked where used. */
-// biome-ignore lint/suspicious/noExplicitAny: provider log lines, read defensively field by field
-function safe(line: string): any {
-  try {
-    return JSON.parse(line)
-  } catch {
-    return undefined
-  }
 }
