@@ -1,4 +1,5 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { createServer, type Socket } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Server } from 'node:tls'
@@ -8,7 +9,7 @@ import type { FleetSettings } from '@aico/fleet/settings'
 import { expect, it, vi } from 'vitest'
 import { lastRunLog, leaseCall, remoteAuthority, serveLeases } from './fleet-leases'
 import type { JobDef } from './jobs'
-import { JobStore, StaleLease } from './leases'
+import { JobStore, StaleLease, Unreachable } from './leases'
 import { Runner } from './runner'
 
 it('carries fenced claims, renewals and late result refusal over two real TLS peers', async () => {
@@ -211,6 +212,80 @@ it('gives another machine the last run output only for a job this machine holds'
     expect(() => lastRunLog(dir, [job], 'other', 'job')).toThrow('Unknown job')
     expect(() => lastRunLog(dir, [job], 'holder', '../job')).toThrow('Unknown job')
   } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+it('counts a peer that accepts and never answers as unreachable, and the tick carries on', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'jobs-silent-'))
+  const sock = join(dir, 'jobs.sock')
+  const held: Socket[] = []
+  const silent = createServer((socket) => void held.push(socket))
+  await new Promise<void>((resolve) => silent.listen(sock, resolve))
+  vi.stubEnv('AICO_JOBS_LEASE_WAIT_MS', '1500')
+  const store = new JobStore(':memory:')
+  try {
+    const remote = remoteAuthority(sock)
+    const started = Date.now()
+    await expect(remote.get('job')).rejects.toBeInstanceOf(Unreachable)
+    expect(Date.now() - started).toBeLessThan(5000)
+    // Having just gone silent, the same peer fails at once instead of costing another wait.
+    const again = Date.now()
+    await expect(remote.claim('job', { holder: 'h', machine: 'm' }, 0, 0)).rejects.toThrow(
+      'a moment ago',
+    )
+    expect(Date.now() - again).toBeLessThan(1000)
+
+    // A call that asks for a longer wait than the default keeps it.
+    const other = join(dir, 'slow.sock')
+    const slow = createServer((socket) => {
+      held.push(socket)
+      setTimeout(() => {
+        socket.end(
+          'HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: 14\r\n\r\n{"value":null}',
+        )
+      }, 400)
+    })
+    await new Promise<void>((resolve) => slow.listen(other, resolve))
+    try {
+      expect(await remoteAuthority(other).standin('job', 3000)).toBeNull()
+    } finally {
+      slow.close()
+    }
+
+    // The scheduler tick finishes, logs it, posts no row and does not run the job.
+    const job: JobDef = {
+      kind: 'job',
+      what: 'Job',
+      project: 'aico',
+      home: 'home',
+      lease_host: 'holder',
+      every_min: 1,
+      lease_s: 10,
+      run: { command: ['true'] },
+    }
+    const rows: unknown[] = []
+    const log: string[] = []
+    const runner = new Runner({
+      store,
+      jobs: [job],
+      machine: 'home',
+      holder: 'home-runner',
+      authority: () => remoteAuthority(sock),
+      act: async () => ({ state: 'ok', meaning: 'ran' }),
+      postRows: async (batch) => void rows.push(...batch),
+      log: (line) => void log.push(line),
+    })
+    await runner.tick()
+    await runner.idle()
+    expect(log.join('\n')).toContain('could not take the lease')
+    expect(store.get('job')?.lastState ?? null).toBeNull()
+    expect(rows).toEqual([])
+  } finally {
+    vi.unstubAllEnvs()
+    for (const socket of held) socket.destroy()
+    silent.close()
+    store.close()
     rmSync(dir, { recursive: true, force: true })
   }
 })

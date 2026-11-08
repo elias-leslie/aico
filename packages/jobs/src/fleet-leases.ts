@@ -267,7 +267,21 @@ export async function serveLeases(
   return server
 }
 
+/** How long a call to another machine's lease authority may go unanswered before it counts as
+ * Unreachable (env AICO_JOBS_LEASE_WAIT_MS). A call can pass its own, longer or shorter wait. */
+function leaseWaitMs(env: NodeJS.ProcessEnv = process.env): number {
+  const set = Number(env.AICO_JOBS_LEASE_WAIT_MS)
+  return Number.isFinite(set) && set > 0 ? set : 10_000
+}
+
+/** Sockets that just went silent, until when: later calls fail at once, so a peer that stops
+ * answering costs the scheduler tick one wait, not one per job. */
+const silentUntil = new Map<string, number>()
+
 async function remoteCall(socketPath: string, body: LeaseCall, waitMs?: number): Promise<unknown> {
+  const wait = waitMs ?? leaseWaitMs()
+  if ((silentUntil.get(socketPath) ?? 0) > Date.now())
+    throw new Unreachable(`no answer from ${socketPath} a moment ago`)
   return new Promise((resolve, reject) => {
     const req = request(
       {
@@ -299,8 +313,13 @@ async function remoteCall(socketPath: string, body: LeaseCall, waitMs?: number):
         })
       },
     )
-    if (waitMs !== undefined)
-      req.setTimeout(waitMs, () => req.destroy(new Error(`no answer in ${waitMs} ms`)))
+    // A whole-call deadline, not an idle one: a peer that accepts and then trickles or stalls
+    // must not hold the caller either.
+    const deadline = setTimeout(() => {
+      silentUntil.set(socketPath, Date.now() + wait)
+      req.destroy(new Error(`no answer in ${wait} ms`))
+    }, wait)
+    req.on('close', () => clearTimeout(deadline))
     req.on('error', (error) => reject(new Unreachable(error.message)))
     req.end(JSON.stringify(body))
   })
