@@ -60,7 +60,7 @@ it('does not treat an old retained offline receipt as proof the source is still 
   expect(state.copies[copyKey(source, 'drive')]?.observed).toBe('offline')
   const currentCfg = config({ AICO_BACKUP_MACHINE: 'aico' })
   const current = localBackupCoverage(state, currentCfg, 'aico', now)
-  expect(current.entries.find((item) => item.source === source)?.state).toBe('warn')
+  expect(current.entries.find((item) => item.source === source)?.state).toBe('off')
 })
 
 function configuredFleet() {

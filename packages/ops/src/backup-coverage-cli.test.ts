@@ -10,6 +10,7 @@ import {
 import { createServer, type Socket } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { serveExec } from '@aico/fleet/exec'
 import { readSettings } from '@aico/fleet/settings'
 import { readPins } from '@aico/fleet/trust'
@@ -93,6 +94,69 @@ it('keeps the ordinary local list contract and active-source counts unchanged', 
   ).toBe(false)
   expect(execute).toHaveBeenCalledWith(['aico', 'jobs', 'list', '--json'])
   expect(readSettings).not.toHaveBeenCalled()
+})
+
+it('keeps an owner-readable off source covered when its unchanged last copy is 72 hours old', async () => {
+  const f = fixture()
+  const now = Date.now()
+  const source = 'pve-host-files'
+  Object.assign(f.state.copies[copyKey(source, 'drive')] as object, {
+    observed: 'offline',
+    dataAt: new Date(now - 72 * 3600000).toISOString(),
+  })
+  f.state.runs.drive = f.state.runs.native = {
+    started: new Date(now - 1000).toISOString(),
+    finished: new Date(now).toISOString(),
+    ok: true,
+  }
+  saveState(f.cfg, f.state)
+  const env = { ...f.env, AICO_BACKUP_MACHINE: 'aico' }
+  expect(await backups(['list', '--json'], env)).toBe(0)
+  expect(await backups(['list', '--fleet', '--local', '--json'], env)).toBe(0)
+  const local = JSON.parse(f.lines[0] as string)
+  const fleet = JSON.parse(f.lines[1] as string)
+  expect(
+    local.entries.find(
+      (e: { source: string; target: string }) => e.source === source && e.target === 'drive',
+    ).state,
+  ).toBe('off')
+  // Feed the actual listing payloads to the native checker, without network or host writes.
+  const checked = spawnSync(
+    'python3',
+    [
+      '-c',
+      `
+import json, sys
+from host_steward.core import Ctx, Result, load_data
+from host_steward.checks.backups import aico_backups
+payload = json.load(sys.stdin)
+data = load_data()
+cfg = {**data['checks']['backups'], 'native_required_sources': []}
+site = {**data['site'], 'pve': {**data['site']['pve'], 'backup_required_targets': [payload['source']]}}
+def run(argv, **kwargs):
+    if '--fleet' in argv:
+        return Result(0, json.dumps(payload['fleet']))
+    if any(word.endswith('/api/backups') for word in argv):
+        return Result(0, json.dumps(payload['local']))
+    return Result(127)
+signals = aico_backups(Ctx(cfg=cfg, site=site, now=payload['now'], run=run))
+print(json.dumps({signal.code: signal.state for signal in signals}))
+`,
+    ],
+    {
+      input: JSON.stringify({ local, fleet, source, now: now / 1000 }),
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        PYTHONPATH: fileURLToPath(new URL('../../../native/host-steward', import.meta.url)),
+      },
+    },
+  )
+  expect(checked.status, checked.stderr).toBe(0)
+  expect(JSON.parse(checked.stdout)).toMatchObject({ 'backups.pve': 'ok', 'backups.drive': 'ok' })
+  expect(fleet.owners[0].entries.find((e: { source: string }) => e.source === source).state).toBe(
+    'off',
+  )
 })
 
 it.skipIf(!existsSync(`/run/user/${process.getuid?.()}/bus`))(
@@ -194,3 +258,5 @@ it.skipIf(!existsSync(`/run/user/${process.getuid?.()}/bus`))(
     }
   },
 )
+
+import { spawnSync } from 'node:child_process'

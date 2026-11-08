@@ -52,31 +52,32 @@ export function localBackupCoverage(
   machine: string,
   now = Date.now(),
 ): ReadBackupOwner {
-  // Saved power observations are not evidence that a guest is still off. This read avoids
-  // live jobs/SSH probes, so it evaluates copy dates and keeps current power unverified.
-  const observed = {
-    ...state,
-    copies: Object.fromEntries(
-      Object.entries(state.copies).map(([key, copy]) => [
-        key,
-        copy.target === 'drive' && copy.observed === 'offline'
-          ? { ...copy, observed: undefined }
-          : copy,
-      ]),
-    ),
-  }
-  const items = entries(observed, cfg, machine, now).filter((item) => item.target === 'drive')
+  // The current owner keeps its normal copy/off semantics. A former owner's old power
+  // observations cannot establish that a moved source is still off.
+  const items = entries(state, cfg, machine, now).filter((item) => item.target === 'drive')
   const retained: BackupEntry[] = []
   for (const source of migrated.sources) {
     if (driveSourceOwner(cfg, source.id) === machine) continue
-    const copy = observed.copies[copyKey(source.id, 'drive')]
+    const copy = state.copies[copyKey(source.id, 'drive')]
     if (!copy?.snapshot || !copy.dataAt) continue
     // An old controller's last attempt does not invalidate its last verified artifact.
     retained.push(
-      entry(source.id, source.name, 'drive', { ...copy, error: undefined }, cfg, machine, now),
+      entry(
+        source.id,
+        source.name,
+        'drive',
+        {
+          ...copy,
+          error: undefined,
+          observed: copy.observed === 'offline' ? undefined : copy.observed,
+        },
+        cfg,
+        machine,
+        now,
+      ),
     )
   }
-  for (const item of [...items, ...retained])
+  for (const item of retained)
     if (state.copies[copyKey(item.source, 'drive')]?.observed === 'offline')
       item.meaning = 'The last copy date is shown. The source’s current power has not been checked.'
   return {
