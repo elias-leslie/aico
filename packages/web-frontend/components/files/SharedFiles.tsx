@@ -180,7 +180,9 @@ export function SharedFiles({
                     onClick={() => onOpenPath(path)}
                     disabled={share.host !== undefined}
                     title={
-                      share.host ? `${path} (on ${share.host}, not here)` : path
+                      share.host
+                        ? `${path} (on ${sessionHostLabel(share.host)}, not here)`
+                        : path
                     }
                   >
                     <Icon

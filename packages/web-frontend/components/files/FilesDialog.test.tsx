@@ -615,6 +615,79 @@ describe('FilesDialog', () => {
     expect(await screen.findByText('Pick a file to preview it.')).toBeVisible()
   })
 
+  it('closes a file that won’t open, and a double-click leaves a file open', async () => {
+    let broken = true
+    renderDialog(null, null, (url) => {
+      const { pathname, searchParams } = new URL(url, 'http://aico.test')
+      if (pathname !== '/api/files/content') return serve(url)
+      if (broken) return json({ detail: 'This file was moved or deleted' }, 404)
+      return json({
+        path: searchParams.get('path'),
+        name: 'tmp-file.txt',
+        content: 'hello',
+        size: 5,
+        lines: 1,
+        extension: '.txt',
+        language: null,
+        is_binary: false,
+        is_truncated: false,
+      })
+    })
+    const row = () => screen.findByRole('button', { name: /tmp-file\.txt/ })
+    fireEvent.click(await row())
+    await screen.findByText('This file was moved or deleted')
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(await screen.findByText('Pick a file to preview it.')).toBeVisible()
+
+    broken = false
+    fireEvent.click(await row(), { detail: 1 })
+    await screen.findByRole('button', { name: 'Close preview' })
+    fireEvent.click(await row(), { detail: 2 })
+    expect(screen.getByRole('button', { name: 'Close preview' })).toBeVisible()
+  })
+
+  it('keeps a hidden folder out of a find once hidden files are off', async () => {
+    renderDialog(null, null, (url) => {
+      const { pathname, searchParams } = new URL(url, 'http://aico.test')
+      if (pathname !== '/api/files/tree') return serve(url)
+      const hidden = searchParams.get('hidden') === '0'
+      const match = searchParams.get('match') ?? ''
+      const inFolder = searchParams.get('path') === '.config'
+      const all = inFolder
+        ? [
+            {
+              name: 'inner.txt',
+              path: '.config/inner.txt',
+              is_directory: false,
+              size: 1,
+              extension: '.txt',
+            },
+          ]
+        : [
+            {
+              name: '.config',
+              path: '.config',
+              is_directory: true,
+              children_count: 1,
+            },
+          ]
+      const entries = all.filter(
+        (entry) =>
+          entry.name.includes(match) && !(hidden && entry.name.startsWith('.')),
+      )
+      return json({ entries, path: '', total: entries.length })
+    })
+    fireEvent.click(await screen.findByRole('button', { name: 'Show hidden' }))
+    fireEvent.click(await screen.findByText('.config'))
+    await screen.findByText('inner.txt')
+    fireEvent.click(screen.getByRole('button', { name: 'Show hidden' }))
+    fireEvent.change(
+      screen.getByRole('searchbox', { name: 'Find in this folder' }),
+      { target: { value: 'nothing' } },
+    )
+    await waitFor(() => expect(screen.queryByText('.config')).toBeNull())
+  })
+
   it('works when storage is out of reach', async () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('blocked')

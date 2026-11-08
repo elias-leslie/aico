@@ -16,7 +16,7 @@ import {
   FolderOpen,
   X,
 } from 'lucide-react'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { RenderedView } from '@/components/render/RenderedView'
 import {
   type FilesSource,
@@ -153,13 +153,17 @@ function TreeNode({
   const children = withOpenFolders(childTree.entries, entry.path, open, inside)
   const FileIcon = getFileIcon(entry)
 
-  const handleClick = useCallback(() => {
-    if (entry.is_directory) {
-      onToggle(entry)
-      return
-    }
-    onSelect(entry)
-  }, [entry, onSelect, onToggle])
+  const handleClick = useCallback(
+    (event: React.MouseEvent) => {
+      if (entry.is_directory) {
+        onToggle(entry)
+        return
+      }
+      // A double-click still opens it: the second click would close it again.
+      if (event.detail <= 1) onSelect(entry)
+    },
+    [entry, onSelect, onToggle],
+  )
 
   return (
     <li aria-expanded={entry.is_directory ? expanded : undefined}>
@@ -357,6 +361,7 @@ export function FileBrowser({
     setOpen(new Map([...open].filter(([, folder]) => folder.open)))
   }
   const entries = withOpenFolders(tree.entries, '', open, view)
+  const list = useRef<HTMLDivElement>(null)
   // Tapping the file that's showing closes it, as the preview's own X does.
   const pick = useCallback((entry: PaneFileTreeEntry) => {
     setSelected((current) => (current?.path === entry.path ? null : entry))
@@ -366,8 +371,10 @@ export function FileBrowser({
     // max-md: keeps a plain `flex` off this element so it cannot beat md:grid.
     <div className="min-h-0 flex-1 max-md:flex max-md:flex-col md:grid md:grid-cols-[320px_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)]">
       <div
+        ref={list}
+        tabIndex={-1}
         className={clsx(
-          'min-h-0 overflow-auto overscroll-contain px-2 pb-2',
+          'min-h-0 overflow-auto overscroll-contain px-2 pb-2 outline-none',
           selected ? 'max-h-[42%] flex-none md:max-h-none' : 'flex-1',
         )}
       >
@@ -416,7 +423,11 @@ export function FileBrowser({
         source={source}
         selected={selected}
         onInsertPath={onInsertPath}
-        onClose={() => setSelected(null)}
+        onClose={() => {
+          setSelected(null)
+          // The X goes with the preview; Escape and Tab need focus still in here.
+          list.current?.focus()
+        }}
         className={selected ? 'flex' : 'hidden md:flex'}
         shared={shared}
       />
@@ -489,6 +500,13 @@ export function FilePreview({
         : 'source'
   const rendered = renderKind !== null && mode === 'rendered'
 
+  // A file that won't open may have no row to tap again: this is the way out.
+  const closeState = onClose && (
+    <button type="button" className="lantern-btn mt-3 ml-2" onClick={onClose}>
+      Close
+    </button>
+  )
+
   const handleCopy = useCallback(
     async (kind: 'path' | 'content') => {
       const value = kind === 'path' ? selectedPath : content.data?.content
@@ -534,7 +552,10 @@ export function FilePreview({
       {!selected ? (
         <p className="files-state m-auto">Pick a file to preview it.</p>
       ) : content.isLoading ? (
-        <p className="files-state m-auto">Loading the file</p>
+        <div className="files-state m-auto">
+          <p>Loading the file</p>
+          {closeState}
+        </div>
       ) : content.isError ? (
         <div className="files-state m-auto">
           <p>{content.error?.message || 'Couldn’t open this file.'}</p>
@@ -547,6 +568,7 @@ export function FilePreview({
               Try again
             </button>
           )}
+          {closeState}
         </div>
       ) : content.data ? (
         <>

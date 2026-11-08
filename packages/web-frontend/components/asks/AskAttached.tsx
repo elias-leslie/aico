@@ -4,6 +4,7 @@ import { ArrowLeft, Code, File, FileX, Folder, Globe } from 'lucide-react'
 import { isHtmlPath, sharedPageUrl } from '@/lib/api/pane-files'
 import { formatBytes } from '@/lib/capture-format'
 import type { AttachedFile, OwnerAsk } from '@/lib/hooks/use-asks'
+import { sessionHostLabel } from '@/lib/machines'
 import { FileBrowser, FilePreview } from '../files/FileBrowser'
 
 /** What a file is, from its name: a short word the owner knows. */
@@ -115,7 +116,9 @@ export function AttachedFiles({
                 data-missing={missing ? 'true' : undefined}
                 disabled={missing || away}
                 title={
-                  away ? `${file.path} (on ${ask.host}, not here)` : file.path
+                  away
+                    ? `${file.path} (on ${ask.host ? sessionHostLabel(ask.host) : 'another computer'}, not here)`
+                    : file.path
                 }
                 onClick={() => onOpen(file)}
               >

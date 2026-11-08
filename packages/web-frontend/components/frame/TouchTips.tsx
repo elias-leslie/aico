@@ -10,7 +10,7 @@ const MOVE_PX = 10
 /** How long after a hold's release its click can still arrive. */
 const CLICK_MS = 400
 const ACTS_ON_TAP =
-  'a,button,input,select,textarea,label,summary,[role="button"],[role="link"],[role="tab"],[role="menuitem"],[tabindex]'
+  'a,button,input,select,textarea,label,summary,[role="button"],[role="link"],[role="tab"],[role="menuitem"],[tabindex]:not([tabindex="-1"])'
 
 interface Tip {
   text: string
@@ -94,6 +94,10 @@ export function TouchTips() {
         event.preventDefault()
     }
     // Only a scroll that moves the tip's element: a chat following its output elsewhere doesn't.
+    const onCancel = () => {
+      cancel()
+      held = false
+    }
     const onScroll = (event: Event) => {
       const at = shown ?? down?.from
       if (!at || !(event.target as Node).contains?.(at)) return
@@ -108,7 +112,7 @@ export function TouchTips() {
       ['pointerdown', onDown as EventListener],
       ['pointermove', onMove as EventListener],
       ['pointerup', onUp as EventListener],
-      ['pointercancel', cancel],
+      ['pointercancel', onCancel],
       ['click', onClick as EventListener],
       ['contextmenu', onMenu],
       ['scroll', onScroll],

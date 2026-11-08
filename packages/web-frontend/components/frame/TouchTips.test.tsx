@@ -97,9 +97,11 @@ describe('TouchTips', () => {
           onClick={pressed}
           data-testid="key"
         />
-        <span title="Whole name" data-testid="text">
-          Whole…
-        </span>
+        <div tabIndex={-1}>
+          <span title="Whole name" data-testid="text">
+            Whole…
+          </span>
+        </div>
         <button type="button" title="Run" data-testid="control" />
       </>,
     )
@@ -127,6 +129,20 @@ describe('TouchTips', () => {
     pointer(control, 'pointerdown')
     act(() => vi.advanceTimersByTime(500))
     expect(menuOn(control)).toBe(true)
+    pointer(control, 'pointerup')
+
+    // In a dialog's focus box, plain text still shows its tip on a tap.
+    tap(text)
+    expect(tip()).toHaveTextContent('Whole name')
+
+    // A hold the browser took over doesn't eat a later keyboard press.
+    const clicked = vi.fn()
+    control.addEventListener('click', clicked)
+    pointer(control, 'pointerdown')
+    act(() => vi.advanceTimersByTime(500))
+    pointer(control, 'pointercancel')
+    act(() => control.click())
+    expect(clicked).toHaveBeenCalledTimes(1)
   })
 
   it('closes when the page behind it scrolls or focus leaves, not for a scroll elsewhere', () => {

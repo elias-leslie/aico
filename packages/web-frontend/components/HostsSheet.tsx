@@ -259,7 +259,9 @@ function HostCard({ host, sync }: { host: HostChoice; sync?: PeerSync }) {
       await powerHost(host.name, 'on')
       await refresh()
     } catch (failure) {
-      setError(messageOf(failure, `Couldn’t power on ${host.name}.`))
+      setError(
+        messageOf(failure, `Couldn’t power on ${sessionHostLabel(host.name)}.`),
+      )
     } finally {
       setBusy(null)
     }
@@ -275,7 +277,12 @@ function HostCard({ host, sync }: { host: HostChoice; sync?: PeerSync }) {
       await refresh()
     } catch (failure) {
       if (force) {
-        setConfirmError(messageOf(failure, `Couldn’t power off ${host.name}.`))
+        setConfirmError(
+          messageOf(
+            failure,
+            `Couldn’t power off ${sessionHostLabel(host.name)}.`,
+          ),
+        )
       } else if (failure instanceof HostCallError && failure.status === 409) {
         // The host says sessions are running there: offer to do it anyway.
         setConfirm({
@@ -284,7 +291,12 @@ function HostCard({ host, sync }: { host: HostChoice; sync?: PeerSync }) {
           confirmText: 'Power off anyway',
         })
       } else {
-        setError(messageOf(failure, `Couldn’t power off ${host.name}.`))
+        setError(
+          messageOf(
+            failure,
+            `Couldn’t power off ${sessionHostLabel(host.name)}.`,
+          ),
+        )
       }
     } finally {
       setBusy(null)
@@ -312,7 +324,9 @@ function HostCard({ host, sync }: { host: HostChoice; sync?: PeerSync }) {
       setConfirm(null)
       await refresh()
     } catch (failure) {
-      setConfirmError(messageOf(failure, `Couldn’t trust ${host.name}.`))
+      setConfirmError(
+        messageOf(failure, `Couldn’t trust ${sessionHostLabel(host.name)}.`),
+      )
     } finally {
       setBusy(null)
     }
@@ -471,7 +485,7 @@ export function HostSignIn({
   if (!connected) {
     return (
       <p className="mt-3 text-[12px]" style={{ color: 'var(--mist)' }}>
-        Sign-in can be checked once {host} is connected.
+        Sign-in can be checked once {sessionHostLabel(host)} is connected.
       </p>
     )
   }
@@ -501,8 +515,8 @@ export function HostSignIn({
       const message = messageOf(
         failure,
         action === 'sign_in'
-          ? `Couldn’t start sign-in on ${host}.`
-          : `Couldn’t sign out on ${host}.`,
+          ? `Couldn’t start sign-in on ${sessionHostLabel(host)}.`
+          : `Couldn’t sign out on ${sessionHostLabel(host)}.`,
       )
       if (action === 'sign_out') setSignOutError(message)
       else setToolError(message)
@@ -517,7 +531,7 @@ export function HostSignIn({
   } else if (logins.isError || !logins.data) {
     body = (
       <p className="text-[13px] break-words">
-        Couldn’t check sign-in on {host}:{' '}
+        Couldn’t check sign-in on {sessionHostLabel(host)}:{' '}
         {logins.error instanceof Error
           ? logins.error.message
           : 'no answer from the host'}
@@ -541,7 +555,10 @@ export function HostSignIn({
   }
 
   return (
-    <section aria-label={`Sign-in on ${host}`} className="mt-3">
+    <section
+      aria-label={`Sign-in on ${sessionHostLabel(host)}`}
+      className="mt-3"
+    >
       <h4 className="lantern-sec mb-1.5">Sign-in</h4>
       {body}
       {toolError && (

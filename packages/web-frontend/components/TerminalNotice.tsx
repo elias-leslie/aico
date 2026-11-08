@@ -5,6 +5,7 @@ import { SIZE_HOLDER_HINT } from '@aico/ui-kit/size-holder-copy'
 import { useEffect, useState } from 'react'
 import type { ConnectionStatus, HostAway } from '@/components/terminal.types'
 import type { SessionModelSwitch } from '@/lib/hooks/use-terminal-sessions'
+import { sessionHostLabel } from '@/lib/machines'
 import { modelSwitchCopy } from '@/lib/model-switch-copy'
 
 const LOST: Partial<Record<ConnectionStatus, string>> = {
@@ -181,7 +182,7 @@ interface HostNoticeProps {
  * the session's last output covered, and offer Reconnect where it helps, or
  * Power on when the host is off. */
 export function HostNotice({ away, onReconnect, onPowerOn }: HostNoticeProps) {
-  const copy = hostNoticeCopy(away.host, away.state)
+  const copy = hostNoticeCopy(sessionHostLabel(away.host), away.state)
   const [powering, setPowering] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
   // The host moved on (connecting, back, or off again): the button is fresh.
@@ -199,7 +200,7 @@ export function HostNotice({ away, onReconnect, onPowerOn }: HostNoticeProps) {
       setFailure(
         error instanceof Error && error.message
           ? error.message
-          : `Couldn’t power on ${away.host}.`,
+          : `Couldn’t power on ${sessionHostLabel(away.host)}.`,
       )
     })
   }

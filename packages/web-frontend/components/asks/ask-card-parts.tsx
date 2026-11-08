@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { openFiles } from '@/lib/files-opener'
 import type { AskReply, AttachedFile, OwnerAsk } from '@/lib/hooks/use-asks'
+import { sessionHostLabel } from '@/lib/machines'
 import { openAppPath, workbenchPathOf } from '@/lib/workbench'
 import { PlainMarkdown } from '../PlainMarkdown'
 import { AttachedFiles } from './AskAttached'
@@ -152,7 +153,7 @@ export function AskHead({
             <span style={{ color: 'var(--bone)' }}>{asker.name}</span>
             {' · asked '}
             {ago(ask.createdAt, now)}
-            {ask.host ? ` · on ${ask.host}` : ''}
+            {ask.host ? ` · on ${sessionHostLabel(ask.host)}` : ''}
           </span>
         </Meta>
       )}
@@ -162,8 +163,9 @@ export function AskHead({
           className="mb-1.5 text-[12px]"
           style={{ color: 'var(--ember)' }}
         >
-          {ask.host ?? 'That computer'} is {awayText(ask.peer?.state)}. This is
-          the last copy seen; you can answer when it is back.
+          {ask.host ? sessionHostLabel(ask.host) : 'That computer'} is{' '}
+          {awayText(ask.peer?.state)}. This is the last copy seen; you can
+          answer when it is back.
         </p>
       )}
       <p className="mb-1.5 font-semibold" style={{ overflowWrap: 'anywhere' }}>
