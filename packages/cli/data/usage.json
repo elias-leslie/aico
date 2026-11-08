@@ -147,7 +147,7 @@
     "surface": "st.db",
     "tier": "reference",
     "cmd": "st db tables|schema TABLE|count TABLE|sample TABLE [N]|query SQL [--store NAME]",
-    "when": "inspect an Aico SQLite store; read queries only"
+    "when": "inspect an Aico SQLite store, not sqlite3 on ~/.local/state/aico/*.db; schema TABLE before guessing columns; read queries only"
   },
   {
     "surface": "st.mockup.add",

@@ -1,5 +1,8 @@
+import { mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { failureLines, resultLine } from './run'
+import { failureLines, pruneDetails, resultLine } from './run'
 
 describe('a failed check says what failed', () => {
   it('lists the failing lines past the hint, cleaned and without the command', () => {
@@ -43,4 +46,19 @@ describe('a failed check says what failed', () => {
     )
     expect(resultLine({ ...base, state: 'pass' })).toBe('CHECK:OK:x|1.0s|hint:first')
   })
+})
+
+it('old details files go, recent ones and anything else stay', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'details-'))
+  try {
+    for (const name of ['old-1-details.txt', 'new-2-details.txt', 'keep.json'])
+      writeFileSync(join(dir, name), '')
+    const eightDaysAgo = new Date(Date.now() - 8 * 24 * 3600 * 1000)
+    utimesSync(join(dir, 'old-1-details.txt'), eightDaysAgo, eightDaysAgo)
+    utimesSync(join(dir, 'keep.json'), eightDaysAgo, eightDaysAgo)
+    pruneDetails(dir)
+    expect(readdirSync(dir).sort()).toEqual(['keep.json', 'new-2-details.txt'])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 })

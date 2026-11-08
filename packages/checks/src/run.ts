@@ -12,9 +12,11 @@ import {
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   renameSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs'
@@ -149,6 +151,27 @@ export function failureLines(output: string, shown: string): string[] {
   if (unique.length > kept.length) kept.push(`${unique.length - kept.length} more in the details`)
   if (FIXABLE.test(output)) kept.push('Biome and ruff can fix your own files: st check --fix')
   return kept
+}
+
+/** Each failed or passed stage leaves a file here; nothing reads one after its run's week is out. */
+const DETAILS_KEPT_MS = 7 * 24 * 3600 * 1000
+
+export function pruneDetails(dir: string, now = Date.now()): void {
+  let names: string[]
+  try {
+    names = readdirSync(dir)
+  } catch {
+    return
+  }
+  for (const name of names) {
+    if (!name.endsWith('-details.txt')) continue
+    const path = join(dir, name)
+    try {
+      if (now - statSync(path).mtimeMs > DETAILS_KEPT_MS) rmSync(path, { force: true })
+    } catch {
+      // another run's prune got there first
+    }
+  }
 }
 
 const pyRegExp = (pattern: string) => new RegExp(pattern.replace(/\(\?P</g, '(?<'), 'gm')
@@ -345,6 +368,7 @@ export async function runSteps(
   const aliases = join(work, 'tools')
   linkTools(config, aliases)
   const details = join(options.detailsRoot ?? root, '.dev-tools')
+  pruneDetails(details)
   mkdirSync(details, { recursive: true })
   const passes = join(commonDir(root), 'aico-checks', 'stages')
   const reuse = options.reuse !== false && lane === 'full'
