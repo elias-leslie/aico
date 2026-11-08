@@ -119,10 +119,10 @@ export async function commit(config: Config, options: CommitOptions): Promise<Co
   if (!options.paths.length) throw new CommitError('name the paths to commit (--paths)')
   const { files, swept } = selection(root, options.paths)
   if (!files.length) throw new CommitError(`nothing to commit under ${options.paths.join(' ')}`)
-  const refused = refusals(files, swept, options.coordination.foreign(root, files))
+  const refused = refusals(files, swept, options.coordination.foreign(root, files, options.withAck))
   if (refused.length)
     throw new CommitError(
-      `commit refused: another agent's uncommitted work: ${refused.join('; ')}. Commit your own files by name, or ask that agent (aico sessions send).`,
+      `commit refused: another agent's uncommitted work: ${refused.join('; ')}. Commit your own files by name, or ask that agent (st sessions send) and rerun with --with-ack <id> once it says yes.`,
     )
   const blocked = options.coordination.guard(root, 'commit', options.withAck)
   if (blocked) throw new CommitError(blocked)
@@ -171,7 +171,11 @@ export async function commit(config: Config, options: CommitOptions): Promise<Co
       throw new CommitError(
         `source changed while waiting to commit: ${moved.join(', ')}; rerun the commit`,
       )
-    const refused = refusals(files, swept, options.coordination.foreign(root, files))
+    const refused = refusals(
+      files,
+      swept,
+      options.coordination.foreign(root, files, options.withAck),
+    )
     if (refused.length)
       throw new CommitError(
         `commit refused: another agent's uncommitted work: ${refused.join('; ')}`,

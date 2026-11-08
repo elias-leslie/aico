@@ -363,3 +363,33 @@ func TestGuardRefusesAnotherAgentsHold(t *testing.T) {
 		}
 	}
 }
+
+func TestWritersYesHandsOverTheirPaths(t *testing.T) {
+	repo := sandbox(t)
+	real, _ := filepath.EvalSymlinks(repo)
+	theirs := filepath.Join(real, "theirs.txt")
+	New(testConfig(), edit(sidB, theirs)).Edit()
+	a, b := agent(sidA, ""), agent(sidB, "")
+	register(t, a, b)
+	found, err := a.Foreign("demo", []string{theirs})
+	if err != nil || len(found[theirs]) == 0 {
+		t.Fatalf("the other agent's write must show: %v (%v)", found, err)
+	}
+	row, _, err := a.Send(SendOpts{To: "cc:222222", Text: "may I commit theirs.txt?"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := row["id"].(string)
+	if got := a.ExceptAcked(found, id, "demo"); len(got[theirs]) == 0 {
+		t.Errorf("an open request hands nothing over: %v", got)
+	}
+	if _, err := b.Ack(id, "yes", ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := a.ExceptAcked(found, id, "demo"); len(got[theirs]) != 0 {
+		t.Errorf("the writer's yes hands its path over: %v", got)
+	}
+	if got := b.ExceptAcked(found, id, "demo"); len(got[theirs]) == 0 {
+		t.Errorf("only the requester may use the yes: %v", got)
+	}
+}

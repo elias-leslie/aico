@@ -37,7 +37,8 @@ const CHECK_USAGE = `aico check: the repo's gate (.st-check.toml).
 Your own changed files: the dirty files no other session wrote or leases.`
 
 const COMMIT_USAGE = `aico commit -m MSG --paths P... [--with-ack ID] [--skip-checks]
-  Runs the quick check on the changed files under P, commits only them, and releases your leases on them.`
+  Runs the quick check on the changed files under P, commits only them, and releases your leases on them.
+  --with-ack ID: the yes of the agent that wrote these files or holds the project (st sessions send).`
 
 interface Parsed {
   flags: Set<string>

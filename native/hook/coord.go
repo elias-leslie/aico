@@ -16,7 +16,8 @@ import (
 //
 //	aico-hook lease [GLOB...] [--check P | --list [--all] | --take P | --release [GLOB] | --release-all |
 //	                 --heartbeat | --hold PURPOSE]
-//	aico-hook lease --foreign P...     JSON {path: [agent ids]} of the paths other sessions wrote (aico commit)
+//	aico-hook lease --foreign P... [--with-ack ID]   JSON {path: [agent ids]} of the paths other sessions wrote
+//	                                   (aico commit); a writer's yes to request ID lets me take its paths
 //	aico-hook lease --guard OP [--with-ack ID]   exit 1 with the holder line when another agent's hold or a live op
 //	                                             refuses OP (commit, publish, rebuild, acceptance)
 //	aico-hook lease --committed P...   a commit settled these paths: drop my leases on them and their writer sets
@@ -173,7 +174,7 @@ func leaseMain(h *lease.Hook, args []string) int {
 		return fail("%v", err)
 	}
 	if foreign || committed {
-		return settledMain(h, p, globs, committed)
+		return settledMain(h, p, globs, committed, withAck)
 	}
 	if guard != "" {
 		line, err := h.Guard(p.ID, p.Root, guard, withAck)
@@ -270,7 +271,7 @@ func leaseMain(h *lease.Hook, args []string) int {
 
 // settledMain answers aico commit: --foreign before it (who else wrote these paths) and --committed after it.
 // Paths are relative to the project root (or absolute) and keyed by their real path, as the writer sets are.
-func settledMain(h *lease.Hook, p lease.Project, paths []string, committed bool) int {
+func settledMain(h *lease.Hook, p lease.Project, paths []string, committed bool, withAck string) int {
 	root := p.Root
 	if real, err := filepath.EvalSymlinks(root); err == nil {
 		root = real
@@ -295,6 +296,9 @@ func settledMain(h *lease.Hook, p lease.Project, paths []string, committed bool)
 	found, err := h.Foreign(p.ID, abs)
 	if err != nil {
 		return fail("%v", err)
+	}
+	if withAck != "" {
+		found = h.ExceptAcked(found, withAck, p.ID)
 	}
 	out := map[string][]string{}
 	for path, ids := range found {

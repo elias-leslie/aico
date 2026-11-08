@@ -358,6 +358,20 @@ func (h *Hook) Foreign(project string, paths []string) (map[string][]string, err
 	return out, nil
 }
 
+// ExceptAcked drops from found (Foreign's answer) the agents whose yes to ackID (my request, under two hours
+// old) lets me take their uncommitted work, as a lease holder's yes does for a hold.
+func (h *Hook) ExceptAcked(found map[string][]string, ackID, project string) map[string][]string {
+	out := map[string][]string{}
+	for path, ids := range found {
+		for _, id := range ids {
+			if !h.AckAuthorizes(ackID, Lease{AgentID: strings.TrimPrefix(id, "lease:")}, project) {
+				out[path] = append(out[path], id)
+			}
+		}
+	}
+	return out
+}
+
 // Committed drops what a commit of paths (absolute) settled: this agent's leases on exactly those paths and the
 // paths' writer sets (the work is no longer in flight). It returns how many lease globs it released.
 func (h *Hook) Committed(project string, paths []string) (int, error) {

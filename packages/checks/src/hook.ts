@@ -8,8 +8,9 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 
 export interface Coordination {
-  /** Path -> other agents that wrote it (`unknown` when not told apart) or lease it (`lease:<agent>`). */
-  foreign(root: string, paths: string[]): Record<string, string[]>
+  /** Path -> other agents that wrote it (`unknown` when not told apart) or lease it (`lease:<agent>`),
+   * less those whose yes to request withAck hands their work over. */
+  foreign(root: string, paths: string[], withAck?: string): Record<string, string[]>
   /** The holder line refusing op, or null when nothing does. Throws when the store does not answer. */
   guard(root: string, op: 'commit' | 'acceptance', withAck?: string): string | null
   /** Drops the caller's leases on these committed paths and their writer sets; the hook's message. */
@@ -46,10 +47,14 @@ export function hookCoordination(env: NodeJS.ProcessEnv = process.env): Coordina
       paths.slice(i * 500, i * 500 + 500),
     )
   return {
-    foreign(root, paths) {
+    foreign(root, paths, withAck) {
       const out: Record<string, string[]> = {}
       for (const chunk of chunks(paths)) {
-        const result = run(root, ['--foreign', ...chunk])
+        const result = run(root, [
+          '--foreign',
+          ...chunk,
+          ...(withAck ? ['--with-ack', withAck] : []),
+        ])
         if (result.code !== 0)
           throw new CoordinationError(`the lease store did not answer: ${result.err || result.out}`)
         Object.assign(out, JSON.parse(result.out || '{}'))
