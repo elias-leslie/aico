@@ -29,9 +29,6 @@ export function TodayPage() {
       <div className="status">
         <header className="status-head">
           <h1>Today</h1>
-          <span className="sub">
-            who worked when · questions and failures marked
-          </span>
         </header>
         <section
           aria-label="While you were away"
