@@ -215,7 +215,7 @@ describe('Routines', () => {
     })
   })
 
-  it('shows a run due within a day as its time of day alone, in the routine’s zone', async () => {
+  it('shows a run due within a day as its time of day alone, in the viewer’s time with no zone', async () => {
     list = [
       routine({
         kind: 'soon',
@@ -229,8 +229,8 @@ describe('Routines', () => {
     view()
     const row = await screen.findByTestId('routine-soon')
     const when = row.querySelector('button')?.textContent ?? ''
-    expect(when).toMatch(/\d:\d\d (AM|PM) GMT\+14/)
-    expect(when).not.toMatch(/[A-Z][a-z]{2} \d/)
+    expect(when).toMatch(/\d:\d\d (AM|PM)/)
+    expect(when).not.toMatch(/GMT|UTC|[A-Z][a-z]{2} \d/)
   })
 
   it('groups by machine, groups with a problem first (by name), with the failed count in the head', async () => {
@@ -285,8 +285,19 @@ describe('Routines', () => {
     expect(screen.getAllByRole('listitem')).toHaveLength(10)
   })
 
-  it('names the zone on the schedule and the next run when it is not the viewer’s, and on neither when it is', async () => {
-    const next = Date.UTC(2030, 5, 15, 3, 30)
+  it('tells a run in the viewer’s time, and names the routine’s own zone only on its schedule with the viewer’s time beside it', async () => {
+    // 03:30 in Kiritimati (UTC+14) is 13:30 UTC the day before.
+    const next = Date.UTC(2030, 5, 14, 13, 30)
+    const local = new Date(next).toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    })
+    const localTime = new Date(next).toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+    })
     list = [
       routine({
         kind: 'gem',
@@ -307,17 +318,17 @@ describe('Routines', () => {
     ]
     view()
     const gem = await screen.findByTestId('routine-gem')
-    // 03:30 UTC is 17:30 on the 15th in Kiritimati (UTC+14): the next run is told in that zone.
-    expect(gem.textContent).toContain('Jun 15, 5:30 PM GMT+14')
+    expect(gem.querySelector('button')?.textContent).toContain(local)
+    expect(gem.querySelector('button')?.textContent).not.toContain('GMT')
     fireEvent.click(gem.querySelector('button') as HTMLElement)
     expect(gem.textContent).toContain(
-      'Daily at 03:30 GMT+14 · next Jun 15, 5:30 PM GMT+14',
+      `Daily at 03:30 GMT+14 (${localTime} here) · next ${local}`,
     )
     const here = screen.getByTestId('routine-here')
     fireEvent.click(here.querySelector('button') as HTMLElement)
-    expect(here.textContent).toContain('Daily at 03:30 · next ')
-    expect(here.textContent).not.toMatch(/Daily at 03:30 [^·]/)
+    expect(here.textContent).toContain(`Daily at 03:30 · next ${local}`)
     expect(here.textContent).not.toContain('GMT')
+    expect(here.textContent).not.toContain('here)')
   })
 
   it('says so when the last run printed nothing', async () => {

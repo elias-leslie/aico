@@ -70,8 +70,9 @@ there, add an entry; the definition itself stays in its unit file.
 A time of day (`--at`, `at`) is read in one named zone, and the schedule text and the next run use it.
 Registered routines store the zone of the machine they were added on (the pair's for `--hosts either`).
 A job in jobs.json gets the zone `zones` gives for its `home` machine (or its own `tz`), so a job homed
-on `aico` (UTC) reads 03:30 as 03:30 UTC. The list shows the zone's short name on the schedule and the
-next run when it is not the viewer's, so "Daily at 03:30 UTC · next Nov 8, 3:30 AM UTC" never mixes zones.
+on `aico` (UTC) reads 03:30 as 03:30 UTC. The list tells every run (rows, next, last) in the viewer's own time, no zone suffix. Only the
+schedule in the detail names its own zone when that is not the viewer's, with the viewer's time beside it:
+"Daily at 03:30 UTC (10:30 PM here) · next Nov 7, 10:30 PM".
 
 ## Timers that moved into the registry
 

@@ -71,36 +71,36 @@ function zoneLabel(tz: string, at: number): string {
   }
 }
 
-/** A moment in the routine's own zone, with the zone's name when that is not the viewer's. */
-export function whenIn(routine: Routine, at: number): string {
-  const text = shortWhen(at, routine.tz)
-  return routine.tz && routine.tz !== viewerZone()
-    ? `${text} ${zoneLabel(routine.tz, at)}`
-    : text
+/** A moment in the viewer's own time: the owner never has to convert a zone. */
+export function whenIn(_routine: Routine, at: number): string {
+  return shortWhen(at)
 }
 
 const DAY_MS = 24 * 3_600_000
 
-/** The same for a row's one line: a run due within a day is just its time of day ("4:30 AM UTC"). */
-export function soonIn(routine: Routine, at: number, now = Date.now()): string {
-  if (at - now >= DAY_MS || at < now) return whenIn(routine, at)
-  const time = new Date(at).toLocaleTimeString('en-US', {
+const timeOfDay = (at: number) =>
+  new Date(at).toLocaleTimeString('en-US', {
     hour: 'numeric',
     minute: '2-digit',
-    ...(routine.tz ? { timeZone: routine.tz } : {}),
   })
-  return routine.tz && routine.tz !== viewerZone()
-    ? `${time} ${zoneLabel(routine.tz, at)}`
-    : time
+
+/** The same for a row's one line: a run due within a day is just its time of day. */
+export function soonIn(routine: Routine, at: number, now = Date.now()): string {
+  return at - now >= DAY_MS || at < now ? whenIn(routine, at) : timeOfDay(at)
 }
 
-/** "daily at 19:00" as a sentence start; a time of day in another zone than the viewer's names it. */
+/** "daily at 03:30" as a sentence start. A time of day in another zone than the viewer's names its
+ * zone and the viewer's time for it: "Daily at 03:30 UTC (10:30 PM here)". */
 export function scheduleText(routine: Routine): string {
   const text =
     routine.schedule.charAt(0).toUpperCase() + routine.schedule.slice(1)
-  return routine.tz && routine.tz !== viewerZone() && /\d:\d\d/.test(text)
-    ? `${text} ${zoneLabel(routine.tz, routine.nextRun ?? Date.now())}`
-    : text
+  if (!routine.tz || routine.tz === viewerZone() || !/\d:\d\d/.test(text))
+    return text
+  const at = routine.nextRun ?? Date.now()
+  const named = `${text} ${zoneLabel(routine.tz, at)}`
+  return routine.nextRun === null
+    ? named
+    : `${named} (${timeOfDay(routine.nextRun)} here)`
 }
 
 /** Where it runs, in words: one machine, or whichever of several is online. */
