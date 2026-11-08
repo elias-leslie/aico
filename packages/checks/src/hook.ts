@@ -76,7 +76,7 @@ export function hookCoordination(env: NodeJS.ProcessEnv = process.env): Coordina
         if (result.code !== 0) return `Leases not released: ${result.err || result.out}`
         released += Number(/Released (\d+)/.exec(result.out)?.[1] ?? 0)
       }
-      return `Released ${released} lease(s).`
+      return released ? `Released ${released} lease(s).` : ''
     },
   }
 }

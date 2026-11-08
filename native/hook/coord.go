@@ -497,8 +497,12 @@ func inboxList(h *lease.Hook) int {
 		}
 		fmt.Printf("%s %s %s->%s %s | %s\n", s(r["id"]), state, s(r["from"]), s(r["to"]), detail, s(r["text"]))
 	}
-	for _, line := range h.Notices() {
+	notices := h.Notices()
+	for _, line := range notices {
 		fmt.Println(line)
+	}
+	if len(rows) == 0 && len(notices) == 0 {
+		fmt.Println("No messages.")
 	}
 	return 0
 }

@@ -1494,27 +1494,30 @@ def started_agent_id(collector: Collector, created: dict) -> str | None:
 
 
 def create_main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="st aico create", description=(
-        "Create one exact owner root; native resume uses an adapter-validated session ID in a new root. "
-        "Reuse the same request ID and complete body on retry. The catalog keeps no prompt."))
+    parser = argparse.ArgumentParser(prog="st aico create", usage=(
+        'st aico create REQUEST_ID "PROMPT" --tool TOOL --work-role ROLE --project P --project-root PATH '
+        '[--model M] [--reasoning-effort E] [options]'), description=(
+        "Start one agent session and print its receipt as one JSON line. REQUEST_ID is a name you pick; "
+        "a retry uses the same ID and the same options. Read it with st aico root report REQUEST_ID, "
+        "end it with st aico root end REQUEST_ID."))
     parser.add_argument("request_id")
     parser.add_argument("prompt", nargs="?", help=(
         f"short sanitized initial/recovery prompt (<={PROMPT_BYTES} UTF-8 bytes); put a longer brief "
         "in a file and name its path here"))
     parser.add_argument("--stdin", action="store_true", help=f"read prompt from stdin instead (same {PROMPT_BYTES}-byte limit)")
-    parser.add_argument("--project", help="required unless --blank-slate (default blank-slate)")
-    parser.add_argument("--project-root", help="required unless --blank-slate")
+    parser.add_argument("--project", help="project id; required unless --blank-slate")
+    parser.add_argument("--project-root", help="its folder; required unless --blank-slate")
     # No default: the caller picks the agent on purpose. No local list either:
     # Tether decides which tools can start a root (`rootCapable` in /v1/tools)
     # and its refusal names them.
     parser.add_argument("--tool", type=tool_slug, required=True, help=(
-        "required. Agent tool slug: claude-code, codex or pi; aico-agent runs Aico's own harness."))
-    parser.add_argument("--role", default="portfolio-root", help="opaque orchestration metadata")
+        "required: claude-code, codex or pi; aico-agent runs Aico's own harness."))
+    parser.add_argument("--role", default="portfolio-root", help=argparse.SUPPRESS)
     parser.add_argument("--work-role",
-                        help="required for a new root: a work role Aico knows (coordinator, implementation, design, research, review, recon, hunting, operations, selection, verification, reporting, mapping or other; st models route lists them); fixed including resume. It also picks the launch defaults")
+                        help="required for a new session: a work role Aico knows (coordinator, implementation, design, research, review, recon, hunting, operations, selection, verification, reporting, mapping or other; st models route lists them); fixed including resume. It also picks the launch defaults")
     parser.add_argument("--work-role-name", help="optional display name (1-128 characters)")
-    parser.add_argument("--lead-root")
-    parser.add_argument("--facet")
+    parser.add_argument("--lead-root", help=argparse.SUPPRESS)
+    parser.add_argument("--facet", help=argparse.SUPPRESS)
     parser.add_argument("--resume-session", help="exact native session ID: Claude/Codex/Pi UUID; owner adapter validates format/support")
     parser.add_argument("--model", help="per-launch model; Pi requires provider/model, Codex a bare name from its catalog (gpt-6.1-sol), Claude Code an alias or full name (claude-haiku-5-5). "
                         "Default: Aico's launch table for the work role and tool (st models route --role ROLE --tool TOOL), with its effort and Daybreak. "
@@ -1530,21 +1533,17 @@ def create_main(argv: list[str]) -> int:
         "add this prompt revision to the agent's instructions, kept for the session's restarts; "
         "default revision: the prompt's current one. A Blank Slate session gets only these"))
     parser.add_argument("--host", help=(
-        "start it on this remote host from ~/.config/tether/hosts.json (powered on first if it is off); "
-        "--project-root is the host's path, which mirrors this computer's (/srv/workspaces/projects/<p>). "
-        "auto: Tether picks the first host with room for --needs from live readings, or answers "
-        "at_capacity with each host's reason (st aico placement shows it without starting anything)"))
+        "start it on this host from ~/.config/tether/hosts.json (powered on if off); --project-root is the "
+        "host's path. auto: Tether picks one with room for --needs (st aico placement shows them)"))
     parser.add_argument("--needs", metavar="mem=6G,cpu=2[,cap=live-ready]", help=(
-        "with --host auto, --host local (this computer) or --host NAME: what the session needs; held for it on that host until it ends. "
-        "With a named host Tether rechecks that host's room first and answers at_capacity if it no longer fits"))
+        "with --host: what the session needs, held for it on that host until it ends; no room answers at_capacity"))
     parser.add_argument("--pool", type=pool_name, metavar="NAME", help=(
         "with --host auto: pick only from this placement pool (placement.json pools, e.g. neri-hunt); "
         "default: the default pool"))
     parser.add_argument("--entry", type=entry_spec, metavar="NAME:ARG", help=(
-        "run the agent through the program the host's ~/.config/tether/entries.json names NAME, with ARG "
-        "(e.g. a hunt slot), on every launch; claude-code (Tether API 15), codex (API 19) or pi (API 20), "
+        "run the agent through the program the host's ~/.config/tether/entries.json names NAME, with ARG; "
         "not with --instructions"))
-    parser.add_argument("--root-socket", type=socket_path)
+    parser.add_argument("--root-socket", type=socket_path, help=argparse.SUPPRESS)
     # Older callers (SummitFlow before it dropped the web app surface) still pass `--surface aico`.
     parser.add_argument("--surface", choices=("aico",), default="aico", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
@@ -1785,6 +1784,10 @@ def create_main(argv: list[str]) -> int:
         if output.get("host", "local") == "local":
             output["sendTo"] = args.request_id
         output["agentId"] = started_agent_id(collector, output)
+        if args.model or args.reasoning_effort:
+            output["launch"] = {"model": args.model, "effort": args.reasoning_effort}
+        output["next"] = (f"st aico wait session {args.request_id}, st aico root report {args.request_id}, "
+                          f"st aico root end {args.request_id}")
         emit_json(collector, output)
         return 0
     except (ValueError, UnicodeError):
@@ -2146,7 +2149,11 @@ def root_report(collector: Collector, socket_name: str, pinned: dict) -> str:
     if last_activity(session):
         head.append(f"last activity {age_label(last_activity(session), now_ms)} ago")
     text = report.get("text")
-    return " · ".join(head) + "\n\n" + (text if isinstance(text, str) and text else "(no message from its agent to show)")
+    if isinstance(text, str) and text:
+        return " · ".join(head) + "\n\n" + text
+    # A message may still come only while it runs; say what to do about that.
+    return " · ".join(head) + "\n\n" + ("(no message from its agent to show)" if pinned["status"] == "ended" else
+        f"(no message from its agent yet; st aico wait session {pinned['requestId']} tells you when it finishes)")
 
 
 def root_main(argv: list[str]) -> int:
@@ -2631,6 +2638,7 @@ def sessions_main(argv: list[str]) -> int:
         "List all Tether catalog sessions, including ordinary/unlinked Aico widgets and roots. "
         "Read-only metadata: exact widget ID, ownership/coordinator, tool, project/title and state. "
         "Includes retained sessions with no visible window; ended sessions are omitted by the owner."))
+    parser.add_argument("--project", help="only this project's sessions")
     parser.add_argument("--owner-socket", type=socket_path, default=tether_socket())
     args = parser.parse_args(argv)
     collector = Collector("", args.owner_socket, "", time.monotonic() + 10, threading.Event())
@@ -2641,6 +2649,8 @@ def sessions_main(argv: list[str]) -> int:
         items = [session_inventory_item(item) for item in data["items"]]
         if len({item["widgetId"] for item in items}) != len(items):
             raise Unavailable("sessions_receipt_unqualified")
+        if args.project:
+            items = [item for item in items if item["projectId"] == args.project]
         emit_json(collector, {"owner": "aico", "source": "tether", "items": items})
         return 0
     except (Unavailable, Stopped) as error:
@@ -3044,19 +3054,31 @@ def nudge_main(argv: list[str]) -> int:
         return 0
 
 
+WAIT_HELP = """usage: st aico wait KIND ...   each takes --help (st aico wait session --help)
+  session ID|REQ [--until finished|idle|blocked|ended]   a session
+  job ID                                                 a service job
+  reply ID [--until acked|closed]                        a request you sent (st sessions send)
+  ask ID                                                 an owner ask
+  host NAME                                              a host connecting
+  cmd [options] -- ARGV...                               your own watcher command; exit 0 is ready
+  time WHEN NOTE                                         a follow-up truly about time
+  get WAIT [--block] | cancel WAIT                       one wait you set
+st aico waits [--recent] lists yours.
+Options: --timeout 2h, --note T, --key K, --block.
+A wait returns at once with state armed, then you get one line in this session when it is ready, over
+or timed out; end your turn meanwhile. --block holds the command until then instead (for subagents and
+agents outside Aico)."""
+
+
 def wait_main(argv: list[str]) -> int:
     """`st aico wait session|job|reply|ask|host|cmd|time|get|cancel` and `st aico waits`."""
     operation = argv[0] if argv else ""
     if operation == "time":
         return wake_main(["set", *argv[1:]])
     if operation not in ("session", *PULL_WAITS, "cmd", "get", "cancel", "list"):
-        print("usage: st aico wait session ID|REQ [--until finished|idle|blocked|ended] | "
-              "wait job ID | wait reply ID [--until acked|closed] | "
-              "wait ask ID | wait host NAME | wait cmd [options] -- ARGV...  "
-              "[--timeout 2h] [--note T] [--key K] [--block] | "
-              "wait time WHEN NOTE | wait get WAIT [--block] | wait cancel WAIT | waits [--recent]",
-              file=sys.stderr)
-        return 2
+        asked = operation in ("--help", "-h")
+        print(WAIT_HELP, file=sys.stdout if asked else sys.stderr)
+        return 0 if asked else 2
     if operation == "job" and (deploys := [a for a in argv[1:] if re.fullmatch(AICO_DEPLOY_JOB, a)]):
         # An aico deploy has no service job file; its own CLI waits for it and exits 0 only on success.
         rest = [a for a in argv[1:] if a != deploys[0]]
@@ -3182,6 +3204,8 @@ def wait_main(argv: list[str]) -> int:
             output.update(applied=True, created=data.get("created") is True, wait=wait_item(data))
             if data.get("created") is True and data.get("state") != "armed":
                 output["note"] = "already over: its line is on the way to this session"
+            elif data.get("state") == "armed":
+                output["note"] = "armed, not over: you get one line in this session when it is"
         elif operation == "get":
             status, data = collector.receipt(args.owner_socket, f"/v1/waits/{args.wait_id}", timeout=5)
             if status != 200:
@@ -3260,12 +3284,21 @@ COMMANDS = ("create", "wait", "waits", "roots", "root", "sessions", "watch", "un
             "nudge", "widget", "placement", "admin")
 
 
+AICO_HELP = f"""Usage: st aico <command> ...   each takes --help (st aico create --help)
+  create REQ "PROMPT" --tool T --work-role R --project P --project-root PATH   start an agent session
+  root status|report|end REQ    its state, its last message, end it (more: st aico root --help)
+  roots                         sessions started from Aico, as a table
+  sessions [--project P]        every live session as JSON
+  wait KIND ID                  get one line when a session, job, reply, ask or host is ready
+All commands: {'|'.join(COMMANDS)}"""
+
+
 def unknown_command(verb: str) -> int:
     """Bare or mistyped `st aico X`: list the commands instead of the raw watch flags."""
     import difflib
     near = difflib.get_close_matches(verb, COMMANDS, n=1) if verb else []
     hint = f"unknown command {verb}" + (f" (did you mean {near[0]}?)" if near else "") + "\n" if verb else ""
-    print(f"{hint}Usage: st aico {'|'.join(COMMANDS)} ...   each takes --help", file=sys.stderr)
+    print(f"{hint}{AICO_HELP}", file=sys.stderr)
     return 2
 
 

@@ -1094,11 +1094,18 @@ def test_group_is_shells_needs_a_listing_of_only_shells():
     assert not watcher.group_is_shells("")
 
 
+def test_wait_help_answers_and_says_a_wait_returns_at_once(capsys):
+    assert watcher.main(["wait", "--help"]) == 0
+    out = capsys.readouterr().out
+    assert "session ID|REQ" in out and "returns at once" in out and "--block" in out
+    assert watcher.main(["wait"]) == 2
+
+
 @pytest.mark.parametrize("argv, hint", [([], ""), (["hosts"], "did you mean roots?")])
 def test_bare_or_unknown_command_lists_commands_not_watch_flags(capsys, argv, hint):
     assert watcher.main(argv) == 2
     err = capsys.readouterr().err
-    assert "Usage: st aico create|" in err and hint in err
+    assert "Usage: st aico <command>" in err and "All commands: create|" in err and hint in err
     assert "--root-socket" not in err
 
 

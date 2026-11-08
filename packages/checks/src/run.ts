@@ -358,8 +358,8 @@ export async function runSteps(
   for (const [reason, ids] of skipped)
     out(
       reason === 'no_relevant_changed_paths'
-        ? `CHECK:SKIP:${reason}: ${ids.length} check(s)`
-        : `CHECK:SKIP:${reason}: ${ids.join(', ')}`,
+        ? `CHECK:SKIP:${reason.replaceAll('_', ' ')}: ${ids.length} check(s)`
+        : `CHECK:SKIP:${reason.replaceAll('_', ' ')}: ${ids.join(', ')}`,
     )
   const steps = planned.flatMap((item) => (item.step ? [item.step] : []))
   if (!steps.length) return planned.map((item) => results.get(item.id) as StepResult)
@@ -370,6 +370,9 @@ export async function runSteps(
   const details = join(options.detailsRoot ?? root, '.dev-tools')
   pruneDetails(details)
   mkdirSync(details, { recursive: true })
+  // Git ignores the folder in any repo, one with no .gitignore too.
+  const ignore = join(details, '.gitignore')
+  if (!existsSync(ignore)) writeFileSync(ignore, '*\n')
   const passes = join(commonDir(root), 'aico-checks', 'stages')
   const reuse = options.reuse !== false && lane === 'full'
 

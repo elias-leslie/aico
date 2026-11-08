@@ -25,7 +25,8 @@ export interface CliIo {
   copy?(root: string): void
 }
 
-const CHECK_USAGE = `aico check: the repo's gate (.st-check.toml).
+const CHECK_USAGE = `aico check: the repo's gate (.st-check.toml; without one, the default checks for
+what is in the repo; a check with nothing to do here prints SKIP). Details go to .dev-tools/.
   aico check --quick [--changed-only]     the fast lane on your own changed files (commit runs it)
   aico check [--changed-only]             the full gate on the working tree
   aico check --fix [--paths P...]         Biome and ruff fixes on your own changed files only
@@ -34,11 +35,12 @@ const CHECK_USAGE = `aico check: the repo's gate (.st-check.toml).
   aico check --acceptance [--sha REV]     the full gate on a commit, in a clean worktree
   options: --paths P...  scope to the changed files under P; --no-reuse  rerun a pass on identical
   content; --jobs N  stages at once (default 3); --with-ack ID  a holder's yes for acceptance
-Your own changed files: the dirty files no other session wrote or leases.`
+Your own changed files: the dirty files no other session wrote or holds a lease on (aico lease --help).`
 
 const COMMIT_USAGE = `aico commit -m MSG --paths P... [--with-ack ID] [--skip-checks]
   Runs the quick check on the changed files under P, commits only them, and releases your leases on them.
-  --with-ack ID: the yes of the agent that wrote these files or holds the project (st sessions send).`
+  Prints COMMIT[1]:status=SUCCESS with the commit id; it does not push.
+  --with-ack ID: needed only when another session wrote these files or holds the project: the id of its yes (st sessions send).`
 
 interface Parsed {
   flags: Set<string>

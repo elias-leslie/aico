@@ -239,6 +239,7 @@ export async function commit(config: Config, options: CommitOptions): Promise<Co
   if (report && checkedCandidate && !changedFiles(root).length)
     noteLocalCheck(root, sha, report, out)
   out(`COMMIT[1]:status=SUCCESS pushed=false detail=${sha}`)
-  out(options.coordination.committed(root, files))
+  const released = options.coordination.committed(root, files)
+  if (released) out(released)
   return { sha, tree, files, check: report }
 }

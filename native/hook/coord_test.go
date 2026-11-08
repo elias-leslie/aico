@@ -180,6 +180,9 @@ func TestSessionsInboxPrintsNoticesAndRefusesUnknown(t *testing.T) {
 		return capture(t, func() int { return coordMain("sessions", args) })
 	}
 	registered(t, sessB)
+	if _, empty, _ := run(sessA, "inbox"); !strings.Contains(empty, "No messages.") {
+		t.Fatalf("an empty inbox should say so: %q", empty)
+	}
 	_, out, errSend := run(sessA, "send", "cc:222222", "can I take the lease file")
 	if len(strings.Fields(out)) < 2 {
 		t.Fatalf("send: %q %q", out, errSend)

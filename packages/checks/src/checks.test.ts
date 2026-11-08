@@ -16,6 +16,7 @@ import { accept } from './accept'
 import { ownChanged, runCheck } from './check'
 import { runCli } from './cli'
 import { commit, refusals, selection, shortSubject } from './commit'
+import { changedFiles } from './git'
 import type { Coordination } from './hook'
 import { type Config, loadConfig, plan } from './plan'
 import { judge, runSteps } from './run'
@@ -112,7 +113,7 @@ describe('stage selection', () => {
       },
     )
     expect(lines).toEqual([
-      'CHECK:SKIP:no_relevant_changed_paths: 1 check(s)',
+      'CHECK:SKIP:no relevant changed paths: 1 check(s)',
       'CHECK:SKIP:no SDK here: android',
     ])
   })
@@ -253,6 +254,16 @@ describe('the overlap rule', () => {
 })
 
 describe('the formatter scope', () => {
+  it('keeps its details out of Git in a repo with no .gitignore', async () => {
+    const root = repo(
+      '[[native.stages]]\nid = "ok"\nkind = "check"\ncoverage = "full"\nquick = true\nargv = ["true"]\n',
+    )
+    write(root, 'a.py', 'x = 1\n')
+    await runCheck(config(root), { lane: 'quick', env: {}, out: () => {} })
+    expect(readFileSync(join(root, '.dev-tools', '.gitignore'), 'utf8')).toBe('*\n')
+    expect(changedFiles(root).filter((path) => path.startsWith('.dev-tools'))).toEqual([])
+  })
+
   it('fixes only the caller’s own changed files', async () => {
     const root = repo('')
     // A stand-in Biome that stamps every file it is given.
