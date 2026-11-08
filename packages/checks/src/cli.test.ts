@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join, relative } from 'node:path'
 import { afterEach, expect, it } from 'vitest'
 import { runCli } from './cli'
 import { loadConfig, plan } from './plan'
@@ -122,6 +122,39 @@ it('formats scoped Python when a native stage owns Ruff', async () => {
   const config = loadConfig(root)
   if ('unsupported' in config) throw new Error(config.unsupported)
   expect(fixScope(config, ['source.py']).map((item) => item.files)).toEqual([['source.py']])
+})
+
+it('formats with the Biome and ruff of frontend/ and backend/, from those folders, as the gate does', async () => {
+  const { fixScope } = await import('./check')
+  const root = fixture()
+  for (const [file, text] of [
+    ['frontend/node_modules/.bin/biome', ''],
+    ['frontend/lib/a.ts', 'export const  a=1\n'],
+    ['backend/.venv/bin/ruff', ''],
+    ['backend/b.py', 'x=1\n'],
+    ['scripts/c.ts', ''],
+  ] as const) {
+    mkdirSync(dirname(join(root, file)), { recursive: true })
+    writeFileSync(join(root, file), text)
+  }
+  const config = loadConfig(root)
+  if ('unsupported' in config) throw new Error(config.unsupported)
+  expect(
+    fixScope(config, ['frontend/lib/a.ts', 'backend/b.py', 'scripts/c.ts']).map((item) => ({
+      tool: item.tool,
+      cwd: item.cwd,
+      files: item.files,
+      binary: relative(root, item.argv[0] as string),
+    })),
+  ).toEqual([
+    {
+      tool: 'biome',
+      cwd: 'frontend',
+      files: ['lib/a.ts'],
+      binary: 'frontend/node_modules/.bin/biome',
+    },
+    { tool: 'ruff', cwd: 'backend', files: ['b.py'], binary: 'backend/.venv/bin/ruff' },
+  ])
 })
 
 it.each([

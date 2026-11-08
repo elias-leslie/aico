@@ -207,7 +207,8 @@ async function checkCli(argv: string[], io: CliIo): Promise<number> {
     }
   } else {
     const report = await runCheck(config, {
-      lane: args.flags.has('--quick') ? 'quick' : 'full',
+      // Fixing formatting is not a request to run the whole gate: the check after it stays quick.
+      lane: args.flags.has('--quick') || args.flags.has('--fix') ? 'quick' : 'full',
       changedOnly: args.flags.has('--changed-only'),
       paths: args.paths.length ? repoPaths(root, io.cwd, args.paths) : undefined,
       fix: args.flags.has('--fix'),

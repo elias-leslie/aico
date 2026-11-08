@@ -9,7 +9,7 @@ import { join, posix } from 'node:path'
 import { blobIds, changedFiles, git, gitOk } from './git'
 import { type Coordination, CoordinationError, othersClaim } from './hook'
 import { noteLocalCheck } from './local-check'
-import { type Config, type Lane, type Planned, plan, toolBinary } from './plan'
+import { type Config, type Lane, type Planned, plan, toolBinary, toolDir } from './plan'
 import { roadmapStep } from './roadmap'
 import { passed, receiptStore, resultLine, runSteps, type StepResult } from './run'
 import type { CheckSummary } from './status'
@@ -129,19 +129,44 @@ const BIOME_FIX = [
   '.cts',
 ]
 
+/** Where the gate runs a tool: its declared stage's directory, else its usual one (a frontend/ or backend/). */
+function fixDir(config: Config, tool: string): string {
+  return (
+    config.stages.find((stage) => posix.basename(stage.argv[0]) === tool)?.cwd ??
+    toolDir(config.root, tool)
+  )
+}
+
+/** The files a tool running in dir sees, relative to it: the same ones the gate checks there. */
+function under(dir: string, files: string[]): string[] {
+  return dir === '.'
+    ? files
+    : files.filter((file) => file.startsWith(`${dir}/`)).map((file) => posix.relative(dir, file))
+}
+
 /** Formatter fixes on exactly these files: Biome on web sources, ruff on Python. Returns the commands run. */
 export function fixScope(
   config: Config,
   files: string[],
-): { tool: string; files: string[]; argv: string[] }[] {
+): { tool: string; files: string[]; cwd: string; argv: string[] }[] {
   const present = files.filter((file) => existsSync(join(config.root, file)))
-  const commands: { tool: string; files: string[]; argv: string[] }[] = []
-  const web = present.filter((file) => BIOME_FIX.includes(posix.extname(file)))
-  const biome = toolBinary(config, 'biome', 'biome', '.')
-  if (web.length && existsSync(biome))
+  const commands: { tool: string; files: string[]; cwd: string; argv: string[] }[] = []
+  const biomeDir = fixDir(config, 'biome')
+  const web = under(
+    biomeDir,
+    present.filter((file) => BIOME_FIX.includes(posix.extname(file))),
+  )
+  const biome = toolBinary(config, 'biome', 'biome', biomeDir)
+  // A repo with its Biome config but no local install runs the one on PATH, as the gate does.
+  if (
+    web.length &&
+    (existsSync(biome) ||
+      ['biome.json', 'biome.jsonc'].some((file) => existsSync(join(config.root, biomeDir, file))))
+  )
     commands.push({
       tool: 'biome',
       files: web,
+      cwd: biomeDir,
       argv: [
         biome,
         'check',
@@ -151,7 +176,11 @@ export function fixScope(
         ...web,
       ],
     })
-  const python = present.filter((file) => posix.extname(file) === '.py')
+  const ruffDir = fixDir(config, 'ruff')
+  const python = under(
+    ruffDir,
+    present.filter((file) => posix.extname(file) === '.py'),
+  )
   if (
     python.length &&
     (config.legacy.includes('ruff') ||
@@ -160,8 +189,9 @@ export function fixScope(
     commands.push({
       tool: 'ruff',
       files: python,
+      cwd: ruffDir,
       argv: [
-        toolBinary(config, 'ruff', 'ruff', '.'),
+        toolBinary(config, 'ruff', 'ruff', ruffDir),
         'check',
         '--fix',
         '--output-format=concise',
@@ -215,9 +245,10 @@ export async function runCheck(config: Config, options: CheckOptions): Promise<C
   const out = options.out ?? (() => {})
   const started = performance.now()
   const scope = checkScope(root, options)
+  if (options.fix && !scope?.length) out('CHECK:FIX:no changed files of yours to fix')
   if (options.fix && scope?.length) {
-    for (const { tool, files, argv } of fixScope(config, fixable(root, scope, options, out))) {
-      const fixed = spawnSync(argv[0], argv.slice(1), { cwd: root, encoding: 'utf8' })
+    for (const { tool, files, cwd, argv } of fixScope(config, fixable(root, scope, options, out))) {
+      const fixed = spawnSync(argv[0], argv.slice(1), { cwd: join(root, cwd), encoding: 'utf8' })
       out(
         `CHECK:FIX:${tool}:${files.length} file(s)${fixed.status === null ? '; the fixer did not run' : fixed.status ? '; fixed what it could, the check below shows what is left' : ''}`,
       )
