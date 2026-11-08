@@ -1537,7 +1537,7 @@ def create_parser() -> argparse.ArgumentParser:
     # Tether decides which tools can start a root (`rootCapable` in /v1/tools)
     # and its refusal names them.
     parser.add_argument("--tool", type=tool_slug, required=True, help=(
-        "required: claude-code, codex or pi; aico-agent runs Aico's own harness."))
+        "required: claude-code, codex, pi or agy (Antigravity); aico-agent runs Aico's own harness."))
     parser.add_argument("--role", default="portfolio-root", help=argparse.SUPPRESS)
     parser.add_argument("--work-role",
                         help="required for a new session: coordinator, implementation, design, research, review, recon, hunting, operations, selection, verification, reporting, mapping or other; it picks the launch defaults")

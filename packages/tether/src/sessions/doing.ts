@@ -98,12 +98,15 @@ export function toolDoing(
     case 'notebookedit':
     case 'str_replace':
     case 'str_replace_editor':
+    case 'edit_file':
       return file ? `Editing ${file}` : 'Editing a file'
     case 'write':
+    case 'write_file':
       return file ? `Writing ${file}` : 'Writing a file'
     case 'read':
     case 'view':
     case 'view_file':
+    case 'read_file':
       return file ? `Reading ${file}` : 'Reading a file'
     case 'grep':
     case 'glob':

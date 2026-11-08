@@ -1,5 +1,6 @@
 import { maskKnownSecrets } from '@aico/shared/secrets'
 import type { HistoryTool, Reader, Reading } from '../types'
+import { agyReader } from './agy'
 import { claudeReader } from './claude'
 import { codexReader } from './codex'
 import { piReader } from './pi'
@@ -21,7 +22,7 @@ function masked<S>(reader: Reader<S>): Reader<S> {
   }
 }
 
-export const READERS: Reader[] = [claudeReader, codexReader, piReader].map((reader) =>
+export const READERS: Reader[] = [claudeReader, codexReader, piReader, agyReader].map((reader) =>
   masked(reader as Reader),
 )
 

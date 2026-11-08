@@ -629,7 +629,7 @@ describe('routes and command', () => {
   it('refuses a tool it does not know, naming the ones it does', async () => {
     const bad = await run('list', '--tool', 'bogus')
     expect(bad.code).toBe(2)
-    expect(bad.err).toContain('no tool bogus (claude-code, codex, pi, aico-agent)')
+    expect(bad.err).toContain('no tool bogus (claude-code, codex, pi, aico-agent, agy)')
   })
 
   it('lists, shows and dumps events', async () => {

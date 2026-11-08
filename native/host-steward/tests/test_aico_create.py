@@ -387,7 +387,7 @@ def test_tool_help_lists_tools_only(capsys):
         admin.main(["create", "--help"])
     help_text = " ".join(capsys.readouterr().out.split())
     assert "claude-code" in help_text and "codex" in help_text
-    assert "codex or pi" in help_text
+    assert "codex, pi or agy" in help_text
     assert "opencode" not in help_text.lower()
     for policy in ("routing", "default choice", "delegated", "Neri"):
         assert policy not in help_text
