@@ -162,6 +162,7 @@ func TestAgyLeashSeesThroughShellShapes(t *testing.T) {
 		"git rm -rf .", "git -C /srv/elsewhere rm -rf .", "mv .git /tmp/x", "mv . /tmp/x",
 		"tar -xf a.tar -C /srv/elsewhere", "curl -o /srv/elsewhere/x http://a", "wget -O /srv/elsewhere/x http://a",
 		"unzip a.zip -d /srv/elsewhere", "npx kill-port 3000", "systemctl --user reload aico-web",
+		"grep -rn x /srv/ 2>/dev/null | head", "find / -name x", "du -sh ~", "rg x /srv/scratch", "grep x ~/.bash_history",
 		"timeout 5 tmux ls", "env X=1 tmux ls", "xargs tmux", "find . -name x -exec tmux ls ;",
 		"python3 -c 'import os; os.remove(\"x\")'", "rm *",
 	}

@@ -29,6 +29,9 @@ type leashFile struct {
 	DeniedCode      []leashText         `json:"denied_code"`
 	MessageCommands [][]string          `json:"message_commands"`
 	OptionTargets   map[string][]string `json:"option_targets"`
+	WideCommands    []string            `json:"wide_commands"`
+	WideRoots       []string            `json:"wide_roots"`
+	WideRefused     string              `json:"wide_refused"`
 	ScriptRunners   []string            `json:"script_runners"`
 	ScriptReadBytes int64               `json:"script_read_bytes"`
 	ValueOptions    map[string][]string `json:"value_options"`
@@ -221,6 +224,25 @@ func (l *Leash) relativeWhy(args []string, cwd string) string {
 	return ""
 }
 
+// wideWhy: a search or size scan of a whole disk or home slows every session on this machine.
+func (l *Leash) wideWhy(exe string, args []string, cwd string) string {
+	if !toSet(l.f.WideCommands).has(exe) || cwd == unknownCwd {
+		return ""
+	}
+	for _, a := range args[1:] {
+		if strings.HasPrefix(a, "-") {
+			continue
+		}
+		target := normPath(joinPath(cwd, expandUser(a)))
+		for _, wide := range l.f.WideRoots {
+			if target == normPath(expandUser(wide)) {
+				return strings.ReplaceAll(l.f.WideRefused, "{path}", a)
+			}
+		}
+	}
+	return ""
+}
+
 // message is a command whose arguments are words for people: a commit subject can say `.env`.
 func (l *Leash) message(args []string) bool {
 	if len(args) == 0 {
@@ -326,6 +348,9 @@ func (l *Leash) walk(command, cwd string, roots []string, depth int) string {
 			continue
 		}
 		if why := l.relativeWhy(args, cwd); why != "" {
+			return why
+		}
+		if why := l.wideWhy(exe, args, cwd); why != "" {
 			return why
 		}
 		if l.rules.shellExecutables.has(exe) || exe == "eval" {

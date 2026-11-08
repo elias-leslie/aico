@@ -20,6 +20,8 @@
     {"path": "~/.npmrc", "why": "keys"},
     {"path": "~/.docker", "why": "keys"},
     {"path": "~/.smbcredentials", "why": "keys"},
+    {"path": "~/.bash_history", "why": "shell history can hold secrets"},
+    {"path": "~/.zsh_history", "why": "shell history can hold secrets"},
     {"path": "~/.config/rclone", "why": "keys"},
     {"path": "~/.config/gh", "why": "keys"},
     {"path": "~/.codex/auth.json", "why": "a login"},
@@ -55,6 +57,9 @@
     "wget": ["-O", "--output-document", "-P", "--directory-prefix"],
     "unzip": ["-d"]
   },
+  "wide_commands": ["grep", "rg", "find", "du", "fd", "tree"],
+  "wide_roots": ["/", "~", "/srv", "/srv/workspaces", "/srv/workspaces/projects", "/srv/scratch", "/home", "/mnt"],
+  "wide_refused": "searching all of {path} slows every session on this machine; search the project, or a narrower folder.",
   "script_runners": ["bash", "sh", "zsh", "python", "python3", "node", "tsx", "perl", "ruby"],
   "script_read_bytes": 262144,
   "value_options": {
