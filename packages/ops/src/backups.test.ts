@@ -1198,6 +1198,32 @@ it('a copy that fails because its machine changed keeps an earlier real error an
   expect(stayed).toMatchObject({ observed: 'failed', snapshot: goodCopy.snapshot })
   expect(stayed.error).toContain('The Drive copy failed')
 })
+it('a VM that is shutting down (listed running, agent gone) is not a failed copy', async () => {
+  const c = cfg(),
+    state = emptyState()
+  state.copies[copyKey('guest', 'drive')] = { ...goodCopy }
+  const rt: Runtime = {
+    cfg: c,
+    run: async () => ({
+      code: 1,
+      out: '',
+      err: 'summitflow-pve-backup: guest agent exec failed: QEMU guest agent is not running',
+    }),
+    now: () => new Date(now),
+  }
+  const copy = await backupJob(rt, state, {
+    id: 'guest',
+    paths: ['/files'],
+    binds: [] as [string, string][],
+    dataAt: new Date(now).toISOString(),
+    machine: {
+      before: { state: 'on' as const, uptime: 99999 },
+      read: async () => ({ state: 'on' as const, uptime: 99999 }),
+    },
+  })
+  expect(copy.error).toBeUndefined()
+  expect(copy).toMatchObject({ observed: 'ok', snapshot: goodCopy.snapshot })
+})
 it('a disk that is away reads as off and keeps the last good copy', async () => {
   const mounts = '/dev/sda1 /mnt/summitflow-native btrfs rw 0 0\n'
   expect(diskAway('/mnt/t7-missing/state', mounts)).toBe(true)

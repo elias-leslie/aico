@@ -207,6 +207,7 @@ async function settledPower(machine: NonNullable<BackupJob['machine']>): Promise
 async function failedCopyMachine(
   job: BackupJob,
   seconds: number,
+  reason = '',
 ): Promise<'off' | 'changed' | null> {
   if (!job.machine) return null
   const { before } = job.machine
@@ -214,6 +215,8 @@ async function failedCopyMachine(
   if (now.state === 'unknown' || before.state === 'unknown') return null
   if (now.state === 'off') return before.state === 'off' ? null : 'off'
   if (before.state === 'off') return 'changed'
+  // Proxmox still lists a VM as running for the minutes it takes to shut down, but its agent is gone.
+  if (/guest agent is not running/i.test(reason)) return 'changed'
   return now.uptime !== undefined && now.uptime < seconds ? 'changed' : null
 }
 async function proxmoxJob(
@@ -446,7 +449,7 @@ export async function backupJob(
     }
   } catch (error) {
     const seconds = (rt.now().getTime() - Date.parse(attemptedAt)) / 1000
-    const machine = await failedCopyMachine(job, seconds)
+    const machine = await failedCopyMachine(job, seconds, (error as Error).message)
     if (machine === 'off') return off()
     // The last good copy waits for the next normal run. An earlier real failure still stands.
     if (machine === 'changed') return { ...old, source: job.id, target, attemptedAt }
