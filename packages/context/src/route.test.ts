@@ -126,6 +126,12 @@ describe('route', () => {
     },
   )
 
+  it('answers --tool agy with the antigravity row', () => {
+    const payload = route(policy, catalog, { role: 'implementation', tool: 'agy' })
+    expect(payload.rows[0]?.tool).toBe('antigravity')
+    expect(payload).toEqual(route(policy, catalog, { role: 'implementation', tool: 'antigravity' }))
+  })
+
   it('names the choices for an unknown role or tool, and says when facts are missing', () => {
     expect(() => route(policy, catalog, { role: 'nope' })).toThrow(UnknownLaunchKey)
     expect(() => route(policy, catalog, { tool: 'nope' })).toThrow(/claude-code/)

@@ -850,7 +850,7 @@ def test_launch_row_reads_aicos_launch_defaults_for_the_model_and_project(launch
 def test_launch_row_asks_for_agy_by_the_launch_tables_name(launch_api):
     seen = launch_api(200, launch_answer(table_row(), work_roles=["implementation"]))
     REAL_LAUNCH_ROW("implementation", "agy")
-    assert seen == [("/api/models/launch-defaults", {"role": "implementation", "tool": "antigravity"})]
+    assert seen == [("/api/models/launch-defaults", {"role": "implementation", "tool": "agy"})]
 
 
 def test_launch_row_takes_allowed_and_deny_reason_beside_the_row(launch_api):

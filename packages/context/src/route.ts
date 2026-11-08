@@ -33,6 +33,10 @@ export class UnknownLaunchKey extends Error {}
 
 // -- the table -------------------------------------------------------------------------------
 
+const TOOL_ALIASES: Record<string, string> = {
+  agy: 'antigravity',
+}
+
 /** A job name, or the job a registered work role launches as. */
 function jobOf(policy: LaunchPolicy, role: string): Job | undefined {
   return (
@@ -202,9 +206,10 @@ export function route(
   facts: Facts | null = null,
   now: string = new Date().toISOString(),
 ): RoutePayload {
-  if (request.tool !== undefined && !policy.tools.some((tool) => tool.name === request.tool))
+  const tool = request.tool !== undefined ? (TOOL_ALIASES[request.tool] ?? request.tool) : undefined
+  if (tool !== undefined && !policy.tools.some((entry) => entry.name === tool))
     throw new UnknownLaunchKey(
-      `Unknown tool '${request.tool}'; use one of: ${policy.tools.map((tool) => tool.name).join(', ')}`,
+      `Unknown tool '${request.tool}'; use one of: ${policy.tools.map((entry) => entry.name).join(', ')}`,
     )
   let jobs = policy.jobs
   if (request.role !== undefined) {
@@ -220,7 +225,7 @@ export function route(
     }
     jobs = [job]
   }
-  const tools = request.tool !== undefined ? [request.tool] : policy.tools.map((tool) => tool.name)
+  const tools = tool !== undefined ? [tool] : policy.tools.map((entry) => entry.name)
   const workRole =
     request.role !== undefined && policy.workRoles.includes(request.role) ? request.role : null
   const rows = jobs.flatMap((job) =>
