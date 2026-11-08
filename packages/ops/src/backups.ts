@@ -468,6 +468,13 @@ export function stopReadsFailed(): void {
   process.once('SIGINT', () => process.exit(130))
 }
 
+/**
+ * Only a backup run takes the shared lock. Listing, browsing and restoring read a repository and
+ * write to a new scratch folder; restic's own shared lock already keeps them safe beside a backup,
+ * so a restore never waits out a Drive backup.
+ */
+export const holdsBackupLock = (verb: string): boolean => verb === 'run'
+
 /** Run this same command again under the shared backup lock (flock). */
 async function runUnderLock(
   env: NodeJS.ProcessEnv,
@@ -705,11 +712,7 @@ export async function backups(argv: string[], env = process.env): Promise<number
       : args[0] === 'guard'
         ? []
         : [homePath(cfg.sharedLock)]
-  if (
-    !['list', 'snapshots', 'browse'].includes(verb) &&
-    lockFiles.length &&
-    env.AICO_BACKUPS_LOCKED !== '1'
-  ) {
+  if (holdsBackupLock(verb) && lockFiles.length && env.AICO_BACKUPS_LOCKED !== '1') {
     if (verb !== 'run' || !args.includes('--scheduled')) return runUnderLock(env, args, lockFiles)
     // A scheduled run can wait behind another backup for hours. Keep telling Status it's under way
     // so its rows don't read late, and never let a hung probe hold up the backup itself.
