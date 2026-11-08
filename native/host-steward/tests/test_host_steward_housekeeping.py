@@ -188,7 +188,7 @@ def test_housekeeping_dry_run_lists_the_work_and_changes_nothing(tmp_path, monke
     )
     would = " | ".join(result["would"])
     for expected in (
-        "vacuum the journal to 2G",
+        "vacuum the journal to 4G",
         "clear the apt cache",
         "foo r5",
         "Spotify cache",
@@ -215,7 +215,7 @@ def test_housekeeping_live_does_the_same_work(tmp_path, monkeypatch):
         NOW,
         str(tmp_path),
     )
-    assert ["journalctl", "--vacuum-size=2G"] in fake.calls and ["apt-get", "clean"] in fake.calls
+    assert ["journalctl", "--vacuum-size=4G"] in fake.calls and ["apt-get", "clean"] in fake.calls
     assert ["snap", "remove", "foo", "--revision=5"] in fake.calls
     assert not any("cleanup" in c for c in fake.calls)
     assert not (tmp_path / "gfs").exists() and not (tmp_path / "spotify" / "Data").exists()

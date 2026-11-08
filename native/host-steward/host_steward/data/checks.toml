@@ -43,7 +43,7 @@ swap_conf = "/etc/sysctl.d/60-aico-memory.conf"
 proc_sys = "/proc/sys"
 zswap_dir = "/sys/module/zswap/parameters"
 zswap_expect = { enabled = "Y", compressor = "zstd", max_pool_percent = "25" }
-journald_expect = { SystemMaxUse = "2G", MaxRetentionSec = "30day" }
+journald_expect = { SystemMaxUse = "4G", MaxRetentionSec = "30day" }
 psi_memory = "/proc/pressure/memory"
 pressure_warn_full_pct = 2.0
 pressure_warn_some_pct = 10.0
@@ -283,7 +283,7 @@ job_slack_min = 120
 what = "Daily housekeeping"
 every_min = 1440
 slack_min = 180
-journal_vacuum = "2G"
+journal_vacuum = "4G"
 spotify_cache = "/home/{owner}/snap/spotify/common/.cache"
 spotify_pattern = '(^|/)spotify( |$)'
 spotify_min_gib = 4

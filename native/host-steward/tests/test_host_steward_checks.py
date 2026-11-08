@@ -82,7 +82,7 @@ def ws_files(tmp_path):
     }
 
 
-def ws_runner(failed="", ufw="Status: active\n", journald="SystemMaxUse=2G\nMaxRetentionSec=30day\n", apt=""):
+def ws_runner(failed="", ufw="Status: active\n", journald="SystemMaxUse=4G\nMaxRetentionSec=30day\n", apt=""):
     ok = Result(0, "", "")
     return Fake(
         (["--failed"], Result(0, failed, "")),
