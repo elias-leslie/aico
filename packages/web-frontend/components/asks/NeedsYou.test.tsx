@@ -351,7 +351,7 @@ describe('Needs you in the side', () => {
     expect(screen.queryByTestId('ask-card')).toBeNull()
   })
 
-  it('is folded when nothing waits, and opens to what was answered', () => {
+  it('is folded when nothing waits, and opens to Waiting with what was answered one tap away', () => {
     state.asks = [
       ask({
         state: 'answered',
@@ -367,15 +367,35 @@ describe('Needs you in the side', () => {
     expect(row).toHaveTextContent('Nothing waiting')
     expect(screen.queryByTestId('answered-card')).toBeNull()
     fireEvent.click(row)
-    expect(screen.getByRole('button', { name: 'Answered' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    )
+    expect(screen.getByText('Nothing waiting for you.')).toBeVisible()
+    expect(screen.queryByTestId('answered-card')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Answered' }))
     expect(screen.getByTestId('answered-card')).toHaveTextContent(
       'You answered Stop here',
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Waiting' }))
-    expect(screen.getByText('Nothing waiting for you.')).toBeVisible()
+  })
+
+  it('never says you replied to an ask you did not answer', () => {
+    state.asks = [
+      ask({ id: '333333333333', state: 'done', question: 'Closed by itself' }),
+    ]
+    render(<NeedsYouSection />)
+    fireEvent.click(screen.getByRole('button', { name: /^Needs you/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Answered' }))
+    const cards = screen
+      .getAllByTestId('answered-card')
+      .map((card) => card.textContent)
+      .join(' ')
+    expect(cards).not.toContain('You replied')
+    expect(cards).toContain('Closed without an answer from you.')
+  })
+
+  it('shows no urgency chip on a notice: a security alert is never No rush', () => {
+    state.asks = [
+      ask({ blocking: false, origin: 'notice', question: 'Was this you?' }),
+    ]
+    render(<NeedsYouSection />)
+    expect(screen.queryByTestId('ask-urgency')).toBeNull()
   })
 
   it('counts each kind by itself in the page header', () => {

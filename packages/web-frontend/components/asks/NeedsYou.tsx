@@ -422,7 +422,7 @@ export function NeedsYouSection({
         : { value: 'Nothing waiting', tone: null }
   const open =
     popout || (folded === null ? total > 0 || problem || !!sent : !folded)
-  const show: Show = picked ?? (total > 0 ? 'waiting' : 'answered')
+  const show: Show = picked ?? 'waiting'
   const leave = () => {
     if (frame && !frame.docked) frame.close()
     closePopover?.()

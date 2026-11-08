@@ -8,8 +8,9 @@ import { AnsweredFiles } from './AskFiles'
 import { askTitle, Meta, OpenSession, useAsker } from './ask-shared'
 
 /** How the answer travels, in the owner's words. */
-function deliveryText(ask: OwnerAsk): string {
-  if (ask.state === 'done') return 'Closed.'
+function deliveryText(ask: OwnerAsk, replied: boolean): string {
+  if (ask.state === 'done')
+    return replied ? 'Closed.' : 'Closed without an answer from you.'
   if (ask.state === 'withdrawn') return 'The agent withdrew it.'
   if (ask.delivery === 'wake')
     return 'Sent to the session. The agent gets it once it is idle.'
@@ -19,6 +20,7 @@ function deliveryText(ask: OwnerAsk): string {
 export function AnsweredCard({ ask, now }: { ask: OwnerAsk; now: number }) {
   const asker = useAsker(ask)
   const reply = useAskReply()
+  const replied = !!(ask.answer || ask.note || ask.files?.length)
   return (
     <li data-testid="answered-card" className="lantern-ask">
       <Meta>
@@ -36,24 +38,26 @@ export function AnsweredCard({ ask, now }: { ask: OwnerAsk; now: number }) {
       <p className="mb-1 font-semibold" style={{ overflowWrap: 'anywhere' }}>
         {askTitle(ask)}
       </p>
-      <p className="text-[13.5px]" style={{ overflowWrap: 'anywhere' }}>
-        {ask.answer ? (
-          <>
-            You answered <b>{ask.answer}</b>
-          </>
-        ) : ask.files?.length ? (
-          `You sent ${plural(ask.files.length, 'file')}`
-        ) : (
-          'You replied'
-        )}
-        {ask.note ? `: “${ask.note}”` : ''}
-        {ask.answer && ask.files?.length
-          ? ` (${plural(ask.files.length, 'file')})`
-          : ''}
-      </p>
+      {replied && (
+        <p className="text-[13.5px]" style={{ overflowWrap: 'anywhere' }}>
+          {ask.answer ? (
+            <>
+              You answered <b>{ask.answer}</b>
+            </>
+          ) : ask.files?.length ? (
+            `You sent ${plural(ask.files.length, 'file')}`
+          ) : (
+            'You replied'
+          )}
+          {ask.note ? `: “${ask.note}”` : ''}
+          {ask.answer && ask.files?.length
+            ? ` (${plural(ask.files.length, 'file')})`
+            : ''}
+        </p>
+      )}
       <AnsweredFiles files={ask.files ?? []} />
       <p className="mt-1 text-[12.5px]" style={{ color: 'var(--mist)' }}>
-        {deliveryText(ask)}
+        {deliveryText(ask, replied)}
       </p>
       {ask.state === 'answered' && (
         <div className="mt-1.5 flex items-center gap-1">

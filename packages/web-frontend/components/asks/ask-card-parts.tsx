@@ -132,23 +132,34 @@ export function AskHead({
   linkAway: boolean
   onOpenFile?: (file: AttachedFile) => void
 }) {
+  // A notice from a program isn't an agent carrying on: it says nothing about urgency, and a
+  // security alert must not read as No rush.
+  const urgency = ask.blocking
+    ? 'Waiting on this'
+    : ask.origin
+      ? null
+      : 'No rush'
   return (
     <>
       {!inSession && (
         <Meta>
-          <span
-            className="lantern-chip"
-            data-tone={ask.blocking ? 'wait' : undefined}
-            data-testid="ask-urgency"
-            title={
-              ask.blocking
-                ? 'The agent has stopped until you answer'
-                : 'The agent keeps working; answer when you can'
-            }
-          >
-            {ask.blocking && <span className="lantern-mark" data-tone="need" />}
-            {ask.blocking ? 'Waiting on this' : 'No rush'}
-          </span>
+          {urgency && (
+            <span
+              className="lantern-chip"
+              data-tone={ask.blocking ? 'wait' : undefined}
+              data-testid="ask-urgency"
+              title={
+                ask.blocking
+                  ? 'The agent has stopped until you answer'
+                  : 'The agent keeps working; answer when you can'
+              }
+            >
+              {ask.blocking && (
+                <span className="lantern-mark" data-tone="need" />
+              )}
+              {urgency}
+            </span>
+          )}
           <span className="min-w-0 truncate" style={{ color: 'var(--mist)' }}>
             <span style={{ color: 'var(--bone)' }}>{asker.name}</span>
             {' · asked '}
