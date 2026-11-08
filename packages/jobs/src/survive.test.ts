@@ -243,6 +243,16 @@ describe('a busy run is not a failed one', () => {
       meaning: 'Already running: the drive backup is in progress.',
     })
     expect(exitResult(1, null, 'boom')).toEqual({ state: 'failed', meaning: 'Exited 1: boom' })
+    // A JSON report at the end is for tools: the line before it, or Finished.
+    expect(exitResult(0, null, 'Reaped 2 guests.\n{\n  "reaped": [\n    "a"\n  ]\n}')).toEqual({
+      state: 'ok',
+      meaning: 'Reaped 2 guests.',
+    })
+    expect(exitResult(0, null, '{"closed":[],"kept":0}')).toEqual({
+      state: 'ok',
+      meaning: 'Finished.',
+    })
+    expect(exitResult(0, null, '  "x": 1\n}')).toEqual({ state: 'ok', meaning: 'Finished.' })
     const { host } = fakeUnits()
     const result = await unitJob('lock', ['sh', '-c', 'echo held; exit 75'], {
       host,

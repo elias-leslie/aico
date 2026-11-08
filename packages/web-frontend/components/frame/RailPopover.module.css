@@ -28,3 +28,9 @@
   color: var(--mist);
   font-size: 11.5px;
 }
+/* A key hint means nothing on a touch screen, where a tap outside closes it. */
+@media (hover: none) and (pointer: coarse) {
+  .hint {
+    display: none;
+  }
+}

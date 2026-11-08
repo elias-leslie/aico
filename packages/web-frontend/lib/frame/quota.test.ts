@@ -83,6 +83,12 @@ describe('quota glance short line', () => {
       now,
     )
     expect(out?.short).toBe('used up · back Nov 11')
+    const monthly = win({ left_percent: 5, resets_at: '2026-11-26T20:00:00Z' })
+    const [low] = quotaGlances(
+      report(provider({ status: 'used_up', windows: [used, monthly] })),
+      now,
+    )
+    expect(low?.short).toBe('used up · back Nov 11 with 5%')
   })
 
   it('says not reported when no window can be read', () => {

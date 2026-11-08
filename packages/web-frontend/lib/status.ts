@@ -196,7 +196,7 @@ export function reason(row: StatusRow): string {
   if (row.unknown_why === 'late')
     return `${machineLabel(row.machine)} stopped reporting.`
   if (row.unknown_why === 'back')
-    return `${machineLabel(row.machine)} is back; this hasn’t reported since.`
+    return `${machineLabel(row.machine)} is back, but this hasn’t reported since it came back.`
   return `Aico hasn’t heard from ${machineLabel(row.machine)} itself.`
 }
 

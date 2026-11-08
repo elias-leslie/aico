@@ -130,6 +130,16 @@ describe('opening the Workbench', () => {
     expect(open).not.toHaveBeenCalled()
   })
 
+  it('keeps Files in place on a narrow screen even with a mouse', () => {
+    const open = vi.spyOn(window, 'open')
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({ matches: !query.includes('min-width') })),
+    )
+    expect(openFilesWindow({ project: 'aico' })).toBe(false)
+    expect(open).not.toHaveBeenCalled()
+  })
+
   it('opens Notes in this window where there is no side window', () => {
     vi.spyOn(window, 'open').mockReturnValue(null)
     const assign = vi.fn()

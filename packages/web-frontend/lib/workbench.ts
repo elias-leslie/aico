@@ -37,7 +37,10 @@ const FEATURES = 'popup,width=520,height=860'
 
 /** A window beside the session is for a mouse and a wide screen; a phone keeps things in place. */
 function hasSideWindows(): boolean {
-  return window.matchMedia?.('(pointer: fine)').matches ?? true
+  return (
+    window.matchMedia?.('(pointer: fine) and (min-width: 768px)').matches ??
+    true
+  )
 }
 
 function open(href: string, name: string): boolean {

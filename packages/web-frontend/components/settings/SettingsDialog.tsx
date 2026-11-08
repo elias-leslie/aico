@@ -69,13 +69,14 @@ export function SettingsDialog({
                   className={styles.item}
                   aria-current={entry.href === place.href ? 'page' : undefined}
                   title={entry.hint}
+                  aria-label={entry.label}
                 >
                   <Icon
                     className="h-4 w-4"
                     strokeWidth={1.7}
                     aria-hidden="true"
                   />
-                  {entry.label}
+                  <span className={styles.label}>{entry.label}</span>
                 </Link>
               )
             })}

@@ -124,9 +124,15 @@
   }
   .item {
     flex: none;
+    justify-content: center;
+    min-width: 44px;
     min-height: 44px;
     padding: 0 12px;
     white-space: nowrap;
+  }
+  /* Every place fits at 390: the open one is named, the others are their icon (name in the tooltip). */
+  .item:not([aria-current="page"]) .label {
+    display: none;
   }
   .pane {
     padding: 12px 14px calc(24px + env(safe-area-inset-bottom));

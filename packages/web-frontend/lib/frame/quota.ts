@@ -93,6 +93,7 @@ function shortLine(
   back: string | null,
   credits: UsageProvider['credits'],
   now: number,
+  windows: readonly UsageWindow[],
 ): string {
   if (state === 'left') {
     const reset = window?.resets_at ? resetDay(window.resets_at, now) : ''
@@ -107,7 +108,15 @@ function shortLine(
       .filter(Boolean)
       .join(' · ')
   }
-  if (state === 'used_up') return back ? `used up · back ${back}` : 'used up'
+  if (state === 'used_up') {
+    if (!back) return 'used up'
+    // A longer window running low limits what comes back: "back Nov 8 with 5%".
+    const after = tightest(windows.filter((item) => item.state !== 'used_up'))
+    const afterLeft = after ? leftOf(after) : null
+    return afterLeft !== null && afterLeft < 100
+      ? `used up · back ${back} with ${afterLeft}%`
+      : `used up · back ${back}`
+  }
   return 'not reported'
 }
 
@@ -140,7 +149,15 @@ function glanceOf(provider: UsageProvider, now: number): QuotaGlance {
     gone: gone === null ? null : Math.round(gone * 100),
     answer: provider.answer,
     back,
-    short: shortLine(state, left, window, back, provider.credits, now),
+    short: shortLine(
+      state,
+      left,
+      window,
+      back,
+      provider.credits,
+      now,
+      provider.windows,
+    ),
     line,
     meaning: meaning || line,
     warn: state === 'used_up' || state === 'unknown',

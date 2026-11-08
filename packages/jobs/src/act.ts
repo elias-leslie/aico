@@ -83,9 +83,25 @@ export async function postJob(
   }
 }
 
-/** What a finished command means: its last line of output and its exit code. */
+/** The last line of output a person can read: a JSON block at the end (a report for tools) is skipped. */
+function plainLast(tail: string): string {
+  const lines = tail.trim().split('\n')
+  const lastOf = (some: string[]) => some.map((line) => line.trim()).findLast(Boolean) ?? ''
+  for (let at = lines.length - 1; at >= 0; at--) {
+    if (!/^[[{]/.test(lines[at] as string)) continue
+    try {
+      JSON.parse(lines.slice(at).join('\n'))
+      return lastOf(lines.slice(0, at))
+    } catch {}
+  }
+  const last = lastOf(lines)
+  // A JSON report cut at the front: its closing brackets alone say nothing.
+  return /^[\]}),\s]*$/.test(last) ? '' : last
+}
+
+/** What a finished command means: its last readable line of output and its exit code. */
 export function exitResult(code: number | null, signal: string | null, tail: string): JobResult {
-  const last = tail.trim().split('\n').at(-1)?.trim() ?? ''
+  const last = plainLast(tail)
   if (code === 0) return { state: 'ok', meaning: last || 'Finished.' }
   if (code === BUSY_EXIT)
     return { state: 'ok', busy: true, meaning: last || 'Already running; this run did nothing.' }

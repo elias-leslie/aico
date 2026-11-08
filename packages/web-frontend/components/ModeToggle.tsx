@@ -103,7 +103,7 @@ export const ModeToggle = memo(function ModeToggle({
           />
         )}
         {!isMobile && <span className="k">Runs</span>}
-        <span className="v">{label}</span>
+        {!isMobile && <span className="v">{label}</span>}
         <ChevronDown
           className="h-3.5 w-3.5 flex-none"
           strokeWidth={1.7}

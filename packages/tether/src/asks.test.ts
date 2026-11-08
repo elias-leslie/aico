@@ -143,7 +143,8 @@ describe('POST /v1/asks', () => {
     expect(created.body).toMatchObject({
       id: expect.stringMatching(/^[0-9a-f]{12}$/),
       session: '0123abcd',
-      requester: null,
+      // The session's name when it asked, so an ended session's ask still says who asked.
+      requester: 'Disk merge',
       options: ['Finish it now', 'Stop here'],
       recommended: 0,
       body: 'Swap becomes a file.\nOne reboot.',

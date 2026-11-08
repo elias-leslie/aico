@@ -40,7 +40,7 @@ describe('ModeToggle', () => {
     )
   })
 
-  it('shows the label alone on a phone', () => {
+  it('shows the mark alone on a phone, with what runs in its name', () => {
     render(
       <ModeToggle
         value="shell"
@@ -49,7 +49,9 @@ describe('ModeToggle', () => {
         agentTools={[mockTool({})]}
       />,
     )
-    expect(screen.getByTestId('mode-toggle')).toHaveTextContent(/^Shell$/)
+    const toggle = screen.getByTestId('mode-toggle')
+    expect(toggle).toHaveTextContent(/^$/)
+    expect(toggle.getAttribute('aria-label')).toMatch(/Shell/)
   })
 
   it('opens an explanation and each option with what it does, never switching on the first click', () => {

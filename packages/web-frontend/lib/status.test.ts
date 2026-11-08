@@ -79,7 +79,7 @@ describe('rowButtons', () => {
     ])
     expect(buttons.primary).toBe('run')
     expect(lookMessage(waiting)).toContain(
-      'Proxmox host is back; this hasn’t reported since.',
+      'Proxmox host is back, but this hasn’t reported since it came back.',
     )
   })
 

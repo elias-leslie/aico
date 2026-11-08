@@ -32,7 +32,8 @@ export function useAsker(ask: OwnerAsk): {
   return useMemo(() => {
     const name = ask.session ? nameOf(ask.session) : null
     if (ask.session && name !== null) return { name, sessionId: ask.session }
-    if (ask.session) return { name: 'An ended session', sessionId: null }
+    if (ask.session)
+      return { name: ask.requester ?? 'An ended session', sessionId: null }
     return { name: ask.requester ?? 'An agent', sessionId: null }
   }, [ask.session, ask.requester, nameOf])
 }
