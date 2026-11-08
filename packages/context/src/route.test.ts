@@ -132,6 +132,31 @@ describe('route', () => {
     expect(payload).toEqual(route(policy, catalog, { role: 'implementation', tool: 'antigravity' }))
   })
 
+  it('refuses a tool by its own deny row, under either name', () => {
+    const limited = {
+      ...policy,
+      providers: {
+        ...policy.providers,
+        antigravity: {
+          name: 'antigravity',
+          label: 'Antigravity',
+          tools: ['antigravity'],
+          catalogProviders: [],
+          nameTokens: [],
+          why: '',
+        },
+      },
+      deny: [
+        ...policy.deny,
+        { provider: 'antigravity', reason: 'not here', source: 'test', jobs: ['coordinator'] },
+      ],
+    }
+    const coordinator = route(limited, catalog, { role: 'coordinator', tool: 'agy' }).rows[0]
+    expect(coordinator).toMatchObject({ allowed: false, deny_reason: 'not here' })
+    const builder = route(limited, catalog, { role: 'implementation', tool: 'agy' }).rows[0]
+    expect(builder).toMatchObject({ allowed: true, deny_reason: null })
+  })
+
   it('names the choices for an unknown role or tool, and says when facts are missing', () => {
     expect(() => route(policy, catalog, { role: 'nope' })).toThrow(UnknownLaunchKey)
     expect(() => route(policy, catalog, { tool: 'nope' })).toThrow(/claude-code/)

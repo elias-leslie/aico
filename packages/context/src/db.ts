@@ -236,6 +236,15 @@ const MIGRATIONS = [
   `UPDATE launch_tools SET
      default_row = '{"model":"gemini-4-argon-high","effort":null,"alternates":[{"model":"gemini-3.8-flash-high","effort":null,"when":"A diagnosis, or a one-line fix"}],"why":"Owner 2026-11-08: routine agent work uses the Antigravity subscription. In trials Argon made a small change in scope; Flash wandered and changed unrelated code to pass a check."}'
      WHERE name = 'antigravity';`,
+  // Antigravity's limits refuse st aico, so it can't coordinate; hunting stays where it was
+  // before Antigravity became launchable.
+  `INSERT OR IGNORE INTO launch_providers (name, label, tools, why)
+     VALUES ('antigravity', 'Antigravity', '["antigravity"]', 'Sessions run under Aico''s limits for weak agents.');
+   INSERT INTO launch_deny (position, jobs, provider, reason, source)
+     SELECT (SELECT COALESCE(MAX(position), 0) + 1 FROM launch_deny), '["coordinator","hunting","recon"]', 'antigravity',
+       'Antigravity runs under limits that stop it starting or managing sessions, and it is not for hunting or recon.',
+       'Usage-burn lane 13, 2026-11-08'
+     WHERE NOT EXISTS (SELECT 1 FROM launch_deny WHERE provider = 'antigravity');`,
 ]
 
 /** The context DB file in a data directory. */
