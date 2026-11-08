@@ -41,6 +41,7 @@ vi.mock('@/lib/hooks/use-host-admin', () => ({
 
 vi.mock('@/lib/hooks/use-machine-guests', () => ({
   useMachineServices: () => ({ machines: data.services, refetch: vi.fn() }),
+  useSessionCopies: () => ({ machines: null, failed: false }),
   restartService: (...args: unknown[]) =>
     (data.restartService as (...a: unknown[]) => unknown)(...args),
   shutDownMachine: (...args: unknown[]) =>

@@ -5,6 +5,7 @@
 //   POST /api/machines/:machine/autostart      {on: true | false}
 //   GET  /api/machines/services                each full Aico's services and their state (aico power units)
 //   POST /api/machines/:machine/restart-service {unit}
+//   GET  /api/machines/session-copies          what was running on the other machines when last heard from (aico shift list)
 // Power goes through Places (Proxmox, the same path as the Projects page), except on / off of a
 // machine Tether links to as a session host: Tether ends its sessions first and follows the start
 // (powering on, connecting, checking services), which Places cannot. A guest is found by the
@@ -177,9 +178,14 @@ const SERVICES_FRESH_MS = 4000
 export type PowerCommand = (args: string[]) => Promise<string>
 
 /** The installed `aico power`, so the page and the CLI do the same thing. */
-const powerCommand: PowerCommand = (args) =>
-  new Promise((resolve, reject) => {
-    const child = spawn('aico', ['power', ...args], { stdio: ['ignore', 'pipe', 'pipe'] })
+const powerCommand: PowerCommand = (args) => aicoCommand('power', args)
+
+/** The installed `aico shift list`: what this machine holds of the other machines' sessions. */
+const copiesCommand: PowerCommand = () => aicoCommand('shift', ['list', '--json'])
+
+const aicoCommand = (verb: string, args: string[]) =>
+  new Promise<string>((resolve, reject) => {
+    const child = spawn('aico', [verb, ...args], { stdio: ['ignore', 'pipe', 'pipe'] })
     let out = ''
     let err = ''
     child.stdout.on('data', (data) => {
@@ -195,7 +201,7 @@ const powerCommand: PowerCommand = (args) =>
         .trim()
         .split('\n')
         .pop()
-        ?.replace(/^aico power:\s*/, '')
+        ?.replace(/^aico \w+:\s*/, '')
       reject(new HttpError(code === 2 ? 422 : 502, said || 'The machine didn’t answer.'))
     })
   })
@@ -205,6 +211,7 @@ export function registerMachineRoutes(
   service: MachinesService,
   power: PowerCommand = powerCommand,
   now: () => number = Date.now,
+  copies: PowerCommand = copiesCommand,
 ) {
   const machineName = (value: string) => {
     if (!MACHINE.test(value)) throw new HttpError(422, 'Unknown machine')
@@ -223,6 +230,19 @@ export function registerMachineRoutes(
     }
     services = { value: { machines }, at: now() }
     return services.value
+  })
+  let held: { value: unknown; at: number } | null = null
+  router.on('GET', '/api/machines/session-copies', async () => {
+    if (held && now() - held.at <= SERVICES_FRESH_MS) return held.value
+    let value: unknown
+    try {
+      value = JSON.parse(await copies([]))
+    } catch (error) {
+      if (error instanceof HttpError) throw error
+      throw new HttpError(502, 'The session copies came back unreadable.')
+    }
+    held = { value, at: now() }
+    return value
   })
   router.on('POST', '/api/machines/:machine/restart-service', async (ctx) => {
     const machine = machineName(ctx.params.machine)

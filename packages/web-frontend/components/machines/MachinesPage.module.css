@@ -61,8 +61,70 @@
   min-width: 0;
 }
 
+.heardAt {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.copyRow summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.copyRow summary::-webkit-details-marker {
+  display: none;
+}
+
+.copyDot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.copyTitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--paper);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.copyBadge {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 3px;
+  font-variant-numeric: tabular-nums;
+}
+
+.copyDetail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0 6px 16px;
+  overflow-wrap: anywhere;
+}
+
+.copyDetail p {
+  margin: 0;
+}
+
+.copyDetail b {
+  color: var(--paper);
+  font-weight: 600;
+}
+
 @media (max-width: 640px) {
   .services summary,
+  .copyRow summary,
   .serviceList :global(.lantern-btn) {
     min-height: 44px;
   }

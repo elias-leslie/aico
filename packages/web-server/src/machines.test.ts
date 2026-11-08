@@ -319,6 +319,39 @@ describe('machine routes', () => {
   })
 })
 
+describe('session copies', () => {
+  it('reads what this machine holds through aico shift, and says so when it can’t', async () => {
+    let calls = 0
+    let answer = '{"machines":[{"machine":"aico","at":1,"sessions":[]}]}'
+    let clock = T0
+    const router = new Router()
+    registerMachineRoutes(
+      router,
+      {} as MachinesService,
+      async () => 'ok',
+      () => clock,
+      async () => {
+        calls++
+        return answer
+      },
+    )
+    const server = createServer((req, res) => {
+      void router.handle(req, res, new URL(req.url ?? '/', 'http://x'))
+    })
+    await new Promise<void>((done) => server.listen(0, '127.0.0.1', done))
+    const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/api/machines/session-copies`
+    expect(await (await fetch(url)).json()).toEqual({
+      machines: [{ machine: 'aico', at: 1, sessions: [] }],
+    })
+    await fetch(url)
+    expect(calls).toBe(1)
+    clock += 3_600_000
+    answer = 'not json'
+    expect((await fetch(url)).status).toBe(502)
+    server.close()
+  })
+})
+
 describe('services', () => {
   it('reads and restarts through aico power, and refuses a name that is no service', async () => {
     const calls: string[][] = []

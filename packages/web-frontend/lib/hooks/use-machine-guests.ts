@@ -156,6 +156,52 @@ export function useMachineServices() {
   return { machines: query.data?.machines ?? null, refetch: query.refetch }
 }
 
+/** A line someone said in a session, as the copy holds it. */
+export interface CopySaid {
+  at: number | null
+  text: string
+}
+
+/** One session that was running on another machine when this Aico last heard from it. */
+export interface CopySession {
+  id: string
+  tool: string
+  title: string
+  project: string | null
+  state: string
+  detail: string | null
+  doing: string | null
+  waitingOn: string | null
+  needsYou: boolean
+  lastActivity: number | null
+  lastOwner: CopySaid | null
+  lastAgent: CopySaid | null
+  git: { branch: string; head: string; dirty: number } | null
+  copy: { bytes: number; files: number; cut: boolean } | null
+}
+
+export interface HeldMachine {
+  machine: string
+  at: number
+  sessions: CopySession[]
+}
+
+/** What this Aico holds of the other machines' sessions; null until read or when it can't say. */
+export function useSessionCopies() {
+  const query = useQuery({
+    queryKey: ['session-copies'],
+    queryFn: () =>
+      apiFetch<{ machines: HeldMachine[] }>(
+        '/api/machines/session-copies',
+        undefined,
+        'Couldn’t read the session copies',
+      ),
+    staleTime: 15_000,
+    refetchInterval: 60_000,
+  })
+  return { machines: query.data?.machines ?? null, failed: query.isError }
+}
+
 export async function restartService(
   machine: string,
   unit: string,

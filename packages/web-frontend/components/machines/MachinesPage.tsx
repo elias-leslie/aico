@@ -26,6 +26,7 @@ import {
   useMachineControls,
 } from './machine-controls'
 import { ServiceList } from './ServiceList'
+import { SessionCopies } from './SessionCopies'
 import { StandbyTag } from './StandbyTag'
 
 /** Machines: every machine once, whether it is up, what it is for, and power where it applies. */
@@ -321,6 +322,7 @@ function MachineRow({
           lineClass={styles.line}
         />
         <ServiceList machine={machine} />
+        <SessionCopies machine={machine} />
       </div>
       <div className={styles.actions}>
         <PowerButtons controls={controls} />
