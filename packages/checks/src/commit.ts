@@ -2,7 +2,9 @@
 // paths, then a commit of only them (`git commit --only`), then the caller's leases on them are
 // released. Other files, staged or not, are never touched. It refuses to take a file another
 // agent wrote (an explicit file only when a named agent wrote it; a file swept in by a directory
-// or glob when anyone else did) and yields to another agent's hold or a live deploy.
+// or glob when anyone else did) and yields to another agent's hold or a live deploy. A stage that
+// fails beside other agents' dirty files runs again on a clean copy of HEAD plus these files
+// (clean-check.ts): that verdict decides, since it is what the commit would make.
 
 import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
