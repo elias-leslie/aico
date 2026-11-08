@@ -6,7 +6,15 @@ import { localTime } from '@aico/shared/time'
 import type { StatusRow } from '@aico/status'
 import config from '../data/usage.json' with { type: 'json' }
 import { currentPlan, type Plans } from './plans'
-import { type Facts, micros, optionUsage, type Usage, type Window, windowFacts } from './windows'
+import {
+  type Facts,
+  lastToReset,
+  micros,
+  optionUsage,
+  type Usage,
+  type Window,
+  windowFacts,
+} from './windows'
 
 /** A moment in this machine's local time with its zone: "Nov 6, 5:00 AM EST". */
 export const when = (iso: string) => localTime(micros(iso) / 1000)
@@ -81,11 +89,7 @@ function creditAnswer(credit: NonNullable<Usage['credits']>, now: string | numbe
  */
 export function answerText(usage: Usage, now: string | number = Date.now()): string {
   const out = usage.windows.filter((w) => w.state === 'used_up')
-  // Usable again once the last of the used-up windows resets.
-  const last = out.reduce<Window | null>(
-    (best, w) => (!best || (w.resets_in_seconds ?? 0) > (best.resets_in_seconds ?? 0) ? w : best),
-    null,
-  )
+  const last = lastToReset(out)
   switch (usage.status) {
     case 'on_credits': {
       const reset = usage.credits?.reset_at ?? last?.resets_at
@@ -180,7 +184,7 @@ export function brief(provider: { id: string; name: string }, input: SpendInput)
   const problem = input.problems[provider.id]
   if (usage.status === 'on_credits') return `${provider.name} on credits`
   if (usage.status === 'used_up') {
-    const out = usage.windows.find((w) => w.state === 'used_up')
+    const out = lastToReset(usage.windows)
     return `${provider.name} ${out ? `${out.label} ` : ''}used up${out?.resets_at ? ` until ${when(out.resets_at)}` : ''}`
   }
   const open = usage.windows.filter((w) => w.state === 'ok')

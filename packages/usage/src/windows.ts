@@ -145,6 +145,17 @@ export function windowFacts(readings: Reading[], now: string): Record<string, Wi
   return out
 }
 
+/** Of the used-up windows, the one that resets last: usable again only once it does. */
+export function lastToReset(windows: Window[]): Window | null {
+  return windows
+    .filter((window) => window.state === 'used_up')
+    .reduce<Window | null>(
+      (best, window) =>
+        !best || (window.resets_in_seconds ?? 0) > (best.resets_in_seconds ?? 0) ? window : best,
+      null,
+    )
+}
+
 export function optionUsage(
   provider: string | null,
   windows: Record<string, Window[]>,
@@ -163,11 +174,9 @@ export function optionUsage(
   let outCredit: Usage['credits'] = null
   if (credit) {
     // Until the used-up window resets, else the week: do the credits last that long?
-    const ref = usedUp.length
-      ? usedUp.reduce((best, window) =>
-          (window.resets_in_seconds ?? 0) > (best.resets_in_seconds ?? 0) ? window : best,
-        )
-      : own.find((window) => window.window_minutes === 10080 && window.state === 'ok')
+    const ref =
+      lastToReset(usedUp) ??
+      own.find((window) => window.window_minutes === 10080 && window.state === 'ok')
     const resetIn = ref ? ref.resets_in_seconds : null
     const empty = credit.balance <= 0
     const days = empty

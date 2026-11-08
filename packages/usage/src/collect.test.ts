@@ -753,5 +753,12 @@ describe('a used-up subscription', () => {
     expect(brief({ id: 'opencode-go', name: 'OpenCode Go' }, input)).toMatch(
       /^OpenCode Go weekly used up until Nov \d+/,
     )
+    // With the 5h window used up too, the line still names the week: usable again only then.
+    input.facts.readings[0] = reading(300, 100, NOW + 3 * HOUR)
+    const [, , both] = spendRows(input)
+    const brief2 = brief({ id: 'opencode-go', name: 'OpenCode Go' }, input)
+    expect(brief2).toMatch(/^OpenCode Go weekly used up until Nov \d+/)
+    expect(both?.meaning).toContain('(5h, weekly)')
+    expect(brief2).toContain(String(both?.meaning).match(/^Used up until ([^(]+) \(/)?.[1])
   })
 })
