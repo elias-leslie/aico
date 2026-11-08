@@ -559,6 +559,25 @@ def test_evaluate_learning_spike_and_new_family(tmp_path):
     assert set(codes(evaluate(hours_state(1), tmp_path))) == {"sudo.summary"}
 
 
+def test_a_declared_new_family_is_a_note_and_an_undeclared_one_still_warns(tmp_path):
+    site = site_for(tmp_path)
+    new = hours_state(5)
+    new["hours"][sudo._hour(NOW)]["brandnew"] = 1
+    assert codes(evaluate(new, tmp_path))["sudo.new_family"] == "warn"
+
+    declare.declare(
+        site["declarations"], site, "workstation", "any", 26, "lab lanes", now=NOW - 2 * 3600
+    )
+    out = codes(evaluate(new, tmp_path))
+    assert "sudo.new_family" not in out and out["sudo.new_family.auto"] == "ok"
+
+    new["hours"][sudo._hour(NOW)]["another"] = 1
+    new["hours"][sudo._hour(NOW - 10 * 3600)]["another"] = 1  # before the declaration
+    out = evaluate(new, tmp_path)
+    sig = next(s for s in out if s.code == "sudo.new_family")
+    assert "another" in sig.fields["families"] and "brandnew" not in sig.fields["families"]
+
+
 def test_new_family_row_lists_three_and_says_what_to_do(tmp_path):
     """The owner sees what was new (three commands, then a count), when that is expected, and what to do."""
     new = hours_state(5)
@@ -567,7 +586,7 @@ def test_new_family_row_lists_three_and_says_what_to_do(tmp_path):
     sig = next(s for s in evaluate(new, tmp_path) if s.code == "sudo.new_family")
     text = core.explain(sig.code, sig.fields, DATA["meanings"], True, sig.state)
     assert text.startswith("5 new sudo commands: alpha, bravo, charlie and 2 more.")
-    assert "delta" not in text and "host-steward declare" in text
+    assert "delta" not in text and "aico declare --what any" in text
     assert "normal after a day" in text and "journalctl -t sudo" in text
     one = core.explain(sig.code, {**sig.fields, "n": 1, "plural": "", "families": ["alpha"]}, DATA["meanings"], False)
     assert one == "1 new sudo command: alpha."

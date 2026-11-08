@@ -513,7 +513,7 @@ next = "See what is calling sudo with host-steward check --only sudo --dry-run"
 
 [signal."sudo.new_family"]
 what = "{n} new sudo command{plural}: {families}"
-impact = "Expected if declared (host-steward declare) or run by a known agent; they count as normal after a day"
+impact = "Expected if run by a known agent or declared (aico declare --what any); they count as normal after a day"
 next = "Don't know one? journalctl -t sudo --since -1d -g NAME shows who ran it"
 
 [signal."sudo.new_family.auto:ok"]

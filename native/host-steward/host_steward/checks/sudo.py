@@ -600,6 +600,22 @@ def _with_actor(family: str, state: dict[str, Any]) -> str:
     return f"{family} ({' or '.join(names)})" if names else family
 
 
+def _new_family_declared(
+    family: str, state: dict[str, Any], hour_keys: set[str], now: float, ctx: Ctx
+) -> dict[str, Any] | None:
+    """The `--what any` declaration covering every hour this family ran in, if an agent made one."""
+    ran = [
+        datetime.strptime(h, "%Y-%m-%dT%H").replace(tzinfo=UTC).timestamp()
+        for h in hour_keys
+        if family in state.get("hours", {}).get(h, {})
+    ]
+    if not ran:
+        return None
+    return declare.covering(
+        ctx.site["declarations"], ctx.cfg["host"], "sudo", min(ran), max(ran), now=now
+    )
+
+
 def evaluate(
     state: dict[str, Any], now: float, ctx: Ctx, rule: Rules, host: str, cap: int
 ) -> list[Signal]:
@@ -646,7 +662,14 @@ def evaluate(
             ):
                 spikes.append((fam, f"{fam} {n} vs {med:.0f}/day"))
         if new:
-            manual = [f for f in new if f not in auto and f not in by_agents]
+            declared = {
+                f: covered
+                for f in new
+                if f not in auto
+                and f not in by_agents
+                and (covered := _new_family_declared(f, state, st["keys"], now, ctx))
+            }
+            manual = [f for f in new if f not in auto and f not in by_agents and f not in declared]
             if manual:
                 out.append(
                     Signal(
@@ -661,7 +684,11 @@ def evaluate(
                 )
             else:
                 by = "; ".join(
-                    f"{f} from {', '.join(auto[f][:2])}" if f in auto else f"{f} from {_agents_of(f, state)}"
+                    f"{f} from {', '.join(auto[f][:2])}"
+                    if f in auto
+                    else f"{f} from {declare.name(declared[f])}"
+                    if f in declared
+                    else f"{f} from {_agents_of(f, state)}"
                     for f in new[:6]
                 )
                 out.append(

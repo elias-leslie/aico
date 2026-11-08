@@ -43,6 +43,14 @@ Other commands: `aico routines list [--json]`, `remove KIND`, `pause KIND`, `res
 `run KIND`, `log KIND`. Registrations live in jobs.db on that machine (they survive deploys);
 built-in jobs can be paused but only removed from jobs.json.
 
+## Caretaker
+
+`jobs/caretaker` (every 5 minutes, on either machine) is the watcher for when no agent is around. When a Status
+problem outlasts its retries, Argon picks one action from the list in `packages/web-server/data/caretaker.json`, with
+the Gemini free tier as fallback; it tells the owner only about the rows that file marks serious. `aico caretaker log`
+shows what it did and `aico caretaker drill [--leash|--free-tier|--clear]` proves it works. `<machine>/model-routes`
+checks once a day that both models still answer.
+
 ## Timers that stay in systemd
 
 Some timers must not depend on the scheduler: the watchdog and heartbeat group
