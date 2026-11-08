@@ -283,6 +283,15 @@ export class TetherClient {
   }
 
   /** The coordination documents' names (project ids and the `_` registry), API 28. */
+  /** Whether an ended session is expected back: a kept check-in relaunches it. */
+  async sessionComesBack(id: string): Promise<boolean> {
+    const answer = await this.json<{ comesBack: boolean }>(
+      'GET',
+      `/v1/sessions/${encodeURIComponent(id)}/comes-back`,
+    )
+    return answer.comesBack
+  }
+
   async coordinationDocs(): Promise<string[]> {
     const answer = await this.json<{ items: Array<{ name: string }> }>(
       'GET',

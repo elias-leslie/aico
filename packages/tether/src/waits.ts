@@ -334,15 +334,14 @@ export class WaitStore {
     )
   }
 
-  /** An armed wait kept past this ended session's End is still to come. */
-  keptFor(endedId: string): boolean {
-    return Boolean(
-      this.db
-        .prepare(
-          "SELECT 1 FROM waits WHERE kept = 1 AND state = 'armed' AND json_extract(ended_session, '$.id') = ? LIMIT 1",
-        )
-        .get(endedId),
-    )
+  /** An armed wait kept past this ended session's End: the session it brings back. */
+  keptFor(endedId: string): EndedSession | null {
+    const row = this.db
+      .prepare(
+        "SELECT ended_session FROM waits WHERE kept = 1 AND state = 'armed' AND json_extract(ended_session, '$.id') = ? LIMIT 1",
+      )
+      .get(endedId) as { ended_session: string } | undefined
+    return row ? (JSON.parse(row.ended_session) as EndedSession) : null
   }
 
   /** Undo `keep` after an End that did not happen. */

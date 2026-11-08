@@ -2,6 +2,7 @@ package lease
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -485,11 +486,40 @@ func TestOthersCloseOnlyForAnEndedOrLaunchedSender(t *testing.T) {
 }
 
 // A session gone from Tether is ended only if nothing kept will bring it back.
+// A resume keeps the agent's id: a row its dead process left must not stop the new process registering,
+// or the sender reads as not running. A row a live process holds stays.
+func TestObserveTakesOverARowItsDeadProcessLeft(t *testing.T) {
+	sandbox(t)
+	h := agent(sidA, "")
+	anchor := func() string { return str(rows(h.Cfg.loadDoc(), "identities")[h.ID.AgentID]["anchor"]) }
+	live := fmt.Sprintf("%d:%s", os.Getpid(), mustStart(t, os.Getpid()))
+	h.ID.Anchor = "4194000:1"
+	h.Cfg.Observe(h.ID, false, false, false)
+	if anchor() != "4194000:1" {
+		t.Fatalf("first registration: anchor %q", anchor())
+	}
+	h.ID.Anchor = live
+	h.Cfg.Observe(h.ID, false, false, false)
+	if anchor() != live {
+		t.Fatalf("the dead process's row should give way, anchor %q", anchor())
+	}
+	h.ID.Anchor = "4194000:2"
+	h.Cfg.Observe(h.ID, false, false, false)
+	if anchor() != live {
+		t.Fatalf("a live process's row must stay, anchor %q", anchor())
+	}
+}
+
 func TestSessionStateAsksWhetherAGoneSessionComesBack(t *testing.T) {
 	sandbox(t)
 	fake.ComesBack = map[string]bool{"aabbccdd": true}
-	if _, ended := sessionState("aabbccdd"); ended {
+	fake.ComesBackCoordinator = "11223344"
+	desc, ended := sessionState("aabbccdd")
+	if ended {
 		t.Error("a kept wake brings it back: not ended")
+	}
+	if str(desc["coordinatorId"]) != "11223344" {
+		t.Errorf("its coordinator can still close its requests: %v", desc)
 	}
 	if _, ended := sessionState("bbbbbbbb"); !ended {
 		t.Error("nothing kept: ended")

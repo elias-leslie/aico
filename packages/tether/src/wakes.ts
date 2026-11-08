@@ -544,15 +544,14 @@ export class WakeStore {
     )
   }
 
-  /** A check-in kept past this ended session's End is still to come. */
-  keptFor(endedId: string): boolean {
-    return Boolean(
-      this.db
-        .prepare(
-          "SELECT 1 FROM wakes WHERE kept = 1 AND json_extract(ended_session, '$.id') = ? LIMIT 1",
-        )
-        .get(endedId),
-    )
+  /** A check-in kept past this ended session's End that can still relaunch it: the session it brings back. */
+  keptFor(endedId: string, relaunchAttempts: number): EndedSession | null {
+    const row = this.db
+      .prepare(
+        "SELECT ended_session FROM wakes WHERE kept = 1 AND attempts < ? AND json_extract(ended_session, '$.id') = ? LIMIT 1",
+      )
+      .get(relaunchAttempts, endedId) as { ended_session: string } | undefined
+    return row ? (JSON.parse(row.ended_session) as EndedSession) : null
   }
 
   /** Undo `keep` after an End that did not happen. */
@@ -831,6 +830,8 @@ export class WakeScheduler {
   private readonly announced = new Set<string>()
   /** Kept wakes waiting out a failed relaunch. */
   private readonly retryAt = new Map<string, number>()
+  /** Ended sessions relaunched for a check-in: the session that came back, null while it starts. */
+  private readonly relaunched = new Map<string, { ended: EndedSession; id: string | null }>()
   /** Why each session's due wakes are not delivered yet. */
   private readonly held = new Map<string, string>()
   /** When each session last took a paste: what did not fit waits for the
@@ -854,6 +855,17 @@ export class WakeScheduler {
   start(): void {
     this.stopped = false
     this.nudge()
+  }
+
+  /** The ended session as it comes back: a kept check-in can still relaunch it, or a relaunch is
+   * starting or running. null when nothing brings it back. */
+  comesBack(endedId: string, running: (id: string) => boolean): EndedSession | null {
+    const back = this.relaunched.get(endedId)
+    if (back && (back.id === null || running(back.id))) return back.ended
+    return (
+      (back?.id ? this.comesBack(back.id, running) : null) ??
+      this.store.keptFor(endedId, this.ops.policy().relaunchAttempts)
+    )
   }
 
   stop(): void {
@@ -1239,6 +1251,7 @@ export class WakeScheduler {
     const message = wakeMessage(wakes, this.ops.now(), this.ops.policy(), {
       resumed: Boolean(ended.resumeId),
     })
+    this.relaunched.set(ended.id, { ended, id: null })
     for (const wake of wakes) this.store.remove(wake.id)
     let outcome: Awaited<ReturnType<WakeOperations['relaunch']>> = {
       status: 'retry',
@@ -1248,12 +1261,16 @@ export class WakeScheduler {
       outcome = await this.ops.relaunch(ended, message)
     } finally {
       if (outcome.status !== 'started') {
+        this.relaunched.delete(ended.id)
         for (const wake of wakes) this.store.restore(wake)
         this.retryAt.set(ended.id, this.ops.now() + WAKE_RELAUNCH_RETRY_MS)
         // An admission refusal is the host saying "not now", not a failure.
         if (outcome.status === 'failed')
           for (const wake of wakes) this.store.failed(wake.id, outcome.reason)
-      } else this.retryAt.delete(ended.id)
+      } else {
+        this.relaunched.set(ended.id, { ended, id: outcome.id })
+        this.retryAt.delete(ended.id)
+      }
       this.ops.changed(null)
     }
     if (outcome.status === 'started')

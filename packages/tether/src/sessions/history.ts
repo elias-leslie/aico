@@ -258,29 +258,32 @@ export class History {
   // --- ingestion ------------------------------------------------------------
 
   /** Bind an observed native conversation to the workload Tether owns. */
-  bind(session: string, tool: string, nativeId: string): void {
+  bind(session: string, tool: string, nativeId: string): boolean {
     if (tool === 'claude') tool = 'claude-code'
     this.owned = null
-    this.db
+    const result = this.db
       .prepare(`INSERT INTO transcript_owners (transcript_id, session_id, ended_at)
       VALUES (?, ?, (SELECT retired_at FROM retired_session_ids WHERE id = ?))
       ON CONFLICT(transcript_id) DO UPDATE SET session_id = excluded.session_id,
+      pane_seen_at = CASE WHEN session_id = excluded.session_id THEN pane_seen_at END,
       ended_at = CASE WHEN session_id = excluded.session_id THEN coalesce(ended_at, excluded.ended_at) ELSE excluded.ended_at END
       WHERE session_id != excluded.session_id OR (ended_at IS NULL AND excluded.ended_at IS NOT NULL)`)
       .run(`${tool}:${nativeId}`, session, session)
+    return Number((result as { changes?: number | bigint }).changes ?? 0) > 0
   }
 
   /** The conversation the agent in the session's own pane is on. Binding alone can't say: a side run
-   * in the pane (an agent's `claude -p`) binds itself too. Written only when it changes: polled often. */
+   * in the pane (an agent's `claude -p`) binds itself too. Written only when it changes: polled often.
+   * Pi's probe stays on its launch conversation past a `/new`, so it says nothing about the pane. */
   seenInPane(session: string, tool: string, nativeId: string): void {
     if (tool === 'claude') tool = 'claude-code'
-    this.bind(session, tool, nativeId)
+    const moved = this.bind(session, tool, nativeId)
     const id = `${tool}:${nativeId}`
-    if (this.inPane.get(session) === id) return
-    this.inPane.set(session, id)
+    if (tool === 'pi' || (!moved && this.inPane.get(session) === id)) return
     this.db
       .prepare('UPDATE transcript_owners SET pane_seen_at = ? WHERE transcript_id = ?')
       .run(Date.now(), id)
+    this.inPane.set(session, id)
   }
 
   endOwned(session: string): void {

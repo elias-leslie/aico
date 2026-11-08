@@ -29,6 +29,8 @@ export interface PulseSources {
   children?(): Promise<ChildAgent[] | null>
   now: () => number
   sessions(): Promise<SessionDescriptor[] | null>
+  /** Whether a session no longer listed is expected back (a kept check-in relaunches it); null when Tether did not answer. */
+  comesBack?(id: string): Promise<boolean | null>
   docNames(): Promise<string[] | null>
   doc(name: string): Promise<Record<string, unknown> | null>
   findings(): Finding[] | null
@@ -87,15 +89,22 @@ function minutesSince(stamp: unknown, now: number): number {
 const HANDSHAKE_KEPT_MINUTES = 24 * 60
 
 /** As the ledger reads it: an ETA ack is the recipient's to finish, and reopens once its time runs out.
- * An ack whose sender's Aico session has ended waits on nobody; Tether's list decides that, and a session
- * Tether did not list because it did not answer (null) stays waiting. */
-function handshakeState(m: Row, now: number, sessions: SessionDescriptor[] | null): string {
+ * An ack whose sender's Aico session has ended for good waits on nobody; Tether decides that, and a sender
+ * that comes back, or a Tether that did not answer (null), stays waiting. */
+async function handshakeState(
+  m: Row,
+  now: number,
+  sessions: SessionDescriptor[] | null,
+  comesBack: PulseSources['comesBack'],
+): Promise<string> {
   const state = text(m.state)
   if (state !== 'acked') return state
   if (m.intent === 'eta' && typeof m.eta_min === 'number')
     return minutesSince(m.acked_at, now) >= m.eta_min ? 'open' : 'eta'
   const window = text(m.from_window)
-  return window && sessions && !sessions.some((s) => s.id === window) ? 'sender-ended' : state
+  if (!window || !sessions || sessions.some((s) => s.id === window)) return state
+  const back = comesBack ? await comesBack(window) : false
+  return back === false ? 'sender-ended' : state
 }
 
 export async function collect(src: PulseSources, cfg: Policy = policy): Promise<Pulse> {
@@ -131,19 +140,21 @@ export async function collect(src: PulseSources, cfg: Policy = policy): Promise<
     }
     const coord = await src.doc('_coord')
     if (coord) {
-      handshakes = ((Array.isArray(coord.messages) ? coord.messages : []) as Row[])
-        .filter(
-          (m) =>
-            (m.state === 'open' || m.state === 'acked') &&
-            minutesSince(m.created, now) <= HANDSHAKE_KEPT_MINUTES,
-        )
-        .map((m) => ({
-          id: text(m.id),
-          from: text(m.from),
-          to: text(m.to),
-          state: handshakeState(m, now, sessions),
-          ageMinutes: minutesSince(m.created, now),
-        }))
+      handshakes = await Promise.all(
+        ((Array.isArray(coord.messages) ? coord.messages : []) as Row[])
+          .filter(
+            (m) =>
+              (m.state === 'open' || m.state === 'acked') &&
+              minutesSince(m.created, now) <= HANDSHAKE_KEPT_MINUTES,
+          )
+          .map(async (m) => ({
+            id: text(m.id),
+            from: text(m.from),
+            to: text(m.to),
+            state: await handshakeState(m, now, sessions, src.comesBack),
+            ageMinutes: minutesSince(m.created, now),
+          })),
+      )
     }
   }
   return {

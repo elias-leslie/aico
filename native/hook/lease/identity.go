@@ -427,10 +427,12 @@ func (c Config) Observe(id Identity, reset, subagent, emit bool) []string {
 	var reg map[string]any
 	if raw, ok := d0["identities"]; ok && json.Unmarshal(raw, &reg) == nil {
 		if mine, ok := reg[id.AgentID].(map[string]any); ok {
-			if str(mine["anchor"]) != id.Anchor {
-				return nil // live on another process: never move it
-			}
-			if !(emit && truthy(mine["notice"])) && fresh(mine["saved"], time.Duration(c.RegistrySaveSec)*time.Second, now) {
+			if a := str(mine["anchor"]); a != id.Anchor {
+				if anchorAlive(a) {
+					return nil // live on another process: never move it
+				}
+				// Its process is gone (a resume keeps the id): the prune below drops the row and this one registers.
+			} else if !(emit && truthy(mine["notice"])) && fresh(mine["saved"], time.Duration(c.RegistrySaveSec)*time.Second, now) {
 				return nil
 			}
 		}

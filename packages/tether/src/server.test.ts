@@ -220,6 +220,7 @@ describe('lifecycle API (no tmux started)', () => {
     expect((await call('GET', '/v1/sessions/NOTANID/comes-back')).status).toBe(404)
     expect((await call('GET', '/v1/sessions/ffffffff/comes-back')).body).toEqual({
       comesBack: false,
+      coordinatorId: null,
     })
     // No record of it is no message and unknown context, never zero.
     expect((await call('GET', '/v1/sessions/ffffffff/report')).body).toMatchObject({
@@ -598,7 +599,7 @@ describe('session wakes API', () => {
 
     // Gone from the list, but its kept wake brings it back; a plain End does not.
     expect((await call('GET', '/v1/sessions/0a1b2c3d')).status).toBe(404)
-    expect((await call('GET', '/v1/sessions/0a1b2c3d/comes-back')).body).toEqual({
+    expect((await call('GET', '/v1/sessions/0a1b2c3d/comes-back')).body).toMatchObject({
       comesBack: true,
     })
 

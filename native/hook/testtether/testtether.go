@@ -30,6 +30,8 @@ type Server struct {
 	HistoryOwners []map[string]any
 	// ComesBack names ended sessions something kept will relaunch.
 	ComesBack map[string]bool
+	// ComesBackCoordinator is the coordinator those sessions report.
+	ComesBackCoordinator string
 }
 
 // Start serves on a control.sock in a short temp dir (dir is unused, kept for callers) and points TETHER_SOCKET at it.
@@ -95,7 +97,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		reply(w, 200, map[string]any{"kept": true})
 	case r.Method == "GET" && strings.HasPrefix(p, "/v1/sessions/") && strings.HasSuffix(p, "/comes-back"):
 		id := strings.TrimSuffix(strings.TrimPrefix(p, "/v1/sessions/"), "/comes-back")
-		reply(w, 200, map[string]any{"comesBack": s.ComesBack[id]})
+		reply(w, 200, map[string]any{"comesBack": s.ComesBack[id], "coordinatorId": s.ComesBackCoordinator})
 	case r.Method == "GET" && strings.HasPrefix(p, "/v1/sessions/") && !strings.Contains(strings.TrimPrefix(p, "/v1/sessions/"), "/"):
 		reply(w, 404, map[string]any{"error": "not_found"})
 	case r.Method == "GET" && p == "/v1/sessions":

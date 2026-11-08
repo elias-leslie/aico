@@ -221,12 +221,13 @@ var sessionState = func(window string) (desc map[string]any, ended bool) {
 	if status == http.StatusNotFound || status == http.StatusGone {
 		// A wake or wait kept past End relaunches the conversation: not over yet.
 		var kept struct {
-			ComesBack bool `json:"comesBack"`
+			ComesBack     bool   `json:"comesBack"`
+			CoordinatorID string `json:"coordinatorId"`
 		}
 		if _, err := tetherCall("GET", "/v1/sessions/"+url.PathEscape(window)+"/comes-back", nil, &kept); err != nil {
 			return nil, false
 		}
-		return nil, !kept.ComesBack
+		return map[string]any{"coordinatorId": kept.CoordinatorID}, !kept.ComesBack
 	}
 	if err != nil {
 		return nil, false

@@ -75,6 +75,7 @@ function liveSources(env: NodeJS.ProcessEnv, now = Date.now): PulseSources {
   return {
     now,
     sessions: () => orNull(() => client.listSessions()),
+    comesBack: (id) => orNull(() => client.sessionComesBack(id)),
     children: () => orNull(() => client.childAgents()),
     docNames: () => orNull(() => client.coordinationDocs()),
     doc: (name) => orNull(() => client.coordinationDoc(name)),

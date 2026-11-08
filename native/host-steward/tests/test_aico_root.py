@@ -418,6 +418,15 @@ def test_status_says_how_the_lane_is_and_what_it_said_bounded(monkeypatch):
     assert view["model"] == "claude-opus-5-5"
 
 
+def test_age_label_rounds_as_the_shared_time_helper_does():
+    minute = 60_000
+    now = 10_000 * minute
+    assert [admin.age_label(now - ago, now) for ago in (40_000, 90_500, 59 * minute + 29_000, 90 * minute, 2_879 * minute, 2_880 * minute)] == [
+        "40s", "2m", "59m", "2h", "48h", "2d",
+    ]
+    assert admin.age_label(None, now) == "-"
+
+
 def test_report_prints_the_whole_last_message_in_plain_text(monkeypatch, capsys):
     lane_receipts(monkeypatch)
     assert admin.main(["root", "report", ROOT]) == 0

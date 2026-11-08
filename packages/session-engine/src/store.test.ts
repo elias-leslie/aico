@@ -122,6 +122,23 @@ describe('Store schema', () => {
     expect(migrated.defaultTool()?.slug).toBe('codex')
   })
 
+  it('v38 adds pane_seen_at to transcript_owners, keeping its rows', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tether-pane-seen-migration-'))
+    const path = join(dir, 'tether.db')
+    const old = open(path)
+    old.db.exec('ALTER TABLE transcript_owners DROP COLUMN pane_seen_at')
+    old.db.exec(
+      "INSERT INTO transcript_owners (transcript_id, session_id) VALUES ('claude-code:a', 'abcd1234')",
+    )
+    old.db.exec('DELETE FROM schema_version WHERE version >= 38')
+    old.close()
+    const migrated = open(path)
+    expect(migrated.schemaVersion()).toBe(SCHEMA_VERSION)
+    expect(
+      migrated.db.prepare('SELECT session_id, pane_seen_at FROM transcript_owners').all(),
+    ).toEqual([{ session_id: 'abcd1234', pane_seen_at: null }])
+  })
+
   it('v28 adds the wakes ride column, keeping queued rows as wake class', () => {
     const dir = mkdtempSync(join(tmpdir(), 'tether-ride-migration-'))
     const path = join(dir, 'tether.db')

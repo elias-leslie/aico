@@ -184,21 +184,29 @@ describe('aico pulse', () => {
       from_window: window,
       created: '2026-11-08T11:00:00Z',
     })
-    const messages = [row('gone', 'aaaaaaaa'), row('here', 'bbbbbbbb'), row('none', '')]
+    const messages = [
+      row('gone', 'aaaaaaaa'),
+      row('here', 'bbbbbbbb'),
+      row('none', ''),
+      row('back', 'cccccccc'),
+      row('unsure', 'dddddddd'),
+    ]
     const pulse = (sessions: unknown) =>
       collect({
         now: () => Date.parse('2026-11-08T12:00:00Z'),
         sessions: async () => sessions,
+        comesBack: async (id: string) =>
+          id === 'cccccccc' ? true : id === 'dddddddd' ? null : false,
         docNames: async () => ['_coord'],
         doc: async () => ({ messages }),
         findings: () => [],
       } as unknown as PulseSources)
     const answered = render(await pulse([{ id: 'bbbbbbbb', tool: 'x', status: 'running' }]))
     expect(answered).toContain(
-      'Handshakes: 2 acked, waiting on their sender, 1 acked, sender ended (nothing to do)',
+      'Handshakes: 4 acked, waiting on their sender, 1 acked, sender ended (nothing to do)',
     )
     expect(answered.join('\n')).not.toContain('gone')
-    expect(render(await pulse(null))).toContain('Handshakes: 3 acked, waiting on their sender')
+    expect(render(await pulse(null))).toContain('Handshakes: 5 acked, waiting on their sender')
   })
 
   it('says unknown, not zero, when a source does not answer', async () => {

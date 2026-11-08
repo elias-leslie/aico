@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { bindCatalog, insertWidget, removeWidget } from '@aico/session-engine/catalog'
 import { Store } from '@aico/session-engine/store'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   applyWakePolicyPatch,
   cleanNote,
@@ -506,6 +506,47 @@ describe('wake scheduler', () => {
     cancel = () => void wakes.remove(wake.id)
     await scheduler.tick()
     expect(log.delivered).toEqual([])
+  })
+
+  it('expects an ended session back while a kept wake can relaunch it and while that relaunch runs', async () => {
+    let finish: (id: string) => void = () => {}
+    const { wakes, scheduler, add } = harness({
+      relaunch: () =>
+        new Promise((resolve) => {
+          finish = (id) => resolve({ status: 'started', id })
+        }),
+    })
+    const running = new Set<string>()
+    const comesBack = (id: string) => scheduler.comesBack(id, (other) => running.has(other))
+    add(9_000, 'note')
+    expect(comesBack(SESSION)).toBeNull()
+    wakes.keep(SESSION, ENDED)
+    removeWidget(SESSION)
+    expect(comesBack(SESSION)).toEqual(ENDED)
+    // The kept row is gone once the relaunch starts; the session is still on its way back.
+    const pass = scheduler.tick()
+    await vi.waitFor(() => expect(wakes.list()).toEqual([]))
+    expect(comesBack(SESSION)).toEqual(ENDED)
+    finish('ffff0000')
+    await pass
+    running.add('ffff0000')
+    expect(comesBack(SESSION)).toEqual(ENDED)
+    running.delete('ffff0000')
+    expect(comesBack(SESSION)).toBeNull()
+  })
+
+  it('does not expect back an ended session whose relaunch ran out of attempts', async () => {
+    const { wakes, clock, scheduler, add } = harness({
+      policy: () => ({ ...DEFAULT_WAKE_POLICY, relaunchAttempts: 1 }),
+      relaunch: async () => ({ status: 'failed', reason: 'no folder' }),
+    })
+    const wake = add(9_000, 'note')
+    wakes.keep(SESSION, ENDED)
+    removeWidget(SESSION)
+    await scheduler.tick()
+    clock.now += 1
+    expect(wakes.get(wake.id)?.attempts).toBe(1)
+    expect(scheduler.comesBack(SESSION, () => false)).toBeNull()
   })
 
   it('relaunches a kept wake as a resumed conversation', async () => {

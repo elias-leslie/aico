@@ -366,6 +366,30 @@ describe("a session's last message and context fill", () => {
     h.seenInPane('abcd1236', 'claude', 'b3')
     await h.scan()
     expect(h.closingMessage('abcd1236', 'claude-code')?.text).toBe('New.')
+    // A conversation that moves here (`claude -p --resume` of an ended lane's) was seen in another
+    // pane: it doesn't outrank this pane's.
+    write(
+      ['.claude', 'projects', '-work-demo', 'b6.jsonl'],
+      jsonl(user('Lane'), later('Lane.', 400)),
+    )
+    h.seenInPane('abcd1238', 'claude', 'b6')
+    h.bind('abcd1236', 'claude', 'b6')
+    await h.scan()
+    expect(h.closingMessage('abcd1236', 'claude-code')?.text).toBe('New.')
+    // It comes back to that pane: seen there again.
+    h.seenInPane('abcd1238', 'claude', 'b6')
+    await h.scan()
+    expect(h.closingMessage('abcd1238', 'claude-code')?.text).toBe('Lane.')
+    expect(h.closingMessage('abcd1236', 'claude-code')?.text).toBe('New.')
+    // Pi's probe stays on its launch conversation past a `/new`: it doesn't outrank the new one.
+    h.seenInPane('abcd1239', 'pi', 'launch')
+    expect(
+      store.db
+        .prepare(
+          "SELECT pane_seen_at AS at FROM transcript_owners WHERE transcript_id = 'pi:launch'",
+        )
+        .get(),
+    ).toEqual({ at: null })
     // Nothing seen in the pane: the one written last, as before.
     write(['.claude', 'projects', '-work-demo', 'b4.jsonl'], jsonl(user('A'), reply('Older.', 1)))
     write(['.claude', 'projects', '-work-demo', 'b5.jsonl'], jsonl(user('B'), later('Newer.', 2)))
