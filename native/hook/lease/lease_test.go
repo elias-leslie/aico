@@ -428,6 +428,9 @@ func TestYesFromAnotherSessionStandsInOnlyForAWriterThatIsGone(t *testing.T) {
 	if got := a.ExceptAcked(found, id); len(got[theirs]) != 0 {
 		t.Errorf("a yes stands in for a writer that is gone: %v", got)
 	}
+	if got := a.ExceptAcked(map[string][]string{theirs: {"cc:999999"}}, id); len(got[theirs]) != 0 {
+		t.Errorf("a writer the registry has forgotten is gone too: %v", got)
+	}
 	if got := a.ExceptAcked(map[string][]string{theirs: {"unknown"}}, id); len(got[theirs]) == 0 {
 		t.Errorf("an unnamed writer never hands over this way: %v", got)
 	}

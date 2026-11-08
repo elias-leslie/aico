@@ -328,8 +328,11 @@ func (h *Hook) yesFrom(id, agent string) map[string]any {
 // yesForGone: my request id, answered yes by anyone within ackValid, stands in for a named writer whose process is
 // gone. An unnamed writer ("unknown") could be anyone, so it never hands over this way.
 func (h *Hook) yesForGone(id, agent string) map[string]any {
-	identity := rows(h.Cfg.loadDoc(), "identities")[agent]
-	if identity == nil || anchorAlive(str(identity["anchor"])) {
+	if agent == "unknown" {
+		return nil
+	}
+	// The registry forgets an agent some time after it ends: no row means no process to answer.
+	if identity := rows(h.Cfg.loadDoc(), "identities")[agent]; identity != nil && anchorAlive(str(identity["anchor"])) {
 		return nil
 	}
 	mine := h.lineage().SelfIDs(h.ID)
