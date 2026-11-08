@@ -90,7 +90,7 @@ def test_context_installs_before_callback_without_registry_or_chdir(monkeypatch,
 
 
 def test_usage_errors_are_plain_lines_naming_the_st_command(monkeypatch, capsys):
-    monkeypatch.delenv('ST_EXTENSION_CONTEXT', raising=False)
+    monkeypatch.setenv('ST_EXTENSION_CONTEXT', json.dumps(context()))
     app = typer.Typer()
 
     @app.command()

@@ -135,17 +135,19 @@ def run_app(
     """Initialize trusted context, then invoke an owner Typer application.
 
     The process always exits: callbacks raising ``typer.Exit`` keep their status,
-    and usage errors print as short plain lines that name ``st <namespace>`` (exit 2)
-    instead of Typer's boxed panel.
+    and usage errors print as short plain lines (exit 2) instead of Typer's boxed panel,
+    naming ``st <namespace>`` when st launched the app.
     """
     if not namespace.strip():
         raise ValueError("extension namespace must be non-empty")
-    _, output = initialize_context()
+    extension_context, output = initialize_context()
     errors = _click_exceptions()
     command = typer.main.get_command(app)
+    # Launched by st: name the st command; run directly: the program's own name.
+    prog = f"st {namespace}" if extension_context else os.path.basename(sys.argv[0]) or namespace
     try:
         try:
-            with command.make_context(f"st {namespace}", list(sys.argv[1:] if args is None else args),
+            with command.make_context(prog, list(sys.argv[1:] if args is None else args),
                                       obj=output) as ctx:
                 command.invoke(ctx)
         except EOFError as exc:
