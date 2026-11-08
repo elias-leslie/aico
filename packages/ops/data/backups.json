@@ -2,7 +2,7 @@
   "version": 1,
   "workstation": "davion-sidarli",
   "stateDir": "~/.local/state/aico/backups",
-  "scratchRoot": "/srv/scratch/aico-backups",
+  "cacheDir": "~/.cache/aico/backups",
   "sharedLock": "~/.local/state/summitflow/host-recovery/run.lock",
   "legacyHostState": "~/.local/state/summitflow/host-recovery",
   "legacyDriveState": "~/.local/state/summitflow/offsite",

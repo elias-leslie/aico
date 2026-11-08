@@ -71,7 +71,7 @@ afterEach(() => {
 const cfg = () => {
   const c = config({})
   c.stateDir = temp()
-  c.scratchRoot = temp()
+  c.cacheDir = temp()
   c.workstation = HOST
   return c
 }

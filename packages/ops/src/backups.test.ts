@@ -88,7 +88,7 @@ const now = Date.parse('2026-11-04T20:00:00Z')
 const cfg = () => {
   const c = config({})
   c.stateDir = temp()
-  c.scratchRoot = temp()
+  c.cacheDir = temp()
   return c
 }
 const ok = (_argv: string[]) => Promise.resolve({ code: 0, out: '', err: '' })
@@ -518,7 +518,7 @@ it('gem has one append copy and the workstation owns its single real Drive recei
 it('gem backs itself up to its own Drive repository with its own login, reported from gem', async () => {
   const c = config({ AICO_BACKUP_MACHINE: 'aico' })
   c.stateDir = temp()
-  c.scratchRoot = temp()
+  c.cacheDir = temp()
   expect(c.drive?.repository).toBe('rclone:aico-notes-drive:SummitFlow-Aico-gem-backup')
   const drive = entries(emptyState(), c, 'aico', now).filter((e) => e.target === 'drive')
   expect(drive[0]).toMatchObject({ id: 'drive/aico-aico', name: 'Aico databases and photos' })
@@ -1229,6 +1229,7 @@ it('keeps the restic cache in its own cache folder, never on the scratch disk', 
   const c = cfg()
   vi.stubEnv('XDG_RUNTIME_DIR', temp())
   const { argv } = resticArgs(c, 'drive', ['snapshots'])
+  expect(argv[argv.indexOf('--cache-dir') + 1]).toBe(join(c.cacheDir, 'cache'))
   expect(JSON.stringify(c)).not.toContain('/srv/scratch/aico-backups')
   vi.unstubAllEnvs()
 })

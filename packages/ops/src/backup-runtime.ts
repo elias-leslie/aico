@@ -205,7 +205,7 @@ export function resticArgs(
   root = false,
 ): { argv: string[]; env: NodeJS.ProcessEnv } {
   const spec = target === 'drive' ? driveSpec(cfg) : cfg.append
-  const cache = join(cfg.scratchRoot, root ? 'cache-root' : 'cache')
+  const cache = join(homePath(cfg.cacheDir), root ? 'cache-root' : 'cache')
   const temp = join(
     process.env.XDG_RUNTIME_DIR || `/run/user/${process.getuid?.() ?? 0}`,
     'aico-backups',
