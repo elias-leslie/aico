@@ -91,7 +91,7 @@ export interface CopySession {
   git: { branch: string; head: string; dirty: number } | null
 }
 
-export interface Snapshot {
+interface Snapshot {
   v: 1
   machine: string
   at: number
@@ -262,7 +262,7 @@ export interface HeldOptions {
   freeBytes?: () => number
 }
 
-export interface FileEntry {
+interface FileEntry {
   session: string
   rel: string
   /** Where these bytes start in the original. */
@@ -523,7 +523,7 @@ export interface SizesAnswer {
   files: Record<string, { base: number; end: number; tail: string; tailLen: number }>
 }
 
-export const fileKey = (session: string, rel: string) => `${session}\n${rel}`
+const fileKey = (session: string, rel: string) => `${session}\n${rel}`
 
 function tailHash(path: string, size: number): { tail: string; tailLen: number } {
   const tailLen = Math.min(TAIL_BYTES, size)
@@ -1207,7 +1207,7 @@ function realDeps(env: NodeJS.ProcessEnv, cfg: CopiesConfig): SendDeps {
   }
 }
 
-export function copiesDirFor(machine: string, cfg: CopiesConfig = copiesConfig): string {
+function copiesDirFor(machine: string, cfg: CopiesConfig = copiesConfig): string {
   const places = cfg.copiesDir as Record<string, string>
   return expandHome(places[machine] ?? (places['*'] as string))
 }
@@ -1227,7 +1227,7 @@ const age = (ms: number) => {
   return hours < 48 ? `${hours} h` : `${Math.round(hours / 24)} d`
 }
 
-export function listLines(held: HeldMachine[], now: number): string[] {
+export function heldLines(held: HeldMachine[], now: number): string[] {
   if (!held.length) return ['No copies of another machine’s sessions here.']
   const lines: string[] = []
   for (const machine of held) {
@@ -1292,7 +1292,7 @@ export async function shift(argv: string[], env = process.env): Promise<number> 
   if (verb === 'list') {
     const held = readHeld(dir)
     if (rest.includes('--json')) console.log(JSON.stringify({ machines: held }))
-    else console.log(listLines(held, Date.now()).join('\n'))
+    else console.log(heldLines(held, Date.now()).join('\n'))
     return 0
   }
   if (verb === 'show') {

@@ -21,7 +21,7 @@ import {
   eligibleSessions,
   type HeldOptions,
   type LiveRecord,
-  listLines,
+  heldLines,
   pruneCopies,
   readHeld,
   receiveBatch,
@@ -227,7 +227,7 @@ test('the survivor reads what was going on, and copies are private and out of ba
     git: { branch: 'main', dirty: 3 },
   })
   expect(session.copy?.bytes).toBe(9)
-  expect(listLines(machines, now).join('\n')).toContain('aaaa1111  working')
+  expect(heldLines(machines, now).join('\n')).toContain('aaaa1111  working')
   expect(showLines(machine, session).join('\n')).toContain(
     'aico wip restore aico --of workstation --to DIR',
   )

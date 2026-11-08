@@ -6,6 +6,9 @@
   "license": "Apache-2.0",
   "aico": {
     "layer": 4,
+    "db": [
+      "copy.db"
+    ],
     "imports": [
       "@aico/shared",
       "@aico/context",

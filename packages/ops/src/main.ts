@@ -18,10 +18,10 @@ import {
 import { journalArgs, otherProjectLogs, parseLogsArgs, statusPointer } from './logs'
 import { plug, plugDeps } from './plug'
 import { power, powerDeps } from './power'
+import { shift } from './session-copies'
 import { run } from './sh'
 import { snapDeps, snapshots } from './snapshots'
 import { routeOp, vm } from './vm'
-import { shift } from './session-copies'
 import { wip } from './wip-mirror'
 
 const USAGE = `Usage:
