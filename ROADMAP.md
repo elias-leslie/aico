@@ -4,6 +4,7 @@ Aico is a Linux companion for people working with terminal AI tools. Agent sessi
 ## Now
 - Notifications leftovers: home alarm, update ready and phone pairing can't get a Settings switch until the next Android release; the Proxmox sender's own alarms (when no Aico answers) reach the phone but aren't on the shared list
 ## Next
+- Boot order for status rows: after a reboot the phone sender token job ran before Aico answered, its row was lost, and Status read Late for 10 minutes until the next report. Other host-steward jobs with short schedules could do the same; proven once on Nov 8
 - Antigravity leftovers (report: /srv/scratch/briefs/usage-burn-2026-11-08/lane12-report.md): agy keeps every conversation on disk with whatever private text it was sent (over 1 GB on the workstation) and no off switch was found, so it needs a cleanup; `search_web` can't be denied on schema calls, so prompt text can reach a Google search
 - Antigravity working agents (report: /srv/scratch/briefs/usage-burn-2026-11-08/lane13-report.md): `st models route` can't show what its subscription has left; the new-session dialog has no first-message box and doesn't explain "Shell also running"; check the standby offers Argon and refuses coordinators once the next release reaches it
 - After the Drive (03:49) and housekeeping (05:15) runs on Nov 9: check the 44 failed Drive rows cleared, the restic caches are in `~/.cache/aico/backups` and `/var/tmp/aico-backups/cache-root`, and the journal shows `doing ...` lines
