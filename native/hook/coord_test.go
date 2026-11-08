@@ -75,6 +75,9 @@ func TestLeaseVerbsAndHandshakeFromTheCommandLine(t *testing.T) {
 	if code, _, errOut := run(sessA, "lease", "list"); code != 2 || !strings.Contains(errOut, "use --list") {
 		t.Fatalf("an action word is not a path: %d %q", code, errOut)
 	}
+	if code, _, errOut := run(sessA, "lease", "status"); code != 2 || !strings.Contains(errOut, "use --list") {
+		t.Fatalf("an action word is not a path: %d %q", code, errOut)
+	}
 
 	code, out, _ := run(sessA, "sessions", "send", "cc:222222", "please look at the lease change", "--source-key", "k1")
 	if code != 0 || !strings.HasPrefix(out, "sent ") {

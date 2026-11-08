@@ -253,10 +253,14 @@ func leaseMain(h *lease.Hook, args []string) int {
 		return fail("Provide globs to acquire, or use --list / --check / --take / --release.")
 	default:
 		for _, g := range globs {
+			action := g
 			switch g {
+			case "status", "ls", "show":
+				action = "list"
+				fallthrough
 			case "list", "check", "take", "release", "release-all", "heartbeat", "hold", "all":
 				if _, err := os.Stat(filepath.Join(p.Root, g)); err != nil {
-					return fail("st lease takes paths; for an action use --%s (e.g. st lease --list).", g)
+					return fail("st lease takes paths; for an action use --%s (e.g. st lease --list).", action)
 				}
 			}
 		}
