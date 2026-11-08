@@ -149,6 +149,30 @@ describe('MachinesService.guests', () => {
     expect(source.down).toBeUndefined()
   })
 
+  it('waits out an older in-flight reading before a caller requires fresh power state', async () => {
+    const { service, places, source, list } = setup()
+    const read = source.list.bind(source)
+    let release = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    source.list = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        const before = await read()
+        await gate
+        return before
+      })
+      .mockImplementation(read)
+    const pending = places.refresh()
+    list[0]!.status = 'running'
+    const fresh = service.guestsNow(true)
+    release()
+    await pending
+    expect((await fresh).items[0]?.state).toBe('running')
+    expect(source.list).toHaveBeenCalledTimes(2)
+  })
+
   it('gives no guests and a reason when Proxmox cannot be read', async () => {
     const { service, places, source } = setup()
     source.down = true
@@ -301,6 +325,29 @@ describe('machine routes', () => {
     }
     expect(answer.items).toHaveLength(4)
     expect(answer.failure).toBeNull()
+  })
+
+  it('reads Proxmox again on demand even when its cached power state is new', async () => {
+    const read = async (query = '') =>
+      (await (await fetch(`${base}/api/machines/guests${query}`)).json()) as {
+        items: { machine: string; state: string }[]
+        failure: string | null
+      }
+    const apps = (answer: Awaited<ReturnType<typeof read>>) =>
+      answer.items.find((item) => item.machine === 'apps')?.state
+    ctx.list[0]!.status = 'running'
+    expect(apps(await read())).toBe('stopped')
+    expect(apps(await read('?fresh=1'))).toBe('running')
+    ctx.list[0]!.status = 'stopped'
+    expect(apps(await read('?fresh=1'))).toBe('stopped')
+  })
+
+  it('reports a failed forced reading instead of silently using cached power state', async () => {
+    ctx.source.down = true
+    const answer = (await (await fetch(`${base}/api/machines/guests?fresh=1`)).json()) as {
+      failure: string | null
+    }
+    expect(answer.failure).toContain('Proxmox did not answer')
   })
 
   it('toggles autostart and answers with what Proxmox now says', async () => {

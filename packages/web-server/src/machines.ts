@@ -1,6 +1,6 @@
 // The Machines page's Proxmox side: each guest's power, autostart (Proxmox's `onboot`), size and
 // the projects that run on it, and the buttons that act on them.
-//   GET  /api/machines/guests                  the guests and when Proxmox was read (or why not)
+//   GET  /api/machines/guests[?fresh=1]        the guests and when Proxmox was read (or why not); fresh bypasses the page cache
 //   POST /api/machines/:machine/power          {action: on | off | restart | stop, force?}  (stop = force off, after a clean shutdown failed)
 //   POST /api/machines/:machine/autostart      {on: true | false}
 //   GET  /api/machines/services                each full Aico's services and their state (aico power units)
@@ -81,9 +81,10 @@ export class MachinesService {
     )
   }
 
-  /** The guests as Proxmox says now: a reading older than a few seconds is taken again first. */
-  async guestsNow() {
-    await this.places.refreshIfOlder(FRESH_MS)
+  /** Power callers can require a new reading; ordinary page reads share a short cache. */
+  async guestsNow(fresh = false) {
+    if (fresh) await this.places.refreshFresh()
+    else await this.places.refreshIfOlder(FRESH_MS)
     return this.guests()
   }
 
@@ -217,7 +218,9 @@ export function registerMachineRoutes(
     if (!MACHINE.test(value)) throw new HttpError(422, 'Unknown machine')
     return value
   }
-  router.on('GET', '/api/machines/guests', () => service.guestsNow())
+  router.on('GET', '/api/machines/guests', (ctx) =>
+    service.guestsNow(ctx.query.get('fresh') === '1'),
+  )
   let services: { value: unknown; at: number } | null = null
   router.on('GET', '/api/machines/services', async () => {
     if (services && now() - services.at <= SERVICES_FRESH_MS) return services.value

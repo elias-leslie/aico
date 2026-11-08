@@ -132,6 +132,12 @@ export class Places {
       : this.refresh()
   }
 
+  /** Power decisions need a read begun after the request, rather than joining an older read. */
+  async refreshFresh(): Promise<void> {
+    if (this.reading) await this.reading
+    await this.refresh()
+  }
+
   private async read(): Promise<void> {
     const { guests } = this.options
     this.syncIntents()
