@@ -299,7 +299,13 @@ export async function runSteps(
       ...(skipped.get(result.reason as string) ?? []),
       result.id,
     ])
-  for (const [reason, ids] of skipped) out(`CHECK:SKIP:${reason}: ${ids.join(', ')}`)
+  // Path-scoped skips are the common case and only a count helps; other reasons name each check.
+  for (const [reason, ids] of skipped)
+    out(
+      reason === 'no_relevant_changed_paths'
+        ? `CHECK:SKIP:${reason}: ${ids.length} check(s)`
+        : `CHECK:SKIP:${reason}: ${ids.join(', ')}`,
+    )
   const steps = planned.flatMap((item) => (item.step ? [item.step] : []))
   if (!steps.length) return planned.map((item) => results.get(item.id) as StepResult)
 

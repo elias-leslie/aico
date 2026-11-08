@@ -99,6 +99,23 @@ describe('stage selection', () => {
     expect(ids('full', null)).toEqual(['lint:run', 'suite:run', 'android:no SDK here'])
   })
 
+  it('counts path-scoped skips and names checks skipped for any other reason', async () => {
+    const cfg = config(repo(stages))
+    const lines: string[] = []
+    await runSteps(
+      cfg,
+      'quick',
+      plan(cfg, 'quick', ['docs/readme.md'], () => []).filter((p) => p.skip),
+      {
+        out: (line) => lines.push(line),
+      },
+    )
+    expect(lines).toEqual([
+      'CHECK:SKIP:no_relevant_changed_paths: 1 check(s)',
+      'CHECK:SKIP:no SDK here: android',
+    ])
+  })
+
   it('hands a declared stage the changed files of a scoped run, and none to a whole-tree run', async () => {
     const log = join(mkdtempSync(join(tmpdir(), 'aico-scope-')), 'seen')
     roots.push(dirname(log))

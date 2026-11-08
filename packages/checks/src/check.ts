@@ -106,9 +106,11 @@ function fixable(
   const excluded = (file: string) =>
     othersClaim(foreign[file]) || (!!foreign[file]?.length && !explicit.has(file))
   const unsure = scope.filter(excluded)
+  // Name only files a formatter would touch, and at most ten: images and notes are noise here.
+  const named = unsure.filter((file) => [...BIOME_FIX, '.py'].includes(posix.extname(file)))
   if (unsure.length)
     out(
-      `CHECK:FIX:left out ${unsure.length} file(s) another session wrote or whose writer is unknown (name your own unknown files individually with --paths): ${unsure.join(', ')}`,
+      `CHECK:FIX:left out ${unsure.length} file(s) another session wrote or whose writer is unknown (name your own unknown files individually with --paths)${named.length ? `: ${named.slice(0, 10).join(', ')}${named.length > 10 ? `, +${named.length - 10} more` : ''}` : ''}`,
     )
   return scope.filter((file) => !excluded(file))
 }
