@@ -28,19 +28,19 @@ OmniNull hub (CT 150) and append-only restic (CT 160) are never captured.
 """
 
 import fcntl
-from contextlib import contextmanager
 import fnmatch
 import json
 import os
 import re
 import secrets
-import signal
 import shlex
+import signal
 import sqlite3
 import subprocess
 import sys
 import tempfile
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 SOURCES = Path("/etc/summitflow-pve-backup/sources.json")
@@ -224,16 +224,60 @@ def _root_partition(device, run):
     return best["path"], best["fstype"]
 
 
+CAPTURE_SIGNALS = (signal.SIGTERM, signal.SIGHUP, signal.SIGINT)
+
+
+@contextmanager
+def shield_capture_signals():
+    """Finish safety-critical work before delivering cancellation; child commands inherit the mask."""
+    previous = signal.pthread_sigmask(signal.SIG_BLOCK, CAPTURE_SIGNALS)
+    try:
+        yield
+    except BaseException:
+        # A thaw/confirmation failure is more useful than the pending cancellation it also caused.
+        try:
+            signal.pthread_sigmask(signal.SIG_SETMASK, previous)
+        except Refused:
+            pass
+        raise
+    else:
+        signal.pthread_sigmask(signal.SIG_SETMASK, previous)
+
+
+def vm_operation_lock(vmid, run, *, release=False):
+    """Use PVE's public config API: set_lock checks the prior flag atomically; removal checks its value.
+
+    Installed PVE::AbstractConfig implements both methods under lock_config, also used by native
+    vzdump/snapshot operations. Do not use qm unlock: it unconditionally removes another lock value.
+    """
+    method = "remove_lock" if release else "set_lock"
+    program = f'PVE::QemuConfig->{method}($ARGV[0], "backup");'
+    result = run(["/usr/bin/perl", "-MPVE::QemuConfig", "-e", program, "--", str(vmid)],
+                 capture_output=True, text=True)
+    if result.returncode:
+        if not release and re.search(r"VM is locked\s*\(|can't lock file.*(?:timeout|temporarily unavailable)", result.stderr):
+            raise Deferred(f"qemu {vmid} has a Proxmox operation in progress")
+        if release:
+            raise Refused(f"qemu {vmid} thawed, but its Proxmox backup lock could not be removed")
+        raise Refused(f"qemu {vmid} could not acquire its Proxmox backup lock")
+
+
 def frozen_snapshot(vmid, create, run):
-    """Freeze only while creating the thin snapshot; confirm thaw before any mount or stream."""
+    """Own the native backup flag through status/freeze/snapshot/confirmed thaw, then release only ours."""
     def command(verb):
         return run(["qm", "guest", "cmd", str(vmid), "fsfreeze-" + verb], capture_output=True, text=True)
 
-    before = command("status")
-    if before.returncode or before.stdout.strip() != "thawed":
-        raise Refused(f"qemu {vmid} is not confirmed thawed; no snapshot was taken")
-    # Freeze can partially succeed before qm reports failure. Always thaw after attempting it.
+    owned = attempted_freeze = False
     try:
+        # Record successful ownership before any pending stop can unwind this operation.
+        with shield_capture_signals():
+            vm_operation_lock(vmid, run)
+            owned = True
+        before = command("status")
+        if before.returncode or before.stdout.strip() != "thawed":
+            raise Refused(f"qemu {vmid} is not confirmed thawed; no snapshot was taken")
+        # Freeze can partially succeed before qm reports failure. Always thaw after attempting it.
+        attempted_freeze = True
         frozen = command("freeze")
         if frozen.returncode:
             raise Refused(f"qemu {vmid} could not freeze its filesystem")
@@ -242,10 +286,14 @@ def frozen_snapshot(vmid, create, run):
             raise Refused(f"qemu {vmid} did not confirm its frozen filesystem")
         create()
     finally:
-        command("thaw")
-        after = command("status")
-        if after.returncode or after.stdout.strip() != "thawed":
-            raise Refused(f"qemu {vmid} could not confirm its filesystem thawed; no files were streamed")
+        if owned:
+            with shield_capture_signals():
+                if attempted_freeze:
+                    command("thaw")
+                after = command("status")
+                if after.returncode or after.stdout.strip() != "thawed":
+                    raise Refused(f"qemu {vmid} could not confirm its filesystem thawed; Proxmox backup lock retained")
+                vm_operation_lock(vmid, run, release=True)
 
 
 @contextmanager
@@ -259,7 +307,7 @@ def capture_signals():
             interrupted = True
             raise Refused(f"capture interrupted by {signal.Signals(signum).name}")
 
-    previous = {number: signal.signal(number, stop) for number in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT)}
+    previous = {number: signal.signal(number, stop) for number in CAPTURE_SIGNALS}
     try:
         yield
     finally:

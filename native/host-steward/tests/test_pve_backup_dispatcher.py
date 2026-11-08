@@ -14,6 +14,7 @@ import shutil
 import signal
 import sqlite3
 import subprocess
+import sys
 import threading
 import time
 from collections.abc import Callable, Iterable
@@ -69,8 +70,12 @@ class Runs:
         self.calls.append(argv)
         answer = self.answers.get(argv[0], "")
         result = answer(argv) if callable(answer) else answer
-        code, stdout = result if isinstance(result, tuple) else (0, result)
-        return subprocess.CompletedProcess(argv, code, stdout, "")
+        if isinstance(result, tuple):
+            code, stdout, *errors = result
+            stderr = errors[0] if errors else ""
+        else:
+            code, stdout, stderr = 0, result, ""
+        return subprocess.CompletedProcess(argv, code, stdout, stderr)
 
 
 @pytest.fixture
@@ -550,7 +555,7 @@ def test_a_stopped_vm_path_that_leaves_the_guest_filesystem_is_refused_and_relea
 def _running_snapshot(failure=None):
     answers = _stopped()
     original = answers["pvesh"]
-    state = {"freeze": "thawed"}
+    state: dict[str, Any] = {"freeze": "thawed", "lock": None, "attempts": []}
 
     def pvesh(argv):
         if argv[2] == "/cluster/resources":
@@ -559,15 +564,56 @@ def _running_snapshot(failure=None):
             return json.dumps({"lock": "backup", "scsi0": "local-lvm:vm-100-disk-0"})
         return original(argv)
 
+    def lock(argv):
+        if "->set_lock" in argv[3]:
+            if failure == "native-wins":
+                state["lock"] = "native-backup"
+                state["freeze"] = "frozen"
+            if state["lock"]:
+                return (1, "", "VM is locked (backup)")
+            state["lock"] = "ours"
+            if failure == "signal-acquire":
+                signal.raise_signal(signal.SIGTERM)
+        else:
+            assert '->remove_lock($ARGV[0], "backup")' in argv[3]
+            if failure == "foreign-lock":
+                state["lock"] = "migration"
+            if state["lock"] != "ours":
+                return (1, "", "found lock migration trying to remove backup lock")
+            assert state["freeze"] == "thawed"
+            state["lock"] = None
+            if failure == "signal-unlock":
+                signal.raise_signal(signal.SIGTERM)
+        return ""
+
+    def native_attempt():
+        if state["lock"]:
+            state["attempts"].append("blocked")
+        else:
+            state["attempts"].append("acquired")
+            state["lock"] = "native-backup"
+            state["freeze"] = "frozen"
+
     def qm(argv):
         verb = argv[-1]
         if verb == "fsfreeze-status":
-            return state["freeze"]
+            reported = state["freeze"]
+            if failure == "native-during-window":
+                # The native contender runs after our status result but before our next command.
+                native_attempt()
+            if failure == "signal-confirm" and state.get("thaw_attempted"):
+                signal.raise_signal(signal.SIGTERM)
+            return reported
         if verb == "fsfreeze-freeze":
+            if state["freeze"] == "frozen":
+                return (1, "", "already frozen")
             state["freeze"] = "frozen"
             return (1 if failure == "freeze" else 0, "1")
         if verb == "fsfreeze-thaw":
-            if failure == "thaw":
+            state["thaw_attempted"] = True
+            if failure in ("signal-thaw", "signal-thaw-fails"):
+                signal.raise_signal(signal.SIGTERM)
+            if failure in ("thaw", "signal-thaw-fails"):
                 return (1, "")
             state["freeze"] = "thawed"
             return "1"
@@ -581,7 +627,7 @@ def _running_snapshot(failure=None):
             signal.raise_signal(signal.SIGTERM)
         return ""
 
-    answers.update({"pvesh": pvesh, "qm": qm, "lvcreate": create})
+    answers.update({"pvesh": pvesh, "qm": qm, "lvcreate": create, "/usr/bin/perl": lock})
     return answers, state
 
 
@@ -595,7 +641,10 @@ def test_running_vm_freezes_only_for_thin_snapshot_then_streams_plain_tar_on_the
     freeze = next(i for i, call in enumerate(runs.calls) if call[-1] == "fsfreeze-freeze")
     thaw = next(i for i, call in enumerate(runs.calls) if call[-1] == "fsfreeze-thaw")
     assert freeze < verbs.index("lvcreate") < thaw < verbs.index("mount") < verbs.index("tar")
-    assert state["freeze"] == "thawed"
+    assert state["freeze"] == "thawed" and state["lock"] is None
+    acquire = next(i for i, call in enumerate(runs.calls) if call[0] == "/usr/bin/perl" and "->set_lock" in call[3])
+    unlock = next(i for i, call in enumerate(runs.calls) if call[0] == "/usr/bin/perl" and "->remove_lock" in call[3])
+    assert acquire < freeze < thaw < unlock < verbs.index("mount")
     assert not any("file-read" in " ".join(call) or call[0] in ("ssh", "pct") for call in runs.calls)
     assert verbs[-3:] == ["umount", "losetup", "lvremove"]
 
@@ -612,6 +661,7 @@ def test_failed_snapshot_or_signal_thaws_before_cleanup_and_never_streams(dispat
     if failure != "locked":
         assert any(call[-1] == "fsfreeze-thaw" for call in runs.calls)
         assert state["freeze"] == ("frozen" if failure == "thaw" else "thawed")
+        assert state["lock"] == ("ours" if failure == "thaw" else None)
         assert runs.calls[-1][:2] == ["lvremove", "-f"]
     else:
         assert not any(call[0] in ("qm", "lvcreate") for call in runs.calls)
@@ -748,3 +798,74 @@ def test_a_guest_export_lock_conflict_is_busy_and_cleans_only_its_unique_scope(d
     runs = Runs(_container("running"))
     assert dispatcher.main(f"capture ct {digest}", run=runs, out=io.BytesIO()) == 75
     assert runs.calls[-1][-1] in calls[0][-1]
+
+
+@pytest.mark.parametrize("phase", ["acquire", "thaw", "confirm", "unlock"])
+def test_first_cancellation_finishes_confirmed_thaw_and_ownership_cleanup(dispatcher, tmp_path, monkeypatch, phase):
+    monkeypatch.setattr(dispatcher, "MOUNT_PARENT", str(tmp_path))
+    digest = _install(dispatcher, {"vm": VM})["vm"]
+    answers, state = _running_snapshot("signal-" + phase)
+    runs = Runs(answers)
+    with dispatcher.capture_signals():
+        assert dispatcher.main(f"capture vm {digest}", run=runs, out=io.BytesIO()) == 2
+    assert state["freeze"] == "thawed" and state["lock"] is None
+    assert any(call[0] == "/usr/bin/perl" and "->remove_lock" in call[3] for call in runs.calls)
+    assert not any(call[0] in ("mount", "tar") for call in runs.calls)
+    if phase != "acquire":
+        thaw = next(i for i, call in enumerate(runs.calls) if call[-1] == "fsfreeze-thaw")
+        confirmed = next(i for i, call in enumerate(runs.calls) if i > thaw and call[-1] == "fsfreeze-status")
+        unlock = next(i for i, call in enumerate(runs.calls) if call[0] == "/usr/bin/perl" and "->remove_lock" in call[3])
+        assert thaw < confirmed < unlock
+
+
+def test_cancellation_cannot_hide_a_failed_thaw_or_release_its_safety_lock(dispatcher, tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(dispatcher, "MOUNT_PARENT", str(tmp_path))
+    digest = _install(dispatcher, {"vm": VM})["vm"]
+    answers, state = _running_snapshot("signal-thaw-fails")
+    runs = Runs(answers)
+    with dispatcher.capture_signals():
+        assert dispatcher.main(f"capture vm {digest}", run=runs, out=io.BytesIO()) == 2
+    assert state["freeze"] == "frozen" and state["lock"] == "ours"
+    assert "Proxmox backup lock retained" in capsys.readouterr().err
+    assert not any(call[0] in ("mount", "tar") or (call[0] == "/usr/bin/perl" and "->remove_lock" in call[3]) for call in runs.calls)
+
+
+@pytest.mark.parametrize("number", [signal.SIGTERM, signal.SIGHUP, signal.SIGINT])
+def test_cleanup_child_inherits_the_cancellation_shield_and_pending_stop_follows_confirmation(dispatcher, number):
+    completed = []
+    program = "import os, signal; os.kill(os.getppid(), int(__import__('sys').argv[1])); os.kill(os.getpid(), int(__import__('sys').argv[1])); print('cleanup child completed', flush=True)"
+    with (dispatcher.capture_signals(), pytest.raises(dispatcher.Refused, match=signal.Signals(number).name),
+          dispatcher.shield_capture_signals()):
+        child = subprocess.run([sys.executable, "-c", program, str(number)], capture_output=True, text=True, check=True)
+        completed.extend([child.stdout.strip(), "thaw confirmed"])
+    assert completed == ["cleanup child completed", "thaw confirmed"]
+
+
+def test_a_native_backup_winning_after_the_boot_config_read_is_never_thawed_or_unlocked(dispatcher, tmp_path, monkeypatch):
+    monkeypatch.setattr(dispatcher, "MOUNT_PARENT", str(tmp_path))
+    digest = _install(dispatcher, {"vm": VM})["vm"]
+    answers, state = _running_snapshot("native-wins")
+    runs = Runs(answers)
+    assert dispatcher.main(f"capture vm {digest}", run=runs, out=io.BytesIO()) == 75
+    assert state["lock"] == "native-backup" and state["freeze"] == "frozen"
+    assert not any(call[0] == "qm" or (call[0] == "/usr/bin/perl" and "->remove_lock" in call[3]) for call in runs.calls)
+
+
+def test_native_backup_cannot_acquire_our_flag_between_status_freeze_snapshot_and_thaw(dispatcher, tmp_path, monkeypatch):
+    monkeypatch.setattr(dispatcher, "MOUNT_PARENT", str(tmp_path))
+    digest = _install(dispatcher, {"vm": VM})["vm"]
+    answers, state = _running_snapshot("native-during-window")
+    runs = Runs(answers)
+    assert dispatcher.main(f"capture vm {digest}", run=runs, out=io.BytesIO()) == 0
+    assert state["attempts"] == ["blocked", "blocked", "blocked"]
+    assert state["lock"] is None and state["freeze"] == "thawed"
+
+
+def test_expected_lock_value_prevents_clearing_a_foreign_operation_flag(dispatcher, tmp_path, monkeypatch):
+    monkeypatch.setattr(dispatcher, "MOUNT_PARENT", str(tmp_path))
+    digest = _install(dispatcher, {"vm": VM})["vm"]
+    answers, state = _running_snapshot("foreign-lock")
+    runs = Runs(answers)
+    assert dispatcher.main(f"capture vm {digest}", run=runs, out=io.BytesIO()) == 2
+    assert state["lock"] == "migration" and state["freeze"] == "thawed"
+    assert not any(call[0] in ("mount", "tar") for call in runs.calls)
