@@ -241,15 +241,11 @@ describe('tether capture', () => {
   })
 
   it('says Aico is not reachable (exit 2) when nothing answers', async () => {
-    const closed = createServer()
-    await new Promise<void>((resolve) => closed.listen(0, '127.0.0.1', resolve))
-    const port = (closed.address() as AddressInfo).port
-    await new Promise<void>((resolve) => closed.close(() => resolve()))
     const run = capture()
-    expect(
-      await runCapture(run.io, false, ['list'], { AICO_WEB_URL: `http://127.0.0.1:${port}` }),
-    ).toBe(2)
-    expect(run.err[0]).toContain(`Aico is not reachable at http://127.0.0.1:${port}`)
+    expect(await runCapture(run.io, false, ['list'], { AICO_WEB_URL: 'http://127.0.0.1:1' })).toBe(
+      2,
+    )
+    expect(run.err[0]).toContain('Aico is not reachable at http://127.0.0.1:1')
   })
 
   it('rejects bad arguments with the usage', async () => {
