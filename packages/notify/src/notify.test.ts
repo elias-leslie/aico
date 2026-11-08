@@ -115,10 +115,29 @@ describe('the outbox', () => {
     await outbox.kick()
     expect(sent).toEqual([])
     expect(store.get(id)?.deliveries[0]?.state).toBe('unsure')
+    // A machine turned off mid-send isn't a failure; the row still says it may not have gone out.
     expect(outbox.statusRow('host', 30_000)).toMatchObject({
       id: 'host/notify-outbox',
-      state: 'failed',
+      state: 'ok',
+      meaning: expect.stringContaining('1 alert may not have gone out'),
     })
+  })
+
+  it('an alert that ended or went stale while a machine was off fails nothing', async () => {
+    const { store, outbox, sent, advance, at } = setup()
+    const ended = store.accept({ ...warning, expires: 60 }, 'local', ['dev1'], at())
+    const stale = store.accept(
+      { ...warning, title: 'Other', key: 'other' },
+      'local',
+      ['dev1'],
+      at(),
+    )
+    advance(GIVE_UP_MS)
+    await outbox.kick()
+    expect(sent).toEqual([])
+    expect(store.get(ended.id)?.deliveries).toEqual([])
+    expect(store.get(stale.id)?.deliveries).toEqual([])
+    expect(outbox.statusRow('host', 30_000).state).toBe('ok')
   })
 
   it('gives up on a gone phone and says so in its Status row', async () => {

@@ -107,13 +107,16 @@ export async function contextSync(argv: string[], env = process.env): Promise<nu
   const phones = await syncPhones(peers, aico, env)
   if (phones.failed) failed = true
   lines.push(...phones.lines)
+  const canary = await syncCanaryCursor(peers, aico, env)
+  if (canary.failed) failed = true
+  lines.push(...canary.lines)
   console.log(lines.join('; '))
   return failed ? 1 : 0
 }
 
 /** `requestExec` found no peer, or lost it before the command reported an exit status. */
-function unanswered(result: { code: number; output: string }): boolean {
-  return result.code === 255 && !result.output.trim()
+function unanswered(result: { ended: boolean }): boolean {
+  return !result.ended
 }
 
 /**
@@ -121,10 +124,11 @@ function unanswered(result: { code: number; output: string }): boolean {
  * Aico answers has to know that key. Each peer merges what it is sent and answers with the result, so
  * a token the phone gave the standby while this machine was off comes back here.
  */
-async function syncPhones(
+export async function syncPhones(
   peers: { name: string; exec: string }[],
   aico: (args: string) => string[],
   env: NodeJS.ProcessEnv,
+  exec: typeof requestExec = requestExec,
 ): Promise<{ lines: string[]; failed: boolean }> {
   const path =
     env.AICO_PHONE_DEVICES_FILE?.trim() ||
@@ -133,7 +137,7 @@ async function syncPhones(
   const lines: string[] = []
   let failed = false
   for (const peer of peers) {
-    const sent = await requestExec(peer.exec, aico('phones merge'), readFileSync(path))
+    const sent = await exec(peer.exec, aico('phones merge'), readFileSync(path))
     if (unanswered(sent)) continue
     let merged: unknown = null
     try {
@@ -149,7 +153,54 @@ async function syncPhones(
     const tmp = `${path}.${process.pid}.tmp`
     writeFileSync(tmp, JSON.stringify(merged), { mode: 0o600 })
     renameSync(tmp, path)
+    // Only now does the peer count the merge as done: a link that dropped before this keeps its new phones.
+    await exec(peer.exec, aico('phones merge-done'), Buffer.alloc(0))
     lines.push(`${peer.name}: ${merged.length} phone${merged.length === 1 ? '' : 's'} in step`)
+  }
+  return { lines, failed }
+}
+
+/**
+ * The canary cursor (the newest hit already looked at, per token; packages/web-server canary-poll.ts)
+ * goes the same way, newest per token winning on both sides. Without it the machine that comes back
+ * would alert hits the other one already did.
+ */
+export async function syncCanaryCursor(
+  peers: { name: string; exec: string }[],
+  aico: (args: string) => string[],
+  env: NodeJS.ProcessEnv,
+  exec: typeof requestExec = requestExec,
+): Promise<{ lines: string[]; failed: boolean }> {
+  const path = join(env.AICO_DATA_DIR || expandHome(config.dataDir), 'canary', 'poll.json')
+  if (!existsSync(path)) return { lines: [], failed: false }
+  const lines: string[] = []
+  let failed = false
+  for (const peer of peers) {
+    const sent = await exec(peer.exec, aico('phones canary-merge'), readFileSync(path))
+    if (unanswered(sent)) continue
+    let merged: Record<string, number> | null = null
+    try {
+      const parsed = JSON.parse(lastLine(sent.stdout))
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) merged = parsed
+    } catch {}
+    if (sent.code !== 0 || !merged) {
+      failed = true
+      lines.push(
+        `${peer.name}: could not take the canary cursor (${lastLine(sent.output) || `exit ${sent.code}`})`,
+      )
+      continue
+    }
+    // Newest per token again: the poller may have moved the file while the peer answered.
+    let ours: Record<string, number> = {}
+    try {
+      ours = JSON.parse(readFileSync(path, 'utf8'))
+    } catch {}
+    for (const [token, at] of Object.entries(ours))
+      if (Number.isFinite(at)) merged[token] = Math.max(merged[token] ?? at, at)
+    const tmp = `${path}.${process.pid}.tmp`
+    writeFileSync(tmp, JSON.stringify(merged), { mode: 0o600 })
+    renameSync(tmp, path)
+    lines.push(`${peer.name}: canary cursor in step`)
   }
   return { lines, failed }
 }

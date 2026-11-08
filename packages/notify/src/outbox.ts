@@ -121,7 +121,7 @@ export class Outbox {
       const { notice } = stored
       // Never tried and past its day (a takeover's queue): the news is too old to start now.
       if (row.attempts === 0 && now - stored.receivedAt >= GIVE_UP_MS) {
-        store.finish(row.id, { state: 'failed', result: 'too old to send' }, now)
+        store.dropOutboxRow(row.id)
         continue
       }
       if (store.alreadyPushed(stored.id)) {
@@ -134,7 +134,8 @@ export class Outbox {
         continue
       }
       if (notice.expires && now > stored.receivedAt + notice.expires * 1000) {
-        store.finish(row.id, { state: 'failed', result: 'ended before it could be sent' }, now)
+        // It ended while the phone or this machine was away: nothing to send, and nothing failed.
+        store.dropOutboxRow(row.id)
         continue
       }
       if (!device) {
@@ -175,7 +176,7 @@ export class Outbox {
     const unreadable = this.unreadable >= 2
     const stuck =
       devices !== null && s.oldestPendingAt !== null && now - s.oldestPendingAt > STUCK_MS
-    const problem = s.failed > 0 || s.unsure > 0 || stuck
+    const problem = s.failed > 0 || stuck
     const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
     const parts: string[] = []
     if (unreadable) parts.push("Can't read the paired phones, so alerts wait until it can.")

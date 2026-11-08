@@ -499,7 +499,7 @@ it('keeps the link moving when a command exits without reading its input', async
     [process.execPath, '-e', 'process.exit(3)'],
     Buffer.alloc(4 * 1024 * 1024, 120),
   )
-  expect(died.code).toBe(3)
+  expect(died).toMatchObject({ code: 3, ended: true })
   const after = await requestExec(exec, ['/usr/bin/true'], Buffer.alloc(0))
   expect(after.code).toBe(0)
 })

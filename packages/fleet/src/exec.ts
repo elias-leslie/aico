@@ -93,16 +93,23 @@ export async function runExec(socketPath: string, argv: string[]): Promise<numbe
   })
 }
 
+/**
+ * Output kept from a command (the tail). stdout carries answers callers parse whole (a JSON list of
+ * paired phones is about 1 KB each, an update result a build log); stderr only a reason line.
+ */
+const STDOUT_KEPT = 4 * 1024 * 1024
+
 /** Buffered input is written to the encrypted channel, never command arguments. */
 export async function requestExec(
   socketPath: string,
   argv: string[],
   input: Buffer,
-): Promise<{ code: number; stdout: string; output: string }> {
+): Promise<{ code: number; stdout: string; output: string; ended: boolean }> {
   return new Promise((resolve) => {
     const socket = createConnection({ path: socketPath, allowHalfOpen: true })
     let pending: Buffer = Buffer.alloc(0)
     let code = 255
+    let ended = false
     let stdout = ''
     let output = ''
     socket.once('connect', () =>
@@ -119,17 +126,20 @@ export async function requestExec(
         if (pending.length < size + 5) break
         const fd = pending[0]
         const data = pending.subarray(5, size + 5).toString()
-        if (fd === 1) stdout = (stdout + data).slice(-4096)
+        if (fd === 1) stdout = (stdout + data).slice(-STDOUT_KEPT)
         else if (fd === 2) output = (output + data).slice(-4096)
         else if (fd === 3) {
           const parsed = Number(data)
-          if (Number.isInteger(parsed)) code = parsed
+          if (Number.isInteger(parsed)) {
+            code = parsed
+            ended = true
+          }
         }
         pending = pending.subarray(size + 5)
       }
     })
     socket.on('error', () => {})
     socket.once('end', () => socket.destroy())
-    socket.once('close', () => resolve({ code, stdout, output }))
+    socket.once('close', () => resolve({ code, stdout, output, ended }))
   })
 }

@@ -42,7 +42,19 @@ fi
   echo "Not sent: no accepted release folder here (${want:-none})"
   exit 1
 }
-have="$(ssh -o BatchMode=yes -o ConnectTimeout=10 "$HOST" 'basename "$(readlink -f "$HOME/.local/lib/aico/ops")"')"
+# Off or restarting isn't a failed release: say so and let the next run send it. Any other failure stays one.
+stop_if_away() {
+  local code=0
+  ssh -o BatchMode=yes -o ConnectTimeout=10 "$HOST" true >/dev/null 2>&1 || code=$?
+  [ "$code" -eq 255 ] || return 0
+  echo "$MACHINE isn't answering; the next run sends its release."
+  exit 0
+}
+have="$(ssh -o BatchMode=yes -o ConnectTimeout=10 "$HOST" 'basename "$(readlink -f "$HOME/.local/lib/aico/ops")"')" || {
+  code=$?
+  stop_if_away
+  exit "$code"
+}
 release="already ran ${want:0:8}"
 if [ "$have" != "$want" ]; then
   if command -v nightshift >/dev/null; then
@@ -50,15 +62,21 @@ if [ "$have" != "$want" ]; then
       --reason "Aico release ${want:0:8} to $MACHINE (peer-release job: copy, install --prebuilt, restart Aico units)" >/dev/null ||
       echo "peer-release: could not declare the change to Nightshift; deploying anyway" >&2
   fi
-  "$HERE/deploy-remote.sh" "$HOST" --sha "$want"
+  "$HERE/deploy-remote.sh" "$HOST" --sha "$want" || {
+    code=$?
+    stop_if_away
+    exit "$code"
+  }
   release="now runs ${want:0:8} (was ${have:0:8})"
 fi
 
 tether="$("$TETHER" fleet push-update "$MACHINE" "$TETHER_LIB" 2>&1 | tail -n 1)" || {
+  stop_if_away
   echo "$MACHINE $release, but its Tether update failed: $tether"
   exit 1
 }
 tools="$("$HERE/peer-tools.sh" "$HOST" 2>&1 | tail -n 1)" || {
+  stop_if_away
   echo "$MACHINE $release. Tether: ${tether:-sent}. Peer tools failed: $tools"
   exit 1
 }
