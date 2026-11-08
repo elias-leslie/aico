@@ -11,6 +11,7 @@
 // session with an open blocking ask (Tether's `asks`) needs you until the
 // owner answers it.
 
+import { shortAgo } from '@aico/shared/time'
 import type { TerminalSession } from './hooks/use-terminal-sessions'
 
 export type Activity = 'working' | 'idle' | 'blocked' | 'unknown'
@@ -37,16 +38,6 @@ type ActivitySession = Pick<
   'activity' | 'activity_previous' | 'activity_at'
 > &
   Partial<Pick<TerminalSession, 'asks' | 'backend' | 'chat'>>
-
-/** Compact age: `<1m`, `3m`, `2h`, `4d`. */
-export function formatAge(ms: number): string {
-  const minutes = Math.floor(Math.max(0, ms) / 60_000)
-  if (minutes < 1) return '<1m'
-  if (minutes < 60) return `${minutes}m`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h`
-  return `${Math.floor(hours / 24)}d`
-}
 
 export function attentionOf(
   session: ActivitySession,
@@ -83,7 +74,7 @@ export function attentionOf(
                 : group === 'working'
                   ? 'Working'
                   : 'Idle',
-      age: chat ? formatAge(now - chat.updatedAt) : null,
+      age: chat ? shortAgo(chat.updatedAt, now) : null,
     }
   }
   const activity = (session.activity ?? 'unknown') as Activity
@@ -91,7 +82,7 @@ export function attentionOf(
   // agent reports and whether or not the session was opened since.
   const asking = session.asks?.find((ask) => ask.blocking)
   if (asking) {
-    const age = formatAge(now - asking.created_at)
+    const age = shortAgo(asking.created_at, now)
     return {
       group: 'needs-you',
       activity,
@@ -121,7 +112,7 @@ export function attentionOf(
         : activity === 'working' || activity === 'idle'
           ? activity
           : null
-  const age = at ? formatAge(now - at) : null
+  const age = at ? shortAgo(at, now) : null
   const detail = word && age ? `${word} ${age}` : word
   return { group, activity, at, detail, age }
 }

@@ -1,5 +1,6 @@
 'use client'
 
+import { ago } from '@aico/shared/time'
 import { clsx } from 'clsx'
 import {
   Archive,
@@ -20,7 +21,6 @@ import {
   type NoteSummary,
   type NotesScope,
 } from '@/lib/api/notes'
-import { formatAge } from '@/lib/attention'
 import { formatWhen } from '@/lib/capture-format'
 import { useNoteProjects } from '@/lib/hooks/use-note-projects'
 import { useNoteLabels, useNotes } from '@/lib/hooks/use-notes'
@@ -430,7 +430,7 @@ export function NoteList({
           {list.isStale && (
             <Message tone="beacon" testId="notes-stale">
               Couldn&apos;t refresh. This is the list from{' '}
-              {formatAge(Date.now() - list.updatedAt)} ago.{' '}
+              {ago(list.updatedAt, Date.now())}.{' '}
               <SmallButton onClick={list.refetch}>Try again</SmallButton>
             </Message>
           )}

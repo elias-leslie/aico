@@ -23,6 +23,7 @@ import { createReadStream, mkdirSync, readFileSync, renameSync, writeFileSync } 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { dirname, join } from 'node:path'
 import type { NotifyStore, StoredNotice } from '@aico/notify'
+import { ago, shortAgo } from '@aico/shared/time'
 import { counted, type ShownRow, type StatusStore } from '@aico/status'
 import { Pairing, type PairingConfig } from './app-pairing'
 import { AppError, cantBuzz, type Phone, type PhoneRegistry } from './app-phones'
@@ -62,13 +63,6 @@ export interface AppApiDeps {
 }
 
 // -- Words -------------------------------------------------------------------------------
-
-/** The website's short age: 5m, 3h, 2d. */
-function ageText(seconds: number): string {
-  if (seconds < 3600) return `${Math.max(1, Math.floor(seconds / 60))}m`
-  if (seconds < 2 * 86_400) return `${Math.floor(seconds / 3600)}h`
-  return `${Math.floor(seconds / 86_400)}d`
-}
 
 const pad = (n: number) => String(n).padStart(2, '0')
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -134,7 +128,7 @@ function problemRow(row: ShownRow, host: string | null, nowMs: number): Row {
     severity: row.shown === 'failed' ? 'critical' : 'warning',
     state: STATE_WORD[row.shown] ?? row.shown,
     ts: Math.floor(since / 1000),
-    age: ageText(Math.max(0, (nowMs - since) / 1000)),
+    age: shortAgo(since, nowMs),
     url,
     item: null,
     actions: openAction(url, 'Open Status'),
@@ -150,7 +144,7 @@ function askRow(ask: Ask, host: string | null, nowMs: number): Row {
     severity: ask.blocking ? 'warning' : 'info',
     state: 'Needs your answer',
     ts: Math.floor(ask.createdAt / 1000),
-    age: ageText(Math.max(0, (nowMs - ask.createdAt) / 1000)),
+    age: shortAgo(ask.createdAt, nowMs),
     url,
     item: ask.id,
     actions: [
@@ -189,7 +183,7 @@ function noticeRow(stored: StoredNotice, nowMs: number): Row {
     severity: notice.severity,
     state: stored.answer ? `Answered: ${cut(stored.answer, 40)}` : '',
     ts: Math.floor(stored.receivedAt / 1000),
-    age: `${ageText(Math.max(0, (nowMs - stored.receivedAt) / 1000))} ago`,
+    age: ago(stored.receivedAt, nowMs),
     url: open,
     item: stored.id,
     actions: [...openAction(open, 'Open'), { id: 'mark-read', label: 'Mark read', tier: 'view' }],

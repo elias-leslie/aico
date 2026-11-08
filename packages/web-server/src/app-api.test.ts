@@ -378,7 +378,11 @@ describe('items', () => {
       url: 'https://aico.example.dev/status',
     })
     const question = needs[1]
-    expect(question).toMatchObject({ item: 'a1b2c3d4e5f6', state: 'Needs your answer', age: '10m' })
+    expect(question).toMatchObject({
+      item: 'a1b2c3d4e5f6',
+      state: 'Needs your answer',
+      age: '10 min',
+    })
     expect(question.actions.map((a: { label: string }) => a.label)).toEqual([
       'Yes',
       'Later',
@@ -390,7 +394,7 @@ describe('items', () => {
       id: `n:${stored.id}`,
       item: stored.id,
       title: 'Disk is filling',
-      age: '5m ago',
+      age: '5 min ago',
       url: 'https://aico.example.dev/status',
     })
     expect(reply.body.health.ok).toBe(true)

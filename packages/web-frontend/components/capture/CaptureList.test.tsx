@@ -89,7 +89,7 @@ describe('CaptureList', () => {
     }
     render(<CaptureList />)
     expect(screen.getByTestId('captures-stale')).toHaveTextContent(
-      "Couldn't refresh. This is the list from 5m ago.",
+      "Couldn't refresh. This is the list from 5 min ago.",
     )
     expect(screen.getAllByTestId('capture-item')).toHaveLength(1)
   })

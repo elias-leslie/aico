@@ -201,7 +201,7 @@ describe('SessionAsk', () => {
     render(<SessionAsk sessionId="0123abcd" />)
     const head = screen.getByRole('button', { expanded: false })
     expect(head).toHaveTextContent(
-      'Asked you· 2mFinish the single Linux partition?',
+      'Asked you· 2 minFinish the single Linux partition?',
     )
     expect(screen.queryByTestId('ask-card')).toBeNull()
     fireEvent.click(head)

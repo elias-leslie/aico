@@ -1,5 +1,6 @@
 'use client'
 
+import { ago } from '@aico/shared/time'
 import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '../api-fetch'
 
@@ -39,11 +40,10 @@ export function useSyncStatus(enabled = true) {
   return query.data?.items ?? []
 }
 
-/** The line under a host's name: `Notes synced 2m ago`, `Notes sync paused: …`. */
+/** The line under a host's name: `Notes synced 2 min ago`, `Notes sync paused: …`. */
 export function syncLine(
   peer: PeerSync,
   now: number,
-  age: (ms: number) => string,
 ): { text: string; warn: boolean } {
   const skew =
     peer.skewMs !== null && Math.abs(peer.skewMs) > SKEW_WARN_MS
@@ -54,7 +54,7 @@ export function syncLine(
   const last =
     peer.lastSyncAt === null
       ? 'not synced yet'
-      : `synced ${age(now - peer.lastSyncAt)} ago`
+      : `synced ${ago(peer.lastSyncAt, now)}`
   switch (peer.state) {
     case 'ok':
       return { text: `Notes ${last}${skew}${build}`, warn }

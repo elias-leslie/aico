@@ -1,6 +1,6 @@
 'use client'
 
-import { formatAge } from '@/lib/attention'
+import { shortAgo } from '@aico/shared/time'
 import { type OwnerAsk, useAskReply } from '@/lib/hooks/use-asks'
 import { plural } from '@/lib/status'
 import { AnsweredFiles } from './AskFiles'
@@ -26,7 +26,7 @@ export function AnsweredCard({ ask, now }: { ask: OwnerAsk; now: number }) {
         </span>
         <span aria-hidden="true">·</span>
         <span className="whitespace-nowrap">
-          {formatAge(now - (ask.answeredAt ?? ask.updatedAt))}
+          {shortAgo(ask.answeredAt ?? ask.updatedAt, now)}
         </span>
       </Meta>
       <p className="mb-1 font-semibold" style={{ overflowWrap: 'anywhere' }}>

@@ -10,7 +10,7 @@ import type { Approval, Ask } from './asks'
 import { Router } from './http'
 import { createWebServer } from './server'
 import type { TerminalHub } from './terminal'
-import { ageText, buildTray, registerTrayRoutes } from './tray'
+import { buildTray, registerTrayRoutes } from './tray'
 
 const HOST = 'aico.example.dev'
 const NOW = Date.parse('2026-11-04T12:00:00Z')
@@ -398,10 +398,6 @@ describe('the tray door and the native tray agree', () => {
     if (process.env.UPDATE_TRAY_FIXTURE) writeFileSync(path, `${JSON.stringify(now, null, 1)}\n`)
     expect(now).toEqual(JSON.parse(readFileSync(path, 'utf8')))
   })
-})
-
-it('words ages as the website does', () => {
-  expect([30, 600, 7200, 3 * 86_400].map(ageText)).toEqual(['1m', '10m', '2h', '3d'])
 })
 
 describe('the routes', () => {

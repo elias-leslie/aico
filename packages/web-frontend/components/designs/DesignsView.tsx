@@ -1,5 +1,6 @@
 'use client'
 
+import { ago } from '@aico/shared/time'
 import {
   Code2,
   ExternalLink,
@@ -18,7 +19,6 @@ import {
   designFrameUrl,
   saveDesignNote,
 } from '@/lib/api/designs'
-import { formatAge } from '@/lib/attention'
 import { useDesigns } from '@/lib/hooks/use-designs'
 import { useNoteProjects } from '@/lib/hooks/use-note-projects'
 import { KIND_LABEL, type RenderKind } from '@/lib/render'
@@ -212,7 +212,7 @@ export function DesignsView() {
             style={{ color: 'var(--beacon)' }}
           >
             Couldn’t refresh. This is the list from{' '}
-            {formatAge(Date.now() - state.updatedAt)} ago.{' '}
+            {ago(state.updatedAt, Date.now())}.{' '}
             <button
               type="button"
               className="lantern-btn small"

@@ -5,7 +5,6 @@ import { useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
 import Link from 'next/link'
 import { type ReactNode, useState } from 'react'
-import { formatAge } from '@/lib/attention'
 import { useAgentTools } from '@/lib/hooks/use-agent-tools'
 import {
   HostCallError,
@@ -434,7 +433,7 @@ function HostCard({ host, sync }: { host: HostChoice; sync?: PeerSync }) {
 }
 
 function SyncState({ peer }: { peer: PeerSync }) {
-  const line = syncLine(peer, Date.now(), formatAge)
+  const line = syncLine(peer, Date.now())
   return (
     <p
       data-testid="host-sync"

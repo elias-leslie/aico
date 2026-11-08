@@ -1,6 +1,7 @@
 'use client'
 
 import { maskSecrets } from '@aico/shared/secrets'
+import { ago } from '@aico/shared/time'
 import { Download, ExternalLink, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -13,7 +14,6 @@ import {
   type RouteAction,
 } from '@/lib/api/captures'
 import { noteHref } from '@/lib/api/notes'
-import { formatAge } from '@/lib/attention'
 import {
   formatBytes,
   formatClock,
@@ -552,8 +552,7 @@ export function CaptureDetail({ id }: { id: string }) {
           className="pb-3 text-[13px]"
           style={{ color: 'var(--beacon)' }}
         >
-          Couldn&apos;t refresh. This is from{' '}
-          {formatAge(Date.now() - view.updatedAt)} ago.{' '}
+          Couldn&apos;t refresh. This is from {ago(view.updatedAt, Date.now())}.{' '}
           <button
             type="button"
             className="inline-flex min-h-11 items-center underline underline-offset-2 md:min-h-0"

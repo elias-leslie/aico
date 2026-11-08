@@ -13,6 +13,7 @@
 // that stand for a failing Status row (those are the row itself).
 
 import { type NotifyStore, popsUp, type StoredNotice } from '@aico/notify'
+import { shortAgo } from '@aico/shared/time'
 import { counted, type ShownRow, type StatusStore, type StatusView } from '@aico/status'
 import type { Approval, Ask } from './asks'
 import { fromThisMachine } from './guard'
@@ -72,13 +73,6 @@ export interface TrayInput {
 }
 
 // -- Words --------------------------------------------------------------------------
-
-/** The website's short age: 5m, 3h, 2d. */
-export function ageText(seconds: number): string {
-  if (seconds < 3600) return `${Math.max(1, Math.floor(seconds / 60))}m`
-  if (seconds < 2 * 86_400) return `${Math.floor(seconds / 3600)}h`
-  return `${Math.floor(seconds / 86_400)}d`
-}
 
 const STATE_WORD: Record<string, string> = {
   failed: 'failed',
@@ -286,7 +280,7 @@ export function buildTray(input: TrayInput): Record<string, unknown> {
         title: ask.question,
         text: ask.body ? [ask.body] : [],
         age,
-        age_text: ageText(age),
+        age_text: shortAgo(ask.createdAt, now),
         open: link,
         unread: [] as string[],
         test: false,

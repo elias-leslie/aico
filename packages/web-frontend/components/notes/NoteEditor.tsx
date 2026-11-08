@@ -1,5 +1,6 @@
 'use client'
 
+import { ago } from '@aico/shared/time'
 import { useQueryClient } from '@tanstack/react-query'
 import { clsx } from 'clsx'
 import {
@@ -22,7 +23,6 @@ import {
   type NotePatch,
   notesHref,
 } from '@/lib/api/notes'
-import { formatAge } from '@/lib/attention'
 import { formatWhen } from '@/lib/capture-format'
 import { type SaveState, useAutosave } from '@/lib/hooks/use-autosave'
 import {
@@ -667,7 +667,7 @@ export function NoteEditor({
       note={view.note}
       stale={
         view.isStale
-          ? `Couldn't refresh. This is from ${formatAge(Date.now() - view.updatedAt)} ago.`
+          ? `Couldn't refresh. This is from ${ago(view.updatedAt, Date.now())}.`
           : null
       }
     />

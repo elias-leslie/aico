@@ -1,8 +1,8 @@
 'use client'
 
+import { ago } from '@aico/shared/time'
 import Link from 'next/link'
 import type { Capture } from '@/lib/api/captures'
-import { formatAge } from '@/lib/attention'
 import {
   firstLine,
   formatBytes,
@@ -114,7 +114,7 @@ export function CaptureList() {
       {list.isStale && (
         <Note tone="beacon" testId="captures-stale">
           Couldn&apos;t refresh. This is the list from{' '}
-          {formatAge(Date.now() - list.updatedAt)} ago.{' '}
+          {ago(list.updatedAt, Date.now())}.{' '}
           <RetryButton onClick={list.refetch} />
         </Note>
       )}

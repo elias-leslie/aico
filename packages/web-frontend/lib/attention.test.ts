@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   attentionOf,
-  formatAge,
   markSeen,
   mostUrgent,
   resetSeenForTests,
@@ -22,13 +21,13 @@ describe('attentionOf', () => {
     } as const
     expect(attentionOf(blocked, 0, NOW)).toMatchObject({
       group: 'needs-you',
-      detail: 'waiting 3m',
-      age: '3m',
+      detail: 'waiting 3 min',
+      age: '3 min',
     })
     // Opened after it blocked: still waiting, but no longer needs-you.
     expect(attentionOf(blocked, at(1), NOW)).toMatchObject({
       group: 'idle',
-      detail: 'waiting 3m',
+      detail: 'waiting 3 min',
     })
   })
 
@@ -45,7 +44,7 @@ describe('attentionOf', () => {
     expect(attentionOf(asking, at(1), NOW)).toMatchObject({
       group: 'needs-you',
       activity: 'idle',
-      detail: 'asks you 4m',
+      detail: 'asks you 4 min',
     })
     // A question the agent asked without stopping does not move the session.
     expect(
@@ -61,11 +60,11 @@ describe('attentionOf', () => {
     } as const
     expect(attentionOf(done, at(5), NOW)).toMatchObject({
       group: 'finished',
-      detail: 'done 1m',
+      detail: 'done 1 min',
     })
     expect(attentionOf(done, at(0), NOW)).toMatchObject({
       group: 'idle',
-      detail: 'idle 1m',
+      detail: 'idle 1 min',
     })
     // An idle agent Tether only just found (unknown -> idle) is not finished.
     const found = {
@@ -100,7 +99,7 @@ describe('attentionOf', () => {
       attentionOf({ activity: 'working', activity_at: at(120) }, 0, NOW),
     ).toMatchObject({
       group: 'working',
-      detail: 'working 2h',
+      detail: 'working 2 h',
     })
     // No state from Tether (a shell, Pi) is not idle.
     expect(attentionOf({}, 0, NOW)).toMatchObject({
@@ -120,14 +119,8 @@ describe('ordering', () => {
       attentionOf({ activity: 'working', activity_at: at(1) }, 0, NOW),
       attentionOf({ activity: 'blocked', activity_at: at(9) }, 0, NOW),
     ]
-    expect(mostUrgent(items)?.detail).toBe('waiting 1m')
+    expect(mostUrgent(items)?.detail).toBe('waiting 1 min')
     expect(mostUrgent([])).toBeNull()
-  })
-
-  it('formats ages', () => {
-    expect(formatAge(10_000)).toBe('<1m')
-    expect(formatAge(59 * 60_000)).toBe('59m')
-    expect(formatAge(25 * 3_600_000)).toBe('1d')
   })
 })
 

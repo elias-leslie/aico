@@ -1,8 +1,8 @@
 'use client'
 
+import { shortAgo } from '@aico/shared/time'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { formatAge } from '@/lib/attention'
 import { openNeedsYou } from '@/lib/frame/needs-you-request'
 import { openAsks, useOwnerAsks } from '@/lib/hooks/use-asks'
 import { useMediaQuery } from '@/lib/hooks/use-media-query'
@@ -71,7 +71,7 @@ export function SessionAsk({
         {state}
       </span>
       <span className="flex-none" style={{ color: 'var(--mist)' }}>
-        · {formatAge(now - ask.createdAt)}
+        · {shortAgo(ask.createdAt, now)}
       </span>
       {!open && <span className="min-w-0 flex-1 truncate">{ask.question}</span>}
       {open && <span className="flex-1" />}
@@ -84,62 +84,57 @@ export function SessionAsk({
   )
 
   return (
-    <>
-      <section
-        aria-label="This session’s question"
-        data-testid="session-ask"
-        className={`lantern-session-ask ${className ?? ''}`}
-      >
-        {isPhone ? (
-          <button
-            type="button"
-            className="lantern-session-ask-head"
-            onClick={() => openNeedsYou(ask.id)}
-            aria-label={`${state}: ${ask.question}. Answer`}
-          >
-            {head}
-            <span className="flex-none" style={{ color: 'var(--lantern)' }}>
-              Answer
-            </span>
-          </button>
-        ) : (
-          <>
-            <div className="flex items-center gap-1">
+    <section
+      aria-label="This session’s question"
+      data-testid="session-ask"
+      className={`lantern-session-ask ${className ?? ''}`}
+    >
+      {isPhone ? (
+        <button
+          type="button"
+          className="lantern-session-ask-head"
+          onClick={() => openNeedsYou(ask.id)}
+          aria-label={`${state}: ${ask.question}. Answer`}
+        >
+          {head}
+          <span className="flex-none" style={{ color: 'var(--lantern)' }}>
+            Answer
+          </span>
+        </button>
+      ) : (
+        <>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              className="lantern-session-ask-head min-w-0 flex-1"
+              aria-expanded={open}
+              onClick={() => setOpened({ ...opened, [ask.id]: !open })}
+              title={open ? 'Fold the question' : 'Show the question'}
+            >
+              {head}
+              {open ? (
+                <ChevronDown className="h-4 w-4 flex-none" strokeWidth={1.7} />
+              ) : (
+                <ChevronUp className="h-4 w-4 flex-none" strokeWidth={1.7} />
+              )}
+            </button>
+            {others > 0 && (
               <button
                 type="button"
-                className="lantern-session-ask-head min-w-0 flex-1"
-                aria-expanded={open}
-                onClick={() => setOpened({ ...opened, [ask.id]: !open })}
-                title={open ? 'Fold the question' : 'Show the question'}
+                className="lantern-btn ghost small flex-none"
+                onClick={() => openNeedsYou()}
               >
-                {head}
-                {open ? (
-                  <ChevronDown
-                    className="h-4 w-4 flex-none"
-                    strokeWidth={1.7}
-                  />
-                ) : (
-                  <ChevronUp className="h-4 w-4 flex-none" strokeWidth={1.7} />
-                )}
+                See all {waiting.length}
               </button>
-              {others > 0 && (
-                <button
-                  type="button"
-                  className="lantern-btn ghost small flex-none"
-                  onClick={() => openNeedsYou()}
-                >
-                  See all {waiting.length}
-                </button>
-              )}
-            </div>
-            {open && (
-              <div className="max-h-[40vh] max-w-[760px] overflow-y-auto overscroll-contain px-3 pt-1 pb-2.5">
-                <AskCard ask={ask} now={now} onSent={setSent} inSession />
-              </div>
             )}
-          </>
-        )}
-      </section>
-    </>
+          </div>
+          {open && (
+            <div className="max-h-[40vh] max-w-[760px] overflow-y-auto overscroll-contain px-3 pt-1 pb-2.5">
+              <AskCard ask={ask} now={now} onSent={setSent} inSession />
+            </div>
+          )}
+        </>
+      )}
+    </section>
   )
 }

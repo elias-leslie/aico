@@ -9,40 +9,34 @@ const peer = (over: Partial<PeerSync> = {}): PeerSync => ({
   reason: null,
   ...over,
 })
-const age = (ms: number) => `${Math.round(ms / 1000)}s`
-
 describe('syncLine', () => {
   it('says when the last sync was, quietly', () => {
-    expect(syncLine(peer(), 31_000, age)).toEqual({
-      text: 'Notes synced 30s ago',
+    expect(syncLine(peer(), 121_000)).toEqual({
+      text: 'Notes synced 2 min ago',
       warn: false,
     })
   })
 
   it('warns on a clock gap past five seconds, either way', () => {
-    expect(syncLine(peer({ skewMs: -9_000 }), 1_000, age)).toEqual({
-      text: 'Notes synced 0s ago · clock 9 s behind',
+    expect(syncLine(peer({ skewMs: -9_000 }), 1_000)).toEqual({
+      text: 'Notes synced just now · clock 9 s behind',
       warn: true,
     })
   })
 
   it('warns when the other Aico is a different build', () => {
-    expect(syncLine(peer({ buildMismatch: true }), 1_000, age)).toEqual({
-      text: 'Notes synced 0s ago · different Aico version',
+    expect(syncLine(peer({ buildMismatch: true }), 1_000)).toEqual({
+      text: 'Notes synced just now · different Aico version',
       warn: true,
     })
   })
 
   it('names why sync is paused, and says a down link is only waiting', () => {
     expect(
-      syncLine(
-        peer({ state: 'paused', reason: 'Update the other one.' }),
-        0,
-        age,
-      ),
+      syncLine(peer({ state: 'paused', reason: 'Update the other one.' }), 0),
     ).toEqual({ text: 'Notes sync paused: Update the other one.', warn: true })
-    expect(
-      syncLine(peer({ state: 'down', lastSyncAt: null }), 0, age).text,
-    ).toBe('Notes sync waiting for the link (not synced yet)')
+    expect(syncLine(peer({ state: 'down', lastSyncAt: null }), 0).text).toBe(
+      'Notes sync waiting for the link (not synced yet)',
+    )
   })
 })

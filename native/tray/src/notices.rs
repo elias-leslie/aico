@@ -143,12 +143,13 @@ pub fn unread_items(rows: &[Vec<String>], log: &Value, cleared: &Cleared) -> usi
 }
 
 pub fn ago(secs: f64) -> String {
-    let m = (secs / 60.0) as i64;
+    // The same rule as ago in @aico/shared/time: hours round to the nearest (90 min is "2 h ago").
+    let m = (secs / 60.0).round() as i64;
     match m {
         i64::MIN..=0 => "just now".into(),
         1..=59 => format!("{m} min ago"),
-        60..=1439 => format!("{} h ago", m / 60),
-        _ => format!("{} d ago", m / 1440),
+        60..=2879 => format!("{} h ago", (m as f64 / 60.0).round() as i64),
+        _ => format!("{} days ago", m / 1440),
     }
 }
 
@@ -359,7 +360,8 @@ mod tests {
         assert_eq!(ago(20.0), "just now");
         assert_eq!(ago(600.0), "10 min ago");
         assert_eq!(ago(7200.0), "2 h ago");
-        assert_eq!(ago(3.0 * 86400.0), "3 d ago");
+        assert_eq!(ago(5400.0), "2 h ago");
+        assert_eq!(ago(3.0 * 86400.0), "3 days ago");
     }
 
     #[test]
