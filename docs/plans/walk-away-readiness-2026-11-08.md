@@ -59,11 +59,13 @@ work's ROADMAP line when its agreed scope is complete.
   fix; 43 related tests and independent review pass. Not deployed yet.
 - Dadbot `475ab5af`: Money History grouping, unique Paid identities and legacy
   note/log compatibility. All 636 tests pass; independent review found no further
-  supported issue. Not deployed yet. Old records without membership cannot reveal
+  supported issue. Deployed with the documented script; all three changed source
+  hashes match, app and tunnel are active, zero restarts, public manifest HTTP 200.
+  Old records without membership cannot reveal
   an exact historical split between same-second payments; no records were rewritten.
 - Gem's corrected-memory policy, including rate spikes, is installed as
   record-only in the Proxmox sender. Its timer is enabled and active. Uncorrected
-  error detection remains tested. Runtime row refresh still needs verification.
+  error detection remains tested. The live row now reports `ok` and record-only.
 - BlackBox CT 140 is running, `onboot=1`; HTTPS `/healthz` answered `status: ok`
   and its service showed zero restarts. The owner will test it in another session.
 - Removed the abandoned, inactive `proof-stuck` test routine.
@@ -71,6 +73,10 @@ work's ROADMAP line when its agreed scope is complete.
   Dependency checks and engine/scorer imports pass; 61 seeds validate with zero
   issues and reference builds complete. Installed the missing SoX runtime on the
   workstation. This does not claim an acting A/B or a new GPU rendering pass.
+- A real-user Aico test created a Codex session with a first message and observed
+  its `READY` reply. Canceling the dialog created no session. The tester ended its
+  test session and closed its browser session. Screenshot:
+  `/srv/scratch/readiness-new-session-test/started.png` (regenerable evidence).
 
 ## Still running or awaiting verification
 
@@ -86,8 +92,10 @@ work's ROADMAP line when its agreed scope is complete.
   workstation. Native source/config installation involved no build or restart.
 - Finish and review schedule/phone corrections and browser on-demand lifecycle;
   deploy Aico to both hosts and browser tools to both entry points, then validate
-  the live paths. Deploy the reviewed Dadbot checkpoint using its documented
-  deployment script: it has no managed service identity manifest.
+  the live paths. VM 100's on-demand runtime policy is registered on both hosts.
+  A two-controller shutdown race was reproduced before rollout; the browser
+  worker is fixing it at the existing guest pool lock using existing guest sudo
+  authority. No new grants, keys or permissions are needed.
 - Verify fixed retention behavior without manually deleting/pruning backups;
   perform the controlled gem reboot once active work and handshakes permit it,
   verify recovery, and apply the approved guest states.
