@@ -654,6 +654,7 @@ def test_a_parked_machine_running_unexplained_warns_then_fails_when_it_holds_dat
     sigs, ctx = run_assets(secs)
     assert sigs["assets.parked_running"].state == "warn"
     assert "shell on PVE" in sigs["assets.parked_running"].fields["how"]
+    assert sigs["assets.parked_running"].fields["id"]  # the next step names the machine to declare
     later, _ = run_assets(
         secs, now=NOW + 2 * 3600, state=ctx.state
     )  # blackbox-vault holds data: one hour is the limit

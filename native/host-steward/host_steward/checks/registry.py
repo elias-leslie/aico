@@ -135,7 +135,9 @@ def parked_signal(
     limit = 3600 * float(cfg["unexplained_data_hours"] if a.data else cfg["unexplained_hours"])
     late = att["kind"] != "web" and now - since >= limit
     return Signal(
-        "assets.parked_running", "failed" if late and a.data else "warn", {**fields, "how": how}
+        "assets.parked_running",
+        "failed" if late and a.data else "warn",
+        {**fields, "how": how, "id": a.id},
     )
 
 

@@ -610,7 +610,7 @@ what = "{asset} is parked and was started by automation ({user}) at {at}"
 [signal."assets.parked_running"]
 what = "{asset} is parked but running{held}: {how}"
 impact = "A machine that should be off is on"
-next = "Stop it, or say you are using it with host-steward declare --what vm"
+next = "Stop it, or say you are using it: aico declare --host {id} --what vm --hours N --reason WHY"
 
 [signal."assets.suggestion:ok"]
 what = "{n} PVE tier marks differ from the asset list (first: {first})"

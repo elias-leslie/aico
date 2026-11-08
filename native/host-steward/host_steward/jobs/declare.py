@@ -14,7 +14,7 @@ from collections.abc import Callable
 from typing import Any
 
 import aico_status
-from host_steward import declare
+from host_steward import assets, declare
 
 NAME = "declare"
 HELP = "say an agent is changing something the host checks watch (listeners, units, vm, firewall, packages, keys, config)"
@@ -29,7 +29,9 @@ def add_args(parser: argparse.ArgumentParser) -> None:
         help="add (the default): declare a change, with --host, --what and --reason; list: show the declarations, open ones first",
     )
     parser.add_argument(
-        "--host", default="", help="host name from the board, or a role: workstation, pve, router"
+        "--host",
+        default="",
+        help="host name from the board, or a role: workstation, pve, router; for a machine you're using (--what vm), its vmid",
     )
     parser.add_argument(
         "--what", default="", help=f"what you change: {', '.join(declare.KINDS)} (lab-use = vm)"
@@ -51,6 +53,14 @@ def add_args(parser: argparse.ArgumentParser) -> None:
         "--by", default="", help="who (default: the agent session running this command)"
     )
     parser.add_argument("--json", action="store_true", help="list: print the raw entries as JSON")
+
+
+def names_a_guest(host: str) -> bool:
+    """Is `host` a VM or container (its vmid or registry id), as a lab-use claim must name?"""
+    if host.isdigit():
+        return True
+    entry = assets.load().assets.get(host.lower())
+    return bool(entry and entry.vmid)
 
 
 def when(at: float) -> str:
@@ -92,4 +102,9 @@ def main(
         print(f"could not write {cfg['file']}: {error.strerror or error}")
         return 1
     print(f"declared {e['what']} on {e['host']} by {e['by']} until {when(e['until'])}")
+    if e["what"] == "vm" and not names_a_guest(e["host"]):
+        print(
+            "This covers VM changes on that host. To clear a parked machine's warning, name the machine: "
+            "--host VMID --what vm"
+        )
     return 0

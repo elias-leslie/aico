@@ -969,6 +969,18 @@ def run_cli(monkeypatch, tmp_path, capsys, *argv):
     return rc, capsys.readouterr().out
 
 
+def test_declaring_vm_work_says_how_to_clear_a_parked_machine(monkeypatch, tmp_path, capsys):
+    def run(host):
+        return run_cli(
+            monkeypatch, tmp_path, capsys, "declare", "--host", host, "--what", "vm", "--reason", "x"
+        )
+
+    rc, out = run("pve")
+    assert rc == 0 and "name the machine: --host VMID" in out
+    rc, out = run("110")
+    assert rc == 0 and "name the machine" not in out
+
+
 def test_declare_and_lab_use_commands(monkeypatch, tmp_path, capsys):
     assert {"declare", "lab-use", "security-ack"} <= set(JOBS)
     rc, out = run_cli(
