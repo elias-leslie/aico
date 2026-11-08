@@ -277,6 +277,10 @@ what = "The PVE backups are not healthy: {why}"
 impact = "PVE data may lack a verified offsite copy"
 next = "Check the PVE sources on Aico's Backups page"
 
+[signal."backups.drive"]
+what = "A Drive backup run needs attention: {why}"
+next = "Check the backup job on its owner machine"
+
 # journal
 [signal."journal.unreadable"]
 what = "Could not read the journal ({why})"

@@ -57,16 +57,16 @@ def autosnap(ctx: Ctx, home: str) -> list[Signal]:
 
 
 def aico_backups(ctx: Ctx) -> list[Signal]:
-    """Read the owning live view; require actual offsite snapshot metadata for every required PVE source."""
+    """Local native health stays local; offsite coverage reads each repository's own receipts."""
     result = ctx.run(ctx.cfg["aico_status_command"], timeout=ctx.cfg["status_timeout_s"])
     try:
         data = json.loads(result.out) if result.rc == 0 else None
     except ValueError:
         data = None
     entries = data.get("entries") if isinstance(data, dict) else None
-    if not isinstance(data, dict) or not isinstance(entries, list) or not entries or any(not isinstance(e, dict) for e in entries):
-        return [Signal(code, "warn", {"why": "Aico's backup health is unavailable"})
-                for code in ["backups.sources", "backups.pve", "backups.native"]]
+    available = isinstance(entries, list) and bool(entries) and all(isinstance(e, dict) for e in entries)
+    if not available:
+        entries = []
 
     def copy_state(entry: dict[str, Any]) -> str:
         if entry.get("state") == "failed":
@@ -87,42 +87,88 @@ def aico_backups(ctx: Ctx) -> list[Signal]:
         issues.append(("warn", "no active sources"))
     source = Signal("backups.sources", "failed" if any(s == "failed" for s, _ in issues) else "warn",
                     {"why": ", ".join(label for _, label in issues[:4])}) if issues else Signal("backups.sources", "ok")
-    problems: list[tuple[str, str]] = []
-    for name in ctx.site["pve"]["backup_required_targets"]:
-        matches = [e for e in entries if e.get("id") == f"drive/{name}" and e.get("source") == name and e.get("target") == "drive"]
-        if len(matches) != 1:
-            problems.append(("failed", f"{name}: offsite copy is missing or ambiguous"))
-            continue
-        entry = matches[0]
-        state = copy_state(entry)
-        if state != "ok":
-            problems.append((state, f"{name}: copy is {state}"))
-        if not isinstance(entry.get("snapshot"), str) or not entry["snapshot"]:
-            problems.append(("failed", f"{name}: no verified offsite snapshot"))
-    runs = data.get("runs")
+    runs = data.get("runs") if isinstance(data, dict) else None
 
-    def run_problems(target: str, max_age_h: float) -> list[tuple[str, str]]:
-        latest = runs.get(target) if isinstance(runs, dict) else None
+    def run_problems(target: str, max_age_h: float, owner_runs: Any = runs, machine: str = "Aico") -> list[tuple[str, str]]:
+        latest = owner_runs.get(target) if isinstance(owner_runs, dict) else None
         label = "Drive" if target == "drive" else "native"
         if not isinstance(latest, dict):
-            return [("warn", f"Aico's {label} run is unavailable")]
+            return [("warn", f"{machine}'s {label} run is unavailable")]
         started = to_ts(latest.get("started"))
         if latest.get("finished") is None and started is not None and -ctx.cfg["future_skew_s"] <= ctx.now - started <= max_age_h * 3600:
             # Running, or cut short by a shutdown before it could say how it went: not a failed run. The last
             # verified copies cover it, and their age below catches a run that never comes back.
             return []
         if latest.get("finished") is not None and latest.get("ok") is False:
-            return [("failed", f"Aico's {label} run failed")]
+            return [("failed", f"{machine}'s {label} run failed")]
         finished = to_ts(latest.get("finished"))
         if latest.get("ok") is not True or finished is None or ctx.now - finished > max_age_h * 3600 or finished - ctx.now > ctx.cfg["future_skew_s"]:
-            return [("warn", f"Aico's {label} run has not finished lately")]
+            return [("warn", f"{machine}'s {label} run has not finished lately")]
         return []
 
     def signal(code: str, issues: list[tuple[str, str]]) -> Signal:
         return Signal(code, "failed" if any(s == "failed" for s, _ in issues) else "warn",
                       {"why": "; ".join(why for _, why in issues[:3])}) if issues else Signal(code, "ok")
 
-    problems += run_problems("drive", ctx.cfg["drive_stale_hours"])
+    fleet_result = ctx.run(ctx.cfg["fleet_status_command"], timeout=ctx.cfg["status_timeout_s"])
+    try:
+        fleet = json.loads(fleet_result.out) if fleet_result.rc == 0 else None
+    except ValueError:
+        fleet = None
+    owners = fleet.get("owners") if isinstance(fleet, dict) else None
+    valid_owners = isinstance(owners, list) and bool(owners) and all(
+        isinstance(owner, dict) and isinstance(owner.get("machine"), str) and bool(owner["machine"])
+        and isinstance(owner.get("repository"), str) and bool(owner["repository"])
+        and isinstance(owner.get("sources"), list) and all(isinstance(s, str) for s in owner["sources"])
+        and (owner.get("state") == "unknown" or (
+            owner.get("state") == "read" and isinstance(owner.get("entries"), list)
+            and isinstance(owner.get("retained"), list)
+            and all(isinstance(e, dict) for e in owner["entries"] + owner["retained"])))
+        for owner in owners)
+    problems: list[tuple[str, str]] = []
+    drive_problems: list[tuple[str, str]] = []
+    if not valid_owners:
+        problems.append(("warn", "Aico's fleet backup coverage is unavailable"))
+        drive_problems.append(("warn", "Aico's backup owner runs are unavailable"))
+    else:
+        off: set[str] = set()
+        if any(owner["state"] == "unknown" for owner in owners):
+            # Status already combines verified machine power, intent and planned outages.
+            # Only its shown machine state can distinguish deliberately off from unread here.
+            machine_result = ctx.run(ctx.cfg["machine_status_command"], timeout=ctx.cfg["status_timeout_s"])
+            try:
+                machine_data = json.loads(machine_result.out) if machine_result.rc == 0 else None
+            except ValueError:
+                machine_data = None
+            rows = machine_data.get("rows") if isinstance(machine_data, dict) else None
+            if isinstance(rows, list):
+                machine_rows = [row for row in rows if isinstance(row, dict) and row.get("kind") == "machine" and isinstance(row.get("machine"), str)]
+                off = {row["machine"] for row in machine_rows if row.get("shown") == "off"}
+                off -= {row["machine"] for row in machine_rows if row.get("shown") == "ok"}
+        for owner in owners:
+            if owner["state"] == "unknown":
+                if owner["machine"] not in off:
+                    drive_problems.append(("warn", f"{owner['machine']}: backup owner is unread"))
+            else:
+                drive_problems += run_problems("drive", ctx.cfg["drive_stale_hours"], owner.get("runs"), owner["machine"])
+                drive_problems += [("failed", f"{owner['machine']}: {e.get('source', 'unknown')} copy failed")
+                                   for e in owner["entries"] if e.get("state") == "failed"]
+        for name in ctx.site["pve"]["backup_required_targets"]:
+            assigned = [owner for owner in owners if name in owner["sources"]]
+            matches = [e for owner in owners if owner["state"] == "read"
+                       for e in owner["entries"] + owner["retained"]
+                       if e.get("id") == f"drive/{name}" and e.get("source") == name and e.get("target") == "drive"]
+            verified = [e for e in matches if isinstance(e.get("snapshot"), str) and bool(e["snapshot"])]
+            # Distinct repositories may legitimately both hold this source during a handoff.
+            if any(copy_state(e) == "ok" for e in verified):
+                continue
+            if not assigned or any(owner["state"] == "unknown" for owner in assigned):
+                problems.append(("warn", f"{name}: backup owner coverage is unknown"))
+            elif not verified:
+                problems.append(("failed", f"{name}: no verified offsite snapshot"))
+            else:
+                state = "failed" if any(copy_state(e) == "failed" for e in verified) else "warn"
+                problems.append((state, f"{name}: copy is {state}"))
     native_problems: list[tuple[str, str]] = []
     for name in ctx.cfg["native_required_sources"]:
         matches = [e for e in entries if e.get("id") == f"native/{name}" and e.get("source") == name and e.get("target") == "native"]
@@ -145,7 +191,8 @@ def aico_backups(ctx: Ctx) -> list[Signal]:
     required = {f"native/{name}" for name in ctx.cfg["native_required_sources"]}
     if not any(e.get("id") in required and e.get("state") == "off" for e in entries):
         native_problems += run_problems("native", ctx.cfg["native_failed_hours"])
-    return [source, signal("backups.pve", problems), signal("backups.native", native_problems)]
+    native = signal("backups.native", native_problems) if available else Signal("backups.native", "warn", {"why": "Aico's local backup health is unavailable"})
+    return [source, signal("backups.pve", problems), signal("backups.drive", drive_problems), native]
 
 
 def run(ctx: Ctx) -> list[Signal]:

@@ -467,13 +467,108 @@ def aico_backup_health():
 
 
 def aico_backup_runner(data):
+    fleet = {"owners": [{
+        "machine": "davion-sidarli", "repository": "workstation-repository", "state": "read",
+        "sources": DATA["site"]["pve"]["backup_required_targets"],
+        "entries": data.get("entries", []), "retained": [], "runs": data.get("runs", {}),
+    }]}
+    if not data.get("entries"):
+        fleet["owners"][0]["state"] = "unknown"
     return Fake(
+        (["--fleet"], Result(0, json.dumps(fleet))),
         (["http://127.0.0.1:3002/api/backups"], Result(0, json.dumps(data))),
         (["http://127.0.0.1:3002/api/status?q=backups-drill"], Result(0, json.dumps({"rows": [
             {"id": "jobs/backups-drill", "state": "ok", "last_run": NOW - 600}]}))),
         (["http://127.0.0.1:3002/api/status?q=backups-snapshots"], Result(0, json.dumps({"rows": [
             {"id": "jobs/backups-snapshots", "state": "ok", "last_run": NOW - 600}]}))),
     )
+
+
+def test_backups_moved_sources_keep_verified_coverage_in_the_previous_repository(tmp_path):
+    data = aico_backup_health()
+    drive = [e for e in data["entries"] if e["target"] == "drive"]
+    data["entries"] = [e for e in data["entries"] if e["target"] != "drive"]
+    fleet = {"owners": [
+        {"machine": "davion-sidarli", "repository": "previous-repository", "state": "read",
+         "sources": [], "entries": [], "retained": drive, "runs": data["runs"]},
+        {"machine": "aico", "repository": "current-repository", "state": "read",
+         "sources": [e["source"] for e in drive],
+         "entries": [{**e, "dataAt": None, "snapshot": None, "state": "warn"} for e in drive],
+         "retained": [], "runs": data["runs"]},
+    ]}
+    runner = aico_backup_runner(data)
+    runner.rules = ((["fleet-backups-fixture"], Result(0, json.dumps(fleet))), *runner.rules)
+    out = backups.run(ctx("backups", run=runner, fleet_status_command=["fleet-backups-fixture"], native_config=str(tmp_path / "absent")))
+    assert states(out)["backups.pve"] == "ok"
+    assert states(out)["backups.native"] == "ok"
+
+
+@pytest.mark.parametrize("owner_state,with_retained,coverage,run_state", [
+    ("read", True, "ok", "failed"),
+    ("unknown", True, "ok", "warn"),
+    ("unknown", False, "warn", "warn"),
+])
+def test_backups_coverage_and_owner_run_health_are_independent(owner_state, with_retained, coverage, run_state):
+    data = aico_backup_health()
+    drive = [e for e in data["entries"] if e["target"] == "drive"]
+    fleet = {"owners": [
+        {"machine": "davion-sidarli", "repository": "previous-repository", "state": "read",
+         "sources": [], "entries": [], "retained": drive if with_retained else [], "runs": data["runs"]},
+        {"machine": "aico", "repository": "current-repository", "state": owner_state,
+         "sources": [e["source"] for e in drive], "entries": drive if with_retained else [], "retained": [],
+         "runs": {"drive": {"ok": False, "finished": NOW - 600}}},
+    ]}
+    runner = aico_backup_runner(data)
+    runner.rules = ((["--fleet"], Result(0, json.dumps(fleet))), *runner.rules)
+    out = states(backups.run(ctx("backups", run=runner)))
+    assert out["backups.pve"] == coverage
+    assert out["backups.drive"] == run_state
+    assert out["backups.native"] == "ok"
+
+
+def test_backups_unread_local_api_does_not_hide_readable_fleet_coverage():
+    runner = aico_backup_runner(aico_backup_health())
+    runner.rules = ((["http://127.0.0.1:3002/api/backups"], Result(1)), *runner.rules)
+    out = states(backups.run(ctx("backups", run=runner)))
+    assert out["backups.sources"] == out["backups.native"] == "warn"
+    assert out["backups.pve"] == out["backups.drive"] == "ok"
+
+
+def test_backups_unread_fleet_does_not_change_local_native_health():
+    data = aico_backup_health()
+    data["runs"]["native"]["ok"] = False
+    runner = aico_backup_runner(data)
+    runner.rules = ((["--fleet"], Result(1)), *runner.rules)
+    out = states(backups.run(ctx("backups", run=runner)))
+    assert out["backups.pve"] == out["backups.drive"] == "warn"
+    assert out["backups.native"] == "failed"
+
+
+@pytest.mark.parametrize("shown,kind,expected", [
+    ("off", "machine", "ok"),
+    ("unknown", "machine", "warn"),
+    ("ok", "machine", "warn"),
+    ("off", "backup", "warn"),
+])
+def test_backups_unread_owner_that_status_verifies_off_is_not_a_run_problem(shown, kind, expected):
+    data = aico_backup_health()
+    drive = [e for e in data["entries"] if e["target"] == "drive"]
+    fleet = {"owners": [
+        {"machine": "davion-sidarli", "repository": "previous-repository", "state": "read",
+         "sources": [], "entries": [], "retained": drive, "runs": data["runs"]},
+        {"machine": "aico", "repository": "current-repository", "state": "unknown",
+         "sources": [e["source"] for e in drive]},
+    ]}
+    runner = aico_backup_runner(data)
+    runner.rules = (
+        (["--fleet"], Result(0, json.dumps(fleet))),
+        (["machine-status-fixture"], Result(0, json.dumps({"rows": [
+            {"machine": "aico", "kind": kind, "state": "failed", "shown": shown}]}))),
+        *runner.rules,
+    )
+    out = states(backups.run(ctx("backups", run=runner, machine_status_command=["machine-status-fixture"])))
+    assert out["backups.pve"] == "ok"
+    assert out["backups.drive"] == expected
 
 
 def test_backups_follow_aico_after_retired_receipt_writers_stop(tmp_path, monkeypatch):
@@ -487,25 +582,26 @@ def test_backups_follow_aico_after_retired_receipt_writers_stop(tmp_path, monkey
     assert out and set(states(out).values()) == {"ok"}
 
 
-@pytest.mark.parametrize("change,source_state,pve_state", [
-    (lambda d: d["entries"][0].update(state="failed"), "failed", "failed"),
-    (lambda d: d["entries"][0].update(state="warn"), "warn", "warn"),
-    (lambda d: d["entries"][0].update(state="unknown"), "warn", "warn"),
-    (lambda d: d["entries"][0].update(dataAt=None), "warn", "warn"),
-    (lambda d: d["entries"][0].update(dataAt=NOW + 3600), "warn", "warn"),
-    (lambda d: d["entries"][0].update(snapshot=None), "ok", "failed"),
-    (lambda d: d["entries"][0].update(target="native"), "ok", "failed"),
-    (lambda d: d["entries"].pop(0), "ok", "failed"),
-    (lambda d: d["runs"]["drive"].update(ok=False), "ok", "failed"),
-    (lambda d: d["runs"]["drive"].update(finished=NOW - 37 * 3600), "ok", "warn"),
-    (lambda d: d["runs"]["drive"].update(finished=NOW + 3600), "ok", "warn"),
-    (lambda d: d["runs"].pop("drive"), "ok", "warn"),
+@pytest.mark.parametrize("change,source_state,pve_state,drive_state", [
+    (lambda d: d["entries"][0].update(state="failed"), "failed", "failed", "failed"),
+    (lambda d: d["entries"][0].update(state="warn"), "warn", "warn", "ok"),
+    (lambda d: d["entries"][0].update(state="unknown"), "warn", "warn", "ok"),
+    (lambda d: d["entries"][0].update(dataAt=None), "warn", "warn", "ok"),
+    (lambda d: d["entries"][0].update(dataAt=NOW + 3600), "warn", "warn", "ok"),
+    (lambda d: d["entries"][0].update(snapshot=None), "ok", "failed", "ok"),
+    (lambda d: d["entries"][0].update(target="native"), "ok", "failed", "ok"),
+    (lambda d: d["entries"].pop(0), "ok", "failed", "ok"),
+    (lambda d: d["runs"]["drive"].update(ok=False), "ok", "ok", "failed"),
+    (lambda d: d["runs"]["drive"].update(finished=NOW - 37 * 3600), "ok", "ok", "warn"),
+    (lambda d: d["runs"]["drive"].update(finished=NOW + 3600), "ok", "ok", "warn"),
+    (lambda d: d["runs"].pop("drive"), "ok", "ok", "warn"),
 ])
-def test_backups_live_entries_keep_failures_unknown_age_and_offsite_checks(change, source_state, pve_state, tmp_path):
+def test_backups_live_entries_keep_failures_unknown_age_and_offsite_checks(change, source_state, pve_state, drive_state, tmp_path):
     data = aico_backup_health()
     change(data)
     out = states(backups.run(ctx("backups", run=aico_backup_runner(data), native_config=str(tmp_path / "absent"))))
     assert out["backups.sources"] == source_state and out["backups.pve"] == pve_state
+    assert out["backups.drive"] == drive_state
 
 
 @pytest.mark.parametrize("data", [{}, {"entries": []}, {"entries": [None]}, {"entries": "unknown"}])
@@ -560,7 +656,7 @@ def test_backups_run_cut_short_by_a_shutdown_is_not_a_failed_run(tmp_path):
     # One that never comes back does show, as a run that hasn't finished lately.
     data["runs"]["drive"] = {"ok": False, "started": NOW - 37 * 3600}
     out = states(backups.run(ctx("backups", run=aico_backup_runner(data), native_config=str(tmp_path / "absent"))))
-    assert out["backups.pve"] == "warn"
+    assert out["backups.drive"] == "warn"
 
 
 def test_backups_running_drive_uses_last_verified_copies(tmp_path):

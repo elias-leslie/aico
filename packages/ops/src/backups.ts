@@ -15,6 +15,7 @@ import {
   type StatusRow,
   statusRowsUrl,
 } from '@aico/status'
+import { fleetBackupCoverage, localBackupCoverage } from './backup-coverage'
 import { appendMachine, BackupDeferred, backupJob, driveBackup, stageSqlite } from './backup-drive'
 import { observeExternal } from './backup-external'
 import { nativeBackup } from './backup-native'
@@ -355,6 +356,7 @@ const BUSY_EXIT = 75
 
 const USAGE = `Usage:
   aico backups [list] [--json]                          backup health: problems first, one line per target
+  aico backups list --fleet --json                     coverage across backup owners and retained repositories
   aico backups request native|drive|append              run that backup now (same run as aico routines run backups-TARGET)
   aico backups recover bootstrap --machine workstation|gem --to /srv/scratch/NEW_FOLDER [--plan]
   aico backups recover check|snapshots|restore|repair --repository REPO --password-file FILE [--to NEW_FOLDER] [--snapshot ID]
@@ -556,12 +558,22 @@ async function listCommand(
   state: BackupState,
   machine: string,
   args: string[],
+  env = process.env,
 ): Promise<number> {
   const { cfg } = rt
   const list = {
     machine,
     entries: await scheduledEntries(state, cfg, machine, rt.run),
     runs: state.runs,
+  }
+  if (args.includes('--fleet')) {
+    const local = localBackupCoverage(state, cfg, machine, list.entries)
+    console.log(
+      JSON.stringify(
+        args.includes('--local') ? { owners: [local] } : await fleetBackupCoverage(local, cfg, env),
+      ),
+    )
+    return 0
   }
   console.log(args.includes('--json') ? JSON.stringify(list) : listText(list, Date.now()))
   return 0
@@ -802,7 +814,7 @@ export async function backups(argv: string[], env = process.env): Promise<number
     }
   }
   const state = readState(cfg)
-  if (verb === 'list') return listCommand(rt, state, machine, args)
+  if (verb === 'list') return listCommand(rt, state, machine, args, env)
   if (verb === 'run') return runCommand(rt, state, machine, args)
   return sourceCommand(rt, state, verb as string, args)
 }
