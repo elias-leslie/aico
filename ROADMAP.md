@@ -7,7 +7,7 @@ Aico is a Linux companion for people working with terminal AI tools. Agent sessi
 - Systems review leftovers (risk list: /srv/scratch/briefs/usage-burn-2026-11-08/lane10-final.md): recurring Status rows with no next_run can't go late; PVE packages, kernels, hand-installed Node and tools get no automatic updates; VM 100 runs Node 20 (past end of life); thin pool can't grow itself
 - Sessions shift between Aico machines: always know what was going on, then a planned move to the standby (plan: docs/plans/session-shift/plan.md)
 - After Claude Max ends (about 2:20 PM EST, Nov 8): check live that `st models route` and `aico usage show` say no plan, `st aico create --tool claude-code` refuses, the new-session dialog opens on another tool, and Status and the phone stay quiet. When the Codex subscription lapses, set its `effective_to` in usage-plans.json (owner said it goes off too, no date given)
-- Power-off test and remote power control: on hold until the owner picks it up (plugs, `aico plug` and the open choices in docs/power-off-test.md)
+- Power-off test: remote control and the workstation-off simulation are done; the real power tests, BIOS settings and plugs wait on the owner (ask filed in Aico; steps and results in docs/power-off-test.md)
 - Test flake risks not yet seen failing (lane 15 runners-up, /srv/scratch/briefs/usage-burn-2026-11-08/lane15-report.md): checks fixture picks a free port then gives it to docker (`-p 127.0.0.1::5432` plus `docker port` removes the race); real-time limits in chat.test, fleet-leases and control.live; no suite-wide run yet with the clock moved ahead, wait until the delete guard is settled
 
 ## Later

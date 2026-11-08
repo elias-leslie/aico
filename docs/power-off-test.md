@@ -65,14 +65,35 @@ What the planned outage silences, until the host reports again more than 2 minut
 
 ## Results
 
-(none yet)
+### Nov 8: workstation cut off by firewall (no power cut)
+
+Six cuts of 2 to 5 minutes, with the workstation's connector stopped, so the standby saw what it would see with the workstation off.
+
+- Address: the standby's connector was on within about 46 s and off again about 2 minutes after the workstation came back.
+- Quiet: no notice on either Aico, from any cut or any return.
+- Standby: Status 3 to 7 problems, none of them about the workstation being off. Real `/v1/ask` from Jobinator answered in about 4 s. Test push went out through the Proxmox relay (outbox sent; the phone itself not seen).
+- `aico power state davion-sidarli` reads off from the standby within 2 minutes. `tether hosts` can say connected for up to 5 minutes.
+- CT 190 rebooted once: Tether restored the Antigravity session in 6 s, it resumed and answered a message. kill-server is refused on the real server there; the server's OOM score is 0 (the container can't go lower, the workstation gets -500).
+- CT 191 and CT 170 rebooted with no help. VM 180 stays off after a gem boot (Autostart off, the owner's choice).
+
+Found and fixed along the way: a stuck fleet link, a repo copy row that stayed Failed, caretaker reading late while the standby stood in, routines of an off machine showing red, two "Workstation" choices in the new-session dialog.
+
+Not proven: starting the workstation from off (a magic packet reaches its card), gem restarting itself after a power cut (BIOS setting can't be read from Linux), the plugs (neither answers). Those need the owner: test 1 and test 2 in the Aico ask.
+
+### After the owner's run, also check
+
+- `tether reboot status`: sessions restored, none failed or stuck pending.
+- Each resumed agent's first prompt says the machine went down and is true about whether it was working.
+- Text sent to a throwaway session seconds before the cut comes back under "Sent to you before the crash", and `~/.local/state/tether/default/pending-input` is empty afterwards.
+- aico-web and tether@default come up with no restart loop, and their stores open.
+- No deploy record stuck running under `~/.local/state/aico/deploys`, no leftover `.git/index.lock` in project checkouts.
 
 ## On hold (Nov 7)
 
 The owner paused the test runs. Where it stands:
 - `aico away` (and the Machines page **Shut down all**, disabled with the reason) refuses to shut anything down while `away.enabled` in packages/ops/data/ops.json is `false`, which it is now. Set it to true only after the owner confirms the plugs are wired and the BIOS power-on is set. `--dry-run` works either way.
 - `aico plug` and `aico away` are built (tests with stubbed plugs and shutdowns only; the countdown rule's field names follow the Kasa protocol and are not yet proven on the real plug). The settings are the layout above; nothing is wired to either plug yet.
-- On Nov 7 neither plug answered on TCP 9999 from the workstation (no route to host), so `aico plug` and `aico away --dry-run` could not read them; the dry run prints the steps and says the sockets were not checked.
+- On Nov 7 and Nov 8 neither plug answered on TCP 9999 (no route to host), so `aico plug` and `aico away --dry-run` could not read them; the dry run prints the steps and says the sockets were not checked.
 - Router: fixed addresses and TCP 9999 rules for both plugs (lan → house), nothing else opened.
 - The standby (CT 190) gets `aico away mark` and the outage route when the next release reaches it (peer release job); until then the away run reports that it could not mark the standby and goes on.
 - Open: the BIOS settings at both hosts, wiring the shed, a first live countdown on one plug, and the test run itself.
