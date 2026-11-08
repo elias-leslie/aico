@@ -222,7 +222,7 @@ describe('withContextDelivery', () => {
     const started = start(spec)
     const [text] = read(spec.contextDelivery as NonNullable<TuiSpec['contextDelivery']>, started)
     expect(text).toContain('## Alpha Policy')
-    expect(text).toContain('- [30m ago] pi: Alpha review')
+    expect(text).toContain('- [30 min ago] pi: Alpha review')
     expect(started.env.AICO_CONTEXT_DELIVERED).toBe(delivered?.hash)
     expect(lastDelivery('e0000001', env)).toMatchObject({ tool: 'codex', hash: delivered?.hash })
     const db = openContext(contextDbPath(env.AICO_DATA_DIR))

@@ -2468,14 +2468,18 @@ OUTPUT_RESERVE = 3.0  # seconds the collector keeps for the context read (2 s) a
 
 
 def age_label(ms: object, now_ms: int) -> str:
-    """How long ago, short: 40s, 12m, 3h, 2d. Unknown is a dash."""
+    """How long ago, short: 40s, 12m, 2h, 3d, rounded as packages/shared/src/time.ts is. Unknown is a dash."""
     if not isinstance(ms, int) or ms <= 0:
         return "-"
     seconds = max(0, (now_ms - ms) // 1000)
-    for size, unit in ((86400, "d"), (3600, "h"), (60, "m")):
-        if seconds >= size:
-            return f"{seconds // size}{unit}"
-    return f"{seconds}s"
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes = (seconds + 30) // 60
+    if minutes < 60:
+        return f"{minutes}m"
+    if minutes < 2880:
+        return f"{(minutes + 30) // 60}h"
+    return f"{minutes // 1440}d"
 
 
 def state_label(session: dict | None, status: object) -> str:

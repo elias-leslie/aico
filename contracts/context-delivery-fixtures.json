@@ -225,7 +225,7 @@
         "88888888"
       ],
       "cut": [],
-      "text": "## Safety Rules\nNever delete backups.\n\n## Runtime Memory\n- [G:33333333] Alpha guardrail.\n- [G:22222222] Newer global guardrail.\n- [G:77777777] Everyone but implementation.\n- [G:66666666] Coordinators and sessions with no known role.\n- [G:11111111] Older global guardrail.\n\n## Plain Narration\nSay what happened first.\n\n## Runtime Memory\n- [M:99999999] A global mandate.\n- [M:88888888] Claude Code only.\n\n## Alpha Policy\nAlpha ships through its own release script.\n\n## Coding Practice\nAdd a regression test for each fixed defect.\n\n## Recent Activity\n- [30m ago] claude-code: Alpha review\n- [2h ago] codex: Release script fixes\n\n<tool-usage>\nmandates:\n- st commit -m \"msg\" — commit a verified checkpoint\n</tool-usage>"
+      "text": "## Safety Rules\nNever delete backups.\n\n## Runtime Memory\n- [G:33333333] Alpha guardrail.\n- [G:22222222] Newer global guardrail.\n- [G:77777777] Everyone but implementation.\n- [G:66666666] Coordinators and sessions with no known role.\n- [G:11111111] Older global guardrail.\n\n## Plain Narration\nSay what happened first.\n\n## Runtime Memory\n- [M:99999999] A global mandate.\n- [M:88888888] Claude Code only.\n\n## Alpha Policy\nAlpha ships through its own release script.\n\n## Coding Practice\nAdd a regression test for each fixed defect.\n\n## Recent Activity\n- [30 min ago] claude-code: Alpha review\n- [2 h ago] codex: Release script fixes\n\n<tool-usage>\nmandates:\n- st commit -m \"msg\" — commit a verified checkpoint\n</tool-usage>"
     },
     {
       "name": "Codex implementation session in project alpha",

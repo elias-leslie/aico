@@ -8,6 +8,7 @@
 
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
+import { ago } from '@aico/shared/time'
 import config from '../data/delivery.json' with { type: 'json' }
 import { budgetHint, contextSessionId, type ItemType } from './cost'
 import { type Database, getSetting, json, putSetting } from './db'
@@ -410,20 +411,13 @@ function memorySections(
 
 // --- computed blocks ----------------------------------------------------------
 
-function ago(ms: number): string {
-  const minutes = Math.max(0, Math.floor(ms / 60_000))
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.floor(minutes / 60)
-  return hours < 24 ? `${hours}h ago` : `${Math.floor(hours / 24)}d ago`
-}
-
 function activitySection(activity: Activity[], now: Date, settings: DeliveryConfig): Built | null {
   const oldest = now.getTime() - settings.activity.maxAgeDays * 86_400_000
   const lines = activity
     .filter((entry) => entry.name.trim() && entry.at >= oldest)
     .sort((a, b) => b.at - a.at)
     .slice(0, settings.activity.maxLines)
-    .map((entry) => `- [${ago(now.getTime() - entry.at)}] ${entry.tool}: ${entry.name.trim()}`)
+    .map((entry) => `- [${ago(entry.at, now.getTime())}] ${entry.tool}: ${entry.name.trim()}`)
   if (!lines.length) return null
   const body = `## Recent Activity\n${lines.join('\n')}`
   return {
