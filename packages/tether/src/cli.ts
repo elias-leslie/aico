@@ -45,10 +45,11 @@ Commands:
   sessions diagnostics <id>
   roots [list | show <requestId>]   coordinator sessions started from a request
   share <path>... [--title T] [--session ID]
-                                show the owner files or folders where they are
-                                (Aico: Files > Shared; nothing is copied);
-                                relative paths are from here; the session is
-                                this pane's own unless --session ID names one
+                                file files or folders quietly in Aico (Files > Shared;
+                                no notice, nothing copied); relative paths are from
+                                here; the session is this pane's own unless --session
+                                ID names one. To get the owner to look at something:
+                                tether ask create --file PATH, only if they truly need to
   share --url <url> [--title T] [--session ID]
   share list                    what is in Files > Shared, with the ID to remove each
   share remove <id>...          take entries out of Files > Shared (a file named
@@ -95,7 +96,7 @@ Sessions
 
 The owner
   ask create|get|list|done|withdraw   put a question to the owner in Aico and read the answer
-  share PATH... | list | remove       show the owner files or folders in Aico (Files > Shared)
+  share PATH... | list | remove       file things quietly in Aico (Files > Shared); to get the owner to look: tether ask create --file
   capture list|get|file               the owner's photos and files saved in Aico
   note list|get|add|item|groceries    the owner's notes and Groceries list
 
@@ -792,8 +793,8 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
         io.out(
           `${
             shared.paths
-              ? `Shared ${shared.paths.length === 1 ? '1 path' : `${shared.paths.length} paths`}; the owner opens them where they are, in Aico under Files > Shared (nothing is copied).`
-              : 'Shared the link; the owner sees it in Aico.'
+              ? `Filed ${shared.paths.length === 1 ? '1 path' : `${shared.paths.length} paths`} quietly in Aico under Files > Shared (no notice, nothing copied). To get the owner to look at something: tether ask create --file PATH, only if they truly need to.`
+              : `Filed the link quietly in Aico under Files > Shared (no notice). To get the owner to look at it: tether ask create --share ${shared.id ?? 'ID'}, only if they truly need to.`
           }${remove}`,
         )
         return 0

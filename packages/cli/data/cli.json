@@ -56,8 +56,8 @@
     "native-sessions": "dropped; use st sessions",
     "note": "the owner's notes are tether note list|get|add (tether note --help)",
     "notes": "the owner's notes are tether note list|get|add (tether note --help)",
-    "share": "show the owner a file with tether share PATH (tether share --help)",
-    "files": "show the owner a file with tether share PATH (tether share --help); their photos and files: tether capture",
+    "share": "file something quietly with tether share PATH; to get the owner to look at it: tether ask create --file PATH, only if they truly need to",
+    "files": "file something quietly with tether share PATH; to get the owner to look at it: tether ask create --file PATH, only if they truly need to; their photos and files: tether capture",
     "ask": "renamed: aico prompt-model MODEL \"question\" asks a model; a question for the owner is tether ask create"
   },
   "rootHelper": "native/host-steward/aico-root-watch.py",
@@ -67,7 +67,7 @@
       "commands": [
         [
           "tether",
-          "live sessions (create, list, attach, end), questions for the owner (tether ask), their notes (tether note) and files you show them (tether share)"
+          "live sessions (create, list, attach, end), questions for the owner (tether ask), their notes (tether note) and files you file quietly for them (tether share)"
         ],
         [
           "recent",

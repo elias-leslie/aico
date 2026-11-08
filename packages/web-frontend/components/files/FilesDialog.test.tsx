@@ -739,35 +739,6 @@ describe('FilesDialog', () => {
     )
   })
 
-  it('marks Shared with the shares that came since it was last open, and clears it on opening', async () => {
-    window.localStorage.setItem(
-      'aico:shared-opened-at',
-      '2026-10-27T09:00:00.000Z',
-    )
-    renderDialog(null, null)
-    await screen.findByText('tmp-file.txt')
-    const button = await screen.findByRole('button', { name: 'Shared 1 new' })
-    expect(within(button).getByTestId('shared-new')).toHaveTextContent('1 new')
-    fireEvent.click(button)
-    expect(await screen.findByText('Image and prompt')).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Shared' })).toBeVisible()
-    expect(screen.queryByTestId('shared-new')).toBeNull()
-    expect(window.localStorage.getItem('aico:shared-opened-at')).toBe(
-      share.createdAt,
-    )
-  })
-
-  it('does not call the shares already there new on a first visit', async () => {
-    renderDialog(null, null)
-    await screen.findByText('tmp-file.txt')
-    await waitFor(() =>
-      expect(window.localStorage.getItem('aico:shared-opened-at')).toBe(
-        share.createdAt,
-      ),
-    )
-    expect(screen.queryByTestId('shared-new')).toBeNull()
-  })
-
   it('shows a symlink as a link, and says when a folder cannot be read', async () => {
     renderDialog(null, null, (url) => {
       const { pathname, searchParams } = new URL(url, 'http://aico.test')

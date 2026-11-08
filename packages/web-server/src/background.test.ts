@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Asks } from './asks'
 import { Background, reconcileLinks } from './background'
 import { WebStore } from './db'
-import { Shows } from './shows'
 import { applyPage, changesSince } from './sync/engine'
 import { FakeTether } from './testing'
 
@@ -14,7 +13,6 @@ vi.mock('@aico/tether-client', async (original) => ({
 
 let tether: FakeTether
 let store: WebStore
-let shows: Shows
 let pushes: unknown[]
 /** What the notices go to: every notice taken lands in `pushes`. */
 const into = (list: unknown[]) => ({
@@ -32,18 +30,17 @@ const event = (type: string, data: Record<string, unknown> = {}) => ({
   data,
 })
 
-function background(trustShows = true, forward?: (event: unknown) => void) {
+function background(ownerTether = true, forward?: (event: unknown) => void) {
   return new Background({
     forward,
     tether: tether.client,
     store,
-    shows,
     asks: new Asks({
       tether: tether.client,
       publicHost: null,
       notices: into(pushes),
     }),
-    trustShows,
+    ownerTether,
     uploads: { dir: '/nonexistent/uploads', remoteDir: '~/uploads', maxBytes: 1, maxAgeMs: 1 },
     maintenance: { enabled: false, intervalMs: 1000, emptyPaneDays: 7 },
   })
@@ -60,11 +57,6 @@ beforeEach(() => {
   tether = new FakeTether()
   store = new WebStore(':memory:')
   pushes = []
-  shows = new Shows({
-    tether: tether.client,
-    publicHost: null,
-    notices: into(pushes),
-  })
   paneId = store.createPane({ projectId: 'aico', name: 'Aico', activeMode: 'codex' }).id
 })
 
@@ -144,7 +136,7 @@ describe('events', () => {
     expect(store.getLink(session.id)).not.toBeNull()
   })
 
-  it("takes agent shares only from the owner's default Tether", async () => {
+  it('raises no notice for a share: it is filed quietly', async () => {
     const share = {
       id: 'ab12cd34ef56',
       session: 'ab12cd34',
@@ -153,10 +145,8 @@ describe('events', () => {
       createdAt: '2026-10-27T10:00:00.000Z',
       paths: ['/srv/a.txt'],
     }
-    await background(false).event(event('show.requested', share))
-    expect(pushes).toEqual([])
     await background(true).event(event('show.requested', share))
-    expect(pushes).toHaveLength(1)
+    expect(pushes).toEqual([])
   })
 
   it("pushes a new blocking ask only from the owner's default Tether", async () => {
@@ -189,14 +179,6 @@ describe('events', () => {
   })
 
   it('pushes once with two doors: only the door whose Tether owns the session pushes', async () => {
-    const share = {
-      id: 'ab12cd34ef56',
-      session: 'ab12cd34',
-      kind: 'files',
-      title: null,
-      createdAt: '2026-10-27T10:00:00.000Z',
-      paths: ['/srv/a.txt'],
-    }
     const ask = {
       id: 'ff12cd34ef56',
       session: null,
@@ -218,15 +200,15 @@ describe('events', () => {
     }
     // The same two events on both doors: the owner's own Tether (no host) and
     // the other door, whose hub relays them from the peer with `host` set.
-    const owner = [event('show.requested', share), event('asks.changed', { ask, created: true })]
+    const owner = [event('asks.changed', { ask, created: true })]
     const relayed = owner.map((item) => event(item.type, { ...item.data, host: 'gem' }))
     const door = background(true)
     const other = background(true)
     for (const item of owner) await door.event(item)
     for (const item of relayed) await other.event(item)
-    expect(pushes).toHaveLength(2) // one share and one ask, each once
+    expect(pushes).toHaveLength(1) // the ask, once
     await other.event(relayed[0] as (typeof relayed)[0])
-    expect(pushes).toHaveLength(2)
+    expect(pushes).toHaveLength(1)
   })
 })
 
@@ -259,13 +241,12 @@ describe('one push per ask across two doors', () => {
       new Background({
         tether: tether.client,
         store,
-        shows,
         asks: new Asks({
           tether: tether.client,
           publicHost: null,
           notices: into(list),
         }),
-        trustShows: true,
+        ownerTether: true,
         uploads: { dir: '/nonexistent/uploads', remoteDir: '~/uploads', maxBytes: 1, maxAgeMs: 1 },
         maintenance: { enabled: false, intervalMs: 1000, emptyPaneDays: 7 },
       })

@@ -169,7 +169,7 @@ Refusals carry the reason in `detail`: `403 access_denied`, `400 invalid_path`, 
 
 | Method and route | Body | Result |
 | --- | --- | --- |
-| `POST /v1/show` | `{session?, title?, url?, path?, paths?}`; exactly one of `url`, `path` and `paths` (absolute, existing files or folders, up to 20) | `201 {id, session, title, createdAt, kind: 'files', paths}` (real paths; a folder ends in `/`; nothing copied) or `{…, kind: 'url', url}`, and a `show.requested` event with the same data. |
+| `POST /v1/show` | `{session?, title?, url?, path?, paths?}`; exactly one of `url`, `path` and `paths` (absolute, existing files or folders, up to 20) | `201 {id, session, title, createdAt, kind: 'files', paths}` (real paths; a folder ends in `/`; nothing copied) or `{…, kind: 'url', url}`, and a `show.requested` event with the same data, for a linked host's list; nothing tells the owner from it (a share is filed quietly; to get the owner to look at something, file an ask with `attach`). |
 | `GET /v1/shares` | — | `200 {items}`: the newest 200 shares, oldest first, kept for `TETHER_SHARE_RETENTION_DAYS` (default 30). |
 | `DELETE /v1/shares/:id` | — | `200 {id, removed: true}`; `404 not_found` for an unknown (or already removed) ID. This Tether's own shares only: a linked host's share is removed on that host. An ask that pointed at it shows no attached files. Additive, no `apiVersion` bump. `tether share remove ID...` calls it per ID. |
 
@@ -209,8 +209,7 @@ symlink handoff directory returns `503 exchange_unavailable` with a clear
 `detail`. Failed requests publish no event. URL requests do not need the exchange.
 
 `st show <url|file> [--title T]` posts to the agent instance at
-`$XDG_RUNTIME_DIR/tether/default/control.sock`. A successful request records the handoff;
-owner-app notification handling is a separate consumer of `show.requested`.
+`$XDG_RUNTIME_DIR/tether/default/control.sock`. A successful request records the handoff.
 
 ## Terminal I/O
 
@@ -477,7 +476,7 @@ files or folders for the owner to look at (`tether ask create --file`). Each
 must exist and be readable (`400 invalid_path` otherwise); Tether links them as
 a share titled with the question, as `POST /v1/show` does (nothing copied;
 the session's existing share with exactly those paths is reused), and sets
-`share`. `attach` and `share` together are refused. Every ask response carries
+`share`. It publishes no `show.requested`: the ask is the one place the owner sees it. `attach` and `share` together are refused. Every ask response carries
 `attached`: the share's paths as they are on disk now, `{path, name, kind,
 size}` with `kind` `file`, `folder` or `missing` (moved, deleted or
 unreadable) and `size` in bytes for a file, else null; empty without a files

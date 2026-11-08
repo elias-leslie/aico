@@ -102,12 +102,7 @@ function serve(): void {
     historyLines: HISTORY_LINES,
     touched: (id) => store.touchLink(id),
   })
-  const shows = new Shows({
-    tether,
-    publicHost: config.publicHost,
-    notices: notify.notifier,
-    choices: noticeChoices,
-  })
+  const shows = new Shows({ tether })
   const blobsDir = join(config.dataDir, 'blobs')
   const asks = new Asks({
     tether,
@@ -161,9 +156,8 @@ function serve(): void {
   const background = new Background({
     tether,
     store,
-    shows,
     asks,
-    trustShows: config.trustShows,
+    ownerTether: config.ownerTether,
     uploads: config.uploads,
     maintenance: config.maintenance,
     forward: (event) => terminals.event(event),

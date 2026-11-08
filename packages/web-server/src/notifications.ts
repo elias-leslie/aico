@@ -83,7 +83,8 @@ function typeRows(deps: NotificationDeps, now: number) {
   const saved = deps.choices.noticeChoices()
   const named = NOTICE_TYPES.map((type) => type.id)
   const senders = [...new Set([...byType.keys(), ...saved.keys()])]
-    .filter((id) => !named.includes(id))
+    // A choice saved for a type since retired is no row of its own.
+    .filter((id) => !named.includes(id) && validTypeId(id))
     .sort()
   return [...named, ...senders].map((id) => {
     const type = describeType(id)

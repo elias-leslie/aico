@@ -191,14 +191,6 @@ const RULES: readonly Rule[] = [
     match: source('browser-automation'),
   },
   {
-    id: 'shared',
-    label: 'Agent shared something',
-    hint: 'An agent shared a file or a design with you.',
-    phone: false,
-    desktop: true,
-    match: key('show'),
-  },
-  {
     id: 'unused-context',
     label: 'Unused context',
     hint: 'Context items no session has used.',

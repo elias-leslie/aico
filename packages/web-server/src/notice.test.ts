@@ -2,7 +2,6 @@ import { NoticeError, parseNotice } from '@aico/notify'
 import { describe, expect, it } from 'vitest'
 import { type Ask, askNotice } from './asks'
 import { type Notice, resolveNotice, sendNotice } from './notice'
-import { type Share, showNotice } from './shows'
 
 const ASK = {
   id: 'abcdefabcdef',
@@ -13,18 +12,9 @@ const ASK = {
   state: 'open',
 } as unknown as Ask
 
-const SHARE = {
-  id: '0123456789ab',
-  kind: 'files',
-  title: 'Report',
-  paths: ['/srv/scratch/report.md'],
-} as unknown as Share
-
 const notices: [string, Notice][] = [
   ['ask with the public host', askNotice(ASK, 'nightly', 'aico.summitflow.dev')],
   ['ask without it', askNotice(ASK, null, null)],
-  ['share', showNotice(SHARE, 'aico.summitflow.dev')],
-  ['share without the public host', showNotice(SHARE, null)],
 ]
 
 describe('notice contract v1', () => {

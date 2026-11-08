@@ -30,7 +30,7 @@ See the [Changelog](../CHANGELOG.md) for shipped changes.
 
 **`files browser`** — Browse the session's working directory. Preview files, copy paths, insert paths into prompts — without leaving the terminal.
 
-**`files and shares`** — The session bar's Files opens Shared and Project. Shared lists what agents handed you with `tether share`, newest first: each file opens in a preview (text and images) and each folder opens to browse, read where they are, never copied. Project browses the session's folder. A file path in the terminal (absolute or starting with `~/`) is a link: click it to open that file or folder in Files. A notice pops up for each new share; its Open goes to the share in Shared.
+**`files and shares`** — The session bar's Files opens Shared and Project. Shared lists what agents filed with `tether share` or attached to a question, newest first: each file opens in a preview (text and images) and each folder opens to browse, read where they are, never copied. Project browses the session's folder. A file path in the terminal (absolute or starting with `~/`) is a link: click it to open that file or folder in Files. A share is filed quietly: nothing pops up for one. When an agent needs you to look at something it asks, and the question's card has Open.
 
 **`project deep links`** — Open `/?project=myapp&dir=/path` to jump straight into a project workspace. Bookmark your setups.
 

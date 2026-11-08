@@ -70,6 +70,15 @@ describe('Settings > Notifications', () => {
     expect(types.find((row) => row.id === 'source:quiet-sender')?.phone.on).toBe(false)
   })
 
+  it('lists no row for a share or a choice saved under the retired shared type', async () => {
+    const h = harness()
+    h.choices.setNoticeChoice('shared', 'desktop', false)
+    take(h, { source: 'aico', key: 'show:0123456789ab', severity: 'info', title: 'Shared: x' })
+    const { types } = await h.list()
+    expect(types.map((row) => row.id)).not.toContain('shared')
+    expect(types.find((row) => row.id === 'source:aico')?.fired).toBe(1)
+  })
+
   it('saves every switch as flipped, so an off row stays off and an on row is forced', async () => {
     const h = harness()
     await h.put('agent-waiting', 'phone', false)

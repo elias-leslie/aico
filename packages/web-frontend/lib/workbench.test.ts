@@ -1,9 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { setFilesOpener } from './files-opener'
 import {
+  openFilesAnywhere,
   openFilesWindow,
   openNotes,
   openWorkbench,
   readTab,
+  sharedLinkTarget,
   splitOff,
   WORKBENCH_TABS,
   workbenchHref,
@@ -40,6 +43,59 @@ describe('the Workbench links', () => {
     )
     expect(workbenchTip()).toContain('Notes')
     expect(workbenchTip()).toContain('Files')
+  })
+})
+
+describe('openFilesAnywhere', () => {
+  const small = () =>
+    vi.stubGlobal('matchMedia', () => ({ matches: false }) as MediaQueryList)
+  afterEach(() => setFilesOpener(null))
+
+  it('uses the open session first', () => {
+    const opener = vi.fn()
+    const open = vi.spyOn(window, 'open')
+    setFilesOpener(opener)
+    openFilesAnywhere({ kind: 'path', path: '/srv/a.md' })
+    expect(opener).toHaveBeenCalledWith({ kind: 'path', path: '/srv/a.md' })
+    expect(open).not.toHaveBeenCalled()
+  })
+
+  it('with no session, uses the Files window', () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(popup())
+    vi.stubGlobal('matchMedia', () => ({ matches: true }) as MediaQueryList)
+    openFilesAnywhere({ kind: 'shared', showId: 'ab12cd34ef56' })
+    expect(open.mock.calls[0]?.[0]).toBe(
+      '/workbench?tab=files&view=shared&show=ab12cd34ef56',
+    )
+  })
+
+  it('on a phone with no session, opens a tab of its own', () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(popup())
+    small()
+    openFilesAnywhere({ kind: 'path', path: '/srv/a.md' })
+    expect(open).toHaveBeenCalledWith(
+      '/workbench?tab=files&path=%2Fsrv%2Fa.md',
+      '_blank',
+    )
+  })
+
+  it('goes there in this page when the tab is blocked', () => {
+    vi.spyOn(window, 'open').mockReturnValue(null)
+    const assign = vi.fn()
+    vi.stubGlobal('location', { ...window.location, assign })
+    small()
+    openFilesAnywhere({ kind: 'shared' })
+    expect(assign).toHaveBeenCalledWith('/workbench?tab=files&view=shared')
+  })
+})
+
+describe('an older share link', () => {
+  it('leads to the share in Files, and any other address to nothing', () => {
+    expect(sharedLinkTarget('?show=ab12cd34ef56')).toBe(
+      '/workbench?tab=files&view=shared&show=ab12cd34ef56',
+    )
+    expect(sharedLinkTarget('?ask=ab12cd34ef56')).toBeNull()
+    expect(sharedLinkTarget('')).toBeNull()
   })
 })
 

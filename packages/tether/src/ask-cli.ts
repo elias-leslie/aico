@@ -20,9 +20,11 @@ export const ASK_USAGE = `Usage:
       characters, on what to send. The answer lists each file (id, path);
       read one with tether capture get ID. Aliases: --photos, --photo-hint.
       --open URL: an https link the card opens (the item the ask is about).
-      --file PATH (up to 20): a file or folder for the owner to look at; the
-      card shows it and opens it in place. Linked where it is, as tether
-      share does (nothing copied). --share ID attaches an earlier share.
+      --file PATH (up to 20): how you get the owner to look at a file or folder,
+      only if they truly need to (a plain tether share is filed quietly). The
+      card shows it with Open, in place (from another computer's Aico, it says
+      which one holds it). Linked where it is (nothing copied).
+      --share ID attaches an earlier share.
   tether ask get <id>          the ask with the owner's answer
   tether ask list [--mine] [--all]
                                open and answered asks (--all: closed ones too);

@@ -1708,6 +1708,13 @@ a.lantern-ask-attached {
   color: var(--mist);
 }
 
+.lantern-ask-attached .o {
+  flex: none;
+  margin-left: 4px;
+  font-size: 12.5px;
+  color: var(--lantern);
+}
+
 .lantern-ask-attached:disabled {
   cursor: default;
 }

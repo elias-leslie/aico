@@ -66,8 +66,8 @@ export interface WebConfig {
   portfolio: PortfolioSettings
   /** The Python backend's database, read once into `dbPath` and never written. */
   tetherSocket: string
-  /** Agent shares are taken only from this user's tether@default (the owner's own socket). */
-  trustShows: boolean
+  /** Asks push only from this user's tether@default (the owner's own socket). */
+  ownerTether: boolean
   uploads: UploadConfig
   /** Folders Files > Everywhere offers beside Home (`AICO_FILE_SHORTCUTS`, comma separated). */
   fileShortcuts: string[]
@@ -522,7 +522,7 @@ export function loadConfig(
       appUrl: urlOrOff(env.AICO_PORTFOLIO_APP_URL, null),
     },
     tetherSocket,
-    trustShows: tetherSocket === defaultTetherSocketPath(env, uid),
+    ownerTether: tetherSocket === defaultTetherSocketPath(env, uid),
     fileShortcuts: list(env.AICO_FILE_SHORTCUTS) ?? DEFAULT_FILE_SHORTCUTS,
     uploads: {
       dir: resolve(expandHome(env.UPLOAD_DIR?.trim() || join(home, uploadDirName), home)),

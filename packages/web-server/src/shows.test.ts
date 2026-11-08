@@ -1,16 +1,7 @@
-import { asksOwner, parseNotice } from '@aico/notify'
 import { TetherError } from '@aico/tether-client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  pushTitle,
-  registerShowRoutes,
-  type Share,
-  Shows,
-  showNotice,
-  validateShare,
-} from './shows'
+import { registerShowRoutes, Shows, validateShare } from './shows'
 import { serveRoutes } from './testing'
-import { QUIET, recorder } from './testing-notices'
 
 const SHOW_ID = 'ab12cd34ef56'
 
@@ -24,12 +15,6 @@ function payload(overrides: Record<string, unknown> = {}): Record<string, unknow
     paths: ['/srv/workspaces/projects/aico/report.md'],
     ...overrides,
   }
-}
-
-function share(overrides: Record<string, unknown> = {}): Share {
-  const valid = validateShare(payload(overrides))
-  if (!valid) throw new Error('fixture share is invalid')
-  return valid
 }
 
 function tetherWith(items: unknown) {
@@ -53,9 +38,9 @@ describe('validateShare', () => {
   it('accepts several paths without a session, and a URL', () => {
     expect(validateShare(payload({ session: null, paths: ['/a/b.png', '/a/c'] }))).not.toBeNull()
     const url = 'https://example.com/report?a=1&b=2'
-    expect(share({ kind: 'url', url, paths: undefined, session: null, title: null })).toMatchObject(
-      { url },
-    )
+    expect(
+      validateShare(payload({ kind: 'url', url, paths: undefined, session: null, title: null })),
+    ).toMatchObject({ url })
   })
 
   it.each([
@@ -91,77 +76,9 @@ describe('validateShare', () => {
 })
 
 describe('Shows', () => {
-  it('pushes a fixed notice once per share, with the public host when set', async () => {
-    const { sink, received } = recorder()
-    const shows = new Shows({
-      tether: tetherWith([]),
-      publicHost: 'aico.example.dev',
-      notices: sink,
-    })
-    await shows.receive(payload())
-    await shows.receive(payload())
-    await shows.receive({ ...payload(), id: 'not valid' })
-    expect(received).toEqual([
-      {
-        v: 1,
-        source: 'aico',
-        kind: 'info',
-        severity: 'info',
-        title: 'Shared: Report',
-        body: 'Open Aico to see it.',
-        key: `show:${SHOW_ID}`,
-        push: 'tray',
-        actions: ['open'],
-        primary: 'open',
-        open: `https://aico.example.dev/?show=${SHOW_ID}`,
-      },
-    ])
-  })
-
-  it('is for the record: the notifier files no question for a share', () => {
-    for (const host of ['aico.example.dev', null]) {
-      const notice = parseNotice(showNotice(share(), host))
-      expect(notice.kind).toBe('info')
-      expect(asksOwner(notice)).toBe(false)
-    }
-  })
-
-  it('names what was shared and never puts a URL in the notice', () => {
-    expect(pushTitle(share({ title: null, paths: ['/a/image.png', '/a/prompt.md'] }))).toBe(
-      'Shared: image.png and 1 more',
-    )
-    expect(pushTitle(share({ title: null, paths: ['/a/out/'] }))).toBe('Shared: out')
-    const link = share({
-      kind: 'url',
-      url: 'https://secret.example',
-      paths: undefined,
-      title: null,
-    })
-    expect(pushTitle(link)).toBe('Shared a link')
-    expect(JSON.stringify(showNotice(link, null))).not.toContain('secret.example')
-    expect(showNotice(link, null)).not.toHaveProperty('open')
-  })
-
-  it('keeps going when a push fails', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {})
-    const shows = new Shows({
-      tether: tetherWith([]),
-      publicHost: null,
-      notices: {
-        receive: () => {
-          throw new Error('offline')
-        },
-        resolve: async () => {},
-      },
-    })
-    await expect(shows.receive(payload())).resolves.toBeUndefined()
-  })
-
   it("lists Tether's shares, leaving out any that fail the checks", async () => {
     const shows = new Shows({
       tether: tetherWith([payload(), { ...payload(), id: 'bad' }, payload({ id: 'bbbbbbbbbbbb' })]),
-      publicHost: null,
-      notices: QUIET,
     })
     expect((await shows.list()).map((item) => item.id)).toEqual([SHOW_ID, 'bbbbbbbbbbbb'])
   })
@@ -186,8 +103,6 @@ describe('share routes', () => {
     tether.request.mockClear()
     const shows = new Shows({
       tether,
-      publicHost: null,
-      notices: QUIET,
     })
     server = await serveRoutes((router) => registerShowRoutes(router, shows))
   })
@@ -196,15 +111,11 @@ describe('share routes', () => {
     await server.close()
   })
 
-  it('lists shares and honours the cursor', async () => {
-    const list = async (query = '') =>
-      (
-        (await (await fetch(`${server.base}/api/shows${query}`)).json()) as { shows: Share[] }
-      ).shows.map((item) => item.id)
-    expect(await list()).toEqual([SHOW_ID, 'bbbbbbbbbbbb'])
-    expect(await list(`?since=${SHOW_ID}`)).toEqual(['bbbbbbbbbbbb'])
-    expect(await list('?since=bbbbbbbbbbbb')).toEqual([])
-    expect(await list('?since=cccccccccccc')).toEqual([SHOW_ID, 'bbbbbbbbbbbb'])
+  it('lists shares', async () => {
+    const body = (await (await fetch(`${server.base}/api/shows`)).json()) as {
+      shows: { id: string }[]
+    }
+    expect(body.shows.map((item) => item.id)).toEqual([SHOW_ID, 'bbbbbbbbbbbb'])
   })
 
   it('removes a share through Tether and says plainly when it is gone', async () => {

@@ -52,11 +52,7 @@ beforeEach(async () => {
       maxBytes: 1024,
       maxAgeMs: 1000,
     },
-    shows: new Shows({
-      tether: tether.client,
-      publicHost: null,
-      notices: QUIET,
-    }),
+    shows: new Shows({ tether: tether.client }),
     asks: new Asks({ tether: tether.client, publicHost: null, notices: QUIET }),
   })
   const hub = new TerminalHub({ tether: tether.client, historyLines: 100, touched: () => {} })

@@ -285,6 +285,13 @@ describe('attached files', () => {
     expect((listed.body.items as { attached: unknown[] }[])[0]?.attached).toHaveLength(2)
   })
 
+  it('announces no share for an attached file: the ask is the one place the owner sees it', async () => {
+    const plan = join(dir, 'plan.md')
+    writeFileSync(plan, 'hello')
+    await ask({ session: '0123abcd', question: 'Ship it?', attach: [plan] })
+    expect((events.replay(0) ?? []).map((event) => event.type)).not.toContain('show.requested')
+  })
+
   it('refuses a path that is not there, a relative one, or attach with share', async () => {
     const missing = await ask({
       session: '0123abcd',

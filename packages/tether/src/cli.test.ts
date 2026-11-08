@@ -237,6 +237,8 @@ describe('main', () => {
       await main(['-i', 'clitest', 'share', '--url', 'https://example.com/c'], shared.io),
     ).toBe(0)
     expect(shared.out.join('\n')).toMatch(/tether share remove [0-9a-f]{12}/)
+    expect(shared.out.join('\n')).toContain('quietly')
+    expect(shared.out.join('\n')).toContain('only if they truly need to')
 
     const listing = capture()
     expect(await main(['-i', 'clitest', 'share', 'list'], listing.io)).toBe(0)

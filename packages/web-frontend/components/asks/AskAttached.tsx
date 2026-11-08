@@ -49,7 +49,7 @@ function detail(file: AttachedFile, host: string | undefined): string {
 }
 
 /**
- * The files an agent attached to its question: one chip each, which opens the
+ * The files an agent attached to its question: one chip each, marked Open, which opens the
  * file in place (a web page opens rendered in its own tab, with Source beside it). A moved or deleted file says so and does not open; a file on
  * another computer opens there, not here.
  */
@@ -93,6 +93,7 @@ export function AttachedFiles({
                       {detail(file, ask.host)} · new tab
                     </span>
                   </span>
+                  <span className="o">Open</span>
                 </a>
                 <button
                   type="button"
@@ -133,6 +134,7 @@ export function AttachedFiles({
                   </span>
                   <span className="s">{detail(file, ask.host)}</span>
                 </span>
+                {!missing && !away && <span className="o">Open</span>}
               </button>
             </li>
           )

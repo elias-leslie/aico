@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { notesHref } from './api/notes'
+import { type FilesRequest, openFiles } from './files-opener'
 import { shownProject } from './frame/shown-project'
 import {
   type Params,
@@ -168,6 +169,28 @@ export function openFilesWindow(
     view: shared ? 'shared' : undefined,
     show: typeof shared === 'string' ? shared : undefined,
   })
+}
+
+/** Open a file or a share from wherever the owner is: the open session's Files, else the Files
+ * window, else (a phone with no session open) a tab of its own, so a half-typed answer stays. */
+export function openFilesAnywhere(request: FilesRequest): void {
+  if (openFiles(request)) return
+  const path = request.kind === 'path' ? request.path : undefined
+  const showId = request.kind === 'shared' ? request.showId : undefined
+  const shared = request.kind === 'shared' ? (showId ?? true) : undefined
+  if (openFilesWindow({ path, shared })) return
+  const href = workbenchHref('files', {
+    path,
+    view: shared ? 'shared' : undefined,
+    show: showId,
+  })
+  if (!window.open(href, '_blank')) window.location.assign(href)
+}
+
+/** The address an older share link (`/?show=<id>`) now leads to, or null for any other address. */
+export function sharedLinkTarget(search: string): string | null {
+  const show = new URLSearchParams(search).get('show')
+  return show ? workbenchHref('files', { view: 'shared', show }) : null
 }
 
 /** An Aico path from an agent's text or a question's link (`/workbench?tab=designs&design=…`): a

@@ -3,13 +3,12 @@ import { useCallback, useEffect, useRef } from 'react'
 import { publishShownSession } from '@/lib/frame/shown-session'
 import { useLocalStorageState } from '@/lib/hooks/use-local-storage-state'
 import {
-  getSlotName,
   getSlotPanelId,
   getSlotSessionId,
   type PaneSlot,
   type TerminalSlot,
 } from '@/lib/utils/slot'
-import { AgentShows } from './AgentShowToast'
+import { sharedLinkTarget } from '@/lib/workbench'
 import { SessionAsk } from './asks/SessionAsk'
 import { useFrame } from './frame/FrameContext'
 import { LeftSide } from './frame/LeftSide'
@@ -67,6 +66,11 @@ function TerminalContentBody({
   handleComposeInput,
   className,
 }: TerminalContentProps) {
+  // A share notice's Open from before shares went quiet still leads to the share.
+  useEffect(() => {
+    const target = sharedLinkTarget(window.location.search)
+    if (target) window.location.replace(target)
+  }, [])
   const [composeOpen, setComposeOpen] = useLocalStorageState(
     COMPOSE_OPEN_KEY,
     false,
@@ -100,12 +104,6 @@ function TerminalContentBody({
   const currentId = shownSlot ? getSlotPanelId(shownSlot) : undefined
   // A chat has no terminal to type keys into.
   const chatShown = shownSlot?.chat === true
-  const sessionName = (session: string) => {
-    const slot = terminalSlots.find((candidate) =>
-      getSlotSessionId(candidate)?.startsWith(session),
-    )
-    return slot ? getSlotName(slot) : null
-  }
   const composeInputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null)
   const focusComposeRef = useRef(false)
   const toggleCompose = useCallback(() => {
@@ -126,7 +124,6 @@ function TerminalContentBody({
         className,
       )}
     >
-      <AgentShows sessionName={sessionName} />
       <LeftSide
         onNewSession={handleOpenTerminalManager}
         rail={

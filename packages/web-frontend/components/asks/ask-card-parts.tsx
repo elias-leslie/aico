@@ -5,10 +5,13 @@ import { clsx } from 'clsx'
 import { Check, Copy } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { openFiles } from '@/lib/files-opener'
 import type { AskReply, AttachedFile, OwnerAsk } from '@/lib/hooks/use-asks'
 import { sessionHostLabel } from '@/lib/machines'
-import { openAppPath, workbenchPathOf } from '@/lib/workbench'
+import {
+  openAppPath,
+  openFilesAnywhere,
+  workbenchPathOf,
+} from '@/lib/workbench'
 import { PlainMarkdown } from '../PlainMarkdown'
 import { AttachedFiles } from './AskAttached'
 import { askTitle, Meta, OpenSession } from './ask-shared'
@@ -187,7 +190,8 @@ export function AskHead({
       <AttachedFiles
         ask={ask}
         onOpen={
-          onOpenFile ?? ((file) => openFiles({ kind: 'path', path: file.path }))
+          onOpenFile ??
+          ((file) => openFilesAnywhere({ kind: 'path', path: file.path }))
         }
       />
       {ask.share && !ask.attached?.length && (
@@ -195,7 +199,10 @@ export function AskHead({
           type="button"
           className="lantern-btn ghost small mb-2"
           onClick={() =>
-            openFiles({ kind: 'shared', showId: ask.share ?? undefined })
+            openFilesAnywhere({
+              kind: 'shared',
+              showId: ask.share ?? undefined,
+            })
           }
         >
           Open what it shared

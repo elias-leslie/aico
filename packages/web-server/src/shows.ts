@@ -1,19 +1,15 @@
-// Agent shares: the default Tether announces `show.requested` with links to
-// files or folders where they already are (or a web link) and keeps the list
-// (GET /v1/shares). The server pushes a fixed-text notice for each
-// new one and hands the UI the list; the files open through the location
-// routes (file-locations.ts). Every field crosses an agent-controlled
-// boundary, so each is checked again here.
+// Agent shares: Tether keeps a list (GET /v1/shares) of links to files or folders
+// where they already are, or web links. A share is filed quietly: nothing pops up
+// or pushes for one; to get the owner to look at something, an agent files an ask.
+// The server hands the UI the list; the files open through the location routes
+// (file-locations.ts). Every field crosses an agent-controlled boundary, so each
+// is checked again here.
 
 import { isAbsolute } from 'node:path'
-import { desktopOff, NO_CHOICES, type NoticeChoices } from '@aico/notify'
 import type { Router } from './http'
 import { tetherCall } from './lifecycle'
-import { type Notice, type NoticeSink, sendNotice } from './notice'
 import { HttpError } from './tether'
 
-/** Ids pushed already, so a replayed event never pushes twice. */
-const PUSHED_KEPT = 500
 const MAX_PATHS = 20
 
 const ID = /^[0-9a-f]{12}$/
@@ -103,81 +99,13 @@ export function validateShare(data: unknown): Share | null {
   return null
 }
 
-/** A path's last part; a shared folder's path ends in `/`. */
-const lastPart = (path: string) =>
-  path
-    .replace(/(?<=.)\/$/, '')
-    .split('/')
-    .pop() || path
-
-/** The push title says what was shared: the share's title (checked plain text) or the first file's name. A URL
- * never goes into the push; a link without a title is just "a link". */
-export function pushTitle(share: Share): string {
-  const what =
-    share.title ??
-    (share.kind === 'files'
-      ? `${lastPart(share.paths[0])}${share.paths.length > 1 ? ` and ${share.paths.length - 1} more` : ''}`
-      : null)
-  return what ? `Shared: ${what}` : 'Shared a link'
-}
-
-/** The notice for a new share: something to look at, not a question. An info notice for the tray that
- * leads to the share; it files no ask, so nothing waits in Needs you (Files > Shared marks it new). */
-export function showNotice(share: Share, publicHost: string | null): Notice {
-  const notice: Notice = {
-    v: 1,
-    source: 'aico',
-    kind: 'info',
-    severity: 'info',
-    title: pushTitle(share),
-    body: 'Open Aico to see it.',
-    key: `show:${share.id}`,
-    push: 'tray',
-  }
-  if (publicHost) {
-    notice.open = `https://${publicHost}/?show=${share.id}`
-    notice.actions = ['open']
-    notice.primary = 'open'
-  }
-  return notice
-}
-
 /** What Shows needs of Tether. */
 interface ShareSource {
   request<T>(method: string, path: string): Promise<{ status: number; body: T }>
 }
 
 export class Shows {
-  private readonly pushed = new Set<string>()
-
-  constructor(
-    private readonly options: {
-      tether: ShareSource
-      publicHost: string | null
-      /** This server's Notifier. */
-      notices: NoticeSink
-      /** The owner's Settings choices: whether the page may pop a share up. */
-      choices?: NoticeChoices
-    },
-  ) {}
-
-  /** The owner turned the shared type's desktop cards off (Settings > Notifications). */
-  toastsOff(): boolean {
-    return desktopOff('shared', this.options.choices ?? NO_CHOICES)
-  }
-
-  /** A `show.requested` event's data from the trusted Tether. */
-  async receive(data: unknown): Promise<void> {
-    const share = validateShare(data)
-    if (!share) {
-      console.log('[aico-web] show rejected')
-      return
-    }
-    if (this.pushed.has(share.id)) return
-    this.pushed.add(share.id)
-    if (this.pushed.size > PUSHED_KEPT) this.pushed.delete(this.pushed.values().next().value ?? '')
-    await sendNotice(this.options.notices, showNotice(share, this.options.publicHost))
-  }
+  constructor(private readonly options: { tether: ShareSource }) {}
 
   /** Take one of this computer's shares out of Tether's list. */
   async remove(id: string): Promise<void> {
@@ -196,15 +124,7 @@ export class Shows {
 }
 
 export function registerShowRoutes(router: Router, shows: Shows): void {
-  router.on('GET', '/api/shows', async (ctx) => {
-    const items = await shows.list()
-    const since = ctx.query.get('since')
-    const index = since ? items.findIndex((item) => item.id === since) : -1
-    // An unknown cursor (an expired share) gets the whole list. `toasts: false`: the owner turned
-    // this type's desktop cards off in Settings, so the page lists shares and pops none up.
-    const list = index >= 0 ? items.slice(index + 1) : items
-    return shows.toastsOff() ? { shows: list, toasts: false } : { shows: list }
-  })
+  router.on('GET', '/api/shows', async () => ({ shows: await shows.list() }))
 
   // Takes an entry out of Files > Shared. A linked host's share is removed on that host.
   router.on('DELETE', '/api/shows/:id', async (ctx) => {

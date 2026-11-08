@@ -195,10 +195,10 @@ describe('loadConfig: uploads, shares and maintenance', () => {
     expect(set.notify.devicesFile).toBe('/x/phones.json')
   })
 
-  it("trusts agent shares only from the owner's default Tether", () => {
+  it("pushes asks only from the owner's default Tether", () => {
     const env = { HOME: '/home/u', XDG_RUNTIME_DIR: '/run/user/7' }
-    expect(loadConfig(env, ID).trustShows).toBe(true)
-    expect(loadConfig({ ...env, TETHER_INSTANCE: 'dev' }, ID).trustShows).toBe(false)
-    expect(loadConfig({ ...env, TETHER_SOCKET: '/tmp/third.sock' }, ID).trustShows).toBe(false)
+    expect(loadConfig(env, ID).ownerTether).toBe(true)
+    expect(loadConfig({ ...env, TETHER_INSTANCE: 'dev' }, ID).ownerTether).toBe(false)
+    expect(loadConfig({ ...env, TETHER_SOCKET: '/tmp/third.sock' }, ID).ownerTether).toBe(false)
   })
 })

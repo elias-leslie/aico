@@ -1232,7 +1232,9 @@ describe('attached files', () => {
     expect(chips).toHaveLength(2)
     expect(chips[0]).toHaveTextContent('plan.md')
     expect(chips[0]).toHaveTextContent('Markdown · 2 KB')
+    expect(chips[0]).toHaveTextContent('Open')
     expect(chips[1]).toHaveTextContent('File moved or deleted')
+    expect(chips[1]).not.toHaveTextContent('Open')
     expect(chips[1]).toBeDisabled()
     // The attached files replace the generic share button.
     expect(within(card).queryByText('Open what it shared')).toBeNull()
@@ -1290,6 +1292,24 @@ describe('attached files', () => {
       root: '/srv/a/my mockup',
       path: 'index.html',
     })
+  })
+
+  it('marks a web page chip with Open too', () => {
+    state.asks = [
+      ask({
+        share: '0123456789ab',
+        attached: [
+          {
+            path: '/srv/a/page.html',
+            name: 'page.html',
+            kind: 'file',
+            size: 10,
+          },
+        ],
+      }),
+    ]
+    render(<NeedsYouPage />)
+    expect(screen.getByTestId('ask-attached')).toHaveTextContent('Open')
   })
 
   it('keeps the share button for a share with no files to list', () => {

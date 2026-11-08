@@ -17,7 +17,6 @@ import {
 import type { Asks } from './asks'
 import type { MaintenanceConfig, UploadConfig } from './config'
 import type { WebStore } from './db'
-import type { Shows } from './shows'
 import { findSession } from './tether'
 import { cleanupOldUploads, type UploadCleanupStats } from './uploads'
 
@@ -77,11 +76,10 @@ export async function reconcileLinks(
 export interface BackgroundDeps {
   tether: TetherClient
   store: WebStore
-  shows: Shows
   /** Absent: asks push nothing (tests, older wiring). */
   asks?: Asks
-  /** Agent shares and asks are taken only from the owner's tether@default. */
-  trustShows: boolean
+  /** Asks push only from the owner's tether@default. */
+  ownerTether: boolean
   uploads: UploadConfig
   maintenance: MaintenanceConfig
   /** The open terminals, which follow the same stream. */
@@ -152,10 +150,8 @@ export class Background {
     const id = typeof data.id === 'string' ? data.id : null
     // Push door: with two Aico doors, only the one whose Tether owns the
     // session pushes. The hub relays a peer's events with `host` set in the data.
-    const pushDoor = this.deps.trustShows && !fromPeer(data)
-    if (event.type === 'show.requested') {
-      if (pushDoor) await this.deps.shows.receive(data)
-    } else if (event.type === 'asks.changed') {
+    const pushDoor = this.deps.ownerTether && !fromPeer(data)
+    if (event.type === 'asks.changed') {
       if (pushDoor) {
         await this.deps.askChanged?.(data).catch((error: unknown) => {
           console.error('[aico-web] Needs you on an ask change failed:', (error as Error).message)

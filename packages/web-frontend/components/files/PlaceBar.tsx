@@ -78,7 +78,6 @@ export function PlaceBar({
   places,
   placesFailed,
   sharedActive,
-  newShares,
   onGo,
   onFolder,
   onShared,
@@ -88,8 +87,6 @@ export function PlaceBar({
   places: FilePlace[] | undefined
   placesFailed: boolean
   sharedActive: boolean
-  /** Shares that came since Shared was last open: a count on its button. */
-  newShares: number
   /** A path the owner typed: a file or a folder, `~` allowed. */
   onGo: (path: string) => void
   /** A folder picked from a shortcut. */
@@ -158,16 +155,6 @@ export function PlaceBar({
           onClick={onShared}
         >
           Shared
-          {newShares > 0 && (
-            <span
-              className="lantern-chip"
-              data-tone="wait"
-              data-testid="shared-new"
-              title={`${newShares} new since you last looked`}
-            >
-              {newShares} new
-            </span>
-          )}
         </button>
         {placesFailed ? (
           <span className="files-chip-note">Shortcuts didn’t load</span>

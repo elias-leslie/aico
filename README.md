@@ -6,7 +6,7 @@ Aico is a Linux companion for people working with terminal AI tools. Your agent 
 
 - Runs Claude Code, Codex, Antigravity, Pi and shells in sessions that survive closed windows, browser restarts and app updates.
 - In the browser and on the phone: the same sessions with a phone keyboard, file browsing, uploads and search, installable as an app.
-- Agents can share files, folders or a link with you (`tether share`): links to where the files are, opened under Files › Shared. File paths in the web terminal are clickable too.
+- Agents can file files, folders or a link for you quietly (`tether share`): links to where the files are, under Files › Shared. When they need you to look at something, they ask, with the file on the question's card. File paths in the web terminal are clickable too.
 
 ## Current scope
 
@@ -37,7 +37,7 @@ The web app keeps its tabs in `~/.local/state/aico/web.db`. Losing it loses layo
 
 ## Runtime, data, and integrations
 
-Agent shares (`show.requested`) are accepted only from your own `tether@default`. A share links to files where they already are; nothing is copied. The web app opens them under **Files › Shared**, and the notice's **Open** goes there. See [agent shares](docs/agent-shares.md).
+A share links to files where they already are; nothing is copied. It is filed quietly under **Files › Shared**, with no notice; an agent that needs you to look at something files an ask with the file on its card. See [agent shares](docs/agent-shares.md).
 
 Provision the exchange root before use, with an `agent/` subtree Tether can write. Create `owner/` yourself. Owner directories must have no group or other write permission. Set `TETHER_EXCHANGE_ROOT` for Tether.
 

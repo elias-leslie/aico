@@ -2,10 +2,19 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Code, File, Folder, Globe, Link, X } from 'lucide-react'
-import { baseName } from '@/components/AgentShowToast'
 import { isHtmlPath, sharedPageUrl } from '@/lib/api/pane-files'
 import { removeShow, useShareList } from '@/lib/hooks/use-agent-shows'
 import { sessionHostLabel } from '@/lib/machines'
+
+/** A path's last part; a shared folder's path ends in `/`. */
+function baseName(path: string): string {
+  return (
+    path
+      .replace(/(?<=.)\/$/, '')
+      .split('/')
+      .pop() || path
+  )
+}
 
 /** When it was shared: the time today, else the day. */
 function sharedWhen(createdAt: string, now = new Date()): string {
