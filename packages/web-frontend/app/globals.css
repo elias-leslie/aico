@@ -3011,6 +3011,11 @@ a.lantern-ask-attached {
     min-height: 44px;
   }
 
+  /* A state chip inside a session row is a label, not a target: the row is the 44px target. */
+  .lantern-row .meta .status-chip {
+    min-height: 0;
+  }
+
   /* The text size steps in the session menu. */
   .lantern-menu-item .lantern-btn[aria-label$="text"] {
     width: 44px !important;
