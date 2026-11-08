@@ -642,7 +642,10 @@ export function rootOperations(context: LifecycleApiContext): RootControlOperati
         },
         resumeSessionId,
         options,
-      )
+      ).finally(() => {
+        // Its agent can't be seen on the conversation yet; a launch deferred by admission renews this.
+        if (resumeSessionId) holdResume(widgetId, resumeSessionId)
+      })
       const latest = getWidget(widgetId)
       // Verify now so `GET /v1/sessions` agrees with `GET /v1/sessions/:id`.
       if (latest) await verifySessionStatus(latest).catch(() => undefined)

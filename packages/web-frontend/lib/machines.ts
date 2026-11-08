@@ -52,7 +52,7 @@ export const STANDBY_TIP =
 
 /** Whether the standby is ready to take over. `ready` only when the machine is up and the rows that
  * keep it ready exist and are all fine; `behind` names the ones that are not. `off` is a machine that
- * is not up, `unknown` is no row to judge it by (Status could not say). */
+ * is off or does not answer, `unknown` is no row to judge it by or a machine Status can't vouch for right now. */
 export interface Standby {
   ready: boolean
   state: 'ready' | 'behind' | 'off' | 'unknown'
@@ -60,7 +60,10 @@ export interface Standby {
 }
 
 function standbyOf(rows: readonly StatusRow[], up: Up): Standby {
-  if (up !== 'on') return { ready: false, state: 'off', behind: [] }
+  if (up === 'off' || up === 'unreachable')
+    return { ready: false, state: 'off', behind: [] }
+  // Starting, late or just changed: it may be up, Status can't vouch for it right now.
+  if (up !== 'on') return { ready: false, state: 'unknown', behind: [] }
   const mine = rows.filter((row) =>
     STANDBY.rows.some((pattern) => pattern.test(row.id)),
   )

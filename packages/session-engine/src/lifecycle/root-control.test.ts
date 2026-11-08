@@ -1477,6 +1477,35 @@ describe('private root workload control', () => {
     expect(ensure.mock.calls).toHaveLength(before)
   })
 
+  it('lets one of two creates on a conversation see the other before it launches', async () => {
+    const before = ensure.mock.calls.length
+    let claimed = false
+    operations.refuse = async () => {
+      // Read before the wait, as a real look at the running agents is.
+      const taken = claimed
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      return taken ? { status: 409, error: 'conversation_open' } : null
+    }
+    ensure.mockImplementationOnce(async (widgetId: string) => {
+      claimed = true
+      running.add(widgetId)
+    })
+    try {
+      const results = await Promise.all(
+        ['race-a', 'race-b'].map((id) =>
+          call('/v1/roots', 'POST', {
+            ...create(id),
+            resumeSessionId: '00000000-0000-4000-8000-0000000000ab',
+          }),
+        ),
+      )
+      expect(results.map((result) => result.status).sort()).toEqual([200, 409])
+      expect(ensure.mock.calls).toHaveLength(before + 1)
+    } finally {
+      delete operations.refuse
+    }
+  })
+
   it('refuses a prompt over its launch limit before reserving anything', async () => {
     const fresh = create('prompt-limit')
     const fits = { ...fresh, initialPrompt: 'x'.repeat(MAX_FRESH_PROMPT_BYTES) }

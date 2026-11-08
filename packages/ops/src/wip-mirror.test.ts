@@ -349,6 +349,21 @@ describe('wip mirror', () => {
       expect(existsSync(join(checkout('app'), 'b.txt'))).toBe(false)
     })
 
+    it('clears the warning once the checkout is sorted, with no new commit here', async () => {
+      const root = repo('app')
+      const d = standbyDeps([{ id: 'app', root }])
+      await mirror(d)
+      writeFileSync(join(checkout('app'), 'a.txt'), 'standby edit\n')
+      writeFileSync(join(root, 'b.txt'), 'b\n')
+      git(root, 'add', '-A')
+      git(root, 'commit', '-qm', 'second')
+      expect((await mirror(d)).problems.map((p) => p.key)).toEqual(['app-standby'])
+      expect((await mirror(d)).problems.map((p) => p.key)).toEqual(['app-standby'])
+      git(checkout('app'), 'checkout', '-q', '--', 'a.txt')
+      expect((await mirror(d)).problems).toEqual([])
+      expect(existsSync(join(checkout('app'), 'b.txt'))).toBe(true)
+    })
+
     it('follows a branch switch here when the checkout has nothing of its own', async () => {
       const root = repo('app')
       const d = standbyDeps([{ id: 'app', root }])

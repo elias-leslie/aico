@@ -38,6 +38,30 @@ def test_inventory_includes_unlinked_pi_codex_and_coordinator_root(monkeypatch):
     assert "private terminal content" not in json.dumps(output)
 
 
+def test_report_over_the_receipt_bound_arrives_whole(tmp_path):
+    message = "word " * 40_000
+    payload = json.dumps({"lastMessage": message}).encode()
+    assert len(payload) > admin.RECEIPT_LIMIT
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, format: str, *args: object) -> None:
+            pass
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+    socket_path = str(tmp_path / "report.sock")
+    collector = admin.Collector("", socket_path, "", admin.time.monotonic() + 10, threading.Event())
+    with socketserver.UnixStreamServer(socket_path, Handler) as server:
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            assert admin.session_report(collector, socket_path, "aabbcc01")["lastMessage"] == message
+        finally:
+            server.shutdown()
+            thread.join()
+
+
 @pytest.mark.parametrize("items", [[session(id="bad")], [session(), session()], [None]])
 def test_inventory_refuses_unqualified_or_duplicate_identity(monkeypatch, capsys, items):
     monkeypatch.setattr(admin.Collector, "receipt", lambda *args, **kwargs: (200, {"items": items}))

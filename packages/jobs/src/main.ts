@@ -65,7 +65,9 @@ async function postRows(webUrl: string, rows: StatusRow[]): Promise<void> {
 }
 
 async function removeRow(webUrl: string, id: string): Promise<void> {
-  await deleteStatusRow(webUrl, id, { timeoutMs: 10_000 })
+  const res = await deleteStatusRow(webUrl, id, { timeoutMs: 10_000 })
+  if (!res.ok && res.status !== 404)
+    throw new Error(`aico-web answered ${res.status}: ${(await res.text()).slice(0, 200)}`)
 }
 
 const time = (ms: number | null) => runTime(ms)

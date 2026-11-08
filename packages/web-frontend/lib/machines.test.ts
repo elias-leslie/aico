@@ -152,6 +152,13 @@ describe('buildMachines', () => {
         [{ name: 'aico', state: 'powered_off', canSleep: false, sessions: 0 }],
       ),
     ).toEqual({ ready: false, state: 'off', behind: [] })
+    // Connecting: it may be fine, but Status can't vouch for it yet, and it isn't off.
+    expect(
+      standbyOf(
+        [...ROWS, sync],
+        [{ name: 'aico', state: 'connecting', canSleep: false, sessions: 0 }],
+      ),
+    ).toEqual({ ready: false, state: 'unknown', behind: [] })
   })
 
   it('lists every machine once, aico (CT 190) with its own session link', () => {

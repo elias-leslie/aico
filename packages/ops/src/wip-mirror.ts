@@ -594,7 +594,11 @@ async function keepStandby(
       continue
     }
     const said = last.slice('standby: '.length)
-    if (said.startsWith('left ')) problems.push(`${root} on ${peer.name} ${said}`)
+    // Asked again next run, so the warning clears once the checkout is sorted, without a new commit here.
+    if (said.startsWith('left ')) {
+      problems.push(`${root} on ${peer.name} ${said}`)
+      continue
+    }
     entry.standby = { ...entry.standby, [peer.name]: print }
   }
   if (ran) {

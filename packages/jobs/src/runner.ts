@@ -72,7 +72,7 @@ export class Runner {
   private readonly unsent = new Map<string, StatusRow>()
   /** What each queued row last said (see rowSignature), so a state another machine changed is sent again. */
   private readonly announced = new Map<string, string>()
-  /** Every kind this process wrote a Status row for, to take the row down when the routine is removed. */
+  /** Every kind this process has known (its row may be from before a restart), to take the row down when the routine is removed. */
   private readonly rowKinds = new Set<string>()
   /** Jobs held elsewhere whose lease host held a lease when last asked: not stood in for until
    * that lease would have run out. */
@@ -111,6 +111,7 @@ export class Runner {
   private sync(): void {
     const { store, machine } = this.options
     for (const job of this.jobs) {
+      this.rowKinds.add(job.kind)
       if ((job.lease_host ?? job.home) !== machine) continue
       store.ensure(job.kind, job.every_min === undefined ? nextRun(job, this.now()) : this.now())
       const state = store.get(job.kind)
@@ -143,7 +144,6 @@ export class Runner {
   async tick(): Promise<void> {
     const { store, machine } = this.options
     this.sync()
-    await this.purge()
     for (const job of this.jobs) {
       if (!(job.workers ?? [job.home]).includes(machine) || this.running.has(job.kind)) continue
       const remote = this.options.authority?.(job) ?? store
@@ -188,6 +188,8 @@ export class Runner {
       this.running.set(job.kind, work)
     }
     await this.flush()
+    // Last: a hung aico-web must not hold up what is due.
+    await this.purge()
   }
 
   /**

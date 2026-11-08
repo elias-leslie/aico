@@ -47,6 +47,8 @@ RECEIPT_LIMIT = 16 * 1024
 CATALOG_LIMIT = 256 * 1024
 COORD_DOC_ROUTE = "/v1/coordination/docs/_coord"
 COORD_DOC_LIMIT = 4 * 1024 * 1024
+REPORT_ROUTE = re.compile(r"/v1/sessions/[^/]+/report")
+REPORT_LIMIT = 2 * 1024 * 1024  # A whole last message: Tether caps it at 200,000 characters.
 # Tether's words for an agent with work still running (session-engine adapters/contract.ts).
 BACKGROUND_SHELLS = "background shells running"
 MAIN_TURN_OVER = "main turn over, background work running"
@@ -752,8 +754,10 @@ class Collector:
     def receipt(self, path: str, route: str, payload: dict | None = None,
                 *, timeout: float = .25, method: str | None = None,
                 headers: dict[str, str] | None = None) -> tuple[int, dict]:
+        path_only = route.split("?")[0]
         limit = (COORD_DOC_LIMIT if route == COORD_DOC_ROUTE
-                 else CATALOG_LIMIT if route.split("?")[0] in ("/v1/roots", "/v1/sessions") else RECEIPT_LIMIT)
+                 else CATALOG_LIMIT if path_only in ("/v1/roots", "/v1/sessions")
+                 else REPORT_LIMIT if REPORT_ROUTE.fullmatch(path_only) else RECEIPT_LIMIT)
         connection = http.client.HTTPConnection("localhost", timeout=min(timeout, self.remaining()))
         client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         connection.sock = client

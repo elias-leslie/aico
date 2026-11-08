@@ -745,7 +745,12 @@ export function createRootHandler(
     }
   }
   // A root on this computer: reserve, launch and describe it.
-  const createLocal = (input: RootCreateRequest, response: ServerResponse) =>
+  const createLocal = (input: RootCreateRequest, response: ServerResponse) => {
+    // Creates on one conversation go one at a time, so the second sees the first's claim and is refused.
+    const create = () => serializeCreate(input, response)
+    return input.resumeSessionId ? serialize(`resume:${input.resumeSessionId}`, create) : create()
+  }
+  const serializeCreate = (input: RootCreateRequest, response: ServerResponse) =>
     serialize(input.requestId, async () => {
       const digest = rootRequestDigest(input)
       let root = getRootRequest(input.requestId)

@@ -40,7 +40,7 @@ export function StandbyTag({
     behind: `Not fully in sync:\n${standby.behind.map((line) => `• ${line}`).join('\n')}`,
     off: 'It is not up, so it can’t take over.',
     unknown:
-      'Status has nothing on its copies yet, so it can’t be called ready.',
+      'Status can’t say how its copies are right now, so it can’t be called ready.',
   }[state]
   return (
     <span

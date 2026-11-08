@@ -330,6 +330,34 @@ describe('the runner', () => {
     expect(removed).toEqual(['jobs/export'])
   })
 
+  it('takes down the row of a removed routine this process never ran', async () => {
+    const clock = { now: new Date(2026, 10, 3, 3, 0).getTime() }
+    const store = new JobStore(':memory:')
+    let jobs: JobDef[] = [{ ...job, home: 'b', lease_host: 'b', workers: ['a', 'b'] }]
+    const removed: string[] = []
+    const runner = new Runner({
+      store,
+      jobs: () => jobs,
+      machine: 'a',
+      holder: 'a:1',
+      authority: () =>
+        ({
+          claim: async () => null,
+          get: async () => null,
+        }) as never,
+      act: async () => ({ state: 'ok', meaning: 'x' }),
+      postRows: async () => {},
+      removeRow: async (id) => void removed.push(id),
+      now: () => clock.now,
+      log: () => {},
+    })
+    runner.start()
+    await runner.tick()
+    jobs = []
+    await runner.tick()
+    expect(removed).toEqual(['jobs/export'])
+  })
+
   it('never runs a job homed on another machine, however overdue', async () => {
     const clock = { now: new Date(2026, 10, 3, 3, 29).getTime() }
     const store = new JobStore(':memory:')
