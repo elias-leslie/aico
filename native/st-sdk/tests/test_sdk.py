@@ -89,6 +89,34 @@ def test_context_installs_before_callback_without_registry_or_chdir(monkeypatch,
                          True, True, tmp_path)]
 
 
+def test_usage_errors_are_plain_lines_naming_the_st_command(monkeypatch, capsys):
+    monkeypatch.delenv('ST_EXTENSION_CONTEXT', raising=False)
+    app = typer.Typer()
+
+    @app.command()
+    def search(query: str):
+        pass
+
+    @app.command()
+    def ready():
+        raise typer.Exit(3)
+
+    cases = {('bogus',): ['Error: No such command', 'Commands: search, ready', 'Help: st jobs --help'],
+             ('serch',): ["Did you mean 'search'?", 'Help: st jobs --help'],
+             ('search', '--nope', 'q'): ['Error: No such option: --nope', 'Usage: st jobs search',
+                                         'Help: st jobs search --help']}
+    for args, expected in cases.items():
+        with pytest.raises(SystemExit) as exc:
+            run_app(app, 'jobs', list(args))
+        err = capsys.readouterr().err
+        assert exc.value.code == 2
+        assert all(part in err for part in expected), err
+        assert '\u256d' not in err and len(err.splitlines()) <= 4, err
+    with pytest.raises(SystemExit) as exc:
+        run_app(app, 'jobs', ['ready'])
+    assert exc.value.code == 3
+
+
 @pytest.mark.parametrize('change', [
     {'contract_version': True}, {'contract_version': 2}, {'extra': 1}, {'cwd': 'relative'},
     {'project_root': 'relative'}, {'project_id': ''}, {'api_base': ''},

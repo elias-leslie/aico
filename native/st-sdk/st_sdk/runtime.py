@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import os
+import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import typer
+import typer.core
 
 from . import config, state
 from .context import OutputContext
@@ -131,14 +134,61 @@ def run_app(
 ) -> Any:
     """Initialize trusted context, then invoke an owner Typer application.
 
-    Typer's ordinary standalone behavior is preserved: usage errors are rendered,
-    callbacks raising ``typer.Exit`` retain their status, and the process exits
-    instead of returning a status that an owner entrypoint could accidentally drop.
+    The process always exits: callbacks raising ``typer.Exit`` keep their status,
+    and usage errors print as short plain lines that name ``st <namespace>`` (exit 2)
+    instead of Typer's boxed panel.
     """
     if not namespace.strip():
         raise ValueError("extension namespace must be non-empty")
     _, output = initialize_context()
-    return app(args=list(args) if args is not None else None, obj=output)
+    errors = _click_exceptions()
+    command = typer.main.get_command(app)
+    try:
+        try:
+            with command.make_context(f"st {namespace}", list(sys.argv[1:] if args is None else args),
+                                      obj=output) as ctx:
+                command.invoke(ctx)
+        except EOFError as exc:
+            raise typer.Abort() from exc
+        except KeyboardInterrupt as exc:
+            raise typer.Exit(130) from exc
+    except typer.Exit as exc:
+        sys.exit(exc.exit_code)
+    except typer.Abort:
+        print("Aborted.", file=sys.stderr)
+        sys.exit(1)
+    except errors.ClickException as exc:
+        if type(exc).__name__ == "NoArgsIsHelpError":
+            # Typer may already have printed the help; Click carries it as the message.
+            if exc.format_message().strip():
+                print(exc.format_message())
+        else:
+            print(_plain_error(exc, errors), file=sys.stderr)
+        sys.exit(exc.exit_code)
+    sys.exit(0)
+
+
+def _click_exceptions() -> Any:
+    """Return the click exceptions module Typer uses (Typer 0.27+ vendors its own copy)."""
+    vendored = getattr(typer.core, "_click", None)
+    if vendored is not None:
+        return vendored.exceptions
+    return importlib.import_module("click.exceptions")
+
+
+def _plain_error(exc: Any, errors: Any) -> str:
+    """Return a usage error as a few plain lines: the problem, the usage, where help is."""
+    lines = [f"Error: {exc.format_message()}"]
+    ctx = getattr(exc, "ctx", None) if isinstance(exc, errors.UsageError) else None
+    if ctx is not None:
+        lines.append(ctx.get_usage())
+        list_commands = getattr(ctx.command, "list_commands", None)
+        if callable(list_commands) and "No such command" in lines[0] and "Did you mean" not in lines[0]:
+            names = [name for name in list_commands(ctx)
+                     if not getattr(ctx.command.get_command(ctx, name), "hidden", False)]
+            lines.append(f"Commands: {', '.join(names)}")
+        lines.append(f"Help: {ctx.command_path} --help")
+    return "\n".join(lines)
 
 
 def _collect_help(
