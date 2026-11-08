@@ -119,7 +119,7 @@ function Source({ group, machine }: { group: BackupGroup; machine: boolean }) {
         <Chevron className="h-3.5 w-3.5" strokeWidth={1.7} aria-hidden="true" />
         <span className={own.sourceName}>{group.name}</span>
         <span className={`status-chip ${CHIP[group.state] ?? 'late'}`}>
-          {copyWord({ state: group.state })}
+          {copyWord({ state: group.state, gone: group.retired })}
         </span>
       </button>
       {open && (

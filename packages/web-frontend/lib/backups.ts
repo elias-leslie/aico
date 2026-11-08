@@ -155,11 +155,16 @@ export const refreshing = (
   row: Pick<BackupEntry, 'state' | 'running'>,
 ): boolean => Boolean(row.running) && row.state === 'ok'
 
-/** One copy's state in a word: "Current", "Copying…", "Needs a fresh copy". */
+/** One copy's state in a word: "Current", "Copying…", "Needs a fresh copy". Off is Archived only
+ * when the source is gone; otherwise its machine is off. */
 export const copyWord = (
-  row: Pick<BackupEntry, 'state' | 'running'>,
+  row: Pick<BackupEntry, 'state' | 'running' | 'gone'>,
 ): string =>
-  refreshing(row) ? 'Copying…' : (COPY_WORD[row.state] ?? 'Needs a fresh copy')
+  refreshing(row)
+    ? 'Copying…'
+    : row.state === 'off' && !row.gone
+      ? 'Machine off'
+      : (COPY_WORD[row.state] ?? 'Needs a fresh copy')
 
 /** The destinations Back up now can start a copy to: those with a live (not archived) copy. */
 export function runnableTargets(

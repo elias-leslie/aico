@@ -98,6 +98,14 @@ describe('GlanceBackups', () => {
     expect(screen.getByText('oldest 38 h, late after 8 h')).toBeVisible()
   })
 
+  it('a source on a machine that is off says so, not Archived', () => {
+    give([entry({ state: 'off' })])
+    view()
+    fireEvent.click(screen.getByRole('button', { name: /machine that is off/ }))
+    expect(screen.getByText('Machine off')).toBeVisible()
+    expect(screen.queryByText('Archived')).toBeNull()
+  })
+
   it('a failed copy being retried shows one state and no next time', () => {
     give([
       entry({

@@ -130,6 +130,7 @@ export function QuotaMeter({ icon = false }: { icon?: boolean }) {
             }}
           >
             {meter.text}
+            {!icon && meter.low !== null ? ' left' : ''}
           </span>
         </>
       }

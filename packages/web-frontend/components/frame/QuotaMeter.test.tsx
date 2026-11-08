@@ -55,7 +55,7 @@ describe('QuotaMeter', () => {
       provider('codex', 'Codex', 12),
     ])
     view()
-    expect(screen.getByTestId('quota-meter').textContent).toBe('12%')
+    expect(screen.getByTestId('quota-meter').textContent).toBe('12% left')
   })
 
   it('reads the lowest among subscriptions that still have quota, and flags one used up', () => {
@@ -65,7 +65,7 @@ describe('QuotaMeter', () => {
     ])
     view()
     const meter = screen.getByTestId('quota-meter')
-    expect(meter.textContent).toBe('69%')
+    expect(meter.textContent).toBe('69% left')
     expect(meter.getAttribute('aria-label')).toMatch(
       /^Quota: OpenCode Go used up/,
     )
