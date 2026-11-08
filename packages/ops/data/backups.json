@@ -89,6 +89,7 @@
     "ownerUnreadMinutes": 30,
     "runReportSeconds": 300,
     "runStuckHours": 12,
+    "copyFailSettleSeconds": 180,
     "runReportTimeoutSeconds": 60
   },
   "pve": {

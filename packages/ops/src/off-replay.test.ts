@@ -86,7 +86,12 @@ const GOOD = {
   observed: 'ok' as const,
 }
 /** The copy of one source, with restic failing as it does when its capture dies. */
-async function failedCopy(before: GuestPower, now: GuestPower, state = emptyState()) {
+async function failedCopy(
+  before: GuestPower,
+  now: GuestPower,
+  state = emptyState(),
+  later?: GuestPower,
+) {
   state.copies[copyKey(GOOD.source, 'drive')] = GOOD
   let clock = T0
   const rt: Runtime = {
@@ -104,7 +109,15 @@ async function failedCopy(before: GuestPower, now: GuestPower, state = emptyStat
     dataAt: new Date(T0).toISOString(),
     command: ['ssh'],
     filename: 'files-qemu-180.tar.gz',
-    machine: { before, read: async () => now },
+    machine: {
+      before,
+      read: async () => {
+        const reading = now
+        now = later ?? now
+        return reading
+      },
+      ...(later ? { settleSeconds: 0.01 } : {}),
+    },
   })
 }
 /** That copy's row, as Status gets it. */
@@ -153,6 +166,17 @@ describe('the notices that fired because a machine was off', () => {
       expect(row.last_run).toBe(GOOD.dataAt)
       s.store.upsert([row])
       expect(s.titles()).toEqual([])
+    })
+    it('a shutdown under way: the copy fails while it still reads running, then it reads off', async () => {
+      // Live on 2026-11-08: VM 180 mid-copy, guest agent gone at once, Proxmox said running for seconds.
+      const copy = await failedCopy(
+        { state: 'on', uptime: 7200 },
+        { state: 'on', uptime: 7300 },
+        emptyState(),
+        { state: 'off' },
+      )
+      expect(copy.observed).toBe('offline')
+      expect(copy.error).toBeUndefined()
     })
     it('the Proxmox host stops answering mid-copy: the same', async () => {
       const copy = await failedCopy({ state: 'on' }, { state: 'off' })

@@ -34,7 +34,7 @@ export interface BackupJob {
   /** Where the source owner stages its payload on a machine without the usual disk. */
   prepareEnv?: Record<string, string>
   /** The machine this copy reads: how it stood at the start, and how to read it again if the copy fails. */
-  machine?: { before: GuestPower; read: () => Promise<GuestPower> }
+  machine?: { before: GuestPower; read: () => Promise<GuestPower>; settleSeconds?: number }
 }
 /** A machine's power: `off` also when the Proxmox host holding it does not answer at all. */
 export type GuestPower = { state: 'on'; uptime?: number } | { state: 'off' } | { state: 'unknown' }
@@ -171,7 +171,11 @@ export async function appendMachine(rt: Runtime): Promise<BackupJob['machine']> 
   try {
     const ssh = await pveSsh(rt, rt.cfg.pve.backupKey)
     const guest = { vmid: rt.cfg.pve.appendGuest, type: 'lxc' }
-    return { before: await readPower(rt, ssh, guest), read: () => readPower(rt, ssh, guest) }
+    return {
+      before: await readPower(rt, ssh, guest),
+      read: () => readPower(rt, ssh, guest),
+      settleSeconds: rt.cfg.schedule.copyFailSettleSeconds,
+    }
   } catch {
     return undefined
   }
@@ -182,13 +186,31 @@ export async function appendMachine(rt: Runtime): Promise<BackupJob['machine']> 
  * last good copy to the next normal run. A machine that stayed as it was failed for real: restic,
  * Drive, or a read of a stopped disk, which works on a machine that stays off.
  */
+/**
+ * The machine's power once a step on it failed. A shutdown stops the guest agent first, so the step
+ * fails while Proxmox still says running: give that time to show before calling it a real failure.
+ */
+async function settledPower(machine: NonNullable<BackupJob['machine']>): Promise<GuestPower> {
+  const { before, read, settleSeconds = 0 } = machine
+  const look = () => read().catch((): GuestPower => ({ state: 'unknown' }))
+  let now = await look()
+  for (
+    let left = settleSeconds;
+    now.state === 'on' && before.state === 'on' && left > 0;
+    left -= 5
+  ) {
+    await new Promise((resolve) => setTimeout(resolve, Math.min(left, 5) * 1000))
+    now = await look()
+  }
+  return now
+}
 async function failedCopyMachine(
   job: BackupJob,
   seconds: number,
 ): Promise<'off' | 'changed' | null> {
   if (!job.machine) return null
-  const { before, read } = job.machine
-  const now = await read().catch((): GuestPower => ({ state: 'unknown' }))
+  const { before } = job.machine
+  const now = await settledPower(job.machine)
   if (now.state === 'unknown' || before.state === 'unknown') return null
   if (now.state === 'off') return before.state === 'off' ? null : 'off'
   if (before.state === 'off') return 'changed'
@@ -227,10 +249,10 @@ async function proxmoxJob(
   const machine = {
     before: readListed(resources, guestId),
     read: () => readPower(rt, ssh, guestId),
+    settleSeconds: rt.cfg.schedule.copyFailSettleSeconds,
   }
   // A step that fails because the machine just went off isn't a failure either.
-  const wentOff = async () =>
-    (await machine.read().catch((): GuestPower => ({ state: 'unknown' }))).state === 'off'
+  const wentOff = async () => (await settledPower(machine)).state === 'off'
   if (source.id === rt.cfg.remoteSqlite.source) {
     if (machine.before.state === 'off') return offline()
     try {
