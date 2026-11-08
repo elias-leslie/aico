@@ -483,7 +483,6 @@ export interface TrayDeps {
   asks: { list(): Promise<Ask[]>; approvals(): Promise<Approval[] | null> }
   publicHost: string | null
   /** This Aico's name in the shared notification list. */
-  hostName?: string
   choices?: NoticeChoices
   now?: () => number
 }

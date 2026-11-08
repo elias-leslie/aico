@@ -316,7 +316,6 @@ function serve(): void {
     notify: notify.store,
     asks,
     publicHost: config.publicHost,
-    hostName: config.hostName,
     choices: noticeChoices,
   })
   registerNotificationRoutes(api, {
