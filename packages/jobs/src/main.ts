@@ -13,6 +13,7 @@ import { type JobState, JobStore, jobsDbPath } from './leases'
 import { loadJobs, readEither } from './routines'
 import { routinesCommand } from './routines-cli'
 import { jobRow, type LeaseAuthority, Runner } from './runner'
+import { readTimers } from './systemd-timers'
 
 const USAGE = `Usage: aico jobs <command>   (routines: aico routines --help)
   list           each job: its home machine and lease holder, when it runs next, who holds it, how it last went
@@ -21,7 +22,7 @@ const USAGE = `Usage: aico jobs <command>   (routines: aico routines --help)
   routines ...   the owner-facing routines: list, add, remove, pause, resume, run, log (aico routines --help)
   post PATH      POST to aico-web and print the result as JSON (what a POST job's unit runs)
   --machine M    act as machine M (tests and drills on one host)
-Settings: AICO_JOBS_FILE (job list, default data/jobs.json), AICO_JOBS_DB (default jobs.db in
+Settings: AICO_JOBS_FILE (job list, default data/jobs.json), AICO_TIMERS_FILE (systemd timers shown in Routines, default data/systemd-timers.json), AICO_JOBS_DB (default jobs.db in
 AICO_DATA_DIR or ~/.local/state/aico), AICO_WEB_URL (aico-web, for jobs and Status rows).`
 
 const TICK_MS = 5_000
@@ -43,6 +44,7 @@ function settings(env: NodeJS.ProcessEnv) {
   return {
     dataDir,
     jobsFile: env.AICO_JOBS_FILE?.trim() || here('../data/jobs.json'),
+    timersFile: env.AICO_TIMERS_FILE?.trim() || here('../data/systemd-timers.json'),
     dbPath: env.AICO_JOBS_DB?.trim() || jobsDbPath(dataDir),
     webUrl,
     socket:
@@ -118,7 +120,7 @@ export async function main(argv: string[], env = process.env): Promise<number> {
     console.error('aico jobs: --machine needs a name')
     return 2
   }
-  const { dataDir, jobsFile, dbPath, webUrl, socket } = settings(env)
+  const { dataDir, jobsFile, timersFile, dbPath, webUrl, socket } = settings(env)
   const store = new JobStore(dbPath)
   const jobs = loadJobs(jobsFile, store)
   const authority = (job: JobDef) =>
@@ -135,6 +137,7 @@ export async function main(argv: string[], env = process.env): Promise<number> {
       env,
       dataDir,
       either: readEither(jobsFile),
+      timers: readTimers(timersFile),
       postRows: (rows) => postRows(webUrl, rows),
       removeRow: (id) => removeRow(webUrl, id),
     })

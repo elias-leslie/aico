@@ -80,6 +80,12 @@ function lastLine(routine: Routine): string {
   return `Last run ${shortWhen(routine.lastRun)}${where}: ${routine.lastMeaning || 'Finished.'}`
 }
 
+const SOURCE_WORDS: Record<Routine['source'], string> = {
+  'built-in': 'Built in',
+  registered: 'Registered',
+  systemd: 'Systemd timer, read only',
+}
+
 function Row({ routine }: { routine: Routine }) {
   const [open, setOpen] = useState(
     routine.lastState === 'failed' && !routine.paused,
@@ -143,11 +149,14 @@ function Row({ routine }: { routine: Routine }) {
             <span className={styles.tag} title="The project that owns it">
               {routine.project}
             </span>{' '}
-            {routine.source === 'registered' ? 'Registered' : 'Built in'} · runs
-            on {hostsText(routine)}
+            {SOURCE_WORDS[routine.source]} · runs on {hostsText(routine)}
           </p>
-          {routine.command && (
-            <p className={styles.cmd}>{routine.command.join(' ')}</p>
+          {routine.source === 'systemd' ? (
+            <p className={styles.cmd}>{routine.command?.join(' ')}</p>
+          ) : (
+            routine.command && (
+              <p className={styles.cmd}>{routine.command.join(' ')}</p>
+            )
           )}
           {routine.post && <p className={styles.cmd}>POST {routine.post}</p>}
           {log && (
@@ -200,14 +209,16 @@ function Row({ routine }: { routine: Routine }) {
                   ? 'Pausing…'
                   : 'Pause'}
             </button>
-            <button
-              type="button"
-              className="lantern-btn small ghost"
-              disabled={reading}
-              onClick={showLog}
-            >
-              {reading ? 'Reading…' : 'Show log'}
-            </button>
+            {routine.source !== 'systemd' && (
+              <button
+                type="button"
+                className="lantern-btn small ghost"
+                disabled={reading}
+                onClick={showLog}
+              >
+                {reading ? 'Reading…' : 'Show log'}
+              </button>
+            )}
           </div>
         </div>
       )}

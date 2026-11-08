@@ -15,7 +15,8 @@ import { HttpError } from './tether'
 
 export type RoutinesCommand = (args: string[]) => Promise<string>
 
-const KIND = /^[a-z0-9][a-z0-9-]{0,63}$/
+// A routine's kind; a systemd timer's is unit@host (e.g. host-steward-heartbeat@aico).
+const KIND = /^[a-z0-9][a-z0-9.-]{0,95}(?:@[a-z0-9-]{1,63})?$/
 const VERBS = ['run', 'pause', 'resume'] as const
 
 const routinesCommand: RoutinesCommand = (args) =>

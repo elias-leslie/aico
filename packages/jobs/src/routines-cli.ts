@@ -11,10 +11,20 @@ import { type JobDef, resumeAt, schedule } from './jobs'
 import type { JobState, JobStore } from './leases'
 import { type EitherHosts, newRoutine, type RoutineInput } from './routines'
 import { jobRow, type LeaseAuthority } from './runner'
+import {
+  controlTimer,
+  type RunCommand,
+  readTimerStatus,
+  type TimerDef,
+  type TimerStatus,
+  type TimersFile,
+  timerKind,
+  timerLog,
+} from './systemd-timers'
 
 const ROUTINES_USAGE = `Usage: aico routines <command>
   list [--json]      every routine: project, schedule, next run, how it last went
-  add --project P --kind K --what "..." (--at HH:MM | --every MINUTES)
+  add --project P --kind K --what "..." (--at HH:MM [--on DAY] | --every MINUTES)
       (--post /aico/path | --command ARGV...) [--cwd DIR] [--hosts either|this] [--scope user|system] [--lease SECONDS]
                      register a routine; --command takes the rest of the line, so it goes last
   remove KIND        unregister a routine you added (built-in ones live in jobs.json)
@@ -23,6 +33,10 @@ const ROUTINES_USAGE = `Usage: aico routines <command>
   run KIND           run it now; its worker starts it within seconds
   log KIND           the output of its last run
 --at is the local time of the machine it runs on (--hosts either: the zone jobs.json names for the pair).
+--on DAY picks the day for --at: mon (every Monday), 1st-sat (the first Saturday of each month; 1st, 2nd,
+3rd, 4th or last) or day-15 (the 15th of each month, 1 to 28). Without it the routine runs daily.
+Timers that stay in systemd (watchdogs, host jobs) are listed too, read-only: run, pause and resume
+start, disable and enable the timer; their definitions are in packages/jobs/data/systemd-timers.json.
 --hosts either runs it on whichever of the two Aico machines is online (never twice for one slot);
 run add on a machine that can run it: it registers the routine on the other one over the fleet link.
 A failed routine shows in Status and the morning digest; it reaches the phone only if its own
@@ -42,6 +56,10 @@ export interface RoutinesContext {
   dataDir: string
   /** The machines `--hosts either` means (jobs.json). */
   either?: EitherHosts | null
+  /** Timers that stay in systemd and show in the list (data/systemd-timers.json). */
+  timers?: TimersFile | null
+  /** How systemctl commands run (tests give their own). */
+  runCommand?: RunCommand
   /** The lease link to another machine (tests give their own). */
   peer?: (name: string) => Pick<ReturnType<typeof remoteAuthority>, 'register' | 'unregister'>
   /** Sends Status rows to aico-web; failures are the caller's to ignore. */
@@ -55,7 +73,7 @@ export interface RoutineView {
   kind: string
   what: string
   project: string
-  source: 'built-in' | 'registered'
+  source: 'built-in' | 'registered' | 'systemd'
   home: string
   /** Every machine that may run it, and the one that holds its lease. */
   hosts: string[]
@@ -64,6 +82,8 @@ export interface RoutineView {
   leaseHost: string
   schedule: string
   at?: string
+  /** The day `at` runs on (mon, 1st-sat, day-15); absent: daily. */
+  on?: string
   every_min?: number
   scope: 'user' | 'system'
   command?: string[]
@@ -81,6 +101,12 @@ export interface RoutineView {
   /** Why the state could not be read (the lease holder's machine did not answer). */
   unreadable?: string
 }
+
+const timerCtx = (ctx: RoutinesContext) => ({
+  machine: ctx.machine,
+  env: ctx.env,
+  ...(ctx.runCommand ? { run: ctx.runCommand } : {}),
+})
 
 function controlOf(job: JobDef, ctx: RoutinesContext): Control {
   const holder = job.lease_host ?? job.home
@@ -122,6 +148,7 @@ async function viewOf(job: JobDef, ctx: RoutinesContext): Promise<RoutineView> {
     leaseHost: job.lease_host ?? job.home,
     schedule: schedule(job),
     ...(job.at !== undefined ? { at: job.at } : {}),
+    ...(job.on !== undefined ? { on: job.on } : {}),
     ...(job.every_min !== undefined ? { every_min: job.every_min } : {}),
     scope: job.scope ?? 'user',
     ...('command' in job.run ? { command: job.run.command } : { post: job.run.post }),
@@ -135,6 +162,54 @@ async function viewOf(job: JobDef, ctx: RoutinesContext): Promise<RoutineView> {
     lastMeaning: state?.lastMeaning ?? null,
     lastMachine: state?.lastMachine ?? null,
     ...(unreadable ? { unreadable } : {}),
+  }
+}
+
+/** A systemd timer as a routine row: its last result is the service's. */
+function timerView(status: TimerStatus): RoutineView {
+  const { def } = status
+  const failed = status.result !== 'success'
+  const unread =
+    status.unreadable ??
+    (status.installed ? undefined : `${def.unit} is not installed on ${def.host}`)
+  const common = {
+    kind: timerKind(def),
+    what: def.what,
+    project: def.project,
+    source: 'systemd' as const,
+    home: def.host,
+    hosts: [def.host],
+    leaseHost: def.host,
+    schedule: def.schedule,
+    scope: def.scope,
+    command: [def.unit],
+    started: true,
+    lastMachine: def.host,
+  }
+  if (unread)
+    return {
+      ...common,
+      paused: false,
+      running: false,
+      nextRun: null,
+      lastRun: null,
+      lastState: null,
+      lastMeaning: null,
+      unreadable: unread,
+    }
+  const ran = status.last !== null
+  return {
+    ...common,
+    paused: !status.active,
+    running: status.running,
+    nextRun: status.active ? status.next : null,
+    lastRun: status.last,
+    lastState: failed ? 'failed' : ran ? 'ok' : null,
+    lastMeaning: failed
+      ? `Failed (${status.result}${status.exitStatus ? `, exit ${status.exitStatus}` : ''}).`
+      : ran
+        ? 'Finished OK.'
+        : null,
   }
 }
 
@@ -164,6 +239,7 @@ export function parseAdd(args: readonly string[]): RoutineInput {
     'kind',
     'what',
     'at',
+    'on',
     'every',
     'post',
     'cwd',
@@ -180,12 +256,15 @@ export function parseAdd(args: readonly string[]): RoutineInput {
   const lease = values.get('lease')
   if ((values.get('at') === undefined) === (every === undefined))
     throw new Error('give exactly one schedule: --at HH:MM (daily) or --every MINUTES')
+  if (values.has('on') && !values.has('at'))
+    throw new Error('--on needs --at HH:MM (the time of day on that day)')
   if (input.command?.length === 0) throw new Error('--command needs the program and its arguments')
   return {
     kind: values.get('kind') as string,
     project: values.get('project') as string,
     what: values.get('what') as string,
     ...(values.has('at') ? { at: values.get('at') } : {}),
+    ...(values.has('on') ? { on: values.get('on') } : {}),
     ...(every !== undefined ? { every_min: Number(every) } : {}),
     ...(input.command ? { command: input.command } : {}),
     ...(values.has('post') ? { post: values.get('post') } : {}),
@@ -195,6 +274,46 @@ export function parseAdd(args: readonly string[]): RoutineInput {
     ...(values.has('scope') ? { scope: values.get('scope') } : {}),
     ...(lease !== undefined ? { lease_s: Number(lease) } : {}),
   }
+}
+
+/** run, pause, resume, log and remove on a systemd timer row. */
+async function timerCommand(
+  verb: string,
+  timer: TimerDef,
+  file: TimersFile,
+  ctx: RoutinesContext,
+  out: (line: string) => void,
+  err: (line: string) => void,
+): Promise<number> {
+  const kind = timerKind(timer)
+  if (verb === 'remove') {
+    err(
+      `aico routines remove: ${kind} is a systemd timer listed in packages/jobs/data/systemd-timers.json; pause it instead`,
+    )
+    return 2
+  }
+  try {
+    if (verb === 'log') {
+      out((await timerLog(file, timer, timerCtx(ctx))) || `${kind} has logged nothing yet.`)
+      return 0
+    }
+    if (verb !== 'run' && verb !== 'pause' && verb !== 'resume') {
+      err(`aico routines: unknown command '${verb}'\n${ROUTINES_USAGE}`)
+      return 2
+    }
+    await controlTimer(file, timer, verb, timerCtx(ctx))
+  } catch (error) {
+    err(`aico routines ${verb}: ${timer.host} said: ${(error as Error).message}`)
+    return 1
+  }
+  out(
+    verb === 'run'
+      ? `${kind} was started now.`
+      : verb === 'pause'
+        ? `${kind} is paused (its timer is disabled). aico routines resume ${kind} enables it again.`
+        : `${kind} is scheduled again.`,
+  )
+  return 0
 }
 
 export async function routinesCommand(
@@ -210,7 +329,11 @@ export async function routinesCommand(
     return verb ? 0 : 2
   }
   if (verb === 'list') {
-    const views = await Promise.all(ctx.jobs.map((job) => viewOf(job, ctx)))
+    const [jobViews, timerStatuses] = await Promise.all([
+      Promise.all(ctx.jobs.map((job) => viewOf(job, ctx))),
+      ctx.timers ? readTimerStatus(ctx.timers, timerCtx(ctx)) : [],
+    ])
+    const views = [...jobViews, ...timerStatuses.map(timerView)]
     if (args.includes('--json')) out(JSON.stringify(views))
     else
       for (const view of views) {
@@ -271,10 +394,12 @@ export async function routinesCommand(
     return 0
   }
   const kind = args[0]
+  const timer = ctx.timers?.timers.find((candidate) => timerKind(candidate) === kind)
+  if (timer && ctx.timers) return timerCommand(verb, timer, ctx.timers, ctx, out, err)
   const job = ctx.jobs.find((candidate) => candidate.kind === kind)
   if (!job) {
     err(
-      `aico routines ${verb}: no routine '${kind ?? ''}' (aico routines list shows them: ${ctx.jobs.map((j) => j.kind).join(', ')})`,
+      `aico routines ${verb}: no routine '${kind ?? ''}' (aico routines list shows them: ${[...ctx.jobs.map((j) => j.kind), ...(ctx.timers?.timers.map(timerKind) ?? [])].join(', ')})`,
     )
     return 2
   }

@@ -1,0 +1,163 @@
+{
+  "description": "Timers that stay in systemd on purpose and show read-only in Routines (aico routines list). The definition lives in the unit file; this lists which timers appear, their plain schedule and how to reach each host. A host not named here is read where the command runs. exec puts command words in front of every systemctl call (root true: the hop is already root, else system units use sudo -n); fleet reaches the machine over the fleet link as its Aico user. Pause disables the timer, Resume enables it, Run now starts its service.",
+  "hosts": {
+    "davion-sidarli": {
+      "fleet": true
+    },
+    "aico": {
+      "exec": [
+        "ssh",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=5",
+        "davion-gem",
+        "pct",
+        "exec",
+        "190",
+        "--"
+      ],
+      "root": true
+    },
+    "davion-gem": {
+      "exec": ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "davion-gem"],
+      "root": true
+    },
+    "restic-append": {
+      "exec": [
+        "ssh",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=5",
+        "davion-gem",
+        "pct",
+        "exec",
+        "160",
+        "--"
+      ],
+      "root": true
+    }
+  },
+  "timers": [
+    {
+      "unit": "host-steward-rules.timer",
+      "host": "davion-sidarli",
+      "project": "aico",
+      "what": "Host rules check",
+      "schedule": "every minute"
+    },
+    {
+      "unit": "host-steward-heartbeat.timer",
+      "host": "davion-sidarli",
+      "project": "aico",
+      "what": "Host heartbeat to Proxmox",
+      "schedule": "every 5 minutes"
+    },
+    {
+      "unit": "host-steward-fcm-token.timer",
+      "host": "davion-sidarli",
+      "project": "aico",
+      "what": "Phone sender access token refresh",
+      "schedule": "every 20 minutes"
+    },
+    {
+      "unit": "host-steward-check.timer",
+      "host": "davion-sidarli",
+      "project": "aico",
+      "what": "Host checks",
+      "schedule": "every 15 minutes"
+    },
+    {
+      "unit": "host-steward-space-guard.timer",
+      "host": "davion-sidarli",
+      "project": "aico",
+      "what": "Disk space guard",
+      "schedule": "about every 15 minutes"
+    },
+    {
+      "unit": "host-steward-collect-usage.timer",
+      "host": "davion-sidarli",
+      "project": "aico",
+      "what": "Host usage collection",
+      "schedule": "daily at 04:40"
+    },
+    {
+      "unit": "host-steward-housekeeping.timer",
+      "host": "davion-sidarli",
+      "project": "aico",
+      "what": "Host housekeeping (journal, caches, retention)",
+      "schedule": "daily at 05:15"
+    },
+    {
+      "unit": "host-steward-nvme-short-test.timer",
+      "host": "davion-sidarli",
+      "project": "aico",
+      "what": "NVMe short self-test",
+      "schedule": "every Saturday at 03:00"
+    },
+    {
+      "unit": "host-steward-nvme-long-test.timer",
+      "host": "davion-sidarli",
+      "project": "aico",
+      "what": "NVMe long self-test",
+      "schedule": "the first Saturday of each month at 00:30"
+    },
+    {
+      "unit": "host-steward-scrub-root.timer",
+      "host": "davion-sidarli",
+      "project": "aico",
+      "what": "Btrfs scrub of the root disk",
+      "schedule": "the first Sunday of each month at 08:00"
+    },
+    {
+      "unit": "host-steward-scrub-native.timer",
+      "host": "davion-sidarli",
+      "project": "aico",
+      "what": "Btrfs scrub of the native backup disk",
+      "schedule": "the third Sunday of each month at 08:00"
+    },
+    {
+      "unit": "host-steward-heartbeat.timer",
+      "host": "aico",
+      "project": "aico",
+      "what": "Host heartbeat to Proxmox",
+      "schedule": "every 5 minutes"
+    },
+    {
+      "unit": "aico-pve-sender.timer",
+      "host": "davion-gem",
+      "project": "aico",
+      "what": "Phone sender and Proxmox watchdog",
+      "schedule": "every 5 minutes"
+    },
+    {
+      "unit": "aico-pve-trim.timer",
+      "host": "davion-gem",
+      "project": "aico",
+      "what": "Weekly container trim (pve-sender)",
+      "schedule": "Mondays at 00:00"
+    },
+    {
+      "unit": "pct-fstrim.timer",
+      "host": "davion-gem",
+      "project": "aico",
+      "what": "Weekly container trim (pct fstrim)",
+      "schedule": "weekly"
+    },
+    {
+      "unit": "blackbox-snapshot.timer",
+      "host": "davion-gem",
+      "project": "blackbox",
+      "what": "BlackBox vault snapshot",
+      "schedule": "hourly"
+    },
+    {
+      "unit": "restic-append-maintain.timer",
+      "host": "restic-append",
+      "project": "aico",
+      "what": "Backup repository maintenance",
+      "schedule": "Sundays at 05:15 UTC"
+    }
+  ]
+}

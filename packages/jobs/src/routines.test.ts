@@ -175,6 +175,67 @@ describe('aico routines', () => {
     ).not.toBeNull()
   })
 
+  it('registers a weekly or monthly routine, lists it in words and schedules its next day', async () => {
+    const h = harness()
+    expect(await h.run('add', ...ADD, '--at', '06:30', '--on', 'mon', '--command', 'true')).toBe(0)
+    expect(h.lines.join('\n')).toContain('every Monday at 06:30')
+    expect(h.store.routines()[0]).toMatchObject({ at: '06:30', on: 'mon' })
+    expect(
+      await h.run(
+        'add',
+        '--project',
+        'p',
+        '--kind',
+        'scrub',
+        '--what',
+        'Scrub',
+        '--at',
+        '08:00',
+        '--on',
+        '3rd-sun',
+        '--command',
+        'true',
+      ),
+    ).toBe(0)
+    h.lines.length = 0
+    await h.run('list')
+    expect(h.lines.find((l) => l.startsWith('school-check'))).toContain(
+      'school-check  school-check  every Monday at 06:30  (registered)',
+    )
+    expect(h.lines.join('\n')).toContain('the third Sunday of each month at 08:00')
+    h.lines.length = 0
+    await h.run('list', '--json')
+    const views = JSON.parse(h.lines[0] as string) as RoutineView[]
+    expect(views.find((v) => v.kind === 'school-check')).toMatchObject({
+      at: '06:30',
+      on: 'mon',
+      schedule: 'every Monday at 06:30',
+    })
+    // The scheduler picks it up with its next Monday (12:00 Sat 7 Nov: Monday 9 Nov), not tomorrow.
+    const [job] = loadJobs(h.file, h.store).filter((entry) => entry.kind === 'school-check')
+    expect(job).toMatchObject({ on: 'mon' })
+    const next = nextRun(job as JobDef, h.clock.now)
+    expect(new Date(next).getDay()).toBe(1)
+    expect(new Date(next).getTime()).toBeGreaterThan(h.clock.now)
+    expect(new Date(next).getTime() - h.clock.now).toBeLessThan(3 * 86_400_000)
+  })
+
+  it('refuses a day without a time, a bad day, and a day on an interval', async () => {
+    const h = harness()
+    expect(() => parseAdd([...ADD, '--on', 'mon', '--command', 'true'])).toThrow('exactly one')
+    expect(() => parseAdd([...ADD, '--at', '06:30', '--on', 'mon', '--every', '5'])).toThrow(
+      'exactly one',
+    )
+    expect(await h.run('add', ...ADD, '--at', '06:30', '--on', 'monday', '--command', 'true')).toBe(
+      2,
+    )
+    expect(h.errors.join('\n')).toContain('.on')
+    expect(await h.run('add', ...ADD, '--at', '06:30', '--on', 'day-30', '--command', 'true')).toBe(
+      2,
+    )
+    expect(h.store.routines()).toEqual([])
+  })
+
   it('says so for an unknown routine and for one the scheduler has not started', async () => {
     const h = harness()
     expect(await h.run('run', 'nope')).toBe(2)
@@ -424,6 +485,30 @@ describe('a routine that runs on either host', () => {
     store.addRoutine({ ...routine, kind: 'older', tz: undefined })
     const older = loadJobs(file, store).find((entry) => entry.kind === 'older')
     expect(older?.tz).toBe('America/New_York')
+  })
+
+  it('reads a weekly routine in the pair zone on both machines', () => {
+    const zoned = { ...EITHER, tz: 'America/New_York' }
+    const routine = newRoutine(
+      {
+        kind: 'w',
+        project: 'p',
+        what: 'W',
+        at: '06:30',
+        on: 'mon',
+        hosts: 'either',
+        command: ['/bin/true'],
+      },
+      'ws',
+      new Set(),
+      0,
+      zoned,
+    )
+    expect(routine).toMatchObject({ tz: 'America/New_York', on: 'mon' })
+    // Sent to the other machine as data, it keeps its day.
+    const other = new JobStore(':memory:')
+    other.addRoutine(JSON.parse(JSON.stringify(routine)))
+    expect(other.routines()[0]).toMatchObject({ on: 'mon', at: '06:30' })
   })
 
   it('needs the either entry, and refuses --host with it', () => {

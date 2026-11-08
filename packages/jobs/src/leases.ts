@@ -44,6 +44,8 @@ const MIGRATIONS = [
    ALTER TABLE routines ADD COLUMN workers TEXT`,
   // The zone a routine's `at` is read in (the registering machine's).
   `ALTER TABLE routines ADD COLUMN tz TEXT`,
+  // The day a timed routine runs on (weekly, nth weekday of the month, day of the month).
+  `ALTER TABLE routines ADD COLUMN on_day TEXT`,
 ]
 
 export function jobsDbPath(dataDir: string): string {
@@ -91,6 +93,8 @@ export interface Routine {
   /** The machine that runs it; registered on that machine. */
   host: string
   at?: string
+  /** With `at`: mon, 1st-sat, day-15 (see JobDef.on). */
+  on?: string
   every_min?: number
   command?: string[]
   /** A path on aico-web to POST to, as jobs.json's run.post. */
@@ -299,8 +303,8 @@ export class JobStore {
   addRoutine(routine: Routine): void {
     this.db
       .prepare(
-        `INSERT OR REPLACE INTO routines (kind, project, what, host, at, every_min, command, post, cwd, scope, lease_s, created_at, lease_host, workers, tz)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT OR REPLACE INTO routines (kind, project, what, host, at, every_min, command, post, cwd, scope, lease_s, created_at, lease_host, workers, tz, on_day)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         routine.kind,
@@ -318,6 +322,7 @@ export class JobStore {
         routine.lease_host ?? null,
         routine.workers ? JSON.stringify(routine.workers) : null,
         routine.tz ?? null,
+        routine.on ?? null,
       )
   }
 
@@ -342,6 +347,7 @@ export class JobStore {
       ...(row.lease_host !== null ? { lease_host: row.lease_host as string } : {}),
       ...(row.workers !== null ? { workers: JSON.parse(row.workers as string) as string[] } : {}),
       ...(row.tz !== null ? { tz: row.tz as string } : {}),
+      ...(row.on_day !== null ? { on: row.on_day as string } : {}),
       scope: row.scope as Routine['scope'],
       lease_s: row.lease_s as number,
       created_at: row.created_at as number,

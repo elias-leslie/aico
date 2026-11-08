@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import type { StatusRow } from '@aico/status'
 import { describe, expect, it, vi } from 'vitest'
 import { answerResult, commandJob, postJob } from './act'
-import { type JobDef, nextAt, nextRun, parseJobs, readJobs } from './jobs'
+import { type JobDef, nextAt, nextRun, parseJobs, readJobs, schedule } from './jobs'
 import { JobStore, StaleLease } from './leases'
 import { main } from './main'
 import { jobRow, Runner } from './runner'
@@ -75,6 +75,101 @@ describe('the schedule', () => {
     expect(nextRun({ at: '16:30', tz: 'UTC' }, Date.UTC(2026, 10, 7, 10, 0))).toBe(
       Date.UTC(2026, 10, 7, 16, 30),
     )
+  })
+
+  describe('weekly and monthly', () => {
+    const ny = 'America/New_York'
+    const at = (on: string, time: string, after: number) => nextAt(time, after, ny, on)
+
+    it('runs on a weekday at a time, once per week', () => {
+      // Sat 7 Nov 2026 noon EST: the next Monday 06:30 EST is 11:30 UTC.
+      const sat = Date.UTC(2026, 10, 7, 17, 0)
+      expect(at('mon', '06:30', sat)).toBe(Date.UTC(2026, 10, 9, 11, 30))
+      expect(at('mon', '06:30', Date.UTC(2026, 10, 9, 11, 30))).toBe(Date.UTC(2026, 10, 16, 11, 30))
+      expect(at('mon', '06:30', Date.UTC(2026, 10, 9, 11, 29))).toBe(Date.UTC(2026, 10, 9, 11, 30))
+    })
+
+    it('runs on the nth weekday of the month, and the last one', () => {
+      // First Saturday 00:30: 7 Nov 2026 (05:30 UTC), then 5 Dec.
+      expect(at('1st-sat', '00:30', Date.UTC(2026, 10, 1, 0, 0))).toBe(Date.UTC(2026, 10, 7, 5, 30))
+      expect(at('1st-sat', '00:30', Date.UTC(2026, 10, 7, 5, 30))).toBe(
+        Date.UTC(2026, 11, 5, 5, 30),
+      )
+      // Third Sunday 08:00: 15 Nov, then 20 Dec. The 8th is a second Sunday, the 22nd a fourth.
+      expect(at('3rd-sun', '08:00', Date.UTC(2026, 10, 1, 0, 0))).toBe(
+        Date.UTC(2026, 10, 15, 13, 0),
+      )
+      expect(at('3rd-sun', '08:00', Date.UTC(2026, 10, 15, 13, 0))).toBe(
+        Date.UTC(2026, 11, 20, 13, 0),
+      )
+      expect(at('last-fri', '09:00', Date.UTC(2026, 10, 1, 0, 0))).toBe(
+        Date.UTC(2026, 10, 27, 14, 0),
+      )
+      expect(at('4th-thu', '09:00', Date.UTC(2026, 10, 1, 0, 0))).toBe(
+        Date.UTC(2026, 10, 26, 14, 0),
+      )
+    })
+
+    it('runs on a day of the month, rolling over the year', () => {
+      expect(at('day-15', '08:00', Date.UTC(2026, 10, 1, 0, 0))).toBe(Date.UTC(2026, 10, 15, 13, 0))
+      expect(at('day-15', '08:00', Date.UTC(2026, 11, 20, 0, 0))).toBe(Date.UTC(2027, 0, 15, 13, 0))
+      expect(at('day-28', '08:00', Date.UTC(2027, 1, 1, 0, 0))).toBe(Date.UTC(2027, 1, 28, 13, 0))
+    })
+
+    it('keeps the wall-clock time across a daylight-saving change', () => {
+      // Clocks went forward on Sun 8 Mar 2026: Monday 06:30 is 11:30 UTC before and 10:30 after.
+      expect(at('mon', '06:30', Date.UTC(2026, 2, 2, 12, 0))).toBe(Date.UTC(2026, 2, 9, 10, 30))
+      expect(at('mon', '06:30', Date.UTC(2026, 1, 20, 0, 0))).toBe(Date.UTC(2026, 1, 23, 11, 30))
+      // Clocks went back on Sun 1 Nov: the first Sunday that month is that day, at EST.
+      expect(at('1st-sun', '08:00', Date.UTC(2026, 9, 5, 0, 0))).toBe(Date.UTC(2026, 10, 1, 13, 0))
+      expect(at('mon', '06:30', Date.UTC(2026, 10, 1, 12, 0))).toBe(Date.UTC(2026, 10, 2, 11, 30))
+      // A time the clock skips runs once, an hour later by the new clock (02:30 does not exist).
+      expect(at('sun', '02:30', Date.UTC(2026, 2, 7, 12, 0))).toBe(Date.UTC(2026, 2, 8, 7, 30))
+      expect(at('sun', '02:30', Date.UTC(2026, 2, 8, 7, 30))).toBe(Date.UTC(2026, 2, 15, 6, 30))
+      // A time that happens twice (01:30 on 1 Nov) runs at the first.
+      expect(at('sun', '01:30', Date.UTC(2026, 9, 25, 12, 0))).toBe(Date.UTC(2026, 10, 1, 5, 30))
+    })
+
+    it('reads the day in the machine zone when none is given, and in the given zone otherwise', () => {
+      const t = nextRun({ at: '06:30', on: 'mon', tz: 'UTC' }, Date.UTC(2026, 10, 7, 17, 0))
+      expect(t).toBe(Date.UTC(2026, 10, 9, 6, 30))
+      // Late Sunday evening in New York is already Monday in UTC.
+      expect(nextRun({ at: '01:00', on: 'mon', tz: 'UTC' }, Date.UTC(2026, 10, 9, 0, 30))).toBe(
+        Date.UTC(2026, 10, 9, 1, 0),
+      )
+      expect(nextRun({ at: '01:00', on: 'mon', tz: ny }, Date.UTC(2026, 10, 9, 0, 30))).toBe(
+        Date.UTC(2026, 10, 9, 6, 0),
+      )
+      const local = nextRun({ at: '06:30', on: 'mon' }, new Date(2026, 10, 7, 12, 0).getTime())
+      expect(new Date(local).getDay()).toBe(1)
+      expect(new Date(local).getHours()).toBe(6)
+    })
+
+    it('says it in words, and refuses a day it does not know', () => {
+      expect(schedule({ at: '06:30', on: 'mon' })).toBe('every Monday at 06:30')
+      expect(schedule({ at: '00:30', on: '1st-sat' })).toBe(
+        'the first Saturday of each month at 00:30',
+      )
+      expect(schedule({ at: '08:00', on: 'last-sun' })).toBe(
+        'the last Sunday of each month at 08:00',
+      )
+      expect(schedule({ at: '08:00', on: 'day-1' })).toBe('on the 1st of each month at 08:00')
+      expect(schedule({ at: '08:00', on: 'day-22' })).toBe('on the 22nd of each month at 08:00')
+      expect(schedule({ at: '08:00' })).toBe('daily at 08:00')
+      const base = {
+        kind: 'w',
+        what: 'W',
+        project: 'aico',
+        home: 'a',
+        lease_s: 60,
+        run: { command: ['true'] },
+      }
+      const [job] = parseJobs({ jobs: [{ ...base, at: '06:30', on: 'mon' }] })
+      expect(job).toMatchObject({ at: '06:30', on: 'mon' })
+      for (const on of ['monday', '5th-sat', 'day-0', 'day-29', 'day-', 'sat-1st'])
+        expect(() => parseJobs({ jobs: [{ ...base, at: '06:30', on }] })).toThrow('jobs[0].on')
+      expect(() => parseJobs({ jobs: [{ ...base, on: 'mon', every_min: 5 }] })).toThrow('needs at')
+    })
   })
 
   it('repeats every_min minutes, and a job has one of at or every_min', () => {

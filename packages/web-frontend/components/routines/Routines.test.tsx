@@ -146,6 +146,58 @@ describe('Routines', () => {
     )
   })
 
+  it('lists a weekly routine in words and a systemd timer read only, with no log to show', async () => {
+    list = [
+      routine({
+        kind: 'proveout',
+        what: 'Weekly prove-out',
+        schedule: 'every Monday at 06:30',
+        at: '06:30',
+        on: 'mon',
+      }),
+      routine({
+        kind: 'host-steward-heartbeat@aico',
+        what: 'Host heartbeat to Proxmox',
+        project: 'aico',
+        source: 'systemd',
+        home: 'aico',
+        hosts: ['aico'],
+        schedule: 'every 5 minutes',
+        scope: 'system',
+        command: ['host-steward-heartbeat.timer'],
+        lastState: 'failed',
+        lastMeaning: 'Failed (exit-code, exit 3).',
+      }),
+    ]
+    view()
+    const weekly = await screen.findByTestId('routine-proveout')
+    expect(weekly.textContent).toContain('Every Monday at 06:30 · next')
+    const timer = screen.getByTestId('routine-host-steward-heartbeat@aico')
+    // A failed row opens by itself and wears the failed chip, like any routine.
+    expect(timer.textContent).toContain('Failed')
+    expect(timer.textContent).toContain(
+      'Systemd timer, read only · runs on aico',
+    )
+    expect(timer.textContent).toContain('host-steward-heartbeat.timer')
+    const names = Array.from(timer.querySelectorAll('button')).map(
+      (b) => b.textContent,
+    )
+    expect(names).toContain('Run now')
+    expect(names).toContain('Pause')
+    expect(names).not.toContain('Show log')
+    fireEvent.click(
+      Array.from(timer.querySelectorAll('button')).find(
+        (b) => b.textContent === 'Run now',
+      ) as HTMLElement,
+    )
+    await waitFor(() =>
+      expect(posts).toContainEqual({
+        url: '/api/routines/run',
+        body: { kind: 'host-steward-heartbeat@aico' },
+      }),
+    )
+  })
+
   it('says so when the last run printed nothing', async () => {
     logLines = ['']
     view()

@@ -4,7 +4,7 @@
 
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
-import { type JobDef, KIND, parseJobs, readJobs } from './jobs'
+import { type JobDef, KIND, localZone, parseJobs, readJobs } from './jobs'
 import type { JobStore, Routine } from './leases'
 
 const DEFAULT_LEASE_S = 300
@@ -23,6 +23,7 @@ function routineJob(routine: Routine, either: EitherHosts | null): JobDef {
     ...(routine.lease_host !== undefined ? { lease_host: routine.lease_host } : {}),
     ...(routine.workers !== undefined ? { workers: routine.workers } : {}),
     ...(routine.at !== undefined ? { at: routine.at } : {}),
+    ...(routine.on !== undefined ? { on: routine.on } : {}),
     ...(tz !== undefined ? { tz } : {}),
     ...(routine.every_min !== undefined ? { every_min: routine.every_min } : {}),
     run: routine.post !== undefined ? { post: routine.post } : { command: routine.command ?? [] },
@@ -80,15 +81,14 @@ export function readEither(jobsFile: string): EitherHosts | null {
   return either as EitherHosts
 }
 
-/** The zone this machine's clock runs in (what built-in jobs' `at` means here). */
-const localZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone
-
 export interface RoutineInput {
   kind: string
   project: string
   what: string
   host?: string
   at?: string
+  /** With `at`: weekday (mon), nth weekday of the month (1st-sat) or day of the month (day-15). */
+  on?: string
   every_min?: number
   command?: string[]
   post?: string
@@ -155,6 +155,7 @@ export function newRoutine(
         project: input.project,
         home: host,
         ...(input.at !== undefined ? { at: input.at } : {}),
+        ...(input.on !== undefined ? { on: input.on } : {}),
         ...(input.every_min !== undefined ? { every_min: input.every_min } : {}),
         run: input.post !== undefined ? { post: input.post } : { command: input.command },
         lease_s,
@@ -168,6 +169,7 @@ export function newRoutine(
     what: job.what,
     host,
     ...(job.at !== undefined ? { at: job.at } : {}),
+    ...(job.on !== undefined ? { on: job.on } : {}),
     ...(job.every_min !== undefined ? { every_min: job.every_min } : {}),
     ...('command' in job.run ? { command: job.run.command } : { post: job.run.post }),
     ...(placement ?? {}),

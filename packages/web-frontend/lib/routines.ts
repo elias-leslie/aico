@@ -8,11 +8,15 @@ export interface Routine {
   kind: string
   what: string
   project: string
-  source: 'built-in' | 'registered'
+  /** systemd: a timer that stays in systemd, listed read-only (Run now starts it, Pause disables it). */
+  source: 'built-in' | 'registered' | 'systemd'
   home: string
   /** Every machine that may run it; more than one means whichever is online. */
   hosts: string[]
   schedule: string
+  /** With a time of day: the day it runs on (mon, 1st-sat, day-15); absent: daily. */
+  on?: string
+  at?: string
   scope: 'user' | 'system'
   command?: string[]
   post?: string
