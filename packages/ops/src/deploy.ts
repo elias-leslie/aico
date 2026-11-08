@@ -21,7 +21,6 @@ import {
   linkSync,
   lstatSync,
   mkdirSync,
-  mkdtempSync,
   readdirSync,
   readFileSync,
   readlinkSync,
@@ -32,27 +31,28 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs'
-import { homedir, hostname, tmpdir } from 'node:os'
-import { basename, join } from 'node:path'
-import { signDetached } from '@aico/fleet/releases'
-import { secretsDir } from '@aico/fleet/secrets'
-import { machineId, postStatusRows, type StatusRow } from '@aico/status'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
+import { machineId, postStatusRows } from '@aico/status'
 import ops from '../data/ops.json' with { type: 'json' }
-import { expandHome, type Runner, run as realRun, tail } from './sh'
+import {
+  hookInstallWanted,
+  installedOpsSha,
+  installHook,
+  installOpsBundle,
+  installRootSources,
+  opsInstallWanted,
+  restoreOps,
+  rootInstallWanted,
+} from './deploy-install'
+import { type DeployConfig, type DeployDeps, Refusal, runningSha, touches } from './deploy-model'
+import { expandHome, run as realRun, tail } from './sh'
+
+export * from './deploy-install'
+export * from './deploy-model'
 
 /** st's seam treats this exit as "Aico does not deploy that; run SummitFlow's own code". */
 export const NOT_HANDLED = 3
-
-export class Refusal extends Error {
-  constructor(
-    message: string,
-    readonly code = 1,
-    /** An explicit hold, lock or acceptance refusal: nothing changed, the old release serves. */
-    readonly unchanged = false,
-  ) {
-    super(message)
-  }
-}
 
 export interface Project {
   id: string
@@ -236,8 +236,6 @@ export function selectUnits(project: Project, req: DeployRequest, ctx: SelectCon
 
 // ---- package cones -------------------------------------------------------------------------
 
-export type DeployConfig = typeof ops.deploy
-
 /**
  * The deploy data (unit sources, root and CLI sources, the root install) of the commit being
  * deployed: a deploy runs the previously installed bundle, and its selection should follow the
@@ -319,9 +317,6 @@ export function unitSources(
   return [...new Set(sources)]
 }
 
-export const touches = (paths: string[], sources: string[]) =>
-  paths.some((path) => sources.some((source) => path === source || path.startsWith(`${source}/`)))
-
 /** The packages a unit needs built in the release: its own and the extra package sources. */
 export function unitBuilds(
   unit: string,
@@ -336,37 +331,7 @@ export function unitBuilds(
   ]
 }
 
-/** The release commit a rendered unit file runs, when it runs one of ours. */
-export function runningSha(unitText: string | null, releasesDir: string): string | null {
-  if (!unitText) return null
-  const dir = /^WorkingDirectory=(\S+)/m.exec(unitText)?.[1]
-  if (!dir?.startsWith(`${releasesDir}/`)) return null
-  const sha = dir.slice(releasesDir.length + 1).split('/')[0] ?? ''
-  return /^[0-9a-f]{40}$/.test(sha) ? sha : null
-}
-
 // ---- the run -------------------------------------------------------------------------------
-
-export interface DeployDeps {
-  run: Runner
-  out: (line: string) => void
-  err: (line: string) => void
-  env: NodeJS.ProcessEnv
-  releasesDir: string
-  jobsDir: string
-  systemdDir: string
-  /** HTTP GET status of a loopback URL, or 0 when nothing answered. */
-  probe: (url: string) => Promise<number>
-  sleep: (ms: number) => Promise<void>
-  /** Posts the deploy's Status row (best effort). */
-  report: (row: StatusRow, port: number) => Promise<void>
-  /** The bundle a detached job re-runs. */
-  self: string
-  /** The link to the release whose ops bundle `aico deploy` runs (data/ops.json deploy.installedOps). */
-  opsLink: string
-  /** The paths live processes run from (cwd, exe, command line), so prune keeps their release. */
-  processPaths: () => string[]
-}
 
 /** cwd, exe, command line, open files and mapped files of every live process, read from /proc. */
 export function procPaths(procDir = '/proc'): string[] {
@@ -893,25 +858,15 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
           if (await placed(unit, from, 'serves the page from')) swaps.push(unit)
         }
       // The ops bundle `aico deploy` runs: installed from this commit when its sources changed.
-      const installedOps = installedOpsSha(deps)
       const installOps =
         packages.some((pkg) => pkg.dir === 'ops') &&
-        (!installedOps ||
-          (installedOps !== sha &&
-            (req.rollback ||
-              deps.run('git', ['-C', root, 'merge-base', '--is-ancestor', installedOps, sha])
-                .code === 0) &&
-            (() => {
-              const diff = deps.run('git', ['-C', root, 'diff', '--name-only', installedOps, sha])
-              return (
-                diff.code !== 0 ||
-                touches(diff.out.split('\n').filter(Boolean), [
-                  ...cfg.rootSources,
-                  ...cone(packages, 'ops'),
-                  ...cfg.cliSources,
-                ])
-              )
-            })()))
+        opsInstallWanted(
+          root,
+          sha,
+          [...cfg.rootSources, ...cone(packages, 'ops'), ...cfg.cliSources],
+          req.rollback,
+          deps,
+        )
       const installRoot = rootInstallWanted(root, sha, cfg, req.rollback, deps)
       const hookTree = hookInstallWanted(root, sha, cfg, req.rollback, deps)
       if (!restart.length && !swaps.length && !installOps && !installRoot && !hookTree) {
@@ -919,6 +874,16 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
         deps.out(`[deploy] ${message.toLowerCase()}`)
         await finish('succeeded', message)
         return 0
+      }
+      // What an install after the swap reports: the units are already live, so say so.
+      const installed = async (what: string, problem: string | null) => {
+        if (!problem) return
+        const done = restart.length ? `${restart.join(', ')} deployed; ` : ''
+        await fail(
+          `Deploy of ${sha.slice(0, 10)}: ${done}the ${what} failed (${problem})`,
+          new Refusal(`The ${what} failed: ${problem}`),
+          restart,
+        )
       }
       if (restart.length) deps.out(`[deploy] restarting ${restart.join(', ')}`)
       if (swaps.length)
@@ -987,34 +952,16 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
         swapped = swaps
       }
       if (installOps && !restart.length && release) installOpsBundle(deps, release)
-      if (installRoot) {
-        const problem = installRootSources(root, sha, cfg, deps)
-        if (problem) {
-          const done = restart.length ? `${restart.join(', ')} deployed; ` : ''
-          await fail(
-            `Deploy of ${sha.slice(0, 10)}: ${done}the host-steward root install failed (${problem})`,
-            new Refusal(`The host-steward root install failed: ${problem}`),
-            restart,
-          )
-        }
-      }
+      if (installRoot)
+        await installed('host-steward root install', installRootSources(root, sha, cfg, deps))
       if (release) {
         // The newest accepted release: the one a peer is sent (scripts/peer-release.sh).
         writeFileSync(join(deps.releasesDir, ACCEPTED), `${sha}\n`)
         pruneReleases(deps, release, cfg)
       }
       // Last: the release is live and accepted whether or not this machine can build the hook.
-      if (hookTree) {
-        const problem = installHook(root, sha, hookTree, cfg, deps)
-        if (problem) {
-          const done = restart.length ? `${restart.join(', ')} deployed; ` : ''
-          await fail(
-            `Deploy of ${sha.slice(0, 10)}: ${done}the aico-hook install failed (${problem})`,
-            new Refusal(`The aico-hook install failed: ${problem}`),
-            restart,
-          )
-        }
-      }
+      if (hookTree)
+        await installed('aico-hook install', installHook(root, sha, hookTree, cfg, deps))
       const seconds = Math.round((Date.now() - started) / 1000)
       const parts = [
         ...restart.map((unit) => unit.replace(/\.service$/, '')),
@@ -1433,53 +1380,6 @@ async function swapUnits(
 
 // ---- the installed ops bundle ----------------------------------------------------------------
 
-const opsBundle = (release: string) => join(release, 'packages/ops/dist/aico-ops.mjs')
-function restoreOps(previous: string | null | undefined, deps: DeployDeps) {
-  if (previous === undefined) return
-  if (previous === null) rmSync(deps.opsLink, { force: true })
-  else installOpsBundle(deps, previous)
-}
-
-/** The release commit whose ops bundle `aico deploy` runs, or null before the first install. */
-export function installedOpsSha(deps: DeployDeps): string | null {
-  try {
-    const target = realpathSync(deps.opsLink)
-    return runningSha(`WorkingDirectory=${target}\n`, realpathSync(deps.releasesDir))
-  } catch {
-    return null
-  }
-}
-
-/** Point the link at this release's ops bundle (atomically: a new link renamed over the old). */
-export function installOpsBundle(deps: DeployDeps, release: string) {
-  if (!existsSync(opsBundle(release)))
-    throw new Refusal(`The release has no ops bundle at ${opsBundle(release)}`)
-  if (
-    existsSync(join(release, 'packages/cli/package.json')) &&
-    !existsSync(join(release, 'packages/cli/dist/aico-cli.mjs'))
-  )
-    throw new Refusal('The release has no CLI bundle')
-  // st service and st skills run from this release's own Python env; set up here, the first call
-  // after a deploy would wait in the shared heavy lane (behind a long build) just to install it.
-  const tools = join(release, 'native/service-tools')
-  if (existsSync(join(tools, 'uv.lock')) && !existsSync(join(tools, '.venv/bin/python'))) {
-    deps.out('[deploy] preparing st service tools')
-    const sync = deps.run(
-      'nice',
-      ['-n', '10', 'uv', 'sync', '--quiet', '--locked', '--no-dev', '--directory', tools],
-      { cwd: tools, env: deps.env },
-    )
-    if (sync.code !== 0)
-      deps.out(`[deploy] st service tools set up on first use instead: ${tail(sync, 2)}`)
-  }
-  const temporary = `${deps.opsLink}.${process.pid}.tmp`
-  rmSync(temporary, { force: true })
-  mkdirSync(join(deps.opsLink, '..'), { recursive: true })
-  symlinkSync(release, temporary)
-  renameSync(temporary, deps.opsLink)
-  deps.out(`[deploy] aico deploy now runs from ${release.split('/').at(-1)?.slice(0, 12)}`)
-}
-
 // ---- the served frontend -------------------------------------------------------------------
 
 /**
@@ -1637,217 +1537,6 @@ async function swapFrontends(
 }
 
 // ---- the root install (host-steward) ---------------------------------------------------------
-
-/** The commit the installed root sources came from (the signed installer's receipt), or null. */
-export function installedRootSha(receipt: string): string | null {
-  try {
-    const sha = (JSON.parse(readFileSync(receipt, 'utf8')) as { sha?: unknown }).sha
-    return typeof sha === 'string' && /^[0-9a-f]{40}$/.test(sha) ? sha : null
-  } catch {
-    return null
-  }
-}
-
-/**
- * Whether this deploy installs the root sources: the machine has the signed installer, the commit
- * has the sources, and they changed since the installed commit (unknown: install). An installed
- * commit this one does not contain is left alone, as units are, unless this is a rollback.
- */
-export function rootInstallWanted(
-  root: string,
-  sha: string,
-  cfg: DeployConfig,
-  rollback: boolean,
-  deps: DeployDeps,
-): boolean {
-  const spec = cfg.rootInstall
-  if (!spec?.sources?.length) return false
-  const listed = deps.run('git', ['-C', root, 'ls-tree', '--name-only', sha, '--', ...spec.sources])
-  if (listed.code !== 0 || !listed.out.trim()) return false
-  if (!existsSync(spec.installer)) {
-    deps.out(
-      `[deploy] host-steward root install skipped: this machine has no signed installer at ${spec.installer}`,
-    )
-    return false
-  }
-  const installed = installedRootSha(spec.receipt)
-  if (!installed) {
-    deps.out('[deploy] host-steward root install: the installed commit is unknown; installing')
-    return true
-  }
-  if (installed === sha) return false
-  const git = (...args: string[]) => deps.run('git', ['-C', root, ...args])
-  if (!rollback && git('merge-base', '--is-ancestor', installed, sha).code !== 0) {
-    if (git('merge-base', '--is-ancestor', sha, installed).code === 0)
-      deps.out(
-        `[deploy] host-steward root install skipped: it runs ${installed.slice(0, 12)}, which contains ${sha.slice(0, 12)}`,
-      )
-    else
-      deps.out(
-        `[deploy] host-steward root install skipped: it runs ${installed.slice(0, 12)}, which ${sha.slice(0, 12)} does not contain; deploy a newer commit or pass --rollback`,
-      )
-    return false
-  }
-  const diff = git('diff', '--name-only', installed, sha, '--', ...spec.sources)
-  if (diff.code === 0 && !diff.out.trim()) {
-    deps.out(
-      `[deploy] host-steward root install skipped: unchanged since ${installed.slice(0, 12)}`,
-    )
-    return false
-  }
-  return true
-}
-
-/**
- * Install the commit's root sources through the signed-update path: a git archive of them, signed
- * with the update key, handed to the installed `install-signed.py` as root, which verifies it
- * against the pinned public key before running anything from it. Null on success, else the problem.
- */
-export function installRootSources(
-  root: string,
-  sha: string,
-  cfg: DeployConfig,
-  deps: DeployDeps,
-): string | null {
-  const spec = cfg.rootInstall
-  deps.out(`[deploy] installing the host-steward root sources from ${sha.slice(0, 12)}`)
-  const declared = deps.run(
-    'host-steward',
-    [
-      'declare',
-      '--host',
-      hostname(),
-      '--what',
-      spec.declareWhat,
-      '--hours',
-      '1',
-      '--reason',
-      `aico deploy installs host-steward root services and timers from ${sha.slice(0, 12)}`,
-    ],
-    { env: deps.env },
-  )
-  if (declared.code !== 0)
-    deps.err(
-      `[deploy] WARNING could not declare the host change to the host check (${tail(declared, 1)}); installing anyway`,
-    )
-  const dir = mkdtempSync(join(tmpdir(), 'aico-root-install-'))
-  try {
-    const archive = join(dir, 'update.tar')
-    const signature = join(dir, 'update.sig')
-    const made = deps.run('git', [
-      '-C',
-      root,
-      'archive',
-      '--format=tar',
-      '-o',
-      archive,
-      sha,
-      '--',
-      ...spec.sources,
-    ])
-    if (made.code !== 0) return `git archive failed: ${tail(made, 1)}`
-    try {
-      writeFileSync(
-        signature,
-        signDetached(readFileSync(archive), join(secretsDir(deps.env), spec.signingKey)),
-      )
-    } catch (error) {
-      return `signing failed: ${(error as Error).message}`
-    }
-    const result = deps.run('sudo', ['-n', spec.installer, archive, signature], { env: deps.env })
-    if (result.code !== 0) return tail(result, 2) || `the installer exited ${result.code}`
-    const recorded = installedRootSha(spec.receipt)
-    deps.out(
-      recorded === sha
-        ? `[deploy] host-steward root sources installed from ${sha.slice(0, 12)}`
-        : `[deploy] host-steward root sources installed; the installer recorded no commit (an older installer), so the next deploy installs again`,
-    )
-    return null
-  } finally {
-    rmSync(dir, { recursive: true, force: true })
-  }
-}
-
-/**
- * The commit's aico-hook tree id when the installed hook (the `current` link install.sh keeps) is
- * another build; null when the commit does not declare the hook install itself (an older
- * install.sh cannot run from an archive), the hook already matches, or the installed build is a
- * newer commit's (left alone unless this is a rollback, as units are).
- */
-export function hookInstallWanted(
-  root: string,
-  sha: string,
-  cfg: DeployConfig,
-  rollback: boolean,
-  deps: DeployDeps,
-): string | null {
-  const spec = cfg.hookInstall
-  if (!spec?.source) return null
-  const own = deps.run('git', ['-C', root, 'show', `${sha}:packages/ops/data/ops.json`])
-  try {
-    if (own.code !== 0 || !JSON.parse(own.out).deploy?.hookInstall) return null
-  } catch {
-    return null
-  }
-  const git = (...args: string[]) => deps.run('git', ['-C', root, ...args])
-  const tree = git('rev-parse', '--short=12', `${sha}:${spec.source}`).out.trim()
-  if (!tree) return null
-  let current = ''
-  try {
-    current = basename(readlinkSync(join(expandHome(spec.dir), 'current')))
-  } catch {}
-  if (current === tree) return null
-  if (!rollback && current) {
-    const newer = git('rev-list', `${sha}..HEAD`, '--', spec.source).out.split('\n').filter(Boolean)
-    if (
-      newer.some(
-        (commit) =>
-          git('rev-parse', '--short=12', `${commit}:${spec.source}`).out.trim() === current,
-      )
-    ) {
-      deps.out(`[deploy] aico-hook install skipped: it runs ${current}, a newer commit's build`)
-      return null
-    }
-  }
-  return tree
-}
-
-/** Build and install the commit's aico-hook with its own install.sh. Null on success, else the problem. */
-export function installHook(
-  root: string,
-  sha: string,
-  tree: string,
-  cfg: DeployConfig,
-  deps: DeployDeps,
-): string | null {
-  const spec = cfg.hookInstall
-  deps.out(`[deploy] installing aico-hook ${tree} from ${sha.slice(0, 12)}`)
-  const dir = mkdtempSync(join(tmpdir(), 'aico-hook-install-'))
-  try {
-    const archive = join(dir, 'hook.tar')
-    const made = deps.run('git', [
-      '-C',
-      root,
-      'archive',
-      '--format=tar',
-      '-o',
-      archive,
-      sha,
-      '--',
-      spec.source,
-    ])
-    if (made.code !== 0) return `git archive failed: ${tail(made, 1)}`
-    const unpacked = deps.run('tar', ['-xf', archive, '-C', dir])
-    if (unpacked.code !== 0) return `tar failed: ${tail(unpacked, 1)}`
-    const result = deps.run('bash', [join(dir, spec.source, 'install.sh')], {
-      env: { ...deps.env, AICO_HOOK_REL: tree, AICO_HOOK_BASE: expandHome(spec.dir) },
-    })
-    if (result.code !== 0) return tail(result, 2) || `install.sh exited ${result.code}`
-    return null
-  } finally {
-    rmSync(dir, { recursive: true, force: true })
-  }
-}
 
 /**
  * Keep the newest releases, every one a unit file still runs, every one whose frontend build a link
