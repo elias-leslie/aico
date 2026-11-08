@@ -119,7 +119,11 @@ export function statusDbPath(dataDir: string): string {
 }
 
 /** Told of rows that stayed bad past their window, and of those told before that are well again. */
-export type SustainedHook = (told: { stayed: Sustained[]; recovered: string[]; ended: string[] }) => void
+export type SustainedHook = (told: {
+  stayed: Sustained[]
+  recovered: string[]
+  ended: string[]
+}) => void
 
 export class StatusStore {
   private readonly db: Database
