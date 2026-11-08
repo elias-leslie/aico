@@ -15,7 +15,7 @@ import { homedir } from 'node:os'
 import { basename, delimiter, join } from 'node:path'
 import { maskKnownSecrets } from '@aico/shared/secrets'
 import { completeEnd, edgeHash, fileFacts, readBackward, readForward } from './lines'
-import { READERS, readerFor } from './readers'
+import { READERS, readerFor, readLine } from './readers'
 import { type SearchHit, type SearchRun, searchFile, stopOf } from './search'
 import type {
   Fold,
@@ -414,15 +414,9 @@ export class History {
       while (offset < facts.size) {
         const before = offset
         const { end } = readForward(row.path, offset, SLICE, (line) => {
-          if (!line.text || reader.skip?.(line.text)) return true
-          let record: unknown
-          try {
-            record = JSON.parse(line.text)
-          } catch {
-            return true
-          }
-          if (!record || typeof record !== 'object' || Array.isArray(record)) return true
-          const { fold } = reader.read(record as Record<string, unknown>, state, false)
+          const reading = readLine(reader, line.text, state, false)
+          if (!reading) return true
+          const { fold } = reading
           if (fold.title !== undefined) found.title = fold.title && maskKnownSecrets(fold.title)
           if (fold.prompt) found.prompt ??= maskKnownSecrets(fold.prompt)
           if (fold.doing !== undefined) found.doing = fold.doing && maskKnownSecrets(fold.doing)
@@ -511,16 +505,9 @@ export class History {
       const slice = Math.min(SLICE, budget - spent)
       const before = offset
       const { end } = readForward(file.path, offset, slice, (line) => {
-        if (!line.text || reader.skip?.(line.text)) return true
-        let record: unknown
-        try {
-          record = JSON.parse(line.text)
-        } catch {
-          return true
-        }
-        if (!record || typeof record !== 'object' || Array.isArray(record)) return true
-        const { fold } = reader.read(record as Record<string, unknown>, state, false)
-        applyFold(totals, fold, written)
+        const reading = readLine(reader, line.text, state, false)
+        if (!reading) return true
+        applyFold(totals, reading.fold, written)
         if (!blockedCwd && totals.cwd && this.blocked(totals.cwd)) blockedCwd = true
         return !blockedCwd
       })
@@ -931,17 +918,8 @@ export class History {
     const state = reader.initialState()
     const budget = 32 << 20
     const parse = (text: string, offset: number): SessionEvent[] => {
-      if (!text || reader.skip?.(text)) return []
-      let record: unknown
-      try {
-        record = JSON.parse(text)
-      } catch {
-        return []
-      }
-      if (!record || typeof record !== 'object' || Array.isArray(record)) return []
-      return reader
-        .read(record as Record<string, unknown>, state, true)
-        .events.map((event) => ({ ...event, offset }))
+      const reading = readLine(reader, text, state, true)
+      return reading ? reading.events.map((event) => ({ ...event, offset })) : []
     }
     if (options.from !== undefined) {
       const items: SessionEvent[] = []

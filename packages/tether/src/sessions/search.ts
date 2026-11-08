@@ -4,7 +4,7 @@
 // reader builds is already masked (readers/index.ts), so a hit shows what Recent shows.
 
 import { open } from 'node:fs/promises'
-import { readerFor } from './readers'
+import { readerFor, readLine } from './readers'
 import type { EventKind, EventRole, HistoryTool, Reader } from './types'
 
 /** What one search may spend, shared by all the files it reads. */
@@ -176,16 +176,9 @@ function read(
   keep: number,
   out: { matches: number; hits: SearchHit[] },
 ): void {
-  const text = line.toString('utf8')
-  if (!text || reader.skip?.(text)) return
-  let record: unknown
-  try {
-    record = JSON.parse(text)
-  } catch {
-    return
-  }
-  if (!record || typeof record !== 'object' || Array.isArray(record)) return
-  for (const event of reader.read(record as Record<string, unknown>, state, true).events) {
+  const reading = readLine(reader, line.toString('utf8'), state, true)
+  if (!reading) return
+  for (const event of reading.events) {
     if (!SEARCHED_KINDS.has(event.kind) || !event.text.toLowerCase().includes(needle)) continue
     out.matches += 1
     if (out.hits.length < keep) {

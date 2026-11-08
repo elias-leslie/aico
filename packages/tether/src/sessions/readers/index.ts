@@ -1,5 +1,5 @@
 import { maskKnownSecrets } from '@aico/shared/secrets'
-import type { HistoryTool, Reader } from '../types'
+import type { HistoryTool, Reader, Reading } from '../types'
 import { claudeReader } from './claude'
 import { codexReader } from './codex'
 import { piReader } from './pi'
@@ -27,4 +27,23 @@ export const READERS: Reader[] = [claudeReader, codexReader, piReader].map((read
 
 export function readerFor(tool: string): Reader | undefined {
   return READERS.find((reader) => reader.tool === (tool as HistoryTool))
+}
+
+/** One transcript line through its tool's reader; null for an empty line, one the reader skips,
+ * or one that is not a JSON object. */
+export function readLine<S>(
+  reader: Reader<S>,
+  text: string,
+  state: S,
+  wantEvents: boolean,
+): Reading | null {
+  if (!text || reader.skip?.(text)) return null
+  let record: unknown
+  try {
+    record = JSON.parse(text)
+  } catch {
+    return null
+  }
+  if (!record || typeof record !== 'object' || Array.isArray(record)) return null
+  return reader.read(record as Record<string, unknown>, state, wantEvents)
 }
