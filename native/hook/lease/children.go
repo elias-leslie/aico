@@ -115,9 +115,13 @@ func (h *Hook) UnfinishedChildren() []string {
 		if stat, err := os.Stat(str(child["transcript"])); err == nil {
 			changed = "transcript last write " + age(stamp(stat.ModTime()), time.Now()) + " ago"
 		}
-		out = append(out, fmt.Sprintf("Native child %s (%s) started but has no completion notice; %s. Silence does not prove it ended.", str(child["id"]), str(child["agent_type"]), changed))
+		out = append(out, fmt.Sprintf("- %s (%s): %s", str(child["id"]), str(child["agent_type"]), changed))
 	}
-	return out
+	if len(out) == 0 {
+		return nil
+	}
+	// One block: the caveat once, then a short line per child (a coordinator can have dozens).
+	return []string{"Native children started with no completion notice (silence does not prove one ended):\n" + strings.Join(out, "\n")}
 }
 
 // pruneChildren keeps the list bounded: a finished child goes after finished_child_hours, and any row after

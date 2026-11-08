@@ -28,6 +28,9 @@ func TestNativeBackgroundChildSurvivesRestartAndReportsOnlyTranscriptAge(t *test
 	if len(lines) != 1 || !strings.Contains(lines[0], "child-1") || !strings.Contains(lines[0], "20m") {
 		t.Fatalf("unfinished child not reported: %v", lines)
 	}
+	if want := "\n- child-1 (reviewer): transcript last write 20m ago"; !strings.HasPrefix(lines[0], "Native children started with no completion notice") || !strings.HasSuffix(lines[0], want) {
+		t.Fatalf("one caveat, then a short line per child: %q", lines[0])
+	}
 	replacement := agent(sidB, "SessionStart")
 	replacement.ID.env["AICO_WIDGET_ID"] = "abcd1234"
 	if len(replacement.UnfinishedChildren()) != 1 {
