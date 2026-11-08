@@ -322,7 +322,9 @@ scratch_max_per_run = 40
 scratch_holds = ".scratch-holds"
 # A sweep frees nothing while a scratch snapshot still holds the entry: its space comes back when they age out.
 scratch_snapshots = "/srv/workspaces/.snapshots/scratch/projects/scratch"
-scratch_keep = ["models", "cache", "tmp", "briefs", "latest", "aico-backups", "restic*", "st-*", "passive*", "traffic*", "*redteam*", ".*"]
+# Home folders whose cache links point into scratch; a link left dangling gets its folder back, empty.
+scratch_link_folders = [".", ".cache", ".cargo", ".cache/huggingface", ".local/share/pnpm", "go/pkg"]
+scratch_keep = ["models", "cache", "tmp", "briefs", "latest", "restic*", "st-*", "passive*", "traffic*", "*redteam*", ".*"]
 # Untagged image layers no container uses, older than a week. Tagged images stay.
 image_prune = [
   { name = "podman", as_owner = true, argv = ["podman", "image", "prune", "--force", "--filter", "until=168h"] },

@@ -177,6 +177,25 @@ def sweep_scratch(
     return freed
 
 
+def restore_cache_folders(cfg: dict[str, Any], owner: str, actor: acts.Actor, notes: list[str], home: str) -> None:
+    """Recreate scratch folders the home folder's cache links point at: tools fail on a dangling link, while an empty
+    cache only re-downloads. Not while scratch is unmounted, so nothing lands on the bare mount point."""
+    root = Path(cfg.get("scratch_root") or "/nonexistent")
+    wrapper = acts.as_owner(owner, [])
+    if wrapper is None or not os.path.ismount(root):
+        return
+    for folder in cfg.get("scratch_link_folders", []):
+        base = Path(home) / folder
+        for link in sorted(base.iterdir()) if base.is_dir() else []:
+            if not link.is_symlink() or link.exists():
+                continue
+            target = Path(os.readlink(link))
+            if target.is_relative_to(root) and ".." not in target.parts:
+                result = actor.do([*wrapper, "mkdir", "-p", str(target)], f"restore the cache folder {target}")
+                if result is not None:
+                    notes.append(f"{'restored the empty' if result.rc == 0 else 'could not restore the'} cache folder {target}")
+
+
 def prune_images(cfg: dict[str, Any], owner: str, actor: acts.Actor, notes: list[str]) -> bool:
     """Untagged, unused image layers of each container tool present here; tagged images stay."""
     failed = False
@@ -280,6 +299,7 @@ def maintain(
             *held_paths(owner, cfg),
         }
         freed += sweep_scratch(cfg, actor, now, notes, in_use)
+        restore_cache_folders(cfg, owner, actor, notes, home)
     except OSError as error:  # scratch retention must never stop the rest of housekeeping
         notes.append(f"scratch sweep failed: {type(error).__name__}")
         failed = True

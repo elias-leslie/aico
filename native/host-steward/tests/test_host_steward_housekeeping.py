@@ -785,6 +785,27 @@ def scratch_cfg(root):
     }
 
 
+def test_a_dangling_cache_link_gets_its_folder_back_only_on_a_mounted_scratch(tmp_path, monkeypatch):
+    root, home = tmp_path / "scratch", tmp_path / "home"
+    (home / ".cache").mkdir(parents=True)
+    (home / ".cache" / "uv").symlink_to(root / "cache" / "uv")
+    (home / ".cache" / "elsewhere").symlink_to(tmp_path / "other")
+    (home / ".cache" / "sneaky").symlink_to(f"{root}/../other")
+    cfg = {"scratch_root": str(root), "scratch_link_folders": [".", ".cache", "missing"]}
+
+    monkeypatch.setattr(housekeeping.os.path, "ismount", lambda _path: False)
+    unmounted = acts.Actor(False, run=Fake())
+    housekeeping.restore_cache_folders(cfg, "kasadis", unmounted, [], str(home))
+    assert unmounted.would == []
+
+    monkeypatch.setattr(housekeeping.os.path, "ismount", lambda _path: True)
+    fake, notes = Fake((["mkdir"], Result(0, ""))), []
+    housekeeping.restore_cache_folders(cfg, "kasadis", acts.Actor(True, run=fake), notes, str(home))
+    made = [argv[-3:] for argv in fake.calls if "mkdir" in argv]
+    assert made == [["mkdir", "-p", str(root / "cache" / "uv")]]
+    assert notes == [f"restored the empty cache folder {root / 'cache' / 'uv'}"]
+
+
 def test_scratch_sweep_takes_only_old_untouched_unused_entries(tmp_path):
     now = time.time()
     old = now - 30 * 86400

@@ -9,6 +9,7 @@ export type Resolution = keyof typeof data.gemini.mediaResolution
 export function cacheRoot(env: NodeJS.ProcessEnv, exists: (path: string) => boolean): string {
   const set = env[config.cache.envDir]?.trim()
   if (set) return set
+  // Scratch is the right place for this: replaceable, recreated on use, and its sweep ages it out.
   const home = env.HOME || homedir()
   const dirs = config.cache.dirs.map((dir) =>
     dir.startsWith('~/') ? join(home, dir.slice(2)) : dir,

@@ -297,9 +297,9 @@ export async function cleanupOldUploads(
           left = -1
           continue
         }
+        await unlink(path)
         left -= 1
         console.log(`[aico-web] upload removed path=${path}`)
-        await unlink(path)
         stats.deleted_files += 1
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') stats.errors += 1
