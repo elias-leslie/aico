@@ -4,14 +4,14 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { StatusRow } from '@aico/status'
 import { openTasksDb, Registry } from '@aico/tasks'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { accept } from './accept'
 import { runCheck } from './check'
 import { commit } from './commit'
 import type { Coordination } from './hook'
 import { localCheck, recordLocalCheck } from './local-check'
 import { type Config, loadConfig } from './plan'
-import { publicationPolicyCli, publicationRow, publishRepos } from './publish'
+import { publicationPolicyCli, publicationRow, publishRepos, scanRefusal } from './publish'
 import { receiptStore } from './run'
 import type { CheckSummary } from './status'
 
@@ -56,6 +56,7 @@ function repo() {
   git(root, 'init', '-q', '-b', 'main')
   git(root, 'config', 'user.email', 'test@example.invalid')
   git(root, 'config', 'user.name', 'Test')
+  git(root, 'remote', 'add', 'origin', 'git@github.com:example/example.git')
   writeFileSync(
     join(root, '.st-check.toml'),
     `[native]\nlegacy_tools = []\n[native.tools]\nnode = ${JSON.stringify(process.execPath)}\n[[native.stages]]\nid = "types"\nkind = "check"\ncoverage = "full"\nquick = true\nargv = ["node", "-e", "process.exit(0)"]\n`,
@@ -522,4 +523,94 @@ it('never runs acceptance for manual-mode, held, excluded or retired sources', a
     'excluded_project',
   ])
   expect(acceptance).not.toHaveBeenCalled()
+})
+
+it('a project with no GitHub remote is skipped before any check runs, whatever its check says', async () => {
+  const root = repo()
+  git(root, 'remote', 'remove', 'origin')
+  const deliver = vi.fn()
+  const acceptance = vi.fn()
+  const post = vi.fn()
+  const [row] = await publishRepos([project(root)], { deliver, acceptance, post })
+  expect(row).toMatchObject({ state: 'skip', reason: 'no_github_remote' })
+  expect(acceptance).not.toHaveBeenCalled()
+  expect(deliver).not.toHaveBeenCalled()
+  expect(post.mock.calls[0][0]).toMatchObject({
+    state: 'ok',
+    meaning: 'Publication skipped: no github remote.',
+  })
+  recordLocalCheck(root, git(root, 'rev-parse', 'HEAD'), result(false))
+  expect((await publishRepos([project(root)], { deliver }))[0].state).toBe('skip')
+})
+
+describe('a history the scan refused', () => {
+  const finding = (n: number) => ({
+    commit: 'a'.repeat(40),
+    file: `frontend/lib/fixtures-${n}.json`,
+    rule: 'generic-api-key',
+    line: n,
+  })
+  const refused = (found: ReturnType<typeof finding>[]) => ({
+    project: 'p',
+    sha: 'b'.repeat(40),
+    failed: [],
+    state: 'failed' as const,
+    publication_complete: false,
+    reason: 'outgoing_verification_failed',
+    security_reason: 'Outgoing secret scan refused history or failed (details redacted)',
+    findings: found,
+    findings_total: found.length,
+  })
+
+  it('takes only the reason and each location from the transport, never another field', () => {
+    const secret = 'the-value-itself'
+    const taken = scanRefusal({
+      state: 'blocked',
+      reason: 'Refused.',
+      findings: [{ ...finding(3), Secret: secret, Match: secret }, { commit: 'no' }, 'junk'],
+      findings_total: 3,
+    })
+    expect(taken).toEqual({ security_reason: 'Refused', findings: [finding(3)], findings_total: 3 })
+    expect(JSON.stringify(taken)).not.toContain(secret)
+    expect(scanRefusal({ state: 'not_run' })).toEqual({})
+    expect(scanRefusal(undefined)).toEqual({})
+  })
+
+  it('the row says why, where each finding is and how to clear a checked false alarm', () => {
+    const { meaning } = publicationRow({ ...refused([finding(432)]), security_log: '/l/p.log' })
+    expect(meaning).toContain('details redacted')
+    expect(meaning).toContain('1 finding: frontend/lib/fixtures-432.json:432 generic-api-key.')
+    expect(meaning).toContain('Log: /l/p.log.')
+    expect(meaning).toContain('native/git-outgoing/publication-fingerprints.txt')
+  })
+
+  it('many findings stay within the row and still end with what to do', () => {
+    const { meaning } = publicationRow(
+      refused(Array.from({ length: 50 }, (_, n) => finding(n + 1))),
+    )
+    expect(meaning.length).toBeLessThanOrEqual(800)
+    expect(meaning).toContain('50 findings: ')
+    expect(meaning).toMatch(/ and \d+ more\./)
+    expect(meaning).toContain('publication-fingerprints.txt.')
+  })
+
+  it('a refusal with nothing located gives the reason, and the log keeps the entries', async () => {
+    const { meaning } = publicationRow({ ...refused([]), findings: undefined })
+    expect(meaning).toContain('details redacted')
+    expect(meaning).not.toContain('publication-fingerprints')
+    const root = repo()
+    recordLocalCheck(root, git(root, 'rev-parse', 'HEAD'), result(true))
+    const refusalLog = vi.fn(() => '/l/example.log')
+    const [row] = await publishRepos([project(root)], {
+      deliver: async () => ({
+        publication_complete: false,
+        reason: 'outgoing_verification_failed',
+        security_reason: 'Refused',
+        findings: [finding(1)],
+      }),
+      refusalLog,
+    })
+    expect(row).toMatchObject({ state: 'failed', security_log: '/l/example.log' })
+    expect(refusalLog).toHaveBeenCalledOnce()
+  })
 })

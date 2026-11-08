@@ -26,6 +26,7 @@ export {
   type ActionKind,
   KINDS,
   type Kind,
+  LIMITS,
   parseRow,
   RowError,
   STATES,

@@ -1,11 +1,18 @@
 // A nightly pass over registered repos. Only checked main commits leave this machine;
 // each repo writes Status directly, with no owner ask and no GitHub Actions wait.
 import { spawn } from 'node:child_process'
-import { createWriteStream, existsSync, mkdirSync } from 'node:fs'
+import { appendFileSync, createWriteStream, existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { parseArgs } from 'node:util'
 import { aicoDataDir } from '@aico/shared/data-dir'
-import { machineId, outboxDir, postOrKeep, type StatusRow, statusRowsUrl } from '@aico/status'
+import {
+  LIMITS,
+  machineId,
+  outboxDir,
+  postOrKeep,
+  type StatusRow,
+  statusRowsUrl,
+} from '@aico/status'
 import {
   openTasksDb,
   type Project,
@@ -20,10 +27,22 @@ import { webUrl } from './status'
 
 export type PublishProject = Pick<Project, 'id' | 'root_path' | 'agent_configs'> &
   Partial<Pick<Project, 'retired_at'>>
+/** Where a refused scan found something: the entry a checked false alarm needs. Never the value. */
+export interface ScanFinding {
+  commit: string
+  file: string
+  rule: string
+  line: number
+}
 export interface Delivery {
   publication_complete: boolean
   pushed?: boolean
   reason: string
+  /** The verifier's fixed reason when it refused the history. */
+  security_reason?: string
+  findings?: ScanFinding[]
+  /** All findings; `findings` holds the first ones. */
+  findings_total?: number
 }
 export interface Publication extends Delivery {
   project: string
@@ -40,6 +59,8 @@ export interface Publication extends Delivery {
   acceptance_log?: string
   /** The environment problem an acceptance reported ("environment not prepared: ..."). */
   acceptance_note?: string
+  /** Where a refused scan's findings were written. */
+  security_log?: string
 }
 /** One acceptance run for a source: whether it passed and where its output is. */
 export interface AcceptanceRun {
@@ -60,6 +81,8 @@ export interface PublishOptions {
   acceptance?: (root: string, sha: string, projectId: string) => Promise<AcceptanceRun>
   /** Most acceptances one pass starts (default: the policy's maxPerRun). */
   acceptanceCap?: number
+  /** Keeps a refused scan's findings where the publish log is; returns its path. */
+  refusalLog?: (result: Publication) => string
   post?: (row: StatusRow) => Promise<void>
 }
 
@@ -79,20 +102,49 @@ export function publishDecision(
   return null
 }
 
+const REFUSED = 'outgoing_verification_failed'
+const FINGERPRINTS = 'native/git-outgoing/publication-fingerprints.txt'
+
+/** The row for a refused history: the reason, then where, as much as Status holds. Never the value. */
+function refusalMeaning(result: Publication, source: string): string {
+  const head = `Outgoing verification refused this${source}: ${result.security_reason ?? 'no reason given'}`
+  const log = result.security_log ? ` Log: ${result.security_log}.` : ''
+  const found = result.findings ?? []
+  if (!found.length) return `${head}.${log} Owning agent: repair it and publish again.`
+  const tail = `${log} Owning agent: remove it, or for a checked false alarm add its commit:file:rule:line to ${FINGERPRINTS}.`
+  const total = result.findings_total ?? found.length
+  let list = ''
+  let shown = 0
+  for (const finding of found) {
+    const next = `${shown ? ', ' : ''}${finding.file}:${finding.line} ${finding.rule}`
+    const more = ` and ${total - shown - 1} more`
+    if (
+      head.length + list.length + next.length + more.length + tail.length + 20 >
+      LIMITS.meaning.max
+    )
+      break
+    list += next
+    shown++
+  }
+  return `${head} ${total} finding${total === 1 ? '' : 's'}: ${list}${total > shown ? ` and ${total - shown} more` : ''}.${tail}`
+}
+
 export function publicationRow(result: Publication, now = new Date()): StatusRow {
   const source = result.sha ? ` at ${result.sha.slice(0, 10)}` : ''
   const problem =
-    result.reason === 'unchecked_commit'
-      ? `${result.branch ? `The ${result.branch} branch` : 'The default branch'} has no full or acceptance check${source}. Owning agent: run st check --acceptance.`
-      : result.reason === 'acceptance_failed'
-        ? `Acceptance failed${source}: ${result.failed.join(', ') || 'a stage'}. Log: ${result.acceptance_log}. Owning agent: fix it.`
-        : result.reason === 'acceptance_incomplete'
-          ? `Acceptance did not finish${source}. Log: ${result.acceptance_log}. Owning agent: run st check --acceptance.`
-          : result.reason === 'environment_not_prepared'
-            ? `Acceptance could not start${source}: ${result.acceptance_note ?? 'environment not prepared'}. Log: ${result.acceptance_log}.`
-            : result.reason === 'local_check_failed'
-              ? `Local check failed${source}: ${result.failed.join(', ') || 'check'}. Owning agent: fix it and check again.`
-              : `Publication failed${source}: ${result.reason.replaceAll('_', ' ')}. Owning agent: inspect the publish log.`
+    result.reason === REFUSED
+      ? refusalMeaning(result, source)
+      : result.reason === 'unchecked_commit'
+        ? `${result.branch ? `The ${result.branch} branch` : 'The default branch'} has no full or acceptance check${source}. Owning agent: run st check --acceptance.`
+        : result.reason === 'acceptance_failed'
+          ? `Acceptance failed${source}: ${result.failed.join(', ') || 'a stage'}. Log: ${result.acceptance_log}. Owning agent: fix it.`
+          : result.reason === 'acceptance_incomplete'
+            ? `Acceptance did not finish${source}. Log: ${result.acceptance_log}. Owning agent: run st check --acceptance.`
+            : result.reason === 'environment_not_prepared'
+              ? `Acceptance could not start${source}: ${result.acceptance_note ?? 'environment not prepared'}. Log: ${result.acceptance_log}.`
+              : result.reason === 'local_check_failed'
+                ? `Local check failed${source}: ${result.failed.join(', ') || 'check'}. Owning agent: fix it and check again.`
+                : `Publication failed${source}: ${result.reason.replaceAll('_', ' ')}. Owning agent: inspect the publish log.`
   return {
     id: `publish:${result.project}`,
     what: `${result.project} GitHub publication`,
@@ -105,9 +157,32 @@ export function publicationRow(result: Publication, now = new Date()): StatusRow
       : result.state === 'skip'
         ? `Publication skipped: ${result.reason.replaceAll('_', ' ')}.`
         : `${result.pushed ? `Published ${result.branch ?? 'main'}` : `${result.branch ? `The ${result.branch} branch` : 'Main'} is on GitHub`}${source}${result.accepted_note ? ` (${result.accepted_note})` : ''}.`
-    ).slice(0, 300),
+    ).slice(0, result.reason === REFUSED ? LIMITS.meaning.max : 300),
     last_run: now.toISOString(),
     actions: [{ kind: 'run', ref: `aico publish --source ${result.project}` }],
+  }
+}
+
+/** Only the verifier's fixed reason and the fields of a finding's location leave the transport. */
+export function scanRefusal(security: unknown): Partial<Delivery> {
+  if (typeof security !== 'object' || security === null) return {}
+  const { reason, findings, findings_total: total } = security as Record<string, unknown>
+  const found = (Array.isArray(findings) ? findings : [])
+    .filter(
+      (finding) =>
+        typeof finding === 'object' &&
+        finding !== null &&
+        /^[0-9a-f]{40,64}$/.test(finding.commit) &&
+        typeof finding.file === 'string' &&
+        typeof finding.rule === 'string' &&
+        Number.isInteger(finding.line),
+    )
+    .map(({ commit, file, rule, line }): ScanFinding => ({ commit, file, rule, line }))
+  return {
+    ...(typeof reason === 'string' ? { security_reason: reason.replace(/\.$/, '') } : {}),
+    ...(found.length
+      ? { findings: found, findings_total: typeof total === 'number' ? total : found.length }
+      : {}),
   }
 }
 
@@ -143,6 +218,7 @@ function deliver(root: string, sha: string, authorized: string[]): Promise<Deliv
           publication_complete: row.publication_complete === true,
           pushed: row.pushed === true,
           reason: row.reason,
+          ...scanRefusal(row.security),
         })
       } catch {
         done({ publication_complete: false, reason: 'transport_result_unavailable' })
@@ -188,6 +264,10 @@ export async function publishRepos(
         try {
           const branch = defaultBranch(root)
           if (!branch) result.reason = 'no_default_branch'
+          // Before any check: nothing could leave, so a gate has no reason to run for this. Any
+          // github.com route goes on; the transport judges which it may use.
+          else if (!/github\.com/i.test(git(root, ['remote', '-v'])))
+            result.reason = 'no_github_remote'
           else {
             const main = git(root, ['rev-parse', `refs/heads/${branch}`]).trim()
             // A hold through REV still publishes REV once main contains it.
@@ -254,6 +334,12 @@ export async function publishRepos(
                   ...delivery,
                   state: delivery.publication_complete ? 'ok' : 'failed',
                 }
+                if (delivery.reason === REFUSED && options.refusalLog)
+                  try {
+                    result.security_log = options.refusalLog(result)
+                  } catch {
+                    // Status and the command's output still carry the findings.
+                  }
                 if (
                   ['no_existing_upstream', 'unsafe_remote_route', 'no_github_remote'].includes(
                     delivery.reason,
@@ -316,6 +402,27 @@ function acceptanceRunner(logDir: string): NonNullable<PublishOptions['acceptanc
 }
 
 const publishLogDir = (env: NodeJS.ProcessEnv) => join(aicoDataDir(env), 'publish-logs')
+
+/** Adds a refusal to the project's publish log, after any acceptance this pass ran. */
+function refusalLogger(logDir: string): NonNullable<PublishOptions['refusalLog']> {
+  return (result) => {
+    mkdirSync(logDir, { recursive: true })
+    const log = join(logDir, `${result.project}.log`)
+    const found = result.findings ?? []
+    const lines = [
+      `${new Date().toISOString()} outgoing verification refused ${result.sha}: ${result.security_reason ?? 'no reason given'}`,
+      ...(found.length
+        ? [
+            `${result.findings_total ?? found.length} finding(s), first ${found.length} below as commit:file:rule:line. Never the value.`,
+            `Remove it, or for a checked false alarm add its line, with a comment saying why, to ${FINGERPRINTS}.`,
+            ...found.map((f) => `${f.commit}:${f.file}:${f.rule}:${f.line}`),
+          ]
+        : []),
+    ]
+    appendFileSync(log, `${lines.join('\n')}\n`)
+    return log
+  }
+}
 
 async function postPublicationRow(row: StatusRow, env = process.env): Promise<void> {
   const base = webUrl(env)
@@ -435,15 +542,18 @@ export async function publishCli(argv: string[], env = process.env): Promise<num
     sha: values.sha,
     dryRun: values['dry-run'],
     acceptance: values['no-accept'] ? undefined : acceptanceRunner(publishLogDir(env)),
+    refusalLog: refusalLogger(publishLogDir(env)),
     authorizedWorkflows: values['authorize-workflow'],
     post: (row) => postPublicationRow(row, env),
   })
   if (values.json) console.log(JSON.stringify({ status: 'completed', projects: results }))
   else {
-    for (const result of results)
+    for (const result of results) {
       console.log(
         `${result.project}: ${result.reason}${result.sha ? ` (${result.sha.slice(0, 12)})` : ''}${result.status_unposted ? '; Status not updated' : ''}`,
       )
+      if (result.reason === REFUSED) console.log(`  ${publicationRow(result).meaning}`)
+    }
     console.log(
       `Publication: ${results.filter((r) => r.pushed).length} pushed; ${results.filter((r) => r.state === 'failed').length} failed.`,
     )

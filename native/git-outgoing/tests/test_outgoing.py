@@ -422,8 +422,11 @@ def test_trusted_publication_fingerprint_allows_only_that_finding(history, monke
     monkeypatch.setattr(outgoing.safe_subprocess, "run_inherited", scanner)
     assert check(history, oid).commits_scanned == 1
     finding["StartLine"] = 21
-    with pytest.raises(OutgoingVerificationError, match="details redacted"):
+    finding["Secret"] = finding["Match"] = "the-value-itself"
+    with pytest.raises(OutgoingVerificationError, match="details redacted") as refused:
         check(history, oid)
+    # Where it is, enough to review and clear it; never the value.
+    assert refused.value.findings == ({"commit": oid, "file": "fixture.py", "rule": "generic-api-key", "line": 21},)
 
 
 def test_publication_fingerprint_policy_has_no_path_or_pattern_allows(history, monkeypatch) -> None:

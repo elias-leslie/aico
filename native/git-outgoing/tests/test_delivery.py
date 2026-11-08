@@ -247,6 +247,17 @@ def test_security_failure_never_pushes_and_reports_only_the_redacted_reason(sour
     assert _remote_main(source) == before
 
 
+def test_a_refused_scan_says_where_the_findings_are_bounded(source, monkeypatch):
+    found = tuple({"commit": "a" * 40, "file": f"f{n}.json", "rule": "generic-api-key", "line": n + 1}
+                  for n in range(delivery._FINDINGS_REPORTED + 3))
+    failure = delivery.OutgoingVerificationError("Outgoing secret scan refused history or failed (details redacted).",
+                                                 findings=found)
+    monkeypatch.setattr(delivery, "verify_outgoing", Mock(side_effect=failure))
+    security = delivery.deliver(source["path"], _head(source))["security"]
+    assert security["findings"][0] == found[0] and len(security["findings"]) == delivery._FINDINGS_REPORTED
+    assert security["findings_total"] == len(found)
+
+
 def test_admission_outage_defers_publication_without_push(source, monkeypatch):
     before = _remote_main(source)
     monkeypatch.setattr(delivery, "verify_outgoing", Mock(side_effect=delivery.OutgoingAdmissionUnavailable("down")))

@@ -54,6 +54,10 @@ class _AuthenticationUnavailable(_TransportUnavailable):
     """The remote refused or never got credentials: the host's GitHub login needs repair."""
 
 
+# A refused history can hold thousands; the result is one bounded JSON line.
+_FINDINGS_REPORTED = 50
+
+
 class _OutgoingFailed(RuntimeError):
     """Publication security evidence was unavailable or rejected."""
 
@@ -348,6 +352,9 @@ def publish_source(source: dict[str, Any], source_commit: str, *, authorized_wor
         if isinstance(exc.__cause__, OutgoingVerificationError):
             # Verifier messages are fixed, already-redacted reasons.
             result["security"]["reason"] = str(exc.__cause__)
+            findings = exc.__cause__.findings
+            if findings:
+                result["security"].update(findings=list(findings[:_FINDINGS_REPORTED]), findings_total=len(findings))
         result["action"] = "Repair the outgoing scanner, policy, history or secret findings before retry"
         return outcome("failed", "outgoing_verification_failed")
     except _AuthenticationUnavailable:

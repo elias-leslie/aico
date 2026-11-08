@@ -28,7 +28,11 @@ from .heavy_work import HeavyWork, HeavyWorkError, heavy_work
 
 
 class OutgoingVerificationError(RuntimeError):
-    """Outgoing objects cannot be certified safe; messages never include content."""
+    """Outgoing objects cannot be certified safe; messages and findings never include content."""
+
+    def __init__(self, *args: object, findings: tuple[dict[str, Any], ...] = ()) -> None:
+        super().__init__(*args)
+        self.findings = findings
 
 
 class OutgoingAdmissionUnavailable(OutgoingVerificationError):
@@ -320,8 +324,11 @@ def _verify_outgoing(
                     )
                 except (OSError, subprocess.TimeoutExpired) as exc:
                     raise OutgoingVerificationError("Outgoing secret scan failed or timed out.") from exc
-                if result.returncode and not _only_reviewed_findings(root, report, policy):
-                    raise OutgoingVerificationError("Outgoing secret scan refused history or failed (details redacted).")
+                if result.returncode:
+                    unreviewed = _unreviewed_findings(root, report, policy)
+                    if unreviewed is None or unreviewed:
+                        raise OutgoingVerificationError("Outgoing secret scan refused history or failed (details redacted).",
+                                                        findings=_finding_locations(unreviewed or []))
                 report.unlink(missing_ok=True)
     return OutgoingVerification(len(commits), len(updates))
 
@@ -338,19 +345,32 @@ def _tree_entries(root: Path, commit: str) -> set[tuple[bytes, bytes, bytes]]:
     return entries
 
 
-def _only_reviewed_findings(root: Path, report: Path, policy: Path) -> bool:
-    """A nonzero scan passes only with a readable report of tolerated findings."""
+def _finding_locations(findings: list[Any]) -> tuple[dict[str, Any], ...]:
+    """Where each finding is, named field by field: the scanner's other fields can hold the value."""
+    located = []
+    for finding in findings:
+        if not isinstance(finding, dict):
+            continue
+        commit, path, rule, line = (finding.get(k) for k in ("Commit", "File", "RuleID", "StartLine"))
+        if (isinstance(commit, str) and _OID.fullmatch(commit) and isinstance(path, str)
+                and isinstance(rule, str) and type(line) is int):
+            located.append({"commit": commit, "file": path, "rule": rule, "line": line})
+    return tuple(located)
+
+
+def _unreviewed_findings(root: Path, report: Path, policy: Path) -> list[Any] | None:
+    """The findings no review tolerates; None when the report can't prove anything. A nonzero scan passes only on []."""
     try:
         findings = json.loads(report.read_bytes())
     except (OSError, ValueError):
-        return False
+        return None
     try:
         reviewed = {line.strip() for line in policy.joinpath("publication-fingerprints.txt").read_text().splitlines()
                     if line.strip() and not line.lstrip().startswith("#")}
     except FileNotFoundError:
         reviewed = set()
     except OSError:
-        return False
+        return None
 
     def reviewed_fingerprint(finding: Any) -> bool:
         if not isinstance(finding, dict):
@@ -362,8 +382,9 @@ def _only_reviewed_findings(root: Path, report: Path, policy: Path) -> bool:
         # Exact immutable finding only: never interpret policy entries as paths or patterns.
         return f"{commit}:{path}:{rule}:{line}" in reviewed
 
-    return (isinstance(findings, list) and bool(findings)
-            and all(_public_manifest_key(root, finding) or reviewed_fingerprint(finding) for finding in findings))
+    if not isinstance(findings, list) or not findings:
+        return None
+    return [finding for finding in findings if not (_public_manifest_key(root, finding) or reviewed_fingerprint(finding))]
 
 
 def _is_ancestor(root: Path, base: str, oid: str) -> bool:

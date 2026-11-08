@@ -221,7 +221,7 @@ func (h *Hook) Compose(t *Target, replyWaited map[string]bool) (line string, rid
 			parts = append(parts, fmt.Sprintf("%s from %s", n, names(from(fyis, "from"), named)))
 		}
 		if len(closed) > 0 {
-			parts = append(parts, fmt.Sprintf("%s from %s (closed)", counted(len(closed), "ack"), names(from(closed, "acked_by"), named)))
+			parts = append(parts, fmt.Sprintf("%s from %s (yes, no reply needed)", counted(len(closed), "ack"), names(from(closed, "acked_by"), named)))
 		}
 		line = "[Message] " + strings.Join(parts, " · ") + " · st sessions inbox"
 		if len([]rune(line)) <= lineMax {

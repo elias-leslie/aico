@@ -73,7 +73,7 @@ func (h *Hook) Pending() []Item {
 			if truthy(r["note"]) {
 				note = " (" + str(r["note"]) + ")"
 			}
-			items = append(items, Item{id + ":ack:" + pyStr(r["acked_at"]), fmt.Sprintf("ACK %s yes%s from %s | closed; nothing to do", id, note, pyStr(r["acked_by"])), false, true})
+			items = append(items, Item{id + ":ack:" + pyStr(r["acked_at"]), fmt.Sprintf("ACK %s yes%s from %s | it has this; no reply needed", id, note, pyStr(r["acked_by"])), false, true})
 		}
 	}
 	return append(items, h.childItems()...)

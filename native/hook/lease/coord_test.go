@@ -288,7 +288,7 @@ func TestBareYesClosesWithoutConfirm(t *testing.T) {
 		t.Fatalf("a bare yes closes for the sender: %v", settled)
 	}
 	items := a.Pending()
-	if len(items) != 1 || !strings.Contains(items[0].Line, "closed; nothing to do") {
+	if len(items) != 1 || !strings.Contains(items[0].Line, "it has this; no reply needed") {
 		t.Errorf("the sender is told once: %+v", items)
 	}
 
