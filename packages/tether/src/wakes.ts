@@ -810,9 +810,11 @@ export interface WakeOperations {
   delivered?(sessionId: string, rows: readonly Wake[], via: 'paste' | 'native'): void
   /** The running session that holds this conversation, if any; throws when it can't tell (the relaunch waits). */
   conversationHolder(resumeId: string): Promise<string | null>
+  /** Start the ended session again. `claimed` names the new session before anything of it exists. */
   relaunch(
     ended: EndedSession,
     message: string,
+    claimed: (id: string) => void,
   ): Promise<{ status: 'started'; id: string } | { status: 'retry' | 'failed'; reason: string }>
   /** Wakes changed: republish the session (or the kept list, for null). */
   changed(sessionId: string | null): void
@@ -1287,23 +1289,26 @@ export class WakeScheduler {
       resumed: Boolean(ended.resumeId),
     })
     this.starting.set(ended.id, ended)
-    for (const wake of wakes) this.store.remove(wake.id)
     let outcome: Awaited<ReturnType<WakeOperations['relaunch']>> = {
       status: 'retry',
       reason: 'relaunch did not finish',
     }
     try {
-      outcome = await this.ops.relaunch(ended, message)
+      // The record comes first and the check-ins go last: Tether dying in between finds both on restart,
+      // and the conversation's holder gets the check-in again rather than nobody.
+      outcome = await this.ops.relaunch(ended, message, (id) =>
+        this.store.linkRelaunch(ended, id, this.ops.now()),
+      )
     } finally {
       this.starting.delete(ended.id)
       if (outcome.status !== 'started') {
-        for (const wake of wakes) this.store.restore(wake)
         this.retryAt.set(ended.id, this.ops.now() + WAKE_RELAUNCH_RETRY_MS)
         // An admission refusal is the host saying "not now", not a failure.
         if (outcome.status === 'failed')
           for (const wake of wakes) this.store.failed(wake.id, outcome.reason)
       } else {
         this.store.linkRelaunch(ended, outcome.id, this.ops.now())
+        for (const wake of wakes) this.store.remove(wake.id)
         this.retryAt.delete(ended.id)
       }
       this.ops.changed(null)

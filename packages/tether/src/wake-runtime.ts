@@ -163,7 +163,7 @@ export class WakeService {
         this.noteReached(id, rows)
       },
       conversationHolder: (resumeId) => conversationHolder(this.context, resumeId),
-      relaunch: (ended, message) => this.relaunch(ended, message),
+      relaunch: (ended, message, claimed) => this.relaunch(ended, message, claimed),
       changed: (id) => this.changed(id),
       log: (message) => console.log(`[tether:wakes] ${message}`),
       ...options.operations,
@@ -393,6 +393,7 @@ export class WakeService {
   private async relaunch(
     ended: EndedSession,
     message: string,
+    claimed: (id: string) => void,
   ): Promise<{ status: 'started'; id: string } | { status: 'retry' | 'failed'; reason: string }> {
     await whenReady()
     // Never on this host: its agent ran through an entry that ended with it.
@@ -412,6 +413,7 @@ export class WakeService {
     // A root's request stays a tombstone; the new session is a plain one.
     const origin: SessionOrigin = ended.origin === 'root' ? 'aico' : (ended.origin as SessionOrigin)
     const id = allocateWidgetId()
+    claimed(id)
     insertWidget(id, tool.slug, Date.now(), { origin })
     setWidgetProject(id, ended.projectId, root)
     if (ended.name) setWidgetName(id, ended.name)

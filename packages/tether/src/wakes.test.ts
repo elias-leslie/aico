@@ -509,7 +509,8 @@ describe('wake scheduler', () => {
   })
 
   it('expects an ended session back while a kept wake can relaunch it and while that relaunch runs', async () => {
-    let finish: (id: string) => void = () => {}
+    const idle = () => {}
+    let finish: (id: string) => void = idle
     const { wakes, scheduler, add } = harness({
       relaunch: () =>
         new Promise((resolve) => {
@@ -523,12 +524,14 @@ describe('wake scheduler', () => {
     wakes.keep(SESSION, ENDED)
     removeWidget(SESSION)
     expect(comesBack(SESSION)).toEqual(ENDED)
-    // The kept row is gone once the relaunch starts; the session is still on its way back.
+    // The kept row stays until the relaunch has started; the session is on its way back either way.
     const pass = scheduler.tick()
-    await vi.waitFor(() => expect(wakes.list()).toEqual([]))
+    await vi.waitFor(() => expect(finish).not.toBe(idle))
+    expect(wakes.list()).toHaveLength(1)
     expect(comesBack(SESSION)).toEqual(ENDED)
     finish('ffff0000')
     await pass
+    expect(wakes.list()).toEqual([])
     running.add('ffff0000')
     expect(comesBack(SESSION)).toEqual(ENDED)
     running.delete('ffff0000')
@@ -558,6 +561,26 @@ describe('wake scheduler', () => {
     await scheduler.tick()
     expect(log.relaunched).toEqual([expect.stringMatching(/resumed after End\] note$/)])
     expect(wakes.list()).toEqual([])
+  })
+
+  it('keeps the record and the check-in when Tether dies while a relaunch starts', async () => {
+    const { wakes, scheduler, add, ops } = harness({
+      // Never settles, as when the process dies here.
+      relaunch: (_ended, _message, claimed) => {
+        claimed('ffff0000')
+        return new Promise(() => {})
+      },
+    })
+    add(9_000, 'note')
+    wakes.keep(SESSION, ENDED)
+    removeWidget(SESSION)
+    void scheduler.tick()
+    await vi.waitFor(() => expect(wakes.relaunchesOf(SESSION)).toHaveLength(1))
+    const restarted = new WakeScheduler(wakes, ops)
+    expect(restarted.comesBack(SESSION, (other) => other === 'ffff0000')).toEqual(ENDED)
+    // Nothing running yet: the check-in is still there to relaunch it.
+    expect(wakes.list()).toHaveLength(1)
+    expect(restarted.comesBack(SESSION, () => false)).toEqual(ENDED)
   })
 
   it('still expects it back across a restart, a second relaunch and a resume by hand', async () => {
