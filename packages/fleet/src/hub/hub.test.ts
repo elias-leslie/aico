@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { peerRequest } from '../peer-http'
 import type { Hub, HubDeps } from './hub'
 import { FakePeer, frontServer, type Item, makeTestHub, session, TEST_PORTS } from './testing'
-import { UPDATE_INSTALLING, type UpdateTarget } from './update'
+import { NOTHING_TO_SEND, UPDATE_INSTALLING, type UpdateTarget } from './update'
 
 const API_VERSION = TEST_PORTS.apiVersion
 
@@ -941,6 +941,22 @@ describe('hub', () => {
       })
       await vi.waitFor(() => expect(update()?.state).toBe('updated'), { timeout: 8_000 })
       expect(calls).toBe(1)
+    })
+
+    it('a hub with nothing to send writes no Status row and shows no update', async () => {
+      peer.release = older
+      let calls = 0
+      await startHub({
+        update: async () => {
+          calls += 1
+          return { code: null, stdout: NOTHING_TO_SEND, output: '' }
+        },
+      })
+      await vi.waitFor(() => expect(calls).toBeGreaterThan(0))
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      expect(update()).toBeNull()
+      expect(rows).toEqual([])
+      expect(JSON.parse(settings.get('peer_update_failures') ?? '{}')).toEqual({})
     })
 
     it('does not push when the host already runs this build', async () => {

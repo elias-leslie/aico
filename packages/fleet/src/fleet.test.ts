@@ -735,3 +735,71 @@ it('reads guest power once per cache window and keeps reporting while a reading 
   await vi.waitFor(() => expect(reports).toBeGreaterThan(before + 6))
   expect(reads).toBe(1)
 })
+
+describe('link Status before and after the first power reading', () => {
+  const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  function hanging() {
+    let release: (value: Map<string, string>) => void = () => {}
+    const posted: import('@aico/status').StatusRow[][] = []
+    const reporting = {
+      postRows: async (rows: import('@aico/status').StatusRow[]) => {
+        posted.push(rows)
+      },
+      peerPower: () =>
+        new Promise<Map<string, string>>((resolve) => {
+          release = resolve
+        }),
+    }
+    return { posted, reporting, release: (value: Map<string, string>) => release(value) }
+  }
+
+  it('posts no row for an unlinked peer until the first power read finishes', async () => {
+    const h = hanging()
+    const p = await pair(h.reporting)
+    p.sa.powerTimeoutMs = 60_000
+    await p.fa.start()
+    await pause(200)
+    expect(h.posted).toEqual([])
+    h.release(new Map([['peer-b', 'stopped']]))
+    await vi.waitFor(() => expect(h.posted.at(-1)?.[0]).toMatchObject({ state: 'off' }))
+  })
+
+  it('reports a connected peer at once, while the power read is still pending', async () => {
+    const h = hanging()
+    const p = await pair(h.reporting)
+    p.sa.powerTimeoutMs = 60_000
+    await p.fb.start()
+    await p.fa.start()
+    await vi.waitFor(() => expect(h.posted.at(-1)?.[0]).toMatchObject({ state: 'ok' }))
+  })
+
+  it('stops holding rows back once a hung read has run past powerTimeoutMs', async () => {
+    const h = hanging()
+    const p = await pair(h.reporting)
+    p.sa.powerTimeoutMs = 250
+    await p.fa.start()
+    await pause(100)
+    expect(h.posted).toEqual([])
+    await vi.waitFor(() => expect(h.posted.at(-1)?.[0]).toMatchObject({ state: 'warn' }))
+  })
+
+  it('no longer says off from a reading older than powerStaleMs', async () => {
+    let fail = false
+    let latest: import('@aico/status').StatusRow[] = []
+    const p = await pair({
+      postRows: async (rows) => {
+        latest = rows
+      },
+      peerPower: async () => {
+        if (fail) throw new Error('Proxmox unavailable')
+        return new Map([['peer-b', 'stopped']])
+      },
+    })
+    p.sa.powerCacheMs = 20
+    p.sa.powerStaleMs = 300
+    await p.fa.start()
+    await vi.waitFor(() => expect(latest[0]?.state).toBe('off'))
+    fail = true
+    await vi.waitFor(() => expect(latest[0]?.state).toBe('warn'))
+  })
+})
