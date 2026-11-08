@@ -693,6 +693,7 @@ it('reports actual stopped guests as off and keeps the last reading when a read 
     },
   })
   p.sa.powerCacheMs = 20
+  p.sa.linkSettleMs = 1
   await p.fa.start()
   await vi.waitFor(() => expect(latest[0]).toMatchObject({ state: 'off' }))
   expect(latest[0]?.next_run).toBeDefined()
@@ -710,6 +711,31 @@ it('reports actual stopped guests as off and keeps the last reading when a read 
   expect(latest[0]?.state).toBe('off')
   await p.fb.start()
   await vi.waitFor(() => expect(latest[0]?.state).toBe('ok'))
+})
+
+it('a link that drops reads off when the machine is off, and is no problem while it settles', async () => {
+  const states: (string | undefined)[] = []
+  let power = 'running'
+  const p = await pair({
+    postRows: async (rows) => {
+      states.push(rows[0]?.state)
+    },
+    peerPower: async () => new Map([['peer-b', power]]),
+  })
+  p.sa.powerCacheMs = 20
+  p.sa.statusMs = 20
+  await p.fb.start()
+  await p.fa.start()
+  await vi.waitFor(() => expect(states.at(-1)).toBe('ok'))
+  states.length = 0
+  await p.fb.close()
+  await vi.waitFor(() => expect(p.fa.status()[0]?.connected).toBe(false))
+  // Still running and just dropped: nothing new is written, so it can't count as a problem.
+  await new Promise((resolve) => setTimeout(resolve, 150))
+  expect(states).not.toContain('warn')
+  power = 'stopped'
+  await vi.waitFor(() => expect(states.at(-1)).toBe('off'))
+  expect(states).not.toContain('warn')
 })
 
 it('reads guest power once per cache window and keeps reporting while a reading hangs', async () => {

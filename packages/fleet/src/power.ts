@@ -1,7 +1,9 @@
 // Proxmox is the authority on a disconnected guest's power state. A missing or
 // failed reading must never turn a broken link into a healthy one.
+import { execFile } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import type { StatusRow } from '@aico/status'
+import type { HostEntry } from './hosts'
 import { guestConfig, isUpid, PveError, type PveRequest, setOnboot } from './proxmox'
 import { type FleetSettings, fleetFile } from './settings'
 
@@ -30,6 +32,34 @@ export function parseGuestPower(value: unknown): Map<string, string> {
 export async function guestPower(call: PveRequest): Promise<Map<string, string>> {
   return parseGuestPower(await call('GET', '/cluster/resources?type=vm'))
 }
+/**
+ * Adds down peers Proxmox doesn't list (the workstation, seen from the standby): their hosts entry's
+ * `status` command says. A command that fails or isn't there says nothing.
+ */
+export async function withHostPower(
+  guests: ReadonlyMap<string, string>,
+  down: readonly string[],
+  hosts: readonly HostEntry[],
+  timeoutMs: number,
+): Promise<Map<string, string>> {
+  const power = new Map(guests)
+  await Promise.all(
+    hosts
+      .filter((host) => host.status && down.includes(host.name) && !guests.has(host.name))
+      .map(async (host) => {
+        const [command, ...args] = host.status as string[]
+        const output = await new Promise<string | null>((resolve) =>
+          execFile(command as string, args, { timeout: timeoutMs }, (error, stdout) =>
+            resolve(error ? null : stdout),
+          ),
+        )
+        if (output !== null)
+          power.set(host.name, new RegExp(host.statusOff).test(output) ? 'stopped' : 'running')
+      }),
+  )
+  return power
+}
+
 /** `peerStatusRow`'s power when the last reading said stopped and power can't be read any more. */
 export const POWER_UNREAD_OFF = 'unread-off'
 

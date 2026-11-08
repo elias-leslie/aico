@@ -1,5 +1,6 @@
 import { parseRow, view } from '@aico/status'
 import { describe, expect, it } from 'vitest'
+import type { HostEntry } from './hosts'
 import {
   guestAction,
   guestPower,
@@ -9,6 +10,7 @@ import {
   parseGuestPower,
   peerStatusRow,
   setGuestOnboot,
+  withHostPower,
 } from './power'
 import type { PveRequest } from './proxmox'
 import { PveError } from './proxmox'
@@ -32,6 +34,27 @@ describe('fleet peer power status', () => {
       expect(peerStatusRow(settings, peer, 'worker', power, 1000).state).toBe('warn')
     }
     expect(peerStatusRow(settings, peer, undefined, 'stopped', 1000).state).toBe('warn')
+  })
+  it('asks a down peer outside Proxmox through its hosts entry', async () => {
+    const host = (name: string, status: string[]) =>
+      ({ name, status, statusOff: '^off' }) as unknown as HostEntry
+    const power = await withHostPower(
+      new Map([['guest', 'running']]),
+      ['off-host', 'on-host', 'broken', 'guest'],
+      [
+        host('off-host', ['/bin/echo', 'off']),
+        host('on-host', ['/bin/echo', 'on']),
+        host('broken', ['/bin/false']),
+        host('guest', ['/bin/echo', 'off']),
+        host('up-host', ['/bin/echo', 'off']),
+      ],
+      5000,
+    )
+    expect([...power.entries()].sort()).toEqual([
+      ['guest', 'running'],
+      ['off-host', 'stopped'],
+      ['on-host', 'running'],
+    ])
   })
   it('trusts a live link over a racing power reading', () => {
     expect(

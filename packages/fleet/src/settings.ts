@@ -39,6 +39,8 @@ export interface FleetSettings {
   powerStaleMs?: number
   /** Timeout for one guest power reading (default 10 s). */
   powerTimeoutMs?: number
+  /** How long a dropped link, or a machine just read as started, may take to connect before its row reads as down (default 2 min). */
+  linkSettleMs?: number
   statusUrl: string
 }
 
@@ -135,6 +137,7 @@ export function readSettings(env: NodeJS.ProcessEnv, controlSocket: string): Fle
     'powerCacheMs',
     'powerStaleMs',
     'powerTimeoutMs',
+    'linkSettleMs',
   ] as const) {
     const n = value[key]
     if (n !== undefined && (!Number.isSafeInteger(n) || n <= 0))

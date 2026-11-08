@@ -11,11 +11,11 @@ import { connect, createServer, type Server, type TLSSocket } from 'node:tls'
 import type { StatusRow } from '@aico/status'
 import { Connection, type OpenChannel } from './connection'
 import { serveExec } from './exec'
-import { hostForwards, hostsFilePath } from './hosts'
+import { hostForwards, hostsFilePath, loadHosts } from './hosts'
 import { type Identity, loadIdentity, validName } from './identity'
 import { loginPeerRpc } from './logins-client'
 import { serveLoginWire } from './logins-wire'
-import { guestPower, POWER_UNREAD_OFF, peerStatusRow } from './power'
+import { guestPower, POWER_UNREAD_OFF, peerStatusRow, withHostPower } from './power'
 import { type PveRequest, pveRequest } from './proxmox'
 import { pushToolLogins } from './secrets'
 import { type FleetSettings, localAddress, readSettings } from './settings'
@@ -596,19 +596,25 @@ export class Fleet {
       const pins = this.pins()
       const known =
         this.powerAnswered || Date.now() - this.startedAt >= (s.powerTimeoutMs ?? 10_000)
-      const peers = this.status().filter((peer) => peer.connected || known)
-      const rows = peers.map((peer) =>
-        peerStatusRow(
-          s,
-          peer,
-          pins.find((pin) => pin.name === peer.name)?.role,
-          // A reading from before the peer's last contact (one that just dropped) is not evidence it
-          // is off. Nor is one too old: then it was off when last checked, which isn't down either.
-          lastPower(reading, peer, s.powerStaleMs ?? 30 * 60_000),
-          this.startedAt,
-          this.runningSince.get(peer.name),
-        ),
-      )
+      const settleMs = s.linkSettleMs ?? 120_000
+      const rows = this.status().flatMap((peer) => {
+        if (!peer.connected && !known) return []
+        // A reading from before the peer's last contact (one that just dropped) is not evidence it
+        // is off. Nor is one too old: then it was off when last checked, which isn't down either.
+        const power = lastPower(reading, peer, s.powerStaleMs ?? 30 * 60_000)
+        const running = this.runningSince.get(peer.name)
+        // A link that just dropped, or a machine still booting, isn't a problem yet: the last row
+        // stands until a reading says off or the link has had time to come back.
+        if (
+          !peer.connected &&
+          power !== 'stopped' &&
+          power !== POWER_UNREAD_OFF &&
+          Date.now() - Math.max(peer.lastSeen ?? 0, running ?? 0) < settleMs
+        )
+          return []
+        const role = pins.find((pin) => pin.name === peer.name)?.role
+        return [peerStatusRow(s, peer, role, power, this.startedAt, running)]
+      })
       if (rows.length) await this.postRows(rows)
     } catch (error) {
       this.log(`Could not write link Status: ${(error as Error).message}`)
@@ -627,12 +633,18 @@ export class Fleet {
   private refreshPower(): void {
     const s = this.options.settings
     if (this.powerProbe || Date.now() - this.powerTriedAt < (s.powerCacheMs ?? 60_000)) return
+    const timeoutMs = s.powerTimeoutMs ?? 10_000
     const read =
       this.options.peerPower ??
-      (() =>
-        s.proxmox
-          ? guestPower(this.pveCall(s.powerTimeoutMs ?? 10_000))
-          : Promise.resolve(new Map<string, string>()))
+      (async () =>
+        withHostPower(
+          s.proxmox ? await guestPower(this.pveCall(timeoutMs)) : new Map<string, string>(),
+          this.status()
+            .filter((peer) => !peer.connected)
+            .map((peer) => peer.name),
+          loadHosts(hostsFilePath(this.options.env ?? process.env)).hosts,
+          timeoutMs,
+        ))
     this.powerTriedAt = Date.now()
     this.powerProbe = (async () => {
       try {
