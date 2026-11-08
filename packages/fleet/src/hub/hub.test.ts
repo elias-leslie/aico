@@ -1010,7 +1010,8 @@ describe('hub', () => {
       }
       await startHub({ release: 'release-a', update: failing })
       await vi.waitFor(() => expect(update()?.state).toBe('failed'))
-      expect(rows[0]).toMatchObject({ state: 'failed' })
+      // A release that didn't land is a warning, never a service down.
+      expect(rows[0]).toMatchObject({ state: 'warn', kind: 'check' })
       expect(rows[0]?.meaning).toContain('its install failed')
       await startHub({ release: 'release-a', update: failing })
       await new Promise((resolve) => setTimeout(resolve, 400))

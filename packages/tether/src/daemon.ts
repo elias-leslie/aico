@@ -7,7 +7,7 @@ import { HostAdmin } from '@aico/fleet/hub/host-admin'
 import { Hub } from '@aico/fleet/hub/hub'
 import { IdleOff, releaseStatusWriter, statusWriter } from '@aico/fleet/hub/idle-off'
 import { LOCAL_HOST, localRootFate, Placement } from '@aico/fleet/hub/placement'
-import { installedRelease } from '@aico/fleet/hub/update'
+import { installedRelease, NOTHING_TO_SEND } from '@aico/fleet/hub/update'
 import { FleetService } from '@aico/fleet/service'
 import {
   AgentStatePoller,
@@ -345,7 +345,10 @@ function createHub(
   return hubEnabled(env)
     ? new Hub({
         env,
-        status: releaseStatusWriter(env, AICO_WEB_DEFAULT_URL),
+        // A test instance doesn't speak for this machine: no Status rows, no releases sent.
+        ...(context.paths.instance === 'default'
+          ? { status: releaseStatusWriter(env, AICO_WEB_DEFAULT_URL) }
+          : { update: async () => ({ code: null, stdout: NOTHING_TO_SEND, output: '' }) }),
         fault: (error) => fleet.fault(error),
         uid: process.getuid?.(),
         ports: tetherHubPorts,

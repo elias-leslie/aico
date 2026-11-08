@@ -104,7 +104,7 @@ export interface ReleaseUpdateRow {
   what: string
   kind: 'check'
   machine: string
-  state: 'ok' | 'warn' | 'failed'
+  state: 'ok' | 'warn'
   meaning: string
   last_run: string
 }
@@ -527,9 +527,9 @@ export class Hub {
   }
 
   /** Aico web's Status says each release update: when a host got this hub's
-   * build, and why one did not. A release that didn't land is never a service down: `installed`
-   * false means nothing changed on the host and the next link-up tries again. */
-  private reportUpdate(peer: Peer, update: PeerUpdate, installed = true): void {
+   * build, and why one did not. A release that didn't land is a warning, never a service down: a
+   * host that really stopped answering has its own link row. */
+  private reportUpdate(peer: Peer, update: PeerUpdate): void {
     const status = this.deps.status
     if (!status || update.state === 'updating') return
     const at = new Date(this.now())
@@ -543,7 +543,7 @@ export class Hub {
       what: `Tether release on ${peer.name}`,
       kind: 'check',
       machine: peer.name,
-      state: done ? 'ok' : installed ? 'failed' : 'warn',
+      state: done ? 'ok' : 'warn',
       meaning: done
         ? `This Tether sent ${peer.name} its release at ${clock}; ${peer.name} now runs ${what}.`
         : `${peer.name} didn't get ${what} at ${clock}: ${update.error ?? 'unknown error'}.`,
@@ -582,7 +582,7 @@ export class Hub {
       }
       peer.setUpdate(update)
       this.toldCurrent.delete(peer.name)
-      this.reportUpdate(peer, update, remember)
+      this.reportUpdate(peer, update)
       if (!remember) return this.forgetUpdateFailure(peer.name)
       this.deps.settings.put(
         UPDATE_FAILURES_KEY,
