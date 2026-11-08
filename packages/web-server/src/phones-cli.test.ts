@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, it } from 'vitest'
@@ -50,21 +50,34 @@ it("answers a sync: merges the sender's phones, keeps its own until confirmed, m
         err: (s) => out.push(s),
         baseUrl: 'http://127.0.0.1:1',
         fetch,
-        readInput: async () => JSON.stringify(input),
+        readInput: async () => (input === undefined ? '' : JSON.stringify(input)),
         devicesFile,
         canaryFolder,
       })
     expect(await run('merge', [phone('sent', 1)])).toBe(0)
-    expect(JSON.parse(out.pop() as string).map((p: { id: string }) => p.id)).toEqual([
-      'sent',
-      'here',
-    ])
+    const first = JSON.parse(out.pop() as string)
+    expect(first.phones.map((p: { id: string }) => p.id)).toEqual(['sent', 'here'])
     // No confirm yet: the phone paired here is still kept.
     expect(await run('merge', [phone('sent', 1)])).toBe(0)
-    expect(JSON.parse(out.pop() as string)).toHaveLength(2)
-    expect(await run('merge-done', null)).toBe(0)
+    const second = JSON.parse(out.pop() as string)
+    expect(second.phones).toHaveLength(2)
+    expect(second.receipt).not.toBe(first.receipt)
+    const pending = readFileSync(`${devicesFile}.sync.json`, 'utf8')
+    for (const confirmation of [
+      undefined,
+      null,
+      {},
+      { receipt: first.receipt },
+      { receipt: 123 },
+    ]) {
+      expect(await run('merge-done', confirmation)).toBe(0)
+      expect(readFileSync(`${devicesFile}.sync.json`, 'utf8')).toBe(pending)
+    }
+    expect(await run('merge-done', { receipt: second.receipt })).toBe(0)
     expect(await run('merge', [phone('sent', 1)])).toBe(0)
-    expect(JSON.parse(out.pop() as string).map((p: { id: string }) => p.id)).toEqual(['sent'])
+    expect(JSON.parse(out.pop() as string).phones.map((p: { id: string }) => p.id)).toEqual([
+      'sent',
+    ])
 
     mkdirSync(canaryFolder)
     writeFileSync(join(canaryFolder, 'poll.json'), JSON.stringify({ a: 5, b: 9 }))

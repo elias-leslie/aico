@@ -271,7 +271,7 @@ export async function syncPhones(
     env.AICO_PHONE_DEVICES_FILE?.trim() ||
     join(env.AICO_DATA_DIR || expandHome(config.dataDir), 'phones.json')
   if (!existsSync(path)) return { lines: [], failed: false }
-  // One exchange at a time: merge-done must acknowledge this exchange's reply, not another one's.
+  // One local exchange at a time. Receipts also bind any delayed remote confirmation to its reply.
   // This is separate from the short phone writer lock: pairing and acks never wait on the link.
   return withFileLock(`${path}.sync`, () => syncPhonePeers(path, peers, aico, exec))
 }
@@ -327,24 +327,39 @@ async function syncPhonePeers(
     }
     const sent = await exec(peer.exec, aico('phones merge'), snapshot)
     if (unanswered(sent)) continue
-    let merged: unknown = null
+    let reply: unknown = null
     try {
-      merged = JSON.parse(lastLine(sent.stdout))
+      reply = JSON.parse(lastLine(sent.stdout))
     } catch {}
-    if (sent.code !== 0 || !Array.isArray(merged)) {
+    if (
+      sent.code !== 0 ||
+      !reply ||
+      typeof reply !== 'object' ||
+      !('phones' in reply) ||
+      !Array.isArray(reply.phones) ||
+      !('receipt' in reply) ||
+      typeof reply.receipt !== 'string' ||
+      !reply.receipt
+    ) {
       failed = true
       lines.push(
         `${peer.name}: could not take the phones (${lastLine(sent.output) || `exit ${sent.code}`})`,
       )
       continue
     }
-    if (!(await save(snapshot, merged))) {
+    if (!(await save(snapshot, reply.phones))) {
       changed(peer.name)
       continue
     }
     // Only now does the peer count the merge as done: a link that dropped before this keeps its new phones.
-    await exec(peer.exec, aico('phones merge-done'), Buffer.alloc(0))
-    lines.push(`${peer.name}: ${merged.length} phone${merged.length === 1 ? '' : 's'} in step`)
+    await exec(
+      peer.exec,
+      aico('phones merge-done'),
+      Buffer.from(JSON.stringify({ receipt: reply.receipt })),
+    )
+    lines.push(
+      `${peer.name}: ${reply.phones.length} phone${reply.phones.length === 1 ? '' : 's'} in step`,
+    )
   }
   return { lines, failed }
 }

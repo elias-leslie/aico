@@ -32,15 +32,23 @@ it('takes a phone list far longer than 4 KB and tells the peer only after it is 
   writeFileSync(join(dir, 'phones.json'), JSON.stringify([{ id: 'a' }]))
   const many = Array.from({ length: 12 }, (_, i) => ({ id: `p${i}`, pad: 'x'.repeat(950) }))
   const calls: string[] = []
-  const exec = async (_s: string, argv: string[]): Promise<Answer> => {
+  const exec = async (_s: string, argv: string[], input: Buffer): Promise<Answer> => {
     calls.push(argv.at(-1) as string)
     const path = join(dir, 'phones.json')
     // Exchanges serialize through their own lock, while the phone API can still write.
     expect(spawnSync('flock', ['-n', '-E', '75', `${path}.sync.lock`, 'true']).status).toBe(75)
     expect(spawnSync('flock', ['-n', '-E', '75', `${path}.lock`, 'true']).status).toBe(0)
-    if (calls.length === 2) expect(JSON.parse(readFileSync(path, 'utf8'))).toHaveLength(12)
+    if (calls.length === 2) {
+      expect(JSON.parse(readFileSync(path, 'utf8'))).toHaveLength(12)
+      expect(JSON.parse(input.toString())).toEqual({ receipt: 'large-list-reply' })
+    }
     return calls.length === 1
-      ? { code: 0, stdout: `${JSON.stringify(many)}\n`, output: '', ended: true }
+      ? {
+          code: 0,
+          stdout: `${JSON.stringify({ phones: many, receipt: 'large-list-reply' })}\n`,
+          output: '',
+          ended: true,
+        }
       : { code: 0, stdout: '', output: '', ended: true }
   }
   const result = await syncPhones(peers, aico, env, exec as never)
@@ -85,6 +93,26 @@ it('does not confirm a merge whose reply never came', async () => {
   expect(JSON.parse(readFileSync(join(dir, 'phones.json'), 'utf8'))).toEqual([{ id: 'a' }])
 })
 
+it.each([
+  [{ id: 'legacy-copy' }],
+  { phones: [{ id: 'unreceipted-copy' }] },
+  { phones: [{ id: 'empty-receipt' }], receipt: '' },
+  { phones: [{ id: 'invalid-receipt' }], receipt: 123 },
+])('does not store or confirm a peer reply without an exchange receipt: %j', async (reply) => {
+  const { dir, env } = setup()
+  const path = join(dir, 'phones.json')
+  const snapshot = JSON.stringify([{ id: 'local' }])
+  writeFileSync(path, snapshot)
+  let calls = 0
+  const exec = async (): Promise<Answer> => {
+    calls++
+    return { code: 0, stdout: JSON.stringify(reply), output: '', ended: true }
+  }
+  expect((await syncPhones(peers, aico, env, exec as never)).failed).toBe(true)
+  expect(calls).toBe(1)
+  expect(readFileSync(path, 'utf8')).toBe(snapshot)
+})
+
 it('keeps local phone changes during a delayed reply, and leaves the peer unconfirmed until the next sync', async () => {
   const { dir, env } = setup()
   const path = join(dir, 'phones.json')
@@ -100,11 +128,10 @@ it('keeps local phone changes during a delayed reply, and leaves the peer unconf
       })
       return {
         code: 0,
-        stdout: JSON.stringify([
-          { id: 'removed' },
-          { id: 'kept', last_ack: 2 },
-          { id: 'paired-there' },
-        ]),
+        stdout: JSON.stringify({
+          phones: [{ id: 'removed' }, { id: 'kept', last_ack: 2 }, { id: 'paired-there' }],
+          receipt: 'declined-reply',
+        }),
         output: '',
         ended: true,
       }
@@ -116,11 +143,10 @@ it('keeps local phone changes during a delayed reply, and leaves the peer unconf
       ])
       return {
         code: 0,
-        stdout: JSON.stringify([
-          { id: 'kept', last_ack: 3 },
-          { id: 'paired-here' },
-          { id: 'paired-there' },
-        ]),
+        stdout: JSON.stringify({
+          phones: [{ id: 'kept', last_ack: 3 }, { id: 'paired-here' }, { id: 'paired-there' }],
+          receipt: 'stored-reply',
+        }),
         output: '',
         ended: true,
       }
@@ -165,7 +191,7 @@ it('releases both locks when the fleet request throws, so the next sync can fini
   ).rejects.toThrow('link broke')
   const answer = async (): Promise<Answer> => ({
     code: 0,
-    stdout: '[{"id":"a"}]',
+    stdout: '{"phones":[{"id":"a"}],"receipt":"retry-reply"}',
     output: '',
     ended: true,
   })
@@ -191,8 +217,8 @@ it('never resurrects a newly sent phone removed while its unconfirmed reply is i
   const moduleUrl = new URL('../../web-server/src/app-phones.ts', import.meta.url).href
   const script = `import {mergePhonesFile, confirmPhonesMerge} from ${JSON.stringify(moduleUrl)};
     let input = ''; for await (const chunk of process.stdin) input += chunk;
-    const {path, verb, phones, now} = JSON.parse(input);
-    const result = verb === 'merge' ? await mergePhonesFile(path, phones, now) : await confirmPhonesMerge(path);
+    const {path, verb, phones, now, receipt} = JSON.parse(input);
+    const result = verb === 'merge' ? await mergePhonesFile(path, phones, now) : await confirmPhonesMerge(path, receipt);
     console.log(JSON.stringify(result ?? null));`
   let calls = 0
   const exec = async (_s: string, argv: string[], input: Buffer): Promise<Answer> => {
@@ -204,7 +230,8 @@ it('never resurrects a newly sent phone removed while its unconfirmed reply is i
         input: JSON.stringify({
           path: receiver,
           verb,
-          phones: input.length ? JSON.parse(input.toString()) : [],
+          phones: verb === 'merge' ? JSON.parse(input.toString()) : [],
+          receipt: verb === 'confirm' ? JSON.parse(input.toString()).receipt : undefined,
           now: 200 + calls,
         }),
         encoding: 'utf8',
@@ -222,6 +249,75 @@ it('never resurrects a newly sent phone removed while its unconfirmed reply is i
     (JSON.parse(readFileSync(path, 'utf8')) as { id: string }[]).map((p) => p.id)
   expect(ids(source)).toEqual(['kept', 'new-at-receiver'])
   expect(ids(receiver)).toEqual(['kept', 'new-at-receiver'])
+})
+
+it('does not let a delayed old confirmation acknowledge a newer reply the source declined', async () => {
+  const { dir, env } = setup()
+  const source = join(dir, 'phones.json')
+  const receiver = join(dir, 'receiver.json')
+  const kept = {
+    id: 'kept',
+    pairing_id: 'kept-pair',
+    added_at: 1,
+    sig_pub: 'sig',
+    enc_pub: 'enc',
+    auth: 'auth',
+  }
+  const pairedThere = { ...kept, id: 'paired-there', pairing_id: 'local-pair', added_at: 200 }
+  writeFileSync(source, JSON.stringify([kept]))
+  writeFileSync(receiver, JSON.stringify([kept]))
+  const moduleUrl = new URL('../../web-server/src/app-phones.ts', import.meta.url).href
+  const script = `import {mergePhonesFile, confirmPhonesMerge} from ${JSON.stringify(moduleUrl)};
+    let input = ''; for await (const chunk of process.stdin) input += chunk;
+    const {path, verb, payload} = JSON.parse(input);
+    const data = payload ? JSON.parse(payload) : null;
+    const result = verb === 'merge' ? await mergePhonesFile(path, data, 200)
+      : await confirmPhonesMerge(path, data?.receipt);
+    console.log(JSON.stringify(result ?? null));`
+  const answer = (verb: string, payload: Buffer): Answer => {
+    const result = spawnSync(
+      process.execPath,
+      ['--experimental-transform-types', '--input-type=module', '-e', script],
+      {
+        input: JSON.stringify({ path: receiver, verb, payload: payload.toString() }),
+        encoding: 'utf8',
+      },
+    )
+    expect(result.status, result.stderr).toBe(0)
+    return { code: result.status ?? 1, stdout: result.stdout, output: result.stderr, ended: true }
+  }
+  let delayedConfirm: Buffer | undefined
+  let merges = 0
+  const exec = async (_s: string, argv: string[], input: Buffer): Promise<Answer> => {
+    if (argv.at(-1)?.endsWith('phones merge-done')) {
+      if (!delayedConfirm) {
+        delayedConfirm = Buffer.from(input)
+        return gone // The remote command survives the source losing its connection.
+      }
+      return answer('merge-done', input)
+    }
+    const result = answer('merge', input)
+    if (++merges === 2) {
+      // The new reply now contains the receiver-local pairing. The prior command finally runs.
+      answer('merge-done', delayedConfirm as Buffer)
+      // The source changes while this reply is in flight, so it refuses to store or confirm it.
+      await withFileLock(source, () =>
+        writeFileSync(source, JSON.stringify([{ ...kept, last_ack: 300 }])),
+      )
+    }
+    return result
+  }
+  await syncPhones(peers, aico, env, exec as never)
+  writeFileSync(receiver, JSON.stringify([kept, pairedThere]))
+  expect((await syncPhones(peers, aico, env, exec as never)).lines).toEqual([
+    'standby: the phone list changed here; the next run catches it up',
+  ])
+  expect(JSON.parse(readFileSync(source, 'utf8'))).toEqual([{ ...kept, last_ack: 300 }])
+  await syncPhones(peers, aico, env, exec as never)
+  const ids = (path: string) =>
+    (JSON.parse(readFileSync(path, 'utf8')) as { id: string }[]).map((phone) => phone.id)
+  expect(ids(source)).toEqual(['kept', 'paired-there'])
+  expect(ids(receiver)).toEqual(['kept', 'paired-there'])
 })
 
 it('sends the canary cursor and keeps the newer time per token from both sides', async () => {

@@ -420,7 +420,16 @@ export function mergePhones(
  * sync time only moves when the sender confirms it has the reply (`confirmPhonesMerge`): until then a
  * phone paired here since the last confirmed sync is still new, so a dropped link cannot lose it.
  */
-export async function mergePhonesFile(path: string, sent: Phone[], now: number): Promise<Phone[]> {
+export interface PhoneMergeReply {
+  phones: Phone[]
+  receipt: string
+}
+
+export async function mergePhonesFile(
+  path: string,
+  sent: Phone[],
+  now: number,
+): Promise<PhoneMergeReply> {
   return withFileLock(path, () => {
     const syncFile = `${path}.sync.json`
     const cursor = readSync(syncFile)
@@ -465,12 +474,14 @@ export async function mergePhonesFile(path: string, sent: Phone[], now: number):
     )
     // Only a stored list can become a reply awaiting acknowledgement. If either write fails,
     // nothing in the common acknowledged baseline advances and a retry uses that same baseline.
+    const receipt = randomUUID()
     writeFileDurable(
       syncFile,
       JSON.stringify({
         ...received,
         received_pairs: storedReceived,
         pending: now,
+        pending_receipt: receipt,
         pending_ids: merged.map((phone) => phone.id),
         pending_pairs: Object.fromEntries(
           merged.map((phone) => [phone.id, phone.pairing_id ?? null]),
@@ -480,17 +491,26 @@ export async function mergePhonesFile(path: string, sent: Phone[], now: number):
         mode: 0o600,
       },
     )
-    return merged
+    return { phones: merged, receipt }
   })
 }
 
 /** The sender has the merged list: phones paired here before that merge are now part of it. */
-export async function confirmPhonesMerge(path: string): Promise<void> {
+export async function confirmPhonesMerge(path: string, receipt?: string): Promise<void> {
   return withFileLock(path, () => {
     const syncFile = `${path}.sync.json`
-    const { at, pending, pending_ids, known_pairs, pending_pairs, received_pairs } =
-      readSync(syncFile)
-    if (pending === undefined || pending < at) return
+    const {
+      at,
+      pending,
+      pending_receipt,
+      pending_ids,
+      known_pairs,
+      pending_pairs,
+      received_pairs,
+    } = readSync(syncFile)
+    // A disconnected exec can finish after another merge. Only that exact reply can be confirmed;
+    // old cursors and callers without a receipt remain unconfirmed until a fresh exchange.
+    if (!receipt || receipt !== pending_receipt || pending === undefined || pending < at) return
     // Confirm only phones in that reply. A pairing after the merge, even in the same second,
     // stays new until a later reply actually carries it. Old cursors retain their time fallback.
     writeFileDurable(
@@ -517,6 +537,7 @@ interface PhoneSync {
   at: number
   ids?: string[]
   pending?: number
+  pending_receipt?: string
   pending_ids?: string[]
   known_pairs?: Record<string, string | null>
   pending_pairs?: Record<string, string | null>
@@ -554,6 +575,7 @@ function readSync(file: string): PhoneSync {
     return {
       at: Number(raw.at) || 0,
       ...(pending > 0 ? { pending } : {}),
+      ...(typeof raw.pending_receipt === 'string' ? { pending_receipt: raw.pending_receipt } : {}),
       ...(ids(raw.ids) ? { ids: raw.ids } : {}),
       ...(ids(raw.pending_ids) ? { pending_ids: raw.pending_ids } : {}),
       ...(pairs(raw.known_pairs) ? { known_pairs: raw.known_pairs } : {}),

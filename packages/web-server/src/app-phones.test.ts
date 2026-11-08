@@ -62,14 +62,17 @@ it.each(['pair', 'remove', 'ack', 'merge', 'confirm'] as const)(
     dirs.push(dir)
     const path = join(dir, 'phones.json')
     writeFileSync(path, JSON.stringify([phone('old')]))
-    writeFileSync(`${path}.sync.json`, JSON.stringify({ at: 1, pending: 2 }))
+    writeFileSync(
+      `${path}.sync.json`,
+      JSON.stringify({ at: 1, pending: 2, pending_receipt: 'reply' }),
+    )
     const registry = new PhoneRegistry(path)
     const actions: Record<typeof operation, () => Promise<unknown>> = {
       pair: () => registry.register(phone('new')),
       remove: () => registry.remove('old'),
       ack: () => registry.ack('old', {}, 100),
       merge: () => mergePhonesFile(path, [phone('sent')], 200),
-      confirm: () => confirmPhonesMerge(path),
+      confirm: () => confirmPhonesMerge(path, 'reply'),
     }
     const before = readFileSync(path, 'utf8')
     const cursor = readFileSync(`${path}.sync.json`, 'utf8')
@@ -154,12 +157,13 @@ it('keeps a phone paired here when the reply to the merge never reached the send
   writeFileSync(`${file}.sync.json`, JSON.stringify({ at: 100 }))
   const sender = [phone('old', { added_at: 1 })]
   // First sync: the phone paired here is kept and returned, but the reply is lost (no confirm).
-  expect((await mergePhonesFile(file, sender, 200)).map((p) => p.id)).toEqual(['old', 'new'])
+  expect((await mergePhonesFile(file, sender, 200)).phones.map((p) => p.id)).toEqual(['old', 'new'])
   // The sender never got it, so its list still lacks the phone: it must survive again.
-  expect((await mergePhonesFile(file, sender, 300)).map((p) => p.id)).toEqual(['old', 'new'])
+  const reply = await mergePhonesFile(file, sender, 300)
+  expect(reply.phones.map((p) => p.id)).toEqual(['old', 'new'])
   // Once a reply is confirmed, the sender's list decides.
-  await confirmPhonesMerge(file)
-  expect((await mergePhonesFile(file, sender, 400)).map((p) => p.id)).toEqual(['old'])
+  await confirmPhonesMerge(file, reply.receipt)
+  expect((await mergePhonesFile(file, sender, 400)).phones.map((p) => p.id)).toEqual(['old'])
 })
 
 it('keeps a phone paired after the merge in its same second, until a reply actually includes it', async () => {
@@ -169,14 +173,59 @@ it('keeps a phone paired after the merge in its same second, until a reply actua
   const sender = [phone('old', { added_at: 1 })]
   writeFileSync(file, JSON.stringify(sender))
   writeFileSync(`${file}.sync.json`, JSON.stringify({ at: 100 }))
-  expect((await mergePhonesFile(file, sender, 200)).map((p) => p.id)).toEqual(['old'])
+  const first = await mergePhonesFile(file, sender, 200)
+  expect(first.phones.map((p) => p.id)).toEqual(['old'])
   // The reply above contains only "old"; this pairing happened later in the same wall-clock second.
   await new PhoneRegistry(file).register(phone('new', { added_at: 200 }))
-  await confirmPhonesMerge(file)
-  expect((await mergePhonesFile(file, sender, 300)).map((p) => p.id)).toEqual(['old', 'new'])
+  await confirmPhonesMerge(file, first.receipt)
+  const second = await mergePhonesFile(file, sender, 300)
+  expect(second.phones.map((p) => p.id)).toEqual(['old', 'new'])
   // Once a confirmed reply contains it, a removal on the sender is authoritative again.
-  await confirmPhonesMerge(file)
-  expect((await mergePhonesFile(file, sender, 400)).map((p) => p.id)).toEqual(['old'])
+  await confirmPhonesMerge(file, second.receipt)
+  expect((await mergePhonesFile(file, sender, 400)).phones.map((p) => p.id)).toEqual(['old'])
+})
+
+it('only acknowledges the receipt of the exact pending reply, even within one second', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'aico-phone-reply-receipt-'))
+  dirs.push(dir)
+  const file = join(dir, 'phones.json')
+  const first = await mergePhonesFile(file, [phone('sent')], 200)
+  await new PhoneRegistry(file).register(phone('paired-here', { added_at: 200 }))
+  const second = await mergePhonesFile(file, [phone('sent')], 200)
+  expect(second.receipt).not.toBe(first.receipt)
+  const cursor = readFileSync(`${file}.sync.json`, 'utf8')
+  const phones = readFileSync(file, 'utf8')
+  for (const receipt of [undefined, 'wrong-receipt', first.receipt]) {
+    await confirmPhonesMerge(file, receipt)
+    expect(readFileSync(`${file}.sync.json`, 'utf8')).toBe(cursor)
+    expect(readFileSync(file, 'utf8')).toBe(phones)
+  }
+  await confirmPhonesMerge(file, second.receipt)
+  expect(JSON.parse(readFileSync(`${file}.sync.json`, 'utf8'))).toMatchObject({
+    at: 200,
+    ids: ['sent', 'paired-here'],
+  })
+  expect(JSON.parse(readFileSync(`${file}.sync.json`, 'utf8'))).not.toHaveProperty('pending')
+})
+
+it('leaves a legacy pending cursor unconfirmed until a new exchange returns a receipt', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'aico-phone-legacy-receipt-'))
+  dirs.push(dir)
+  const file = join(dir, 'phones.json')
+  const phones = [phone('sent')]
+  writeFileSync(file, JSON.stringify(phones))
+  const cursor = JSON.stringify({ at: 100, pending: 200, pending_ids: ['sent'] })
+  writeFileSync(`${file}.sync.json`, cursor)
+  for (const receipt of [undefined, 'unknown-receipt']) {
+    await confirmPhonesMerge(file, receipt)
+    expect(readFileSync(`${file}.sync.json`, 'utf8')).toBe(cursor)
+  }
+  const fresh = await mergePhonesFile(file, phones, 300)
+  await confirmPhonesMerge(file, fresh.receipt)
+  expect(JSON.parse(readFileSync(`${file}.sync.json`, 'utf8'))).toMatchObject({
+    at: 300,
+    ids: ['sent'],
+  })
 })
 
 it('keeps sender origin and the last whole list when the list write fails after its cursor was saved', async () => {
@@ -204,27 +253,27 @@ it('keeps sender origin and the last whole list when the list write fails after 
   expect(JSON.parse(readFileSync(`${file}.sync.json`, 'utf8'))).not.toHaveProperty('pending')
   failed.mockRestore()
   // No reply was produced, so there is no confirm. A retry with the sender phone removed is safe.
-  expect((await mergePhonesFile(file, [phone('kept')], 300)).map((phone) => phone.id)).toEqual([
-    'kept',
-    'paired-here',
-  ])
+  expect(
+    (await mergePhonesFile(file, [phone('kept')], 300)).phones.map((phone) => phone.id),
+  ).toEqual(['kept', 'paired-here'])
 })
 
 it('distinguishes a fresh local pairing of a known phone from the pairing the sender already knew', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'aico-phone-repairing-'))
   dirs.push(dir)
   const file = join(dir, 'phones.json')
-  await mergePhonesFile(file, [phone('same-phone', { added_at: 1 })], 200)
-  await confirmPhonesMerge(file)
+  const first = await mergePhonesFile(file, [phone('same-phone', { added_at: 1 })], 200)
+  await confirmPhonesMerge(file, first.receipt)
   // The sender removed its old pairing, but this receiver paired that installation again afterward,
   // in the same second as the last reply. The next reply must carry this new pairing first.
   await new PhoneRegistry(file).register(
     phone('same-phone', { added_at: 200, auth: 'new-pairing-auth' }),
   )
-  expect((await mergePhonesFile(file, [], 300)).map((phone) => phone.id)).toEqual(['same-phone'])
-  await confirmPhonesMerge(file)
+  const second = await mergePhonesFile(file, [], 300)
+  expect(second.phones.map((phone) => phone.id)).toEqual(['same-phone'])
+  await confirmPhonesMerge(file, second.receipt)
   // Once that exact pairing was acknowledged, a later sender removal wins again.
-  expect(await mergePhonesFile(file, [], 400)).toEqual([])
+  expect((await mergePhonesFile(file, [], 400)).phones).toEqual([])
 })
 
 it('keeps an unconfirmed local re-pair when the sender still sends the acknowledged old pairing', async () => {
@@ -232,8 +281,8 @@ it('keeps an unconfirmed local re-pair when the sender still sends the acknowled
   dirs.push(dir)
   const file = join(dir, 'phones.json')
   const old = phone('same-phone', { added_at: 1, auth: 'old-auth', last_ack: 999 })
-  await mergePhonesFile(file, [old], 200)
-  await confirmPhonesMerge(file)
+  const first = await mergePhonesFile(file, [old], 200)
+  await confirmPhonesMerge(file, first.receipt)
   const registry = new PhoneRegistry(file)
   // Re-pair after the last reply, within its same second, with new encryption material.
   await registry.register(
@@ -241,9 +290,10 @@ it('keeps an unconfirmed local re-pair when the sender still sends the acknowled
   )
   const fresh = registry.get('same-phone')
   expect(fresh?.pairing_id).toBeTruthy()
-  expect(await mergePhonesFile(file, [old], 300)).toEqual([fresh])
-  await confirmPhonesMerge(file)
-  expect(await mergePhonesFile(file, [], 400)).toEqual([])
+  const second = await mergePhonesFile(file, [old], 300)
+  expect(second.phones).toEqual([fresh])
+  await confirmPhonesMerge(file, second.receipt)
+  expect((await mergePhonesFile(file, [], 400)).phones).toEqual([])
 })
 
 it('takes a new sender pairing over the receiver copy of an acknowledged old pairing', async () => {
@@ -251,19 +301,20 @@ it('takes a new sender pairing over the receiver copy of an acknowledged old pai
   dirs.push(dir)
   const file = join(dir, 'phones.json')
   const old = phone('same-phone', { pairing_id: 'old-pair', auth: 'old-auth', last_ack: 999 })
-  await mergePhonesFile(file, [old], 200)
-  await confirmPhonesMerge(file)
+  const first = await mergePhonesFile(file, [old], 200)
+  await confirmPhonesMerge(file, first.receipt)
   const fresh = phone('same-phone', {
     pairing_id: 'new-sender-pair',
     auth: 'new-auth',
     last_ack: 1,
   })
-  expect(await mergePhonesFile(file, [fresh], 300)).toEqual([fresh])
+  const second = await mergePhonesFile(file, [fresh], 300)
+  expect(second.phones).toEqual([fresh])
   expect(JSON.parse(readFileSync(`${file}.sync.json`, 'utf8')).received_pairs).toEqual({
     'same-phone': ['new-sender-pair'],
   })
-  await confirmPhonesMerge(file)
-  expect(await mergePhonesFile(file, [], 400)).toEqual([])
+  await confirmPhonesMerge(file, second.receipt)
+  expect((await mergePhonesFile(file, [], 400)).phones).toEqual([])
 })
 
 it.each(['phone list', 'reply cursor'])(
@@ -274,8 +325,8 @@ it.each(['phone list', 'reply cursor'])(
     const file = join(dir, 'phones.json')
     const old = phone('same-phone', { pairing_id: 'old-pair', auth: 'old-auth' })
     const fresh = phone('same-phone', { pairing_id: 'new-pair', auth: 'new-auth' })
-    await mergePhonesFile(file, [old], 200)
-    await confirmPhonesMerge(file)
+    const first = await mergePhonesFile(file, [old], 200)
+    await confirmPhonesMerge(file, first.receipt)
     const write = durableFile.writeFileDurable
     let cursorWrites = 0
     const failed = vi
@@ -299,11 +350,12 @@ it.each(['phone list', 'reply cursor'])(
     })
     expect(interrupted).not.toHaveProperty('pending')
     // Retry the same request: the unchanged old local record must not be mistaken for a fresh pairing.
-    expect(await mergePhonesFile(file, [fresh], 400)).toEqual([fresh])
+    const second = await mergePhonesFile(file, [fresh], 400)
+    expect(second.phones).toEqual([fresh])
     expect(JSON.parse(readFileSync(`${file}.sync.json`, 'utf8')).known_pairs).toEqual({
       'same-phone': 'old-pair',
     })
-    await confirmPhonesMerge(file)
+    await confirmPhonesMerge(file, second.receipt)
     expect(JSON.parse(readFileSync(`${file}.sync.json`, 'utf8')).known_pairs).toEqual({
       'same-phone': 'new-pair',
     })
@@ -319,10 +371,10 @@ it.each(['current', 'legacy'])(
     const acknowledged = phone('same-phone', { pairing_id: 'pair-a', auth: 'auth-a' })
     const received = phone('same-phone', { pairing_id: 'pair-b', auth: 'auth-b' })
     const replacement = phone('same-phone', { pairing_id: 'pair-c', auth: 'auth-c' })
-    await mergePhonesFile(file, [acknowledged], 200)
-    await confirmPhonesMerge(file)
+    const first = await mergePhonesFile(file, [acknowledged], 200)
+    await confirmPhonesMerge(file, first.receipt)
     // B reached the receiver, but its reply never reached the sender, so A remains acknowledged.
-    expect(await mergePhonesFile(file, [received], 300)).toEqual([received])
+    expect((await mergePhonesFile(file, [received], 300)).phones).toEqual([received])
     if (cursorFormat === 'legacy') {
       const cursor = JSON.parse(readFileSync(`${file}.sync.json`, 'utf8'))
       writeFileSync(
@@ -346,7 +398,7 @@ it.each(['current', 'legacy'])(
     expect(interrupted.known_pairs).toEqual({ 'same-phone': 'pair-a' })
     expect(interrupted.received_pairs).toEqual({ 'same-phone': ['pair-b', 'pair-c'] })
     // C never reached the list. Removing the phone at the sender must still remove received B.
-    expect(await mergePhonesFile(file, [], 500)).toEqual([])
+    expect((await mergePhonesFile(file, [], 500)).phones).toEqual([])
     expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual([])
     expect(JSON.parse(readFileSync(`${file}.sync.json`, 'utf8')).received_pairs).toEqual({})
   },

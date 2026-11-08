@@ -62,7 +62,20 @@ export async function runPhonesCli(argv: string[], io: PhonesIo): Promise<number
   if (verb === 'merge') return mergeFromPeer(io)
   if (verb === 'dump') return dumpForPeer(io)
   if (verb === 'merge-done') {
-    await confirmPhonesMerge(devicesFile(io))
+    let receipt: string | undefined
+    try {
+      const input: unknown = JSON.parse(await (io.readInput ?? (() => text(process.stdin)))())
+      if (
+        input &&
+        typeof input === 'object' &&
+        'receipt' in input &&
+        typeof input.receipt === 'string'
+      )
+        receipt = input.receipt
+    } catch {
+      // An old caller sends no receipt; it cannot confirm a newer exchange.
+    }
+    await confirmPhonesMerge(devicesFile(io), receipt)
     return 0
   }
   if (verb === 'canary-merge') return mergeCanaryFromPeer(io)
