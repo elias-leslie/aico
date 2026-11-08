@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { StatusRow } from '@aico/status'
 import { describe, expect, it, vi } from 'vitest'
-import { answerResult, commandJob, postJob } from './act'
+import { answerResult, commandJob, postJob, selfArgv } from './act'
 import { type JobDef, nextAt, nextRun, parseJobs, readJobs, schedule } from './jobs'
 import { JobStore, StaleLease } from './leases'
 import { main } from './main'
@@ -467,5 +467,17 @@ describe('what a job does', () => {
       state: 'failed',
       meaning: 'Exited 3: bad',
     })
+  })
+})
+
+describe('a POST job unit', () => {
+  it("starts node with the runner's own flags, so node:sqlite's warning stays out of its log", () => {
+    expect(
+      selfArgv({
+        execPath: '/usr/bin/node',
+        execArgv: ['--disable-warning=ExperimentalWarning'],
+        argv: ['/usr/bin/node', '/x/aico-jobs.mjs', 'serve'],
+      }),
+    ).toEqual(['/usr/bin/node', '--disable-warning=ExperimentalWarning', '/x/aico-jobs.mjs'])
   })
 })

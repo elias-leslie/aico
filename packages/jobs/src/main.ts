@@ -14,7 +14,7 @@ import {
   type StatusRow,
   statusRowsUrl,
 } from '@aico/status'
-import { act, postJob, systemdUnits, unitInFlight, whereOf } from './act'
+import { act, postJob, selfArgv, systemdUnits, unitInFlight, whereOf } from './act'
 import { remoteAuthority, serveLeases } from './fleet-leases'
 import type { JobDef } from './jobs'
 import { type JobState, JobStore, jobsDbPath } from './leases'
@@ -207,7 +207,7 @@ export async function main(argv: string[], env = process.env): Promise<number> {
         job.kind,
         TICK_MS,
       ),
-    act: act([process.execPath, process.argv[1] as string], units),
+    act: act(selfArgv(), units),
     inFlight: (job) => unitInFlight(job.kind, units, whereOf(job)),
     drain: async () => void (await drainOutbox(rowsUrl, outbox)),
     postRows: (rows) => postRows(webUrl, rows),

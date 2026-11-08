@@ -292,6 +292,15 @@ export const whereOf = (job: JobDef): UnitWhere => ({
   ...(job.cwd ? { cwd: job.cwd } : {}),
 })
 
+/** How to start this program again: node with its own flags (aico-jobs.service passes
+ * --disable-warning=ExperimentalWarning, so a POST job's unit logs its result, not node:sqlite's
+ * warning) and the bundle. */
+export function selfArgv(
+  proc: Pick<NodeJS.Process, 'execPath' | 'execArgv' | 'argv'> = process,
+): string[] {
+  return [proc.execPath, ...proc.execArgv, proc.argv[1] as string]
+}
+
 /**
  * Runs each job in its own unit. `self` is how to start this program again (node and the
  * aico-jobs bundle), for a POST job's `aico jobs post PATH` unit.
