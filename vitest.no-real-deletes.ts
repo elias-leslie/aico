@@ -10,7 +10,7 @@ import { promisify } from 'node:util'
 
 const real = (path: string) => {
   try {
-    return realpathSync(path)
+    return realpathSync.native(path) // The plain one collapses ".." before it follows links.
   } catch {
     return path
   }
@@ -26,9 +26,11 @@ function refuseOutsideTemp(target: unknown, what: string): void {
         ? target.toString()
         : target
   if (typeof raw !== 'string') return
-  const path = resolve(raw)
-  // The parent resolves links; the entry itself may be a link being removed, or already gone.
-  const seen = resolve(real(dirname(path)), path.slice(dirname(path).length + 1))
+  // The parent resolves links (and a ".." walks through them); the entry itself may be a link being
+  // removed, or already gone. A trailing slash walks through it too, so then the target is what gets hit.
+  const path = raw.replace(/\/\.?$/, '')
+  const entry = resolve(real(dirname(path)), basename(path))
+  const seen = path === raw ? entry : real(entry)
   if (inTemp(seen)) return
   throw new Error(`A test tried ${what} on ${seen}, outside a temp folder.`)
 }
@@ -38,6 +40,7 @@ const guarded = (host: Record<string, unknown>, names: string[]) => {
     const original = host[name] as (...args: unknown[]) => unknown
     host[name] = (...args: unknown[]) => {
       refuseOutsideTemp(args[0], name)
+      if (name.startsWith('rename')) refuseOutsideTemp(args[1], name) // It overwrites its destination.
       return original.apply(host, args)
     }
   }
