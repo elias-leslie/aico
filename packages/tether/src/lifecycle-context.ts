@@ -7,6 +7,7 @@ import type { EventBus } from '@aico/session-engine/events'
 import type { TetherPaths } from '@aico/session-engine/paths'
 import type { Store } from '@aico/session-engine/store'
 import type { LaneReporter } from './lane-reports'
+import type { ModelWatch } from './model-switch'
 import type { WaitService } from './waits'
 
 export interface LifecycleContext {
@@ -19,4 +20,6 @@ export interface LifecycleContext {
   lanes?: LaneReporter
   /** General waits (src/waits.ts); absent where Tether does not observe sessions. */
   waits?: WaitService
+  /** The agent record Tether follows for a session; absent where it doesn't observe sessions. */
+  agentRecord?: ModelWatch['recordOf']
 }

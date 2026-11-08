@@ -12,7 +12,7 @@
 // checkpoint, report readiness) and reads `status` after boot.
 
 import { randomUUID } from 'node:crypto'
-import { readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { closeSync, fsyncSync, openSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
 import { entryReaders } from './entry-files'
 import { ADAPTERS, adapterOf } from './lifecycle/tui/registry'
@@ -161,7 +161,15 @@ export function readJsonFile<T>(path: string): T | null {
 
 export function writeJsonFile(path: string, value: unknown): void {
   const tmp = `${path}.${randomUUID()}.tmp`
-  writeFileSync(tmp, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 })
+  // Synced before the rename: a power cut must not leave an empty file where the
+  // record of what to bring back was.
+  const fd = openSync(tmp, 'w', 0o600)
+  try {
+    writeFileSync(fd, `${JSON.stringify(value, null, 2)}\n`)
+    fsyncSync(fd)
+  } finally {
+    closeSync(fd)
+  }
   renameSync(tmp, path)
 }
 

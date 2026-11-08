@@ -1,7 +1,7 @@
 // The crash recovery state machine with the engine, clock and commands
 // replaced: no tmux, systemd or agent process is involved.
 
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -15,6 +15,7 @@ import {
 } from '@aico/session-engine/catalog'
 import { writeJsonFile } from '@aico/session-engine/continuity'
 import type { AbandonedScope, RespawnResult } from '@aico/session-engine/engine'
+import { rootLaunchEnvironment } from '@aico/session-engine/root-launch'
 import { initStore, registerBuiltinTuis } from '@aico/session-engine/testing'
 import type { AgentExitMarker } from '@aico/session-engine/tui/launch'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, type Mock, vi } from 'vitest'
@@ -319,6 +320,47 @@ describe('crash recovery', () => {
     await runDue(h)
     expect(h.respawn).toHaveBeenCalledTimes(1)
     expect(sessions(h)).toMatchObject([{ state: 'recovered', attempt: 1 }])
+  })
+
+  it('puts back what the agent never got, once, and says it may have arrived', async () => {
+    h.recovery.pending.add(h.id, { text: 'the lost message', state: 'sent' })
+    await agentKilled(h)
+    const prompts: string[] = []
+    h.respawn.mockImplementation(async () => {
+      prompts.push(rootLaunchEnvironment(h.id).AICO_ROOT_INITIAL_PROMPT ?? '')
+      h.agent = { pid: 7, resumeId: RESUME }
+      return { status: 'replaced' }
+    })
+    await runDue(h)
+    expect(prompts).toHaveLength(1)
+    expect(prompts[0]).toContain('the lost message')
+    expect(prompts[0]).toContain('do not act on any of it twice')
+    expect(h.recovery.pending.has(h.id)).toBe(false)
+    expect(sessions(h)).toMatchObject([{ state: 'recovered' }])
+    const folder = (h.recovery as unknown as { recoveryDir: string }).recoveryDir
+    const detail = readdirSync(folder)
+    expect(detail).toHaveLength(1)
+    expect(readFileSync(join(folder, detail[0] as string), 'utf8')).not.toContain(
+      'the lost message',
+    )
+  })
+
+  it('keeps what is sent as the pane goes, and never a command', async () => {
+    await h.recovery.inspect(row(h), 'running', 1, 7)
+    h.pane = null
+    await h.recovery.noteInput(h.id, { text: '/login', state: 'sent' })
+    expect(h.recovery.pending.has(h.id)).toBe(false)
+    await h.recovery.noteInput(h.id, { text: 'sent as it died', state: 'typed' })
+    expect(h.recovery.pending.has(h.id)).toBe(true)
+  })
+
+  it('records text only while an agent is really in the pane', async () => {
+    h.agent = null
+    await h.recovery.noteInput(h.id, { text: 'maybe a password', state: 'sent' })
+    expect(h.recovery.pending.has(h.id)).toBe(false)
+    h.agent = { pid: 7, resumeId: RESUME }
+    await h.recovery.noteInput(h.id, { text: 'for the agent', state: 'sent' })
+    expect(h.recovery.pending.list(h.id).map((entry) => entry.text)).toEqual(['for the agent'])
   })
 
   it('still resumes a crashed agent after admission returns beyond the former fifteen-minute cutoff', async () => {

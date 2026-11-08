@@ -52,6 +52,8 @@ export interface TerminalHandle {
   sendInput: (data: string) => void
   /** Send text wrapped in bracketed paste sequences — needed for TUI apps like Claude Code */
   pasteInput: (data: string) => Promise<void>
+  /** False when the server never answered: what was sent may not have arrived. */
+  inputArrived: () => Promise<boolean>
   search: (
     query: string,
     options?: TerminalSearchOptions,

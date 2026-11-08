@@ -39,11 +39,12 @@
  * 33: `GET /v1/sessions/:id/report`: the agent's last message and context fill; the idle
  *     detail `background shells running`; `laneBackgroundHoldSeconds` and `laneClosingMaxChars`.
  * 34: `GET /v1/sessions/:id/comes-back`: a wake or wait kept past End will relaunch it.
+ * 35: `POST /v1/sessions/:id/pending-input`: what a viewer sent, kept until the agent has it.
  *
  * A bump also changes EXPECTED_TETHER_API_VERSION in packages/tether-client (config.test.ts keeps
  * them equal): a deploy restarts Tether when its code changed, and the web server names a daemon
  * older than that. */
-export const API_VERSION = 34
+export const API_VERSION = 35
 
 /** Where Aico's web server listens on this host (`AICO_WEB_URL` overrides it). */
 export const AICO_WEB_DEFAULT_URL = 'http://127.0.0.1:3002'

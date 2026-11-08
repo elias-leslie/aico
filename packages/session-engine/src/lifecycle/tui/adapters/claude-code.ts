@@ -357,6 +357,36 @@ export function claudePromptAt(
   return text === null ? null : { text, after }
 }
 
+/** A queued prompt's own record says Claude Code gave it to the turn in progress. */
+const QUEUE_DELIVERED = new Set(['absorbed_mid_turn', 'delivered_to_agent'])
+
+/** Text that reached the agent: a prompt row, or a queued prompt taken mid-turn
+ * (no prompt row then, only the queue's `remove`). */
+export function claudeDelivered(line: string): { text: string; at: number | null }[] {
+  if (!line.includes('"user"') && !line.includes('"queue-operation"')) return []
+  const row = parse(line)
+  if (!row || row.isSidechain === true) return []
+  const at = time(row.timestamp)
+  if (row.type === 'queue-operation') {
+    const text = row.content
+    return row.operation === 'remove' &&
+      QUEUE_DELIVERED.has(String(row.reason)) &&
+      typeof text === 'string' &&
+      !text.startsWith('<')
+      ? [{ text, at }]
+      : []
+  }
+  if (row.type !== 'user' || !isPrompt(row)) return []
+  const content = (row.message as { content?: unknown }).content
+  const text =
+    typeof content === 'string'
+      ? content
+      : (content as { type?: string; text?: unknown }[])
+          .map((part) => (part.type === 'text' && typeof part.text === 'string' ? part.text : ''))
+          .join('\n')
+  return text ? [{ text, at }] : []
+}
+
 // --- context ---------------------------------------------------------------------
 
 /** Native Claude hooks deliver Aico context, including spawned agents. */
@@ -767,7 +797,7 @@ export const claudeCode: TuiAdapter = {
     grant: true,
     local: { bin: 'claude', authFile: '.claude/.credentials.json' },
   },
-  models: { events: claudeModelEvents, promptAt: claudePromptAt },
+  models: { events: claudeModelEvents, promptAt: claudePromptAt, delivered: claudeDelivered },
   sessionFile: claudeTranscriptPath,
   displayName: 'Claude Code',
 }

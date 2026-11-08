@@ -73,6 +73,10 @@ function TerminalContentBody({
   )
   const frame = useFrame()
   const shownSlot = getShownSlot(terminalSlots, activeSessionId)
+  const shownMode =
+    shownSlot && 'activeMode' in shownSlot
+      ? shownSlot.activeMode
+      : shownSlot?.sessionMode
   // A deep link or a session picked from the sheet shows that session.
   const setSheetOpen = frame?.setSheetOpen
   // Not on first render: a page opened by its link (/needs-you on a phone)
@@ -215,6 +219,7 @@ function TerminalContentBody({
                 inputRef={composeInputRef}
                 sessionId={activeSessionId}
                 connected={activeStatus === 'connected'}
+                keepOnDevice={Boolean(shownMode) && shownMode !== 'shell'}
                 onCommit={handleComposeInput}
               />
             </div>

@@ -15,6 +15,7 @@ type XtermTerminal = InstanceType<typeof import('@xterm/xterm').Terminal>
 interface UseTerminalHandleOptions {
   reconnect: () => void
   sendInput: (data: string) => void
+  inputArrived: () => Promise<boolean>
   claimSize: () => void
   reconnectHost: () => void
   status: ConnectionStatus
@@ -34,6 +35,7 @@ export function useTerminalHandle(
   {
     reconnect,
     sendInput,
+    inputArrived,
     claimSize,
     reconnectHost,
     status,
@@ -54,6 +56,7 @@ export function useTerminalHandle(
       getContent: () => getTerminalContent(terminalRef.current),
       sendInput,
       pasteInput,
+      inputArrived,
       search,
       clearSearch,
       status,
@@ -61,6 +64,7 @@ export function useTerminalHandle(
     [
       clearSearch,
       pasteInput,
+      inputArrived,
       reconnect,
       search,
       sendInput,

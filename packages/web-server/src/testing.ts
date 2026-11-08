@@ -232,6 +232,11 @@ export class FakeTether {
     return this.hostRows
   }
 
+  async recordInput(id: string, input: unknown) {
+    this.record('recordInput', id, input)
+    return { ok: true }
+  }
+
   async resizeClaim(
     id: string,
     generation: string,

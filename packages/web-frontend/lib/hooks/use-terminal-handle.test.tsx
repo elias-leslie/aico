@@ -14,6 +14,7 @@ const Harness = forwardRef<
   useTerminalHandle(ref, {
     reconnect: vi.fn(),
     sendInput,
+    inputArrived: vi.fn().mockResolvedValue(true),
     claimSize: vi.fn(),
     reconnectHost: vi.fn(),
     status: 'connected',

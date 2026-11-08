@@ -64,7 +64,7 @@ export interface WebSocketConnectionCallbacks {
 
 // Binary protocol message types (must match backend)
 const MSG_OUTPUT = 0x01
-const MSG_CONTROL = 0x02
+export const MSG_CONTROL = 0x02
 
 /** Client capabilities advertised in the initial resize message. */
 const CLIENT_CAPABILITIES = ['binary_protocol']

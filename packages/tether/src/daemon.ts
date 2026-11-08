@@ -206,6 +206,7 @@ function createContext(
     startedAt: Date.now(),
     continuity: undefined as Continuity | undefined,
     recovery: undefined as Recovery | undefined,
+    agentRecord: undefined as ModelWatch['recordOf'] | undefined,
     wakes: undefined as WakeService | undefined,
     asks: undefined as AskDelivery | undefined,
     // The Aico tray reads this file for its Aico row.
@@ -250,6 +251,8 @@ function startSessionHistory(context: DaemonContext, env: NodeJS.ProcessEnv): vo
   })
 }
 
+const NEW_SESSION_OBSERVE_MS = 15_000
+
 /** Reboot continuity and crash recovery, where Tether observes sessions. */
 function startContinuity(context: DaemonContext, env: NodeJS.ProcessEnv): void {
   const graphical = () => userManagerGraphicalEnvironment()
@@ -286,6 +289,14 @@ function startContinuity(context: DaemonContext, env: NodeJS.ProcessEnv): void {
   setLaunchGuard((id) => recovery.holdsLaunch(id))
   context.continuity = continuity
   context.recovery = recovery
+  // The next timed pass could be a minute off: a power cut in that minute must
+  // not forget a session just opened.
+  context.events.subscribe((event) => {
+    if (event.type === 'session.created')
+      setTimeout(() => void continuity.observe().catch(() => {}), NEW_SESSION_OBSERVE_MS).unref()
+    else if (event.type === 'session.ended' && typeof event.data.id === 'string')
+      recovery.pending.forget(event.data.id)
+  })
 }
 
 /** An owner's answer to an ask goes to the asking session as an event line
@@ -798,10 +809,15 @@ function startModelWatch(
             nodeProcFs.mtimeMs ? nodeProcFs.mtimeMs(path) : null,
           ),
         changed: (id) => notifySessionChanged(id, { force: true }),
+        awaited: {
+          has: (id) => context.recovery?.pending.has(id) ?? false,
+          seen: (id, text, at) => context.recovery?.pending.seen(id, text, at),
+        },
         log: (message) => console.log(`[tether:models] ${message}`),
       })
     : null
   bindModelWatch(models)
+  if (models) context.agentRecord = (id) => models.recordOf(id)
   if (models)
     events.subscribe((event) => {
       if (event.type === 'session.ended' && typeof event.data.host !== 'string')

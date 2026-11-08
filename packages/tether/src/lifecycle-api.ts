@@ -1403,7 +1403,34 @@ function registerTerminalInputRoutes(router: Router, context: LifecycleApiContex
       if (!delivered) throw new HttpError(409, 'workload_unavailable')
       if (from && from !== row.id && submit) context.waits?.store.recordSend(from, row.id, sentAt)
       if (submit && from !== row.id) context.lanes?.reached(row.id, 'a send reached it')
+      if (submit && agentStateOf(row.id).state !== 'blocked')
+        await context.recovery?.noteInput(row.id, {
+          text,
+          state: 'sent',
+          ...(from ? { from } : {}),
+        })
       sendJson(res, 200, { generation, delivered: true })
+    })
+    // What a viewer sent, or was typing when it lost the session: Aico doesn't
+    // hold it, so nothing else would if the agent went down now (pending-input.ts).
+    .add('POST', '/v1/sessions/:id/pending-input', async (req, res, params) => {
+      const body = await readJsonObject(req)
+      onlyFields(body, ['text', 'state', 'approx'])
+      if (typeof body.text !== 'string' || !body.text.trim())
+        throw new HttpError(400, 'invalid_body', { field: 'text' })
+      if (body.state !== 'sent' && body.state !== 'typed')
+        throw new HttpError(400, 'invalid_body', { field: 'state' })
+      if (body.approx !== undefined && body.approx !== true)
+        throw new HttpError(400, 'invalid_body', { field: 'approx' })
+      const row = requireSession(params.id)
+      // A prompt the agent is waiting on (a permission, a password) isn't a message.
+      if (agentStateOf(row.id).state !== 'blocked')
+        await context.recovery?.noteInput(row.id, {
+          text: body.text,
+          state: body.state,
+          ...(body.approx ? { approx: true as const } : {}),
+        })
+      sendJson(res, 200, { ok: true })
     })
     // Rewind a Claude Code session to before the prompt its standing model
     // switch names (docs/api-v1.md "Model switches"), through its rewind menu.

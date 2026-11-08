@@ -1,7 +1,6 @@
 // Facts behind a crash recovery: what ended the session (systemd and kernel
-// journal records), what the agent had running (the per-tool transcript
-// adapter; Claude Code only, Codex has none), and the state it comes back to
-// (git, leases). Everything here is pure parsing plus bounded reads, so the
+// journal records), what the agent had running (its own record, per harness),
+// and the state it comes back to (git, leases, what changed during the gap). Everything here is pure parsing plus bounded reads, so the
 // synopsis prompt and the detail file can be tested from fixtures.
 
 import { closeSync, openSync, readdirSync, readFileSync, statSync } from 'node:fs'
@@ -16,6 +15,9 @@ export type { FileReader } from '@aico/session-engine/proc-facts'
  * runs as a non-main process of an ExitType=cgroup unit, so systemd records no
  * failure when it is killed; the agent seen running is the evidence. */
 export const SERVER_LOST = 'lost'
+
+/** Cause of a session that was running when the machine went down. */
+export const MACHINE_DOWN = 'machine-down'
 
 /** Cause of a pane whose scope ended cleanly while its agent was still
  * running: every process in it was SIGKILLed from outside (systemctl kill,
@@ -272,6 +274,8 @@ export interface KilledCall {
   outcome: string
   background: boolean
   transcript: string
+  /** The file a killed Write or Edit was writing. */
+  file?: string
 }
 
 export interface WorkflowState {
@@ -289,6 +293,12 @@ export interface TranscriptFacts {
   killed: KilledCall[]
   workflows: WorkflowState[]
   lostBackground: { id: string; output: string | null }[]
+  /** The agent's last turn had ended before it died. */
+  turnOver: boolean
+  /** Queued prompts the agent never took; Claude Code loses its queue with it. */
+  unread: { at: number; text: string }[]
+  /** Background work that finished, whose report never reached the agent. */
+  finishedUnread: { id: string; summary: string }[]
 }
 
 /** The last `maxBytes` of a file, from its first whole line. */
@@ -331,6 +341,7 @@ interface ToolUse {
   command: string
   at: number | null
   background: boolean
+  file?: string
 }
 
 interface ToolResult {
@@ -344,6 +355,10 @@ interface ParsedTranscript {
   lastOwner: { at: number; text: string } | null
   backgroundStarted: Map<string, number | null>
   notified: Set<string>
+  turnOver: boolean
+  /** A subagent's reply ended; false while it was still going. */
+  replyEnded: boolean
+  queued: { at: number; text: string; status: string | null; id: string | null; summary: string }[]
 }
 
 function toTime(value: unknown): number | null {
@@ -359,6 +374,16 @@ function oneLine(text: string, max: number): string {
     .replace(/\s+/g, ' ')
     .trim()
   return flat.length > max ? `${flat.slice(0, max - 3)}...` : flat
+}
+
+/** At most `limit` bytes of valid text: a prompt with half a character in it is refused. */
+function fitBytes(text: string, limit: number): string {
+  const bytes = Buffer.from(text)
+  if (bytes.length <= limit) return bytes.toString('utf8')
+  return bytes
+    .subarray(0, limit)
+    .toString('utf8')
+    .replace(/\uFFFD+$/, '')
 }
 
 function resultText(content: unknown): string {
@@ -377,6 +402,40 @@ function resultText(content: unknown): string {
 const BACKGROUND_RE = /running in background with ID: ([A-Za-z0-9_-]+)/
 const TASK_ID_RE = /<task-id>([A-Za-z0-9_-]+)<\/task-id>/g
 
+const FILE_WRITERS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit'])
+const TASK_TAG_RE = /<(status|task-id|summary)>([^<]*)<\//g
+
+function noteQueue(
+  queued: ParsedTranscript['queued'],
+  entry: Record<string, unknown>,
+  at: number | null,
+): void {
+  const text = entry.content
+  if (typeof text !== 'string') return
+  if (entry.operation === 'remove') {
+    const index = queued.findIndex((item) => item.text === text)
+    if (index >= 0) queued.splice(index, 1)
+  } else if (entry.operation === 'enqueue' && at !== null) {
+    const tags = new Map([...text.matchAll(TASK_TAG_RE)].map((m) => [m[1], m[2]]))
+    queued.push({
+      at,
+      text,
+      status: tags.get('status') ?? null,
+      id: tags.get('task-id') ?? null,
+      summary: tags.get('summary') ?? '',
+    })
+  }
+}
+
+/** A row that reached the agent: what it carries left the queue, and Tether's
+ * own prompt means the last crash already accounted for what was queued. */
+function settleQueue(queued: ParsedTranscript['queued'], text: string): void {
+  if (isTetherPrompt(text)) queued.length = 0
+  else
+    for (let index = queued.length - 1; index >= 0; index -= 1)
+      if (text.includes((queued[index] as { text: string }).text)) queued.splice(index, 1)
+}
+
 function parseTranscript(text: string): ParsedTranscript {
   const parsed: ParsedTranscript = {
     uses: new Map(),
@@ -384,6 +443,9 @@ function parseTranscript(text: string): ParsedTranscript {
     lastOwner: null,
     backgroundStarted: new Map(),
     notified: new Set(),
+    turnOver: false,
+    replyEnded: false,
+    queued: [],
   }
   for (const line of text.split('\n')) {
     if (!line.trim()) continue
@@ -394,7 +456,16 @@ function parseTranscript(text: string): ParsedTranscript {
       continue
     }
     const at = toTime(entry.timestamp)
-    const content = (entry.message as { content?: unknown } | undefined)?.content
+    if (entry.type === 'queue-operation') {
+      noteQueue(parsed.queued, entry, at)
+      continue
+    }
+    if (entry.type === 'system' && entry.subtype === 'turn_duration') parsed.turnOver = true
+    if (entry.type !== 'assistant' && entry.type !== 'user') continue
+    parsed.turnOver = false
+    const message = entry.message as { content?: unknown; stop_reason?: unknown } | undefined
+    const content = message?.content
+    parsed.replyEnded = entry.type === 'assistant' && message?.stop_reason === 'end_turn'
     if (entry.type === 'assistant' && Array.isArray(content)) {
       for (const block of content as Record<string, unknown>[]) {
         if (block?.type !== 'tool_use' || typeof block.id !== 'string') continue
@@ -413,12 +484,16 @@ function parseTranscript(text: string): ParsedTranscript {
           command,
           at,
           background: input.run_in_background === true,
+          ...(typeof input.file_path === 'string' && FILE_WRITERS.has(String(block.name))
+            ? { file: input.file_path }
+            : {}),
         })
       }
     }
     if (entry.type !== 'user') continue
     if (typeof content === 'string') {
       for (const match of content.matchAll(TASK_ID_RE)) parsed.notified.add(match[1] as string)
+      settleQueue(parsed.queued, content)
       const human = (entry.origin as { kind?: unknown } | undefined)?.kind === 'human'
       if (
         at !== null &&
@@ -438,6 +513,7 @@ function parseTranscript(text: string): ParsedTranscript {
         if (background) parsed.backgroundStarted.set(background[1] as string, at)
       } else if (block?.type === 'text' && typeof block.text === 'string') {
         for (const match of block.text.matchAll(TASK_ID_RE)) parsed.notified.add(match[1] as string)
+        settleQueue(parsed.queued, block.text)
         if (
           at !== null &&
           !entry.isMeta &&
@@ -473,10 +549,11 @@ function killedCalls(
     calls.push({
       where,
       ...ids,
-      command: use.command || use.name,
+      command: use.command || (use.file ? `${use.name} ${use.file}` : use.name),
       startedAt: use.at,
       outcome,
       background: use.background,
+      ...(use.file ? { file: use.file } : {}),
     })
   }
   return calls
@@ -553,6 +630,11 @@ function subagentTranscripts(
  * What was in flight at the death is at the end, so only the tail is read. */
 const MAIN_TAIL_BYTES = 4 * 1024 * 1024
 const SUBAGENT_TAIL_BYTES = 256 * 1024
+/** A subagent written to this close to the death, its reply unfinished, was
+ * still going even with no tool call open (mid-thought). */
+const SUBAGENT_LIVE_MS = 15 * 60_000
+/** Stands for a command in a subagent that died between its tool calls. */
+const MID_REPLY = 'mid-reply'
 
 /** Claude Code adapter: facts from the main transcript, its subagents and
  * workflow journals for a session that died at `diedAt`. */
@@ -595,16 +677,39 @@ export function claudeTranscriptFacts(
         // no meta
       }
     }
-    killed.push(
-      ...killedCalls(parseTranscript(body), diedAt, where, { agentId, runId, transcript: path }),
+    const parsed = parseTranscript(body)
+    const calls = killedCalls(parsed, diedAt, where, { agentId, runId, transcript: path })
+    killed.push(...calls)
+    if (
+      !calls.length &&
+      !parsed.replyEnded &&
+      (files.mtime(path) ?? 0) >= diedAt - SUBAGENT_LIVE_MS
     )
+      killed.push({
+        where,
+        agentId,
+        runId,
+        transcript: path,
+        command: MID_REPLY,
+        startedAt: null,
+        outcome: 'in flight',
+        background: true,
+      })
   }
   const openMainCalls = [...main.uses.values()]
     .filter((use) => !main.results.has(use.id) && (use.at ?? 0) <= diedAt + 5_000)
     .map((use) => `${use.name} ${use.id}`)
   const projectDir = basename(dirname(transcript))
+  const leftInQueue = main.queued.filter((item) => item.at >= diedAt - 24 * 3600_000)
+  const finishedUnread = leftInQueue
+    .filter((item) => item.status === 'completed' && item.id && !main.notified.has(item.id))
+    .map((item) => ({ id: item.id as string, summary: item.summary }))
+  const finishedIds = new Set(finishedUnread.map((item) => item.id))
   const lostBackground = [...main.backgroundStarted.entries()]
-    .filter(([id, at]) => !main.notified.has(id) && (at ?? 0) >= diedAt - 24 * 3600_000)
+    .filter(
+      ([id, at]) =>
+        !main.notified.has(id) && !finishedIds.has(id) && (at ?? 0) >= diedAt - 24 * 3600_000,
+    )
     .map(([id]) => {
       const output = join(`/tmp/claude-${uid}`, projectDir, sessionId, 'tasks', `${id}.output`)
       return { id, output: files.mtime(output) !== null ? output : null }
@@ -616,16 +721,177 @@ export function claudeTranscriptFacts(
     killed: killed.sort((a, b) => (a.startedAt ?? 0) - (b.startedAt ?? 0)),
     workflows: unfinishedWorkflows(files, sessionDir),
     lostBackground,
+    turnOver: main.turnOver,
+    unread: leftInQueue
+      .filter((item) => !/^[</]/.test(item.text))
+      .map(({ at, text }) => ({ at, text })),
+    finishedUnread,
   }
+}
+
+// --- Codex and Pi: what their records say about a death ---------------------------
+
+const PATCH_FILE = /^\*\*\* (?:Add|Update|Delete) File: (.+)$/m
+const NOT_THE_OWNER =
+  /^\s*(<[a-z][\w-]*[\s>]|# AGENTS\.md instructions|Caveat: The messages below)/i
+
+/** Whether a user row in an agent's record is the owner speaking, not the harness. */
+export function ownerSaid(text: string): boolean {
+  return !NOT_THE_OWNER.test(text) && !isTetherPrompt(text)
+}
+
+function textOfParts(content: unknown): string {
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return ''
+  return content
+    .map((part) => {
+      const text = (part as { text?: unknown } | null)?.text
+      return typeof text === 'string' ? text : ''
+    })
+    .filter(Boolean)
+    .join('\n')
+}
+
+/** Calls without an answer, the last owner message and whether the turn ended,
+ * shared by the Codex and Pi readers below. */
+class RecordFold {
+  readonly open = new Map<string, ToolUse>()
+  lastOwner: { at: number; text: string } | null = null
+  turnOver = false
+
+  said(text: string, at: number | null): void {
+    this.turnOver = false
+    if (at !== null && text && ownerSaid(text)) this.lastOwner = { at, text }
+  }
+
+  facts(transcript: string, diedAt: number): TranscriptFacts {
+    const calls = [...this.open.values()].filter(
+      (use) => use.at === null || (use.at <= diedAt + 5_000 && use.at >= diedAt - 6 * 3600_000),
+    )
+    return {
+      transcript,
+      lastOwner: this.lastOwner,
+      openMainCalls: calls.map((use) => `${use.name} ${use.id}`),
+      killed: calls.map((use) => ({
+        where: 'main',
+        agentId: null,
+        runId: null,
+        transcript,
+        command: use.command || use.name,
+        startedAt: use.at,
+        outcome: 'in flight',
+        background: false,
+        ...(use.file ? { file: use.file } : {}),
+      })),
+      workflows: [],
+      lostBackground: [],
+      turnOver: this.turnOver && calls.length === 0,
+      unread: [],
+      finishedUnread: [],
+    }
+  }
+}
+
+function jsonLines(text: string, visit: (row: Record<string, unknown>) => void): void {
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue
+    try {
+      visit(JSON.parse(line) as Record<string, unknown>)
+    } catch {
+      // A partial line: the crash cut it.
+    }
+  }
+}
+
+/** Codex: a rollout's calls, answers, turn events and user messages. */
+export function codexTranscriptFacts(
+  files: FileReader,
+  transcript: string,
+  diedAt: number,
+): TranscriptFacts | null {
+  const text = files.read(transcript, MAIN_TAIL_BYTES)
+  if (text === null) return null
+  const fold = new RecordFold()
+  jsonLines(text, (row) => {
+    const payload = row.payload as Record<string, unknown> | undefined
+    if (!payload) return
+    const at = toTime(row.timestamp)
+    const kind = payload.type
+    if (row.type === 'event_msg') {
+      if (kind === 'task_started') fold.turnOver = false
+      else if (kind === 'task_complete' || kind === 'turn_aborted') {
+        fold.turnOver = true
+        fold.open.clear() // A call the turn left unanswered isn't running.
+      }
+      return
+    }
+    if (row.type !== 'response_item') return
+    if (kind === 'message' && payload.role === 'user') fold.said(textOfParts(payload.content), at)
+    else if (kind === 'function_call' || kind === 'custom_tool_call') {
+      const id = String(payload.call_id ?? payload.id ?? '')
+      const input = String(payload.input ?? payload.arguments ?? '')
+      const file = PATCH_FILE.exec(input)?.[1]?.trim()
+      fold.open.set(id, {
+        id,
+        name: String(payload.name ?? 'tool'),
+        command: input,
+        at,
+        background: false,
+        ...(file ? { file } : {}),
+      })
+    } else if (kind === 'function_call_output' || kind === 'custom_tool_call_output')
+      fold.open.delete(String(payload.call_id ?? ''))
+  })
+  return fold.facts(transcript, diedAt)
+}
+
+/** Pi: its session file's messages, tool calls and tool results. */
+export function piTranscriptFacts(
+  files: FileReader,
+  transcript: string,
+  diedAt: number,
+): TranscriptFacts | null {
+  const text = files.read(transcript, MAIN_TAIL_BYTES)
+  if (text === null) return null
+  const fold = new RecordFold()
+  jsonLines(text, (row) => {
+    const message = row.message as Record<string, unknown> | undefined
+    if (row.type !== 'message' || !message) return
+    const at = toTime(row.timestamp)
+    if (message.role === 'user') fold.said(textOfParts(message.content), at)
+    else if (message.role === 'toolResult') fold.open.delete(String(message.toolCallId ?? ''))
+    else if (message.role === 'assistant') {
+      const stop = message.stopReason
+      fold.turnOver = stop === 'stop' || stop === 'length' || stop === 'aborted'
+      if (fold.turnOver) fold.open.clear() // A call the turn left unanswered isn't running.
+      for (const part of Array.isArray(message.content) ? message.content : []) {
+        const block = part as Record<string, unknown> | null
+        if (block?.type !== 'toolCall') continue
+        const args = (block.arguments ?? {}) as Record<string, unknown>
+        const file = args.path ?? args.file_path
+        const id = String(block.id ?? '')
+        fold.open.set(id, {
+          id,
+          name: String(block.name ?? 'tool'),
+          command: typeof args.command === 'string' ? args.command : '',
+          at,
+          background: false,
+          ...(typeof file === 'string' ? { file } : {}),
+        })
+      }
+    }
+  })
+  return fold.facts(transcript, diedAt)
 }
 
 /** The killed call most likely to have caused an OOM kill: one whose command
  * names the kernel's victim, else the most recently started. */
 export function likelyCulprit(calls: KilledCall[], victimComm: string | null): KilledCall | null {
-  if (calls.length === 0) return null
+  const commands = calls.filter((call) => call.command !== MID_REPLY)
+  if (commands.length === 0) return null
   const comm = victimComm?.toLowerCase() ?? ''
-  const named = comm ? calls.filter((call) => call.command.toLowerCase().includes(comm)) : []
-  const pool = named.length ? named : calls
+  const named = comm ? commands.filter((call) => call.command.toLowerCase().includes(comm)) : []
+  const pool = named.length ? named : commands
   return pool.reduce((latest, call) =>
     (call.startedAt ?? 0) > (latest.startedAt ?? 0) ? call : latest,
   )
@@ -692,6 +958,27 @@ export interface CrashFacts {
   git: GitState | null
   transcript: TranscriptFacts | null
   leases: string[]
+  /** Commits and deploys that landed in this project while it was down. */
+  since?: string[]
+  /** Uncommitted files changed just before the death. */
+  recentFiles?: string[]
+  /** Text sent to the agent that its record doesn't show arriving. */
+  lost?: LostText[]
+  /** Where the whole of `lost` is, when it doesn't all fit in the prompt. */
+  lostFile?: string
+  /** A restore after boot, not a counted crash recovery. */
+  boot?: boolean
+}
+
+export interface LostText {
+  at: number
+  text: string
+  /** Was still being typed, never sent. */
+  typed?: boolean
+  /** Rebuilt from keystrokes that moved the cursor: the words may differ. */
+  approx?: boolean
+  /** The session that sent it. */
+  from?: string
 }
 
 function pad(value: number): string {
@@ -738,6 +1025,8 @@ function causeLine(facts: CrashFacts): string {
     return victim
       ? `${where}; the kernel killed ${victim.comm} pid ${victim.pid} at ${size(victim.rssBytes)} in your pane and every process in it ended, which ended you, your subagents and every process you started`
       : 'every process in your pane was killed from outside (no memory kill or unit failure was logged), which ended you, your subagents and every process you started'
+  if (facts.cause === MACHINE_DOWN)
+    return 'the machine went down, which ended you, your subagents and every process you started'
   if (facts.kind === 'server-died')
     return `the tmux server holding your pane died${facts.cause === SERVER_LOST ? ' while you were running' : ` (${facts.cause})`}, which ended you, your subagents and every process you started`
   if (victim)
@@ -749,26 +1038,139 @@ function callLabel(call: KilledCall): string {
   return call.where === 'main' ? 'your main thread' : call.where
 }
 
-/** The resume prompt: facts only, at most `limit` bytes (2000 fits a prompt). */
+/** Who to resume by name: a workflow's agents come back with their workflow. */
+function killedLine(t: TranscriptFacts, culprit: KilledCall | null, level: number): string | null {
+  const parts: string[] = []
+  const main = t.killed.find((call) => call.where === 'main' && !call.background)
+  if (main && main !== culprit) parts.push(`your main thread (\`${oneLine(main.command, 80)}\`)`)
+  const agents = new Map<string, string>()
+  for (const call of t.killed)
+    if (call.agentId && !call.runId) agents.set(call.agentId, call.where.replace(/^subagent /, ''))
+  if (agents.size) {
+    const names = [...agents].slice(0, level ? 4 : 8).map(([id, name]) => `${name} (${id})`)
+    const more = agents.size - names.length
+    parts.push(
+      `subagents, resume each you still need with SendMessage (their work so far is kept): ${names.join(', ')}${more > 0 ? ` and ${more} more` : ''}`,
+    )
+  }
+  const flowAgents = [...new Set(t.killed.filter((c) => c.runId && c !== culprit).map(callLabel))]
+  if (flowAgents.length && level < 2)
+    parts.push(
+      `${flowAgents.slice(0, 3).join(', ')}${flowAgents.length > 3 ? ` and ${flowAgents.length - 3} more` : ''}`,
+    )
+  const shells = t.lostBackground.map((job) => job.id)
+  if (shells.length)
+    parts.push(
+      `background commands: ${shells.slice(0, 4).join(', ')}${shells.length > 4 ? ` and ${shells.length - 4} more` : ''}`,
+    )
+  return parts.length ? `Killed: ${parts.join('; ')}.` : null
+}
+
+/** What a crash could not have touched: nothing running, nothing unanswered. */
+function wasIdle(facts: CrashFacts): boolean {
+  const t = facts.transcript
+  return Boolean(
+    t?.turnOver &&
+      !facts.agentWasHog &&
+      !t.killed.length &&
+      !t.workflows.length &&
+      !t.lostBackground.length &&
+      !t.finishedUnread.length,
+  )
+}
+
+const lostHead = (when: string) =>
+  `Sent to you before ${when}; it may not have reached you. Check your conversation first and do not act on any of it twice:`
+
+export function lostBlock(
+  facts: Pick<CrashFacts, 'lost' | 'lostFile' | 'resumedAt'>,
+  room: number,
+  when = 'the crash',
+): string {
+  const lost = facts.lost ?? []
+  if (!lost.length) return ''
+  const head = lostHead(when)
+  const row = (item: LostText, max: number) => {
+    const who = item.typed
+      ? 'still being typed, never sent'
+      : item.from
+        ? `from session ${item.from}`
+        : null
+    const flat = oneLine(item.text, max)
+    const rough = item.approx ? ' (roughly)' : ''
+    return `- ${clock(item.at, facts.resumedAt)}${who ? ` (${who})` : ''}${rough}: ${flat}`
+  }
+  const whole = [head, ...lost.map((item) => row(item, Number.POSITIVE_INFINITY))].join('\n')
+  if (Buffer.byteLength(whole) <= room) return whole
+  const each = Math.max(40, Math.floor((room - head.length - 120) / lost.length) - 30)
+  const shorter = lost.map((item) => row(item, Math.floor(each / 2)))
+  return [
+    head,
+    ...shorter,
+    facts.lostFile ? `All of it: ${facts.lostFile} (delete it once read).` : '',
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
+/** The resume prompt: facts only, at most `limit` bytes (2000 fits a prompt).
+ * Paid on every recovery, so what isn't there isn't mentioned. */
 export function renderSynopsis(facts: CrashFacts, limit = 2000): string {
   const t = facts.transcript
   const oom = facts.cause === 'oom-kill' || facts.victim !== null
   const culprit = t && oom ? likelyCulprit(t.killed, facts.victim?.comm ?? null) : null
-  const others = (t?.killed ?? []).filter((call) => call !== culprit)
-  const build = (level: number): string => {
-    const lines: string[] = []
+  const down = duration(facts.resumedAt - facts.diedAt)
+  const headLine = (level: number): string => {
     let head =
       `${SYNOPSIS_HEAD}${facts.diedAtApprox ? 'about ' : ''}${clock(facts.diedAt, facts.resumedAt)} and Tether resumed it at ` +
-      `${clock(facts.resumedAt, facts.resumedAt)} (down ${facts.diedAtApprox ? 'about ' : ''}${duration(facts.resumedAt - facts.diedAt)}). ` +
+      `${clock(facts.resumedAt, facts.resumedAt)} (down ${facts.diedAtApprox && !down.startsWith('under') ? 'about ' : ''}${down}). ` +
       `Cause: ${causeLine(facts)}.`
     if (culprit)
       head += ` Likely culprit: ${callLabel(culprit)} ran \`${oneLine(culprit.command, level > 2 ? 80 : 160)}\`${culprit.startedAt ? ` from ${clock(culprit.startedAt, facts.resumedAt)}` : ''}, ${culprit.outcome}.`
-    if (others.length && level < 2) {
-      const shown = others.slice(0, level ? 3 : 6).map((call) => callLabel(call))
-      const more = others.length - shown.length
-      head += ` Also killed mid-run: ${[...new Set(shown)].join(', ')}${more > 0 ? ` and ${more} more` : ''}.`
+    return head
+  }
+  const sinceLine = () =>
+    facts.since?.length ? `Since it went down: ${facts.since.join('; ')}.` : null
+  const fit = (text: string): string => fitBytes(text, limit)
+  if (wasIdle(facts)) {
+    const said = (rest: string) => [
+      headLine(0),
+      'You were idle: your last turn had ended and nothing was in flight.',
+      ...(sinceLine() ? [sinceLine() as string] : []),
+      rest,
+    ]
+    if (facts.lost?.length) {
+      const base = said('Anything you started earlier is gone; re-verify before relying on it.')
+      const room = limit - Buffer.byteLength(base.join('\n')) - 1
+      return fit([...base, lostBlock(facts, room)].join('\n'))
     }
-    lines.push(head)
+    return fit(
+      said(
+        "Anything you started earlier is gone; re-verify before relying on it. Don't start anything: say in one line that you're idle, and wait.",
+      ).join('\n'),
+    )
+  }
+  const build = (level: number): string => {
+    const lines: string[] = [headLine(level)]
+    if (t) {
+      const killed = killedLine(t, culprit, level)
+      if (killed) lines.push(killed)
+      if (t.finishedUnread.length)
+        lines.push(
+          `Finished, but the report never reached you: ${t.finishedUnread
+            .slice(0, level ? 3 : 6)
+            .map((job) => `${oneLine(job.summary, level ? 40 : 70)} (${job.id})`)
+            .join(', ')}.`,
+        )
+    }
+    if (facts.recentFiles?.length)
+      lines.push(
+        `May be half-written (changed just before the crash; some may be another agent's): ${facts.recentFiles
+          .slice(0, level > 1 ? 3 : 6)
+          .join(', ')}.`,
+      )
+    const since = sinceLine()
+    if (since) lines.push(since)
     const state: string[] = []
     if (facts.git) {
       const g = facts.git
@@ -787,16 +1189,13 @@ export function renderSynopsis(facts: CrashFacts, limit = 2000): string {
         )
       state.push(`Workflows not finished: ${flows.join('; ')}.`)
     }
-    if (t)
-      state.push(
-        `Open main-thread calls: ${t.openMainCalls.length ? t.openMainCalls.slice(0, 3).join(', ') : 'none'}.`,
-      )
     state.push(`Detail: ${facts.detailFile}`)
-    state.push(
-      facts.manual
-        ? 'Tether held this crash and the owner resumed it.'
-        : `This is automatic recovery ${facts.attempt} of ${facts.maxAttempts} in 6 hours.`,
-    )
+    if (!facts.boot)
+      state.push(
+        facts.manual
+          ? 'Tether held this crash and the owner resumed it.'
+          : `This is automatic recovery ${facts.attempt} of ${facts.maxAttempts} in 6 hours.`,
+      )
     lines.push(state.join(' '))
     if (facts.agentWasHog)
       lines.push(
@@ -805,34 +1204,85 @@ export function renderSynopsis(facts: CrashFacts, limit = 2000): string {
     lines.push('Do first, in order:')
     let step = 1
     lines.push(
-      `${step++}. Check the uncommitted work; killed jobs leave partial files. Commit what is sound, discard half-written outputs.`,
+      `${step++}. ${facts.recentFiles?.length ? 'Check those files before committing anything' : 'Check your uncommitted work'}; a killed job leaves partial ones. Commit only your own paths.`,
     )
-    lines.push(
-      oom
-        ? `${step++}. Do not rerun the culprit unchanged: wrap it in systemd-run --user --scope -p MemoryMax=<cap> -p MemorySwapMax=0, run heavy jobs one at a time, or make it smaller.`
-        : `${step++}. Find out what ended the session before repeating the step that was running.`,
-    )
+    if (oom)
+      lines.push(
+        `${step++}. Do not rerun the culprit unchanged: wrap it in systemd-run --user --scope -p MemoryMax=<cap> -p MemorySwapMax=0, run heavy jobs one at a time, or make it smaller.`,
+      )
+    else if (facts.cause !== MACHINE_DOWN)
+      lines.push(
+        `${step++}. If your last command could have caused this, check before repeating it.`,
+      )
     if (t?.workflows.length)
       lines.push(
         `${step++}. Resume each unfinished workflow with Workflow({scriptPath, resumeFromRunId}); finished agent() calls return cached, in-flight ones restart. Edit the script first if a lane must change.`,
       )
     lines.push(
-      `${step++}. Relaunch any server, watcher or background job you still need; none survived.`,
+      `${step++}. Relaunch only the servers, watchers or jobs you still need; none survived. Re-verify anything live before acting on earlier findings.`,
     )
     const owner = t?.lastOwner
     lines.push(
-      `${step++}. Continue the owner's last instruction${owner ? ` (${clock(owner.at, facts.resumedAt)}: "${oneLine(owner.text, level > 1 ? 50 : 80)}")` : ''}. If the same failure recurs, stop that lane and record it in FOLLOWUPS.md instead of retrying.`,
+      t?.turnOver
+        ? `${step++}. Your last turn had ended: finish only what's listed above, start nothing new.`
+        : `${step++}. Continue the owner's last instruction${owner ? ` (${clock(owner.at, facts.resumedAt)}: "${oneLine(owner.text, level > 1 ? 50 : 80)}")` : ''}. If the same failure recurs, stop that lane and record it in FOLLOWUPS.md instead of retrying.`,
     )
     return lines.join('\n')
   }
+  // Lost text comes first in the budget: nothing else holds it.
+  const lostAlone = lostBlock(facts, Math.floor(limit / 2))
+  const room = limit - (lostAlone ? Buffer.byteLength(lostAlone) + 1 : 0)
   for (let level = 0; level < 4; level += 1) {
     const text = build(level)
-    if (Buffer.byteLength(text) <= limit) return text
+    if (Buffer.byteLength(text) <= room) {
+      if (!lostAlone) return fit(text)
+      return fit([text, lostBlock(facts, limit - Buffer.byteLength(text) - 1)].join('\n'))
+    }
   }
-  const text = build(3)
-  let cut = text.slice(0, limit)
-  while (Buffer.byteLength(cut) > limit) cut = cut.slice(0, -1)
-  return cut
+  const cut = fitBytes(build(3), room)
+  return fit(lostAlone ? [cut, lostAlone].join('\n') : cut)
+}
+
+/** One line per thing that landed during the gap. `git log --format=%h %s`. */
+export function gapCommits(log: string, limit = 3): string[] {
+  const rows = log.split('\n').filter(Boolean)
+  if (!rows.length) return []
+  const subject = (row: string) => oneLine(row.slice(row.indexOf(' ') + 1), 60)
+  return [
+    `${rows.length} commit${rows.length > 1 ? 's' : ''} (${rows.slice(0, limit).map(subject).join(' / ')}${rows.length > limit ? ' / ...' : ''})`,
+  ]
+}
+
+/** Paths from `git status --porcelain` lines. */
+export function statusPaths(status: string): string[] {
+  const paths: string[] = []
+  for (const line of status.split('\n')) {
+    if (line.length < 4) continue
+    const path = line.slice(3)
+    const arrow = path.indexOf(' -> ')
+    paths.push((arrow >= 0 ? path.slice(arrow + 4) : path).replace(/^"|"$/g, ''))
+  }
+  return paths
+}
+
+/** Files to look at before trusting them: what a killed call was writing, then
+ * uncommitted files changed in the two minutes before the death. A session
+ * with nothing in flight gets none, and neither does one nothing was running
+ * in: the checkout is shared and other agents' saves aren't its to worry about. */
+export function recentFiles(
+  transcript: TranscriptFacts | null,
+  dirty: readonly string[],
+  mtime: (path: string) => number | null,
+  diedAt: number,
+  limit = 6,
+): string[] {
+  if (!transcript?.killed.length) return []
+  const named = transcript.killed.flatMap((call) => (call.file ? [call.file] : []))
+  const recent = dirty.filter((path) => {
+    const at = mtime(path)
+    return at !== null && at >= diedAt - 120_000 && at <= diedAt + 2_000
+  })
+  return [...new Set([...named, ...recent])].slice(0, limit)
 }
 
 export interface DetailSections {
@@ -859,7 +1309,8 @@ export function renderDetail(facts: CrashFacts, sections: DetailSections): strin
       'Only the time Tether noticed the death is known; it can be up to a minute after the crash.',
       '',
     )
-  out.push('## Prompt the agent was resumed with', '', sections.synopsis, '')
+  if (!facts.lost?.length)
+    out.push('## Prompt the agent was resumed with', '', sections.synopsis, '')
   block('Unit journal', sections.unitLines)
   block('Kernel OOM records', sections.kernelLines)
   block('Memory controller (host-steward memctl, Tether memory guard)', sections.memctlLines)
@@ -886,6 +1337,8 @@ export function renderDetail(facts: CrashFacts, sections: DetailSections): strin
     out.push('')
     out.push(`Main transcript: ${t.transcript}`, '')
   }
+  if (facts.lost?.length)
+    out.push(`## Text that may not have reached the agent`, '', `${facts.lost.length}`, '')
   block('git status --short', facts.git?.short.slice(0, 200) ?? [], 'not a git checkout')
   block('Leases', sections.leases)
   return out.join('\n')

@@ -311,6 +311,62 @@ describe('terminal history', () => {
   })
 })
 
+describe('what the owner sent to an agent session', () => {
+  const started = async (tool: string) => {
+    const session = tether.add(tool === 'shell' ? {} : { tool })
+    const view = open(session.id)
+    await view.next((f) => f.transport === 'control')
+    view.ws.send(ctrl({ resize: { cols: 100, rows: 40 } }))
+    await until(() => links.length === 1)
+    return { session, view, link: links[0] as FakeLink }
+  }
+
+  it('records a sent line and a composer paste, and still relays them', async () => {
+    const { session, view, link } = await started('claude')
+    view.ws.send('hello\r')
+    view.ws.send(ctrl({ paste: 'from the composer' }))
+    view.ws.send('\r')
+    await until(() => tether.callsOf('recordInput').length === 2)
+    expect(tether.callsOf('recordInput')).toEqual([
+      [session.id, { text: 'hello', state: 'sent' }],
+      [session.id, { text: 'from the composer', state: 'sent' }],
+    ])
+    expect(link.written).toEqual(['hello\r', '\r'])
+    expect(link.pasted).toEqual(['from the composer'])
+  })
+
+  it('records what was still being typed when the socket closed', async () => {
+    const { session, view, link } = await started('claude')
+    view.ws.send('half a tho')
+    await until(() => link.written.length === 1)
+    view.ws.close()
+    await until(() => tether.callsOf('recordInput').length === 1)
+    expect(tether.callsOf('recordInput')).toEqual([
+      [session.id, { text: 'half a tho', state: 'typed' }],
+    ])
+  })
+
+  it('never records a shell session', async () => {
+    const { view, link } = await started('shell')
+    view.ws.send('hunter2\r')
+    view.ws.send('half')
+    await until(() => link.written.length === 2)
+    view.ws.close()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(tether.callsOf('recordInput')).toEqual([])
+  })
+
+  it('a slow or failing record never holds up input', async () => {
+    const { view, link } = await started('claude')
+    tether.recordInput = async () => {
+      throw new Error('tether is restarting')
+    }
+    view.ws.send('still goes\r')
+    await until(() => link.written.length === 1)
+    expect(link.written).toEqual(['still goes\r'])
+  })
+})
+
 describe('terminal socket', () => {
   it('starts at the first size, relays input and output, and takes a size nobody holds', async () => {
     const session = tether.add()

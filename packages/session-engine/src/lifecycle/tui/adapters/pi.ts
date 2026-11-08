@@ -177,6 +177,24 @@ export function entryPiSession(
 
 /** One Pi session line: an assistant message names the model asked for
  * (`provider/model`) and, when the provider says, the one that answered. */
+/** Text that reached Pi: its session file writes a user message when a turn takes it. */
+export function piDelivered(line: string): { text: string; at: number | null }[] {
+  if (!line.includes('"user"')) return []
+  const row = parse(line)
+  const message = row?.message as Record<string, unknown> | undefined
+  if (row?.type !== 'message' || message?.role !== 'user') return []
+  const content = message.content
+  const text =
+    typeof content === 'string'
+      ? content
+      : Array.isArray(content)
+        ? (content as { text?: unknown }[])
+            .map((part) => (typeof part.text === 'string' ? part.text : ''))
+            .join('\n')
+        : ''
+  return text ? [{ text, at: time(row.timestamp) }] : []
+}
+
 export function piModelEvents(line: string): ModelEvent[] {
   if (!line.includes('"assistant"')) return []
   const row = parse(line)
@@ -342,7 +360,7 @@ export const pi: TuiAdapter = {
     signOut: { kind: 'session', line: "echo 'In pi, type /logout.'; pi" },
     local: { bin: 'pi', authFile: '.pi/agent/auth.json' },
   },
-  models: { events: piModelEvents },
+  models: { events: piModelEvents, delivered: piDelivered },
   sessionFile: piSessionFile,
   displayName: 'Pi',
 }

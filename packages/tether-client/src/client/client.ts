@@ -324,6 +324,15 @@ export class TetherClient {
     }).then(parseAttachAnswer)
   }
 
+  /** What a viewer sent to an agent session, or was typing when it lost the
+   * session. Tether keeps it until the agent's record shows it arriving. */
+  recordInput(
+    id: string,
+    input: { text: string; state: 'sent' | 'typed'; approx?: true },
+  ): Promise<unknown> {
+    return this.json('POST', `/v1/sessions/${encodeURIComponent(id)}/pending-input`, input)
+  }
+
   /** Claim the shared window size for this attached tmux client. `viewer`
    * names the claimer for the other views ("Viewing on …"). */
   resizeClaim(

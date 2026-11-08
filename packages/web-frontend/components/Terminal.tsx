@@ -26,7 +26,10 @@ import { useTerminalScrolling } from '../lib/hooks/use-terminal-scrolling'
 import { useTerminalSearch } from '../lib/hooks/use-terminal-search'
 import { useTerminalWebSocket } from '../lib/hooks/use-terminal-websocket'
 import { useTerminalWriteQueue } from '../lib/hooks/use-terminal-write-queue'
-import type { HistoryFrame } from '../lib/hooks/use-websocket-connection'
+import {
+  type HistoryFrame,
+  MSG_CONTROL,
+} from '../lib/hooks/use-websocket-connection'
 import {
   swallowQueryReplies,
   trackSgrMouse,
@@ -53,6 +56,7 @@ type XtermFitAddon = InstanceType<typeof import('@xterm/addon-fit').FitAddon>
 const SIZE_NOTICE_DELAY_MS = 600
 /** Typing takes the size back at most this often. */
 const RECLAIM_SPACING_MS = 1500
+const INPUT_ANSWER_MS = 4000
 
 function isObserverModeEnabled(search: string): boolean {
   const value = new URLSearchParams(search).get('observer')
@@ -62,6 +66,42 @@ function isObserverModeEnabled(search: string): boolean {
 /** The owner is looking at this page now (the focused, visible window). */
 function isPageActive(): boolean {
   return document.visibilityState === 'visible' && document.hasFocus()
+}
+
+function pongOf(data: unknown): { live?: boolean } | null {
+  const view = data instanceof ArrayBuffer ? new Uint8Array(data) : null
+  if (view?.[0] !== MSG_CONTROL) return null
+  try {
+    const frame = JSON.parse(new TextDecoder().decode(view.subarray(1)))
+    return frame?.pong === true ? frame : null
+  } catch {
+    return null
+  }
+}
+
+/** A socket can look open after the phone lost its network. Messages arrive in
+ * order, so the server's answer to a probe means it has all that was sent before,
+ * and it says whether that went on to the session (`live`). */
+export function serverAnswers(
+  ws: WebSocket,
+  reconnect: () => void,
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    const listener = (event: MessageEvent) => {
+      const pong = pongOf(event.data)
+      if (!pong) return
+      clearTimeout(timer)
+      ws.removeEventListener('message', listener)
+      resolve(pong.live !== false)
+    }
+    const timer = setTimeout(() => {
+      ws.removeEventListener('message', listener)
+      if (ws.readyState === WebSocket.OPEN) reconnect()
+      resolve(false)
+    }, INPUT_ANSWER_MS)
+    ws.addEventListener('message', listener)
+    ws.send(JSON.stringify({ __ctrl: true, ping: true, probe: true }))
+  })
 }
 
 export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
@@ -303,6 +343,12 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
       },
       [claimOnInput, wsRef],
     )
+    const inputArrived = useCallback(() => {
+      const ws = wsRef.current
+      return ws?.readyState === WebSocket.OPEN
+        ? serverAnswers(ws, reconnect)
+        : Promise.resolve(false)
+    }, [reconnect, wsRef])
     const pasteFile = useCallback(
       (file: File) => {
         void onFilePaste?.(file, sessionId)
@@ -421,6 +467,7 @@ export const TerminalComponent = forwardRef<TerminalHandle, TerminalProps>(
     useTerminalHandle(ref, {
       reconnect,
       sendInput: sendUsedInput,
+      inputArrived,
       claimSize,
       reconnectHost,
       status,

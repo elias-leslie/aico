@@ -385,6 +385,18 @@ export function observeCodex(fs: ProcFs, pids: number[]): AgentObservation | nul
 // --- model watch ------------------------------------------------------------
 
 /** One Codex rollout line. */
+/** Text that reached Codex: its rollout writes a user message when a turn takes it. */
+export function codexDelivered(line: string): { text: string; at: number | null }[] {
+  if (!line.includes('"user"')) return []
+  const row = parse(line)
+  const payload = row?.payload as Record<string, unknown> | undefined
+  if (row?.type !== 'response_item' || payload?.type !== 'message' || payload.role !== 'user')
+    return []
+  const parts = Array.isArray(payload.content) ? (payload.content as { text?: unknown }[]) : []
+  const text = parts.map((part) => (typeof part.text === 'string' ? part.text : '')).join('\n')
+  return text ? [{ text, at: time(row.timestamp) }] : []
+}
+
 export function codexModelEvents(line: string): ModelEvent[] {
   if (!line.includes('"turn_context"') && !line.includes('model_reroute')) return []
   const row = parse(line)
@@ -673,7 +685,7 @@ export const codex: TuiAdapter = {
     signOut: { kind: 'command', line: 'codex logout' },
     local: { bin: 'codex', authFile: '.codex/auth.json' },
   },
-  models: { events: codexModelEvents },
+  models: { events: codexModelEvents, delivered: codexDelivered },
   sessionFile: null,
   displayName: 'Codex',
 }

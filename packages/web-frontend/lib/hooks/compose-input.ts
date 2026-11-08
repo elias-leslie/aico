@@ -10,6 +10,8 @@ export async function commitComposeInput(
   if (handle?.status !== 'connected' || !text) return false
   if (action === 'send' && /[\r\n]/.test(text)) return false
   await handle.pasteInput(text)
+  // No word back: the socket only looked open. The draft stays.
+  if (!(await handle.inputArrived())) return false
   // A queued paste may outlive a disconnect or a pane replacement.
   const current = handles.get(sessionId)
   if (!current || current !== handle || current.status !== 'connected')

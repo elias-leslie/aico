@@ -27,6 +27,8 @@ function notifyPending() {
 interface NativeKeyboardInputProps {
   sessionId: string
   connected: boolean
+  /** Agent sessions only: what's typed for a shell may be a password. */
+  keepOnDevice: boolean
   onCommit: (
     sessionId: string,
     text: string,
@@ -36,17 +38,46 @@ interface NativeKeyboardInputProps {
   inputRef?: React.RefObject<HTMLInputElement | HTMLTextAreaElement | null>
 }
 
+const DRAFT_PREFIX = 'a-term-compose:'
+
 function draftStorageKey(sessionId: string) {
-  return `a-term-compose:${sessionId}`
+  return `${DRAFT_PREFIX}${sessionId}`
+}
+
+/** Drafts kept on this device, so an app reload doesn't lose one. */
+const MAX_STORED_DRAFTS = 20
+
+function storeDraft(key: string, value: string) {
+  try {
+    if (!value) {
+      window.localStorage.removeItem(key)
+      return
+    }
+    window.localStorage.setItem(key, value)
+    const stored = Object.keys(window.localStorage).filter((name) =>
+      name.startsWith(DRAFT_PREFIX),
+    )
+    for (const name of stored.slice(0, -MAX_STORED_DRAFTS))
+      if (name !== key) window.localStorage.removeItem(name)
+  } catch {
+    // Private window or full storage: the draft lives until the page goes.
+  }
 }
 
 function readDraft(key: string): string {
-  return drafts.get(key) ?? ''
+  const held = drafts.get(key)
+  if (held !== undefined) return held
+  try {
+    return window.localStorage.getItem(key) ?? ''
+  } catch {
+    return ''
+  }
 }
 
-function saveDraft(key: string, value: string) {
+function saveDraft(key: string, value: string, keepOnDevice: boolean) {
   if (value) drafts.set(key, value)
   else drafts.delete(key)
+  if (keepOnDevice) storeDraft(key, value)
   const revision = (draftRevisions.get(key) ?? 0) + 1
   draftRevisions.set(key, revision)
   return revision
@@ -58,6 +89,7 @@ const DESKTOP_COMPOSE_HEIGHT = 38
 export function NativeKeyboardInput({
   sessionId,
   connected,
+  keepOnDevice,
   onCommit,
   onFocusChange,
   inputRef,
@@ -101,7 +133,7 @@ export function NativeKeyboardInput({
 
       // Autocorrect may commit into the DOM just before Enter, before React
       // has dispatched change. Retain that exact text on failure.
-      const submittedRevision = saveDraft(storageKey, text)
+      const submittedRevision = saveDraft(storageKey, text, keepOnDevice)
       setValue(text)
       const operation = Symbol(storageKey)
       pendingCommits.set(storageKey, operation)
@@ -112,7 +144,7 @@ export function NativeKeyboardInput({
       try {
         if (await onCommit(sessionId, text, action)) {
           if (draftRevisions.get(storageKey) === submittedRevision) {
-            saveDraft(storageKey, '')
+            saveDraft(storageKey, '', keepOnDevice)
             setValue('')
           }
         } else {
@@ -129,17 +161,25 @@ export function NativeKeyboardInput({
         setBusy(false)
       }
     },
-    [connected, onCommit, resolvedRef, sessionId, storageKey, value],
+    [
+      connected,
+      keepOnDevice,
+      onCommit,
+      resolvedRef,
+      sessionId,
+      storageKey,
+      value,
+    ],
   )
 
   const handleChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       const next = event.target.value
       setValue(next)
-      saveDraft(storageKey, next)
+      saveDraft(storageKey, next, keepOnDevice)
       setFailed(null)
     },
-    [storageKey],
+    [keepOnDevice, storageKey],
   )
 
   const interrupted = failed && (

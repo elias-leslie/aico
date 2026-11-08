@@ -20,10 +20,10 @@
 // the owner.
 
 import { execFile } from 'node:child_process'
-import { mkdirSync, readdirSync, readFileSync, statSync, unlinkSync } from 'node:fs'
+import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, unlinkSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { promisify } from 'node:util'
 import { type Needs, parseNeeds } from '@aico/fleet/hub/placement'
 import { admissionOverrideFromEnv } from '@aico/session-engine/agent-admission'
@@ -63,7 +63,7 @@ import { probeEntryAgent } from '@aico/session-engine/entry-agent'
 import { entryHomeFiles, findClaudeTranscript } from '@aico/session-engine/entry-files'
 import { memoryEventsPath } from '@aico/session-engine/job-guard'
 import { agentExitMarkerDir } from '@aico/session-engine/paths'
-import { nodeProcFs, processTree, UUID_RE } from '@aico/session-engine/proc-fs'
+import { nodeFileTail, nodeProcFs, processTree, UUID_RE } from '@aico/session-engine/proc-fs'
 import { isNamedProcess, processEnvironment } from '@aico/session-engine/procfs'
 import { launchingResume, withRootPrompt } from '@aico/session-engine/root-launch'
 import { paneExitedEventPath } from '@aico/session-engine/tmux'
@@ -78,22 +78,31 @@ import type { TuiSpec } from '@aico/session-engine/tui/spec'
 import { hostAdmissionPath, readHostAdmission } from '@aico/shared/host-admission'
 import { HttpError, type Router, readJsonObject, sendJson } from '@aico/shared/http'
 import type { LifecycleContext } from './lifecycle-context'
+import { lastLook } from './model-switch'
+import { type PendingInput, PendingInputs } from './pending-input'
 import {
   CRASH_RESULTS,
   type CrashFacts,
   type CrashKind,
   claudeTranscriptFacts,
+  codexTranscriptFacts,
   type GitState,
+  gapCommits,
   kernelOomVictims,
+  type LostText,
+  lostBlock,
   nodeFileReader,
   type OomVictim,
   PANE_KILLED,
   parseGitState,
   parseJournal,
+  piTranscriptFacts,
+  recentFiles,
   renderDetail,
   renderSynopsis,
   SERVER_LOST,
   scopeMemoryEvents,
+  statusPaths,
   type TranscriptFacts,
   unitOutcome,
   victimsInScope,
@@ -259,6 +268,7 @@ export interface RecoveryOptions {
   awaitingRestore?: (id: string) => boolean
   run?: (command: string, args: string[], timeoutMs: number) => Promise<string | null>
   engine?: Partial<RecoveryEngine>
+  deploysDir?: string
 }
 
 async function agentInPane(
@@ -379,6 +389,50 @@ export async function runProcess(
 
 const ACTIVE: ReadonlySet<RecoveryState> = new Set(['waiting', 'recovering', 'held'])
 
+const LOST_SUFFIX = '-lost.txt'
+/** Past this, a prompt can't carry the text whole. */
+const LOST_INLINE_BYTES = 700
+/** Slash commands and `!` shell lines aren't messages, and can carry a secret. */
+const COMMAND_LINE = /^\s*(!|\/[^\s/]+(\s|$))/
+const PROMPT_BYTES = 2000
+
+/** What a crash account needs of a crash record. */
+type GatherRecord = Pick<
+  CrashRecord,
+  | 'id'
+  | 'kind'
+  | 'cause'
+  | 'signal'
+  | 'victim'
+  | 'agentWasHog'
+  | 'diedAt'
+  | 'diedAtApprox'
+  | 'attempt'
+  | 'manual'
+  | 'resumeId'
+  | 'scopeUnit'
+  | 'scopeInvocationId'
+>
+
+/** Tether's record and the agent's own queue often name the same text. */
+function lostTexts(
+  pending: readonly PendingInput[],
+  unread: readonly { at: number; text: string }[],
+): LostText[] {
+  const flat = (text: string) => text.replace(/\s+/g, ' ').trim()
+  const known = new Set(pending.map((item) => flat(item.text)))
+  return [
+    ...pending.map((item) => ({
+      at: item.at,
+      text: item.text,
+      ...(item.state === 'typed' ? { typed: true } : {}),
+      ...(item.approx ? { approx: true } : {}),
+      ...(item.from ? { from: item.from } : {}),
+    })),
+    ...unread.filter((item) => !known.has(flat(item.text))),
+  ].sort((a, b) => a.at - b.at)
+}
+
 export class Recovery {
   private readonly path: string
   private readonly recoveryDir: string
@@ -393,6 +447,9 @@ export class Recovery {
     timeoutMs: number,
   ) => Promise<string | null>
   private readonly engine: RecoveryEngine
+  /** What was sent to agents and hasn't shown up in their records yet. */
+  readonly pending: PendingInputs
+  private readonly deploysDir: string
   private records = new Map<string, CrashRecord>()
   private history: RecoveryAttempt[] = []
   private dismissed: Record<string, string> = {}
@@ -410,7 +467,7 @@ export class Recovery {
   private busy = false
 
   constructor(
-    private readonly context: Pick<LifecycleContext, 'paths' | 'placement'>,
+    private readonly context: Pick<LifecycleContext, 'paths' | 'placement' | 'agentRecord'>,
     options: RecoveryOptions = {},
   ) {
     this.path = join(context.paths.stateDir, 'recoveries.json')
@@ -425,7 +482,32 @@ export class Recovery {
       ...defaultEngine(this.home, context.paths.stateDir, agentExitMarkerDir(context.paths)),
       ...options.engine,
     }
+    this.pending = new PendingInputs(join(context.paths.stateDir, 'pending-input'), this.now)
+    this.deploysDir = options.deploysDir ?? join(this.home, '.local/state/aico/deploys')
     this.load()
+  }
+
+  /** Text the owner or another session sent to a session. Only an agent that
+   * is really there: a session fallen back to its shell may be asking for a
+   * password, and a shell session is never recorded. */
+  async noteInput(id: string, input: Omit<PendingInput, 'at'>): Promise<void> {
+    try {
+      const row = getWidget(id)
+      if (!row || !adapterOf(getTui(row.tool)?.slug)?.models?.delivered) return
+      if (COMMAND_LINE.test(input.text)) return
+      const pane = await this.engine.currentPane(row).catch(() => null)
+      // A pane with no agent is a shell. No pane at all is the crash itself, and
+      // what's sent then most needs keeping, as long as an agent was there.
+      const agentThere = pane
+        ? await this.engine.agentIn(pane.pid, row.tool, row.id)
+        : this.classifying.has(id) ||
+          this.records.has(id) ||
+          this.now() - (this.agentSeenAt.get(id) ?? 0) <= AGENT_SEEN_FRESH_MS
+      if (agentThere) this.pending.add(id, input)
+    } catch (error) {
+      // Keeping a copy never gets in the way of the text itself.
+      this.log(`${id}: could not record input: ${(error as Error).message}`)
+    }
   }
 
   start(): void {
@@ -467,6 +549,25 @@ export class Recovery {
     for (const { scopeUnit, at } of this.engine.agentExitMarkers())
       if (!owned.has(scopeUnit) && now - at > MARKER_KEEP_MS)
         this.engine.removeAgentExitMarker(scopeUnit)
+    this.pending.retain((id) => Boolean(getWidget(id)))
+    this.removeLostFiles(now)
+  }
+
+  private removeLostFiles(now: number): void {
+    let names: string[] = []
+    try {
+      names = readdirSync(this.recoveryDir).filter((name) => name.endsWith(LOST_SUFFIX))
+    } catch {
+      return
+    }
+    for (const name of names) {
+      const path = join(this.recoveryDir, name)
+      try {
+        if (now - statSync(path).mtimeMs > 24 * 3600_000) rmSync(path, { force: true })
+      } catch {
+        // gone meanwhile
+      }
+    }
   }
 
   private removeOldDetailFiles(): void {
@@ -816,6 +917,7 @@ export class Recovery {
     if (agentPid !== null) {
       this.agentPids.set(row.id, agentPid)
       this.agentSeenAt.set(row.id, this.now())
+      this.pending.expire(row.id)
       // The agent is running again (the owner restarted it by hand): a crash
       // record that never launched anything has nothing left to do.
       const record = this.records.get(row.id)
@@ -1064,7 +1166,7 @@ export class Recovery {
     }
   }
 
-  private async gather(record: CrashRecord, row: WidgetRow, resumedAt: number) {
+  private async gather(record: GatherRecord, row: WidgetRow, resumedAt: number, boot = false) {
     const unitLines: string[] = []
     if (record.scopeUnit)
       unitLines.push(
@@ -1111,6 +1213,8 @@ export class Recovery {
         )
       : null
     let git: GitState | null = null
+    let dirty: string[] = []
+    let gap: string[] = []
     if (row.projectRoot) {
       const log = await this.run(
         'git',
@@ -1119,6 +1223,21 @@ export class Recovery {
       )
       const status = await this.run('git', ['-C', row.projectRoot, 'status', '--porcelain'], 10_000)
       if (log !== null && status !== null) git = parseGitState(log, status)
+      dirty = statusPaths(status ?? '')
+      const commits = await this.run(
+        'git',
+        [
+          '-C',
+          row.projectRoot,
+          'log',
+          '-n',
+          '20',
+          `--since=@${Math.floor(record.diedAt / 1000)}`,
+          '--format=%h %s',
+        ],
+        5_000,
+      )
+      gap = [...gapCommits(commits ?? ''), ...this.gapDeploys(row.projectRoot, record.diedAt)]
     }
     const prefix = record.resumeId?.slice(0, 6)
     const leases = prefix
@@ -1130,20 +1249,49 @@ export class Recovery {
     const key = `${record.id}:${record.diedAt}`
     if (!this.transcripts.has(key)) {
       let facts: TranscriptFacts | null = null
-      if (record.resumeId && adapterOf(getTui(row.tool)?.slug)?.capabilities.transcriptFacts) {
-        // An entry session's transcript is read only inside its home (none
-        // when the entry no longer resolves), never the host's.
-        const entryHome = getSessionEntry(row.id) ? sessionEntryHome(row.id) : undefined
-        const contained = entryHome ? entryHomeFiles(entryHome) : null
-        const files = entryHome === undefined ? nodeFileReader : contained?.reader
+      const slug = getTui(row.tool)?.slug
+      // An entry session's transcript is read only inside its home (none
+      // when the entry no longer resolves), never the host's.
+      const entryHome = getSessionEntry(row.id) ? sessionEntryHome(row.id) : undefined
+      const contained = entryHome ? entryHomeFiles(entryHome) : null
+      const files = entryHome === undefined ? nodeFileReader : contained?.reader
+      if (record.resumeId && adapterOf(slug)?.capabilities.transcriptFacts) {
         const home = contained?.home ?? this.home
         const path = files ? findClaudeTranscript(files, home, record.resumeId) : null
         if (files && path)
           facts = claudeTranscriptFacts(files, path, record.diedAt, process.getuid?.() ?? 1000)
+      } else if (files && (slug === 'codex' || slug === 'pi')) {
+        // The record's path is what the model watch has been following for it.
+        const path = this.context.agentRecord?.(row.id)?.path
+        const read = slug === 'codex' ? codexTranscriptFacts : piTranscriptFacts
+        if (path) facts = read(files, path, record.diedAt)
       }
       this.transcripts.set(key, facts)
     }
     const transcript = this.transcripts.get(key) ?? null
+    const root = row.projectRoot
+    const files = recentFiles(
+      transcript,
+      dirty,
+      (path) => {
+        try {
+          return statSync(root ? join(root, path) : path).mtimeMs
+        } catch {
+          return null
+        }
+      },
+      record.diedAt,
+    )
+    // What the agent wrote after the watcher's last read still counts as arrived.
+    lastLook(
+      row.id,
+      this.context.agentRecord?.(row.id) ?? null,
+      getSessionEntry(row.id) ? null : nodeFileTail,
+      this.pending,
+    )
+    const shown = this.pending.list(row.id)
+    const lost = lostTexts(shown, transcript?.unread ?? [])
+    const lostFile = lost.length ? await this.writeLostFile(row.id, record.diedAt, lost) : undefined
     const detailFile = join(
       this.recoveryDir,
       `${row.id}-${new Date(record.diedAt).toISOString().replace(/[:.]/g, '-')}.md`,
@@ -1164,6 +1312,11 @@ export class Recovery {
       git,
       transcript,
       leases,
+      since: gap,
+      recentFiles: files,
+      lost,
+      ...(lostFile ? { lostFile } : {}),
+      ...(boot ? { boot } : {}),
     }
     const synopsis = renderSynopsis(facts)
     const detail = renderDetail(facts, {
@@ -1174,7 +1327,98 @@ export class Recovery {
       memoryEvents: events ? events.slice(0, 16_000) : null,
       leases,
     })
-    return { synopsis, detail, detailFile }
+    return { synopsis, detail, detailFile, shown }
+  }
+
+  /** Deploys of this project that moved during the gap. */
+  private gapDeploys(projectRoot: string, since: number): string[] {
+    const project = basename(projectRoot)
+    let names: string[] = []
+    try {
+      names = readdirSync(this.deploysDir).filter((name) => name.startsWith(`${project}-`))
+    } catch {
+      return []
+    }
+    const seen: string[] = []
+    for (const name of names) {
+      const path = join(this.deploysDir, name)
+      try {
+        if (statSync(path).mtimeMs < since) continue
+        const deploy = JSON.parse(readFileSync(path, 'utf8')) as { sha?: string; state?: string }
+        seen.push(`deploy ${String(deploy.sha ?? '?').slice(0, 7)} ${deploy.state ?? 'unknown'}`)
+      } catch {
+        // Being written, or cut short: says nothing.
+      }
+    }
+    return seen.slice(-3)
+  }
+
+  /** Long text doesn't fit a prompt, so it waits in a file the prompt names. */
+  private async writeLostFile(
+    id: string,
+    diedAt: number,
+    lost: LostText[],
+  ): Promise<string | undefined> {
+    if (lost.reduce((sum, item) => sum + Buffer.byteLength(item.text), 0) < LOST_INLINE_BYTES)
+      return undefined
+    const path = join(this.recoveryDir, `${id}-${Math.floor(diedAt / 1000)}${LOST_SUFFIX}`)
+    mkdirSync(this.recoveryDir, { recursive: true, mode: 0o700 })
+    await writeFile(path, lost.map((item) => item.text).join('\n\n---\n\n'), { mode: 0o600 })
+    return path
+  }
+
+  /** The true account for a session restored after the machine went down. Its
+   * text counts as shown once `settle` runs, after the agent is confirmed. */
+  async bootAccount(
+    id: string,
+    resumeId: string | null,
+    diedAt: number,
+    cause: string,
+  ): Promise<{ prompt: string; settle: () => void } | null> {
+    const row = getWidget(id)
+    if (!row) return null
+    const record: GatherRecord = {
+      id,
+      kind: 'server-died',
+      cause,
+      signal: null,
+      victim: null,
+      agentWasHog: false,
+      diedAt,
+      diedAtApprox: true,
+      attempt: 0,
+      manual: false,
+      resumeId,
+      scopeUnit: null,
+      scopeInvocationId: null,
+    }
+    const { synopsis, detail, detailFile, shown } = await this.gather(record, row, this.now(), true)
+    mkdirSync(this.recoveryDir, { recursive: true, mode: 0o700 })
+    await writeFile(detailFile, detail, { mode: 0o600 })
+    return { prompt: synopsis, settle: () => this.pending.remove(id, shown) }
+  }
+
+  /** For a restore with no account to give: what still has to be put back, after
+   * `base`, the prompt it was going to use, if any. */
+  async lostNote(
+    id: string,
+    base: string | null,
+    diedAt: number,
+  ): Promise<{ prompt: string; settle: () => void } | null> {
+    const shown = this.pending.list(id)
+    if (!shown.length) return null
+    const lost = lostTexts(shown, [])
+    const lostFile = await this.writeLostFile(id, diedAt, lost)
+    const room = PROMPT_BYTES - (base ? Buffer.byteLength(base) + 1 : 0)
+    const block = lostBlock(
+      { lost, resumedAt: this.now(), ...(lostFile ? { lostFile } : {}) },
+      room,
+      'this restart',
+    )
+    return {
+      prompt: base ? `${base}\n${block}` : block,
+      settle: () => this.pending.remove(id, shown),
+    }
   }
 
   private async recoverOne(record: CrashRecord): Promise<void> {
@@ -1227,7 +1471,7 @@ export class Recovery {
       return
     }
     this.update(record, { state: 'recovering', firstTryAt: record.firstTryAt ?? now })
-    const { synopsis, detail, detailFile } = await this.gather(record, row, now)
+    const { synopsis, detail, detailFile, shown } = await this.gather(record, row, now)
     mkdirSync(this.recoveryDir, { recursive: true, mode: 0o700 })
     await writeFile(detailFile, detail, { mode: 0o600 })
     if (this.unsettled(record, 'recovering')) return
@@ -1272,6 +1516,8 @@ export class Recovery {
       this.log(`${row.id}: held: the resumed agent did not appear`)
       return
     }
+    // It's in the prompt the running agent got; the prompt says not to act twice.
+    this.pending.remove(row.id, shown)
     this.finish(record, getWidget(row.id) ?? row)
   }
 

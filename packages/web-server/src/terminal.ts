@@ -53,6 +53,7 @@ import {
   VIEWER_CREDIT_BYTES,
 } from '@aico/tether-client/term'
 import { WebSocket } from 'ws'
+import { InputLine, type TakenLine } from './input-line'
 import { findSession } from './tether'
 
 export const TERMINAL_PATH = /^\/ws\/([^/]+)$/
@@ -435,6 +436,23 @@ export class TerminalHub {
     let retries = 0
     let retryTimer: NodeJS.Timeout | undefined
     let attaching = false
+    // Agent sessions on this machine only: a shell may be asking for a password.
+    const line = !host && descriptor.tool !== 'shell' ? new InputLine() : null
+    const remember = (taken: TakenLine, state: 'sent' | 'typed') => {
+      void Promise.resolve()
+        .then(() =>
+          tether.recordInput(sessionId, {
+            text: taken.text,
+            state,
+            ...(taken.approx ? { approx: true as const } : {}),
+          }),
+        )
+        .catch(() => {})
+    }
+    const rememberTyped = () => {
+      const taken = line?.take()
+      if (taken) remember(taken, 'typed')
+    }
     const isCurrent = () => open && link !== null && !link.closed
     const hostState = (state: string) => {
       if (!open || !host || state === lastHostState) return
@@ -565,6 +583,7 @@ export class TerminalHub {
         // A remote link tries again here; a local one has the page reconnect.
         close: () => {
           if (link !== current) return
+          rememberTyped()
           if (host && current.refusedByHost) {
             // The host's sshd has no room for another session: retrying at
             // once cannot help, so say so and wait for Reconnect.
@@ -652,6 +671,7 @@ export class TerminalHub {
       this.remove(sessionId, view)
       clearTimeout(retryTimer)
       detach()
+      rememberTyped()
     }
 
     // An automated socket's claim while it may not claim: the real holder may
@@ -679,6 +699,10 @@ export class TerminalHub {
 
     const handle = (message: ClientMessage) => {
       const control = message.kind === 'control' ? message.message : null
+      // Before the live-link check: what's dropped below is what most needs keeping.
+      if (message.kind === 'data')
+        for (const sent of line?.feed(message.text) ?? []) remember(sent, 'sent')
+      else if (typeof control?.paste === 'string') line?.paste(control.paste)
       if (automated && !mayClaim && control?.claim === true && isCurrent())
         return void recheck(control)
       // An automated browser sizes and claims only when that takes nothing
@@ -690,7 +714,7 @@ export class TerminalHub {
       // The page came back to the foreground and asks whether this socket
       // still carries frames: answer even while the host is away.
       if (control?.probe === true && ws.readyState === WebSocket.OPEN)
-        ws.send(controlFrame({ __ctrl: true, pong: true }))
+        ws.send(controlFrame({ __ctrl: true, pong: true, live: isCurrent() && link !== null }))
       if (control?.reconnect === true && !isCurrent()) {
         // The page's Reconnect: try once more now.
         retries = 0

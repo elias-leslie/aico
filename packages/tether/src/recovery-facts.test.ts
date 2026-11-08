@@ -1,6 +1,6 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { isBoundedTerminalText } from '@aico/session-engine/tmux'
 import { describe, expect, it } from 'vitest'
 import { decideRecovery, LOOP_WINDOW_MS, RECOVERY_WINDOW_MS } from './recovery'
@@ -8,17 +8,23 @@ import {
   CRASH_RESULTS,
   type CrashFacts,
   claudeTranscriptFacts,
+  codexTranscriptFacts,
   type FileReader,
+  gapCommits,
   kernelOomVictims,
   likelyCulprit,
+  MACHINE_DOWN,
   nodeFileReader,
   PANE_KILLED,
   parseGitState,
   parseJournal,
+  piTranscriptFacts,
+  recentFiles,
   renderDetail,
   renderSynopsis,
   SERVER_LOST,
   scopeMemoryEvents,
+  statusPaths,
   unitOutcome,
   victimsInScope,
 } from './recovery-facts'
@@ -410,7 +416,7 @@ describe('synopsis', () => {
     expect(text).toContain(
       'Likely culprit: wf_f671639d-9ad AS-P0 ran `/srv/scratch/tools/imagegen-venv/bin/python',
     )
-    expect(text).toContain('Also killed mid-run: wf_f671639d-9ad AS-S1')
+    expect(text).toContain('Killed: wf_f671639d-9ad AS-S1')
     expect(text).toContain('HEAD defade4')
     expect(text).toContain('3 modified, 2 untracked')
     expect(text).toContain('Your leases are still held.')
@@ -523,5 +529,427 @@ describe('synopsis', () => {
     expect(detail).toContain('agent a7641549d1168add9')
     expect(detail).toContain('bw9n91ahz')
     expect(detail).toContain(' M game/autoload/a.gd')
+  })
+})
+
+describe('a resumed prompt stays one the launch accepts', () => {
+  const base = {
+    id: 'aaaa1111',
+    tool: 'claude-code',
+    kind: 'server-died',
+    cause: 'server-lost',
+    signal: null,
+    victim: null,
+    agentWasHog: false,
+    diedAt: 1_000_000,
+    diedAtApprox: false,
+    resumedAt: 1_060_000,
+    attempt: 1,
+    maxAttempts: 2,
+    windowHours: 6,
+    transcript: null,
+    git: null,
+    leases: [],
+    detailFile: '/x/detail.md',
+  } as unknown as CrashFacts
+
+  it('holds to the byte limit with long wide text, and never cuts a character in half', () => {
+    const lost = Array.from({ length: 8 }, (_, index) => ({
+      at: 1_000_000 + index,
+      text: '\u6f22\u5b57'.repeat(400) + '\u{1f600}'.repeat(50),
+    }))
+    const prompt = renderSynopsis({ ...base, lost, lostFile: '/x/lost.txt' })
+    expect(Buffer.byteLength(prompt)).toBeLessThanOrEqual(2000)
+    expect(Buffer.from(prompt).toString('utf8')).toBe(prompt)
+    expect(prompt).not.toContain('\uFFFD')
+  })
+
+  it('marks text rebuilt from moved keys as rough', () => {
+    const prompt = renderSynopsis({
+      ...base,
+      lost: [{ at: 1_000_000, text: 'moved keys', approx: true }],
+    })
+    expect(prompt).toMatch(/\(roughly\): moved keys/)
+  })
+})
+
+describe('a call the turn left unanswered', () => {
+  it('is not in flight once a Codex turn ended', () => {
+    const rows = [
+      {
+        timestamp: new Date(1000).toISOString(),
+        type: 'response_item',
+        payload: { type: 'function_call', call_id: 'c1', name: 'exec', arguments: 'x' },
+      },
+      {
+        timestamp: new Date(2000).toISOString(),
+        type: 'event_msg',
+        payload: { type: 'turn_aborted' },
+      },
+    ]
+      .map((row) => JSON.stringify(row))
+      .join('\n')
+    const read = codexTranscriptFacts(reader({ '/r.jsonl': `${rows}\n` }), '/r.jsonl', 5000)
+    expect(read?.killed).toEqual([])
+    expect(read?.turnOver).toBe(true)
+  })
+
+  it('is no culprit when only a subagent mid-reply was running', () => {
+    const call = {
+      where: 'x',
+      command: 'mid-reply',
+      startedAt: null,
+      outcome: 'in flight',
+      background: true,
+    }
+    expect(likelyCulprit([call] as never, null)).toBeNull()
+  })
+})
+
+describe('what a crash took, and what it did not', () => {
+  const row = (value: unknown) => `${JSON.stringify(value)}\n`
+  const at = (ms: number) => new Date(ms).toISOString()
+  const said = (text: string, when: number) =>
+    row({
+      type: 'user',
+      timestamp: at(when),
+      origin: { kind: 'human' },
+      message: { content: text },
+    })
+  const turnEnd = (when: number) =>
+    row({ type: 'system', subtype: 'turn_duration', timestamp: at(when) })
+  const reply = (when: number) =>
+    row({
+      type: 'assistant',
+      timestamp: at(when),
+      message: { stop_reason: 'end_turn', content: [{ type: 'text', text: 'done' }] },
+    })
+  const facts = (text: string) => claudeTranscriptFacts(reader({ [MAIN]: text }), MAIN, DIED, 1000)
+  const crash = (overrides: Partial<CrashFacts>): CrashFacts => ({
+    kind: 'server-died',
+    cause: SERVER_LOST,
+    signal: null,
+    victim: null,
+    agentWasHog: false,
+    diedAt: DIED,
+    resumedAt: DIED + 120_000,
+    attempt: 1,
+    maxAttempts: 2,
+    detailFile: '/s/recovery/d.md',
+    git: null,
+    transcript: null,
+    leases: [],
+    ...overrides,
+  })
+
+  it('finds a queued message that never reached the agent, as at 11:29', () => {
+    const lost = facts(
+      said('earlier', DIED - 60_000) +
+        row({
+          type: 'queue-operation',
+          operation: 'enqueue',
+          content: 'the one that was lost',
+          timestamp: at(DIED - 5_000),
+        }) +
+        row({ type: 'queue-operation', operation: 'dequeue', timestamp: at(DIED - 4_000) }),
+    )
+    expect(lost?.unread.map((item) => item.text)).toEqual(['the one that was lost'])
+    expect(lost?.turnOver).toBe(false)
+  })
+
+  it('does not call a queued message lost once it reached the agent', () => {
+    const queued = (content: string, operation = 'enqueue', reason?: string) =>
+      row({
+        type: 'queue-operation',
+        operation,
+        content,
+        timestamp: at(DIED - 9_000),
+        ...(reason ? { reason } : {}),
+      })
+    const read = facts(
+      queued('as a prompt') +
+        said('as a prompt', DIED - 8_000) +
+        queued('mid-turn') +
+        queued('mid-turn', 'remove', 'absorbed_mid_turn') +
+        queued('/compact') +
+        queued('after a resume'),
+    )
+    expect(read?.unread.map((item) => item.text)).toEqual(['after a resume'])
+    const resumed = facts(
+      queued('shown in a resume') + said('Recovery: this session crashed at 11:29', DIED - 1_000),
+    )
+    expect(resumed?.unread).toEqual([])
+  })
+
+  it('names a report that finished and never arrived, not as still running', () => {
+    const report =
+      '<task-notification><task-id>abc123</task-id><status>completed</status><summary>Agent "Seeker" finished</summary></task-notification>'
+    const read = facts(
+      row({
+        type: 'queue-operation',
+        operation: 'enqueue',
+        content: report,
+        timestamp: at(DIED - 5_000),
+      }),
+    )
+    expect(read?.finishedUnread).toEqual([{ id: 'abc123', summary: 'Agent "Seeker" finished' }])
+    expect(read?.unread).toEqual([])
+    const text = renderSynopsis(crash({ transcript: read }))
+    expect(text).toContain('the report never reached you: Agent "Seeker" finished (abc123)')
+  })
+
+  it('tells an idle session it was idle and invents no work', () => {
+    const read = facts(
+      said('thanks', DIED - 3600_000) + reply(DIED - 3590_000) + turnEnd(DIED - 3590_000),
+    )
+    expect(read?.turnOver).toBe(true)
+    const text = renderSynopsis(crash({ transcript: read }))
+    expect(text).toContain('You were idle')
+    expect(text).toContain("Don't start anything")
+    expect(text).not.toContain('Continue')
+    expect(text).not.toContain('Do first')
+    expect(Buffer.byteLength(text)).toBeLessThan(500)
+  })
+
+  it('an idle session that lost text gets the text, not an order to wait', () => {
+    const read = facts(said('thanks', DIED - 3600_000) + turnEnd(DIED - 3590_000))
+    const text = renderSynopsis(
+      crash({
+        transcript: read,
+        lost: [{ at: DIED - 1_000, text: 'do this next' }],
+      }),
+    )
+    expect(text).toContain('You were idle')
+    expect(text).toContain('do this next')
+    expect(text).toContain('do not act on any of it twice')
+    expect(text).not.toContain("Don't start anything")
+  })
+
+  it('a turn in progress is not idle, and a later row reopens an ended turn', () => {
+    expect(facts(turnEnd(DIED - 9_000) + said('more', DIED - 8_000))?.turnOver).toBe(false)
+  })
+
+  it('states what was in flight and the rule for live facts, without tool ids', () => {
+    const read = facts(
+      said('go', DIED - 60_000) +
+        row({
+          type: 'assistant',
+          timestamp: at(DIED - 10_000),
+          message: {
+            content: [
+              {
+                type: 'tool_use',
+                id: 'toolu_01',
+                name: 'Write',
+                input: { file_path: '/p/half.py', content: 'x' },
+              },
+            ],
+          },
+        }),
+    )
+    expect(read?.killed[0]?.file).toBe('/p/half.py')
+    const text = renderSynopsis(
+      crash({
+        transcript: read,
+        recentFiles: recentFiles(read, [], () => null, DIED),
+        since: ['2 commits (a / b)', 'deploy abc1234 ok'],
+      }),
+    )
+    expect(text).toContain('Killed: your main thread')
+    expect(text).toContain('May be half-written')
+    expect(text).toContain('/p/half.py')
+    expect(text).toContain('Since it went down: 2 commits (a / b); deploy abc1234 ok.')
+    expect(text).toContain('Re-verify anything live')
+    expect(text).toContain('Commit only your own paths')
+    expect(text).toContain('Continue the owner')
+    expect(text).not.toContain('toolu_')
+    expect(text).not.toContain('Find out what ended')
+  })
+
+  it('names killed subagents so the parent resumes them', () => {
+    const sub = `${dirname(MAIN)}/${basename(MAIN, '.jsonl')}/subagents/agent-a1.jsonl`
+    const read = claudeTranscriptFacts(
+      reader({
+        [MAIN]: said('go', DIED - 60_000),
+        [sub]: row({
+          type: 'assistant',
+          timestamp: at(DIED - 10_000),
+          message: { stop_reason: 'tool_use', content: [{ type: 'text', text: 'thinking' }] },
+        }),
+        [sub.replace(/\.jsonl$/, '.meta.json')]: JSON.stringify({ description: 'Check logs' }),
+      }),
+      MAIN,
+      DIED,
+      1000,
+    )
+    expect(read?.turnOver).toBe(false)
+    const text = renderSynopsis(crash({ transcript: read }))
+    expect(text).toContain('resume each you still need with SendMessage')
+    expect(text).toContain('Check logs (a1)')
+  })
+
+  it('stays within a prompt, with long lost text left in its file', () => {
+    const read = facts(said('go', DIED - 60_000))
+    const text = renderSynopsis(
+      crash({
+        transcript: read,
+        lost: [
+          { at: DIED - 2_000, text: 'first line\nsecond line '.repeat(300), from: 'aaaa1111' },
+          { at: DIED - 1_000, text: 'half typed', typed: true },
+        ],
+        lostFile: '/s/recovery/x-lost.txt',
+      }),
+    )
+    expect(Buffer.byteLength(text)).toBeLessThanOrEqual(2000)
+    expect(isBoundedTerminalText(text)).toBe(true)
+    expect(text).toContain('All of it: /s/recovery/x-lost.txt')
+    expect(text).toContain('from session aaaa1111')
+    expect(text).toContain('still being typed, never sent')
+    expect(text).toContain('Continue the owner')
+  })
+
+  it('leaves lost text out of the detail file', () => {
+    const synopsis = renderSynopsis(crash({ lost: [{ at: DIED, text: 'private words' }] }))
+    expect(synopsis).toContain('private words')
+    const detail = renderDetail(crash({ lost: [{ at: DIED, text: 'private words' }] }), {
+      synopsis,
+      unitLines: [],
+      kernelLines: [],
+      memctlLines: [],
+      memoryEvents: null,
+      leases: [],
+    })
+    expect(detail).not.toContain('private words')
+  })
+
+  it('says the machine went down, and restores carry no attempt count', () => {
+    const text = renderSynopsis(crash({ cause: MACHINE_DOWN, boot: true, attempt: 0 }))
+    expect(text).toContain('the machine went down')
+    expect(text).not.toContain('automatic recovery')
+    expect(text).not.toContain('If your last command')
+  })
+
+  it('files: what a killed call wrote, then recent changes; none with nothing in flight', () => {
+    const read = facts(
+      said('go', DIED - 60_000) +
+        row({
+          type: 'assistant',
+          timestamp: at(DIED - 10_000),
+          message: {
+            content: [
+              { type: 'tool_use', id: 't', name: 'Edit', input: { file_path: '/p/edited' } },
+            ],
+          },
+        }),
+    )
+    const times: Record<string, number> = {
+      fresh: DIED - 60_000,
+      old: DIED - 600_000,
+      late: DIED + 60_000,
+    }
+    const mtime = (path: string) => times[path] ?? null
+    expect(recentFiles(read, ['fresh', 'old', 'late', 'gone'], mtime, DIED)).toEqual([
+      '/p/edited',
+      'fresh',
+    ])
+    expect(recentFiles(facts(turnEnd(DIED - 9_000)), ['fresh'], mtime, DIED)).toEqual([])
+    expect(statusPaths(' M a/b\n?? c\nR  d -> e\n')).toEqual(['a/b', 'c', 'e'])
+    expect(gapCommits('')).toEqual([])
+    expect(gapCommits('abc one\ndef two\n')).toEqual(['2 commits (one / two)'])
+  })
+
+  describe('Codex rollouts', () => {
+    const item = (when: number, payload: unknown) =>
+      row({ timestamp: at(when), type: 'response_item', payload })
+    const event = (when: number, type: string) =>
+      row({ timestamp: at(when), type: 'event_msg', payload: { type } })
+    const read = (text: string) =>
+      codexTranscriptFacts(reader({ '/r.jsonl': text }), '/r.jsonl', DIED)
+    const user = (text: string, when: number) =>
+      item(when, { type: 'message', role: 'user', content: [{ type: 'input_text', text }] })
+
+    it('sees an open call and a patch it was writing', () => {
+      const facts = read(
+        event(DIED - 20_000, 'task_started') +
+          user('<environment_context>x</environment_context>', DIED - 20_000) +
+          user('fix it', DIED - 19_000) +
+          item(DIED - 9_000, {
+            type: 'function_call',
+            call_id: 'done',
+            name: 'exec',
+            arguments: 'ls',
+          }) +
+          item(DIED - 8_000, { type: 'function_call_output', call_id: 'done', output: 'ok' }) +
+          item(DIED - 5_000, {
+            type: 'custom_tool_call',
+            call_id: 'open',
+            name: 'apply_patch',
+            input: '*** Begin Patch\n*** Update File: src/a.ts\n@@\n',
+          }) +
+          '{"timestamp":"torn',
+      )
+      expect(facts?.lastOwner?.text).toBe('fix it')
+      expect(facts?.turnOver).toBe(false)
+      expect(facts?.killed.map((call) => call.file)).toEqual(['src/a.ts'])
+      const text = renderSynopsis(crash({ transcript: facts, kind: 'server-died' }))
+      expect(text).toContain('Killed: your main thread')
+      expect(text).toContain('"fix it"')
+    })
+
+    it('sees an idle session as idle', () => {
+      const facts = read(
+        event(DIED - 20_000, 'task_started') +
+          user('fix it', DIED - 19_000) +
+          event(DIED - 9_000, 'task_complete'),
+      )
+      expect(facts?.turnOver).toBe(true)
+      expect(renderSynopsis(crash({ transcript: facts }))).toContain('You were idle')
+    })
+  })
+
+  describe('Pi session files', () => {
+    const message = (when: number, value: unknown) =>
+      row({ type: 'message', timestamp: at(when), message: value })
+    const read = (text: string) => piTranscriptFacts(reader({ '/p.jsonl': text }), '/p.jsonl', DIED)
+
+    it('sees an open call', () => {
+      const facts = read(
+        message(DIED - 20_000, { role: 'user', content: [{ type: 'text', text: 'fix it' }] }) +
+          message(DIED - 9_000, {
+            role: 'assistant',
+            stopReason: 'toolUse',
+            content: [
+              {
+                type: 'toolCall',
+                id: 'c1',
+                name: 'write',
+                arguments: { path: 'src/a.ts', content: 'x' },
+              },
+            ],
+          }),
+      )
+      expect(facts?.lastOwner?.text).toBe('fix it')
+      expect(facts?.turnOver).toBe(false)
+      expect(facts?.killed.map((call) => call.file)).toEqual(['src/a.ts'])
+    })
+
+    it('an answered call and a finished reply read as idle', () => {
+      const facts = read(
+        message(DIED - 20_000, { role: 'user', content: 'fix it' }) +
+          message(DIED - 19_000, {
+            role: 'assistant',
+            stopReason: 'toolUse',
+            content: [{ type: 'toolCall', id: 'c1', name: 'bash', arguments: { command: 'ls' } }],
+          }) +
+          message(DIED - 18_000, { role: 'toolResult', toolCallId: 'c1', toolName: 'bash' }) +
+          message(DIED - 17_000, {
+            role: 'assistant',
+            stopReason: 'stop',
+            content: [{ type: 'text', text: 'done' }],
+          }),
+      )
+      expect(facts?.killed).toEqual([])
+      expect(facts?.turnOver).toBe(true)
+    })
   })
 })

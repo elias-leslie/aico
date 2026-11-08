@@ -164,6 +164,9 @@ export interface TuiAdapter {
     events(line: string): ModelEvent[]
     /** The owner's prompt `uuid` and the prompts after it, for a rewind. */
     promptAt?(transcript: string, uuid: string): { text: string; after: string[] } | null
+    /** Text one transcript line shows reached the agent as the owner's or
+     * another session's message. No line for queued text: queued is not read. */
+    delivered?(line: string): { text: string; at: number | null }[]
   } | null
   /** Where a conversation's session file is, by id; null when the tool's file
    * is found another way (Codex: the rollout its process holds open) or it keeps none. */

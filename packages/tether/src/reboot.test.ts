@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Placement } from '@aico/fleet/hub/placement'
@@ -8,12 +8,19 @@ import {
   removeWidget,
   reserveRootRequest,
 } from '@aico/session-engine/catalog'
-import { type RestoreReport, readJsonFile, writeJsonFile } from '@aico/session-engine/continuity'
+import {
+  RESUME_PROMPT,
+  type RestoreReport,
+  readJsonFile,
+  writeJsonFile,
+} from '@aico/session-engine/continuity'
 import { rootLaunchEnvironment } from '@aico/session-engine/root-launch'
 import { initStore } from '@aico/session-engine/testing'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LifecycleApiContext } from './lifecycle-api'
 import { Continuity } from './reboot'
+import type { Recovery } from './recovery'
+import { MACHINE_DOWN } from './recovery-facts'
 
 const h = vi.hoisted(() => ({
   status: 'pending',
@@ -180,6 +187,76 @@ it('rebooks durable needs before resuming when both the booking and runtime are 
 afterEach(() => {
   service.stop()
   rmSync(dir, { recursive: true, force: true })
+})
+
+describe('the account a restored session wakes to', () => {
+  const restored = (settle = vi.fn(), lostNote = vi.fn(async () => null as never)) => {
+    const account = vi.fn(async () => ({ prompt: 'TRUE ACCOUNT', settle }))
+    h.probe = { kind: 'running', pid: 7, resumeId: RESUME }
+    service.setRecovery({
+      bootAccount: account,
+      lostNote,
+      retains: () => false,
+      inspect: async () => {},
+    } as unknown as Recovery)
+    const prompts: string[] = []
+    h.respawn.mockImplementation(async () => {
+      prompts.push(rootLaunchEnvironment(ID).AICO_ROOT_INITIAL_PROMPT ?? '')
+      h.agent = true
+      return { status: 'replaced' }
+    })
+    h.ensure.mockImplementation(async () => {
+      prompts.push(rootLaunchEnvironment(ID).AICO_ROOT_INITIAL_PROMPT ?? '')
+      h.status = 'running'
+      h.agent = true
+      return true
+    })
+    return { account, prompts, settle }
+  }
+
+  it('a power cut gets the true account, and text counts as shown once the agent is back', async () => {
+    const { account, prompts, settle } = restored()
+    const report = await service.restoreAfterStart()
+    expect(report?.restored).toMatchObject([{ id: ID, resumed: true }])
+    expect(prompts).toEqual(['TRUE ACCOUNT'])
+    expect(account).toHaveBeenCalledWith(ID, RESUME, 1000, MACHINE_DOWN)
+    expect(settle).toHaveBeenCalledOnce()
+  })
+
+  it('a checkpointed reboot still puts back what was sent, and counts it once shown', async () => {
+    writeJsonFile(join(dir, 'checkpoint.json'), { at: now - 60_000 })
+    const settle = vi.fn()
+    const lostNote = vi.fn(async () => ({ prompt: 'SHORT PLUS LOST', settle }) as never)
+    const { prompts } = restored(vi.fn(), lostNote)
+    await service.restoreAfterStart()
+    expect(lostNote).toHaveBeenCalledWith(ID, RESUME_PROMPT, expect.any(Number))
+    expect(prompts).toEqual(['SHORT PLUS LOST'])
+    expect(settle).toHaveBeenCalledOnce()
+  })
+
+  it('a reboot the agents checkpointed for keeps its short prompt', async () => {
+    writeJsonFile(join(dir, 'checkpoint.json'), { at: now - 60_000 })
+    const { account, prompts } = restored()
+    await service.restoreAfterStart()
+    expect(account).not.toHaveBeenCalled()
+    expect(prompts).toEqual([RESUME_PROMPT])
+    expect(existsSync(join(dir, 'checkpoint.json'))).toBe(false)
+  })
+
+  it('an old checkpoint says nothing about this shutdown', async () => {
+    writeJsonFile(join(dir, 'checkpoint.json'), { at: now - 3 * 3600_000 })
+    const { prompts } = restored()
+    await service.restoreAfterStart()
+    expect(prompts).toEqual(['TRUE ACCOUNT'])
+  })
+
+  it('still resumes on the short prompt when no account can be made', async () => {
+    const { prompts, account } = restored()
+    account.mockRejectedValue(new Error('no'))
+    const report = await service.restoreAfterStart()
+    expect(report?.restored).toMatchObject([{ id: ID, resumed: true }])
+    expect(prompts).toEqual([RESUME_PROMPT])
+  })
 })
 
 describe('reboot agent readiness', () => {

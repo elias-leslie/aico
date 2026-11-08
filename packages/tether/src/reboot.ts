@@ -2,6 +2,7 @@
 // the restore that runs after startup reconciliation, and the routes
 // host-steward uses around a planned reboot (docs/reboot-continuity.md).
 
+import { rmSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { getWidget, listWidgets, type WidgetRow } from '@aico/session-engine/catalog'
@@ -39,6 +40,7 @@ import { AgentAdmissionDenied } from '@aico/shared/host-pressure'
 import { HttpError, type Router, readJsonObject, sendJson } from '@aico/shared/http'
 import type { LifecycleContext } from './lifecycle-context'
 import type { Recovery } from './recovery'
+import { MACHINE_DOWN, SERVER_LOST } from './recovery-facts'
 import { restoreSessionReservation } from './recovery-placement'
 
 const OBSERVE_INTERVAL_MS = 60_000
@@ -49,6 +51,8 @@ const DESKTOP_WAIT_MS = 5 * 60_000
 const PREPARE_POLL_MS = 3_000
 /** An agent may still report idle for a moment after the checkpoint prompt lands. */
 const PREPARE_SETTLE_MS = 15_000
+/** A checkpoint this close to the last observation was for the shutdown that followed. */
+const CHECKPOINT_FRESH_MS = 30 * 60_000
 
 export interface PreparedSession {
   id: string
@@ -122,6 +126,9 @@ export class Continuity {
   private readonly failedRestore = new Set<string>()
   /** Crash recovery: told about each agent session on every pass. */
   private recovery: Recovery | null = null
+  private readonly checkpointPath: string
+  /** How the sessions being restored went down; null when they were told first. */
+  private wentDown: { at: number; cause: string } | null = null
   private markPlanned: () => void = () => {}
   private markFinished: () => void = () => {}
   /** Settles once this start knows which sessions it restores (they are then
@@ -141,6 +148,7 @@ export class Continuity {
   ) {
     this.snapshotPath = join(context.paths.stateDir, 'continuity.json')
     this.reportPath = join(context.paths.stateDir, 'restore.json')
+    this.checkpointPath = join(context.paths.stateDir, 'checkpoint.json')
     this.home = process.env.HOME ?? homedir()
     this.now = options.now ?? Date.now
     this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)))
@@ -258,6 +266,7 @@ export class Continuity {
         if (blocked || !isAgent(row.tool)) continue
         if (await pasteIntoRunningSession(row.id, CHECKPOINT_PROMPT)) notified.add(row.id)
       }
+      if (notified.size) writeJsonFile(this.checkpointPath, { at: this.now() })
       if (notified.size) await this.sleep(Math.min(PREPARE_SETTLE_MS, options.timeoutMs))
     }
     const busy = () => observed.some(({ row, idle }) => isAgent(row.tool) && idle === false)
@@ -304,6 +313,7 @@ export class Continuity {
    * gone (a reboot, or the server ended), resuming its agent. */
   async restoreAfterStart(): Promise<RestoreReport | null> {
     const snapshot = readJsonFile<ContinuitySnapshot>(this.snapshotPath)
+    this.wentDown = snapshot ? this.howItWentDown(snapshot) : null
     const previous = readJsonFile<RestoreReport>(this.reportPath)
     for (const failed of previous?.failed ?? []) this.failedRestore.add(failed.id)
     const statuses = new Map<string, string>()
@@ -382,6 +392,44 @@ export class Continuity {
     return report
   }
 
+  /** A reboot the agents checkpointed for needs no account: they wrote their
+   * own and were told what comes next. Anything else came without warning. */
+  private howItWentDown(snapshot: ContinuitySnapshot): { at: number; cause: string } | null {
+    const checkpoint = readJsonFile<{ at?: number }>(this.checkpointPath)
+    rmSync(this.checkpointPath, { force: true })
+    if (
+      typeof checkpoint?.at === 'number' &&
+      snapshot.updatedAt - checkpoint.at < CHECKPOINT_FRESH_MS
+    )
+      return null
+    return {
+      at: snapshot.updatedAt,
+      cause: snapshot.bootId === currentBootId() ? SERVER_LOST : MACHINE_DOWN,
+    }
+  }
+
+  private async promptFor(
+    id: string,
+    resume: string | null,
+  ): Promise<{ prompt: string; settle: () => void }> {
+    const account =
+      this.wentDown &&
+      (await this.recovery
+        ?.bootAccount(id, resume, this.wentDown.at, this.wentDown.cause)
+        .catch(() => null))
+    return (
+      account ||
+      (await this.lostNote(id, RESUME_PROMPT)) || { prompt: RESUME_PROMPT, settle: () => {} }
+    )
+  }
+
+  private lostNote(id: string, base: string | null) {
+    return (
+      this.recovery?.lostNote(id, base, this.wentDown?.at ?? this.now()).catch(() => null) ??
+      Promise.resolve(null)
+    )
+  }
+
   private async restoreOne(
     id: string,
     resumeId: string | null,
@@ -400,9 +448,10 @@ export class Continuity {
         const marker = agentExitOf(row)
         if (marker?.state !== 'exit' || marker.status !== ENTRY_RETRY_EXIT)
           return this.confirmAgent(id, resume)
+        const account = await this.promptFor(id, resume)
         const result = await withRootPrompt(
           id,
-          RESUME_PROMPT,
+          account.prompt,
           () => respawnAndRelaunch(id, tool, { initialLaunch: true }),
           resume,
         )
@@ -413,10 +462,14 @@ export class Continuity {
           }
         if (result.status !== 'replaced')
           return { status: 'failed', reason: 'reason' in result ? result.reason : result.status }
-        return this.confirmAgent(id, resume)
+        const confirmed = await this.confirmAgent(id, resume)
+        if (confirmed.status === 'restored') account.settle()
+        return confirmed
       }
       const launch = () => ensureSessionSerialized(id, { cols: 100, rows: 30 })
-      const ok = resume ? await withRootPrompt(id, RESUME_PROMPT, launch, resume) : await launch()
+      // With nothing to resume the agent starts over; what it was sent still comes back.
+      const account = resume ? await this.promptFor(id, resume) : await this.lostNote(id, null)
+      const ok = account ? await withRootPrompt(id, account.prompt, launch, resume) : await launch()
       const latest = getWidget(id)
       const status = latest ? await verifySessionStatus(latest) : 'pending'
       if (!ok || status === 'pending') {
@@ -426,9 +479,10 @@ export class Continuity {
           ? { status: 'retry', reason }
           : { status: 'failed', reason }
       }
-      return isAgent(row.tool)
-        ? this.confirmAgent(id, resume)
-        : { status: 'restored', resumed: false }
+      if (!isAgent(row.tool)) return { status: 'restored', resumed: false }
+      const confirmed = await this.confirmAgent(id, resume)
+      if (confirmed.status === 'restored') account?.settle()
+      return confirmed
     } catch (error) {
       const reason = (error as Error).message
       return error instanceof AgentAdmissionDenied

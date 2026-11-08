@@ -2,7 +2,11 @@ import { act, render, waitFor } from '@testing-library/react'
 import { createRef } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { markCreatedHere } from '../lib/created-here'
-import { TerminalComponent, type TerminalHandle } from './Terminal'
+import {
+  serverAnswers,
+  TerminalComponent,
+  type TerminalHandle,
+} from './Terminal'
 
 type TerminalHookOptions = Parameters<
   typeof import('../lib/hooks/use-terminal-websocket')['useTerminalWebSocket']
@@ -617,5 +621,59 @@ describe('TerminalComponent in control mode', () => {
     expect(websocketState.wsRefCurrent?.send).toHaveBeenCalledWith(
       JSON.stringify({ __ctrl: true, paste: 'a\nb' }),
     )
+  })
+})
+
+describe('serverAnswers', () => {
+  function socket() {
+    const target = new EventTarget() as EventTarget & {
+      readyState: number
+      send: ReturnType<typeof vi.fn>
+    }
+    target.readyState = WebSocket.OPEN
+    target.send = vi.fn()
+    return target
+  }
+  const frame = (text: string) =>
+    new Uint8Array([0x02, ...new TextEncoder().encode(text)])
+      .buffer as ArrayBuffer
+
+  it('says the input arrived once the server answers the probe', async () => {
+    const ws = socket()
+    const reconnect = vi.fn()
+    const answer = serverAnswers(ws as unknown as WebSocket, reconnect)
+    ws.dispatchEvent(
+      new MessageEvent('message', { data: frame('{"__ctrl":true,"other":1}') }),
+    )
+    ws.dispatchEvent(
+      new MessageEvent('message', { data: frame('{"pong":true}') }),
+    )
+    await expect(answer).resolves.toBe(true)
+    expect(reconnect).not.toHaveBeenCalled()
+  })
+
+  it('says it did not arrive when the server has no link to the session', async () => {
+    const ws = socket()
+    const answer = serverAnswers(ws as unknown as WebSocket, vi.fn())
+    ws.dispatchEvent(
+      new MessageEvent('message', {
+        data: frame('{"pong":true,"live":false}'),
+      }),
+    )
+    await expect(answer).resolves.toBe(false)
+  })
+
+  it('says it may not have arrived and reconnects when nothing answers', async () => {
+    vi.useFakeTimers()
+    try {
+      const ws = socket()
+      const reconnect = vi.fn()
+      const answer = serverAnswers(ws as unknown as WebSocket, reconnect)
+      await vi.advanceTimersByTimeAsync(5000)
+      await expect(answer).resolves.toBe(false)
+      expect(reconnect).toHaveBeenCalledOnce()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

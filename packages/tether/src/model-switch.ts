@@ -378,6 +378,12 @@ export interface ModelWatchOperations {
   /** The session's descriptor changed (publish `session.updated`). */
   changed(id: string): void
   log(message: string): void
+  /** Text waiting to show up in a session's record (pending-input.ts): only
+   * a session that has some gets its new lines read for it. */
+  awaited?: {
+    has(id: string): boolean
+    seen(id: string, text: string, at: number | null): void
+  }
 }
 
 /** Bytes read per poll, forward from where the last read stopped: a record
@@ -386,6 +392,8 @@ export interface ModelWatchOperations {
 const STEP_BYTES = 4 * 1024 * 1024
 /** The most a rewind reads from its target prompt on. */
 const PROMPT_READ_BYTES = 32 * 1024 * 1024
+/** What a last look at a dead agent's record re-reads. */
+const LAST_LOOK_BYTES = 1024 * 1024
 /** Persist an advancing offset at most this often when nothing else changed. */
 const SAVE_EVERY_MS = 60_000
 const TRANSCRIPT_SEARCH_MS = 15_000
@@ -556,6 +564,9 @@ export class ModelWatch {
     }
     const found: RawSwitch[] = []
     let spoke = false
+    const delivered = this.ops.awaited?.has(id)
+      ? adapterByHarness(source.tool)?.models?.delivered
+      : undefined
     while (at < cut) {
       const newline = buffer.indexOf(0x0a, at)
       const stop = newline < 0 || newline >= cut ? cut : newline
@@ -563,6 +574,8 @@ export class ModelWatch {
       const lineAt = start + at
       at = stop + 1
       if (!line) continue
+      for (const prompt of delivered?.(line) ?? [])
+        this.ops.awaited?.seen(id, prompt.text, prompt.at)
       for (const event of adapterByHarness(source.tool)?.models?.events(line) ?? []) {
         const raw = live.follower.apply(event, now, lineAt)
         if (raw) found.push(raw)
@@ -746,6 +759,14 @@ export class ModelWatch {
     } catch {
       return null
     }
+  }
+
+  /** The record followed for a session, and the reader it was read with; it
+   * stays known after the agent dies. */
+  recordOf(id: string): { path: string; tool: string; reader: FileTail | null } | null {
+    const entry = this.entries[id]
+    if (!entry?.path || !entry.tool) return null
+    return { path: entry.path, tool: entry.tool, reader: this.live.get(id)?.reader ?? null }
   }
 
   /** The switch a rewind undid, so it is not undone twice. */
@@ -955,5 +976,30 @@ export function modelSwitchText(
       ...facts,
       advice(tool, requestId),
     ].join(' · '),
+  }
+}
+
+/** A dead agent's record, one last time: what it wrote after the last poll still
+ * counts as having reached it. */
+export function lastLook(
+  id: string,
+  record: { path: string; tool: string; reader: FileTail | null } | null,
+  fallback: FileTail | null,
+  awaited: { has(id: string): boolean; seen(id: string, text: string, at: number | null): void },
+): void {
+  const delivered = record && adapterByHarness(record.tool)?.models?.delivered
+  if (!record || !delivered || !awaited.has(id)) return
+  const reader = record.reader ?? fallback
+  if (!reader) return
+  try {
+    const { size } = reader.read(record.path, 0, 0)
+    const from = Math.max(0, size - LAST_LOOK_BYTES)
+    const text = reader.range(record.path, from, size).toString('utf8')
+    const lines = text.split('\n')
+    if (from > 0) lines.shift()
+    for (const line of lines)
+      for (const prompt of delivered(line)) awaited.seen(id, prompt.text, prompt.at)
+  } catch {
+    // The record went away: nothing shows the text arrived.
   }
 }

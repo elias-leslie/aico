@@ -6,11 +6,22 @@ function handle() {
   return {
     status: 'connected',
     pasteInput: vi.fn().mockResolvedValue(undefined),
+    inputArrived: vi.fn().mockResolvedValue(true),
     sendInput: vi.fn(),
   } as unknown as TerminalHandle
 }
 
 describe('commitComposeInput', () => {
+  it('keeps the draft when the server never answered the paste', async () => {
+    const dead = handle()
+    dead.inputArrived = vi.fn().mockResolvedValue(false)
+    const handles = new Map([['dead', dead]])
+    await expect(
+      commitComposeInput(handles, 'dead', 'the words', 'send'),
+    ).resolves.toBe(false)
+    expect(dead.sendInput).not.toHaveBeenCalled()
+  })
+
   it('uses the exact session and sends Enter only after its bracketed paste completes', async () => {
     let finishPaste: (() => void) | undefined
     const first = handle()
