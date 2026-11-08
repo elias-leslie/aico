@@ -61,6 +61,8 @@ export interface Place {
    */
   intent: Intent
   machine?: string
+  /** How to reach it from here (a name in ~/.ssh/config), where `aico logs PROJECT` reads its journal. */
+  ssh?: string
 }
 
 export class ProjectError extends Error {}
@@ -76,7 +78,7 @@ export function parseRuntime(value: unknown): Place[] {
       throw new ProjectError(`${at} must be an object`)
     const p = raw as Record<string, unknown>
     const extra = Object.keys(p).filter(
-      (key) => !['kind', 'id', 'node', 'label', 'power', 'intent', 'machine'].includes(key),
+      (key) => !['kind', 'id', 'node', 'label', 'power', 'intent', 'machine', 'ssh'].includes(key),
     )
     if (extra.length) throw new ProjectError(`${at} has unknown field ${extra[0]}`)
     if (typeof p.kind !== 'string' || !PLACE_KINDS.includes(p.kind))
@@ -90,7 +92,7 @@ export function parseRuntime(value: unknown): Place[] {
       throw new ProjectError(
         `${at} ${p.kind === 'host' ? 'is a host and takes no id' : 'needs a Proxmox id'}`,
       )
-    for (const key of ['node', 'machine'] as const)
+    for (const key of ['node', 'machine', 'ssh'] as const)
       if (
         p[key] !== undefined &&
         (typeof p[key] !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(p[key] as string))
@@ -106,6 +108,7 @@ export function parseRuntime(value: unknown): Place[] {
       power: p.power,
       intent: p.intent as Intent,
       ...(p.machine !== undefined ? { machine: p.machine as string } : {}),
+      ...(p.ssh !== undefined ? { ssh: p.ssh as string } : {}),
     }
   })
 }

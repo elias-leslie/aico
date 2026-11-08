@@ -173,6 +173,34 @@ describe('aico pulse', () => {
     expect(render(pulse).join('\n')).not.toContain('old')
   })
 
+  it('counts an ack whose sender has ended apart, only when Tether answered', async () => {
+    const row = (id: string, window: string) => ({
+      id,
+      from: 'a',
+      to: 'b',
+      state: 'acked',
+      intent: 'yes',
+      note: 'n',
+      from_window: window,
+      created: '2026-11-08T11:00:00Z',
+    })
+    const messages = [row('gone', 'aaaaaaaa'), row('here', 'bbbbbbbb'), row('none', '')]
+    const pulse = (sessions: unknown) =>
+      collect({
+        now: () => Date.parse('2026-11-08T12:00:00Z'),
+        sessions: async () => sessions,
+        docNames: async () => ['_coord'],
+        doc: async () => ({ messages }),
+        findings: () => [],
+      } as unknown as PulseSources)
+    const answered = render(await pulse([{ id: 'bbbbbbbb', tool: 'x', status: 'running' }]))
+    expect(answered).toContain(
+      'Handshakes: 2 acked, waiting on their sender, 1 acked, sender ended (nothing to do)',
+    )
+    expect(answered.join('\n')).not.toContain('gone')
+    expect(render(await pulse(null))).toContain('Handshakes: 3 acked, waiting on their sender')
+  })
+
   it('says unknown, not zero, when a source does not answer', async () => {
     const { sources } = setup(null)
     const lines = render(

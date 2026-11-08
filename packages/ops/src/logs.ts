@@ -1,8 +1,8 @@
 // `aico logs UNIT|PROJECT [-n N] [--since T] [-l LEVEL] [-f]`: a unit's journal (the user manager's,
-// else the system's), or every unit of a project from its project.identity.json.
+// else the system's), or every unit of a project from its project.identity.json, on the machine it runs on.
 
 import type { Project } from './deploy'
-import { canonical } from './deploy'
+import { canonical, loadProject } from './deploy'
 import type { Runner } from './sh'
 
 // One level only, as `st logs -l` shows it: journal priorities grouped the way st names them.
@@ -48,16 +48,17 @@ export function parseLogsArgs(argv: string[]): LogsRequest | string {
   return req
 }
 
+const projectUnits = (project: Project) =>
+  [
+    project.backend,
+    ...project.defaultWorkers,
+    ...project.optionalWorkers,
+    ...project.manualWorkers,
+  ].filter(Boolean)
+
 /** The journalctl argv for a request; units of the project when the target names it; null for no such unit. */
 export function journalArgs(req: LogsRequest, project: Project, run: Runner): string[] | null {
-  const units = project.names.includes(req.target)
-    ? [
-        project.backend,
-        ...project.defaultWorkers,
-        ...project.optionalWorkers,
-        ...project.manualWorkers,
-      ].filter(Boolean)
-    : [canonical(req.target)]
+  const units = project.names.includes(req.target) ? projectUnits(project) : [canonical(req.target)]
   let user = units.length > 1
   if (!user) {
     user = run('systemctl', ['--user', 'cat', units[0] as string]).code === 0
@@ -81,6 +82,10 @@ export function journalArgs(req: LogsRequest, project: Project, run: Runner): st
       if (!user && !retained(false)) return null
     }
   }
+  return tailArgs(req, units, user)
+}
+
+function tailArgs(req: LogsRequest, units: string[], user: boolean): string[] {
   const args = [
     ...(user ? ['--user'] : []),
     ...units.flatMap((unit) => ['-u', unit]),
@@ -92,4 +97,56 @@ export function journalArgs(req: LogsRequest, project: Project, run: Runner): st
   if (req.level) args.push('-p', LEVELS[req.level.toUpperCase()] as string)
   if (req.follow) args.push('-f')
   return args
+}
+
+/** The command that reads another registered project's journal: its units are user units, where it
+ * runs (over ssh when its runtime names `ssh`). Null when the target is no such project; a string
+ * says why there is nothing to read. */
+export function otherProjectLogs(
+  req: LogsRequest,
+  run: Runner,
+): { cmd: string; args: string[] } | string | null {
+  const shown = run('aico', ['projects', 'show', req.target, '--json'])
+  if (shown.code !== 0) return null
+  const registered = JSON.parse(shown.out) as {
+    id: string
+    root_path?: string | null
+    runtime?: { ssh?: string }[]
+  }
+  let project: Project
+  try {
+    project = loadProject(registered.root_path ?? '')
+  } catch {
+    return `${registered.id} is registered but has no project.identity.json, so its units are unknown`
+  }
+  const units = projectUnits(project)
+  if (!units.length) return `${registered.id} has no services to read logs from`
+  const args = tailArgs(req, units, true)
+  const host = registered.runtime?.find((place) => place.ssh)?.ssh
+  return host ? { cmd: 'ssh', args: [host, 'journalctl', ...args] } : { cmd: 'journalctl', args }
+}
+
+/** Where Status says a job's log is, for a target that is a Status row and no unit. */
+export function statusPointer(target: string, run: Runner): string | null {
+  const found = run('aico', ['status', '--search', target, '--json'])
+  if (found.code !== 0) return null
+  let rows: {
+    id?: string
+    what?: string
+    project?: string
+    actions?: { kind?: string; ref?: string }[]
+  }[]
+  try {
+    rows = (JSON.parse(found.out) as { rows?: typeof rows }).rows ?? []
+  } catch {
+    return null
+  }
+  const wanted = target.toLowerCase()
+  const row = rows.find(
+    (r) => r.what?.toLowerCase() === wanted || r.id?.toLowerCase().endsWith(`/${wanted}`),
+  )
+  if (!row) return null
+  const log = row.actions?.find((action) => action.kind === 'log')?.ref
+  if (log) return `${row.what}: ${log}`
+  return row.project ? `${row.what} is a job of ${row.project}: aico logs ${row.project}` : null
 }

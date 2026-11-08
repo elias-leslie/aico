@@ -86,17 +86,23 @@ function minutesSince(stamp: unknown, now: number): number {
 /** The ledger's own retention (native/hook/lease/ledger.go): an older row only lingers until the next save. */
 const HANDSHAKE_KEPT_MINUTES = 24 * 60
 
-/** As the ledger reads it: an ETA ack is the recipient's to finish, and reopens once its time runs out. */
-function handshakeState(m: Row, now: number): string {
+/** As the ledger reads it: an ETA ack is the recipient's to finish, and reopens once its time runs out.
+ * An ack whose sender's Aico session has ended waits on nobody; Tether's list decides that, and a session
+ * Tether did not list because it did not answer (null) stays waiting. */
+function handshakeState(m: Row, now: number, sessions: SessionDescriptor[] | null): string {
   const state = text(m.state)
-  if (state !== 'acked' || m.intent !== 'eta' || typeof m.eta_min !== 'number') return state
-  return minutesSince(m.acked_at, now) >= m.eta_min ? 'open' : 'eta'
+  if (state !== 'acked') return state
+  if (m.intent === 'eta' && typeof m.eta_min === 'number')
+    return minutesSince(m.acked_at, now) >= m.eta_min ? 'open' : 'eta'
+  const window = text(m.from_window)
+  return window && sessions && !sessions.some((s) => s.id === window) ? 'sender-ended' : state
 }
 
 export async function collect(src: PulseSources, cfg: Policy = policy): Promise<Pulse> {
   const now = src.now()
   let leases: Lease[] | null = null
   let handshakes: Handshake[] | null = null
+  const sessions = await src.sessions()
   const names = await src.docNames()
   if (names) {
     leases = []
@@ -135,7 +141,7 @@ export async function collect(src: PulseSources, cfg: Policy = policy): Promise<
           id: text(m.id),
           from: text(m.from),
           to: text(m.to),
-          state: handshakeState(m, now),
+          state: handshakeState(m, now, sessions),
           ageMinutes: minutesSince(m.created, now),
         }))
     }
@@ -143,7 +149,7 @@ export async function collect(src: PulseSources, cfg: Policy = policy): Promise<
   return {
     children: src.children ? await src.children() : null,
     generatedAt: now,
-    sessions: await src.sessions(),
+    sessions,
     leases,
     handshakes,
     findings: src.findings(),
@@ -196,11 +202,13 @@ export function render(p: Pulse): string[] {
       [count('open'), 'open'],
       [count('acked'), 'acked, waiting on their sender'],
       [count('eta'), 'with an ETA, waiting on the recipient'],
+      [count('sender-ended'), 'acked, sender ended (nothing to do)'],
     ] as const
     const shown = parts.filter(([n]) => n > 0).map(([n, label]) => `${n} ${label}`)
     out.push(`Handshakes: ${shown.join(', ')}`)
     for (const h of p.handshakes)
-      out.push(`  ${h.id} ${h.state} ${h.from}->${h.to} ${age(h.ageMinutes)}`)
+      if (h.state !== 'sender-ended')
+        out.push(`  ${h.id} ${h.state} ${h.from}->${h.to} ${age(h.ageMinutes)}`)
   }
   if (p.findings === null) out.push('Status: unreadable; host findings are unknown.')
   else if (p.findings.length === 0) out.push('Status: no problems.')

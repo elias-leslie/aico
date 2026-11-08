@@ -36,6 +36,10 @@ describe('tether note', () => {
           return reply(201, { id: 'aaaaaaaaaaaa', ...JSON.parse(text) })
         if (req.method === 'PATCH' && req.url === '/api/notes/aaaaaaaaaaaa')
           return reply(200, { id: 'aaaaaaaaaaaa', ...JSON.parse(text) })
+        if (req.method === 'DELETE' && req.url === '/api/notes/aaaaaaaaaaaa?madeBy=12345678')
+          return reply(200, { deleted: true, id: 'aaaaaaaaaaaa' })
+        if (req.method === 'DELETE')
+          return reply(403, { detail: "This session didn't make that note, so it stays" })
         if (req.url === '/api/notes/groceries')
           return reply(200, {
             id: '0123456789ab',
@@ -143,6 +147,26 @@ describe('tether note', () => {
       await runNote(both.io, false, ['add', 'Idea', '--global', '--project', 'aico'], env()),
     ).toBe(2)
     expect(both.err[0]).toMatch(/cannot be used together/)
+  })
+
+  it('deletes only as the session that made the note, and says so otherwise', async () => {
+    const session = { ...env(), AICO_WIDGET_ID: '12345678' }
+    await runNote(capture().io, false, ['add', 'Mine'], session)
+    expect(requests.filter((r) => r.startsWith('POST /api/notes ')).at(-1)).toContain(
+      '"madeBy":"12345678"',
+    )
+    const mine = capture()
+    expect(await runNote(mine.io, false, ['delete', 'aaaaaaaaaaaa'], session)).toBe(0)
+    expect(requests.at(-1)).toBe('DELETE /api/notes/aaaaaaaaaaaa?madeBy=12345678')
+    expect(mine.out[0]).toBe('Deleted aaaaaaaaaaaa')
+    const other = capture()
+    expect(await runNote(other.io, false, ['delete', 'bbbbbbbbbbbb'], session)).toBe(1)
+    expect(other.err[0]).toMatch(/didn't make that note/)
+    const seen = requests.length
+    const outside = capture()
+    expect(await runNote(outside.io, false, ['delete', 'aaaaaaaaaaaa'], env())).toBe(2)
+    expect(outside.err[0]).toMatch(/only inside the Aico session/)
+    expect(requests).toHaveLength(seen)
   })
 
   it('filters by project, shows it, and moves a note', async () => {

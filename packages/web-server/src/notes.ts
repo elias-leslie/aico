@@ -3,6 +3,7 @@
 // captures. `groceries` works anywhere a note id does and makes the list on
 // first use.
 
+import { randomBytes } from 'node:crypto'
 import type { ServerResponse } from 'node:http'
 import { hasBlob } from '@aico/notes/blobs'
 import { maskSecrets } from '@aico/shared/secrets'
@@ -44,7 +45,17 @@ const PAGE_DEFAULT = 100
 const SNIPPET = 200
 /** Read past the cut, so a token crossing it is still recognised and hidden whole. */
 const SNIPPET_MARGIN = 400
-const CREATE_KEYS = ['kind', 'title', 'body', 'pinned', 'labels', 'items', 'remindAt', 'project']
+const CREATE_KEYS = [
+  'kind',
+  'title',
+  'body',
+  'pinned',
+  'labels',
+  'items',
+  'remindAt',
+  'project',
+  'madeBy',
+]
 const PATCH_KEYS = [
   'title',
   'body',
@@ -308,6 +319,32 @@ function projectQuery(query: URLSearchParams): string | undefined {
   return value
 }
 
+/** An Aico session's id: who made a note, for `tether note delete`. */
+const SESSION_ID = /^[0-9a-f]{8}$/
+
+/** The note's `source` when a session makes it: synced with the note, and unique as a source must be. */
+function madeBySource(madeBy: unknown): string | undefined {
+  if (madeBy === undefined) return undefined
+  if (typeof madeBy !== 'string' || !SESSION_ID.test(madeBy))
+    throw new HttpError(422, 'madeBy must be a session id')
+  return `session:${madeBy}:${randomBytes(4).toString('hex')}`
+}
+
+/** A session deletes only a note it made, and not once the owner has reworded it: no agent command
+ * changes a title or body. The route is a guard against mistakes; the owner's own delete sends no `madeBy`. */
+function refuseUnlessMadeBy(row: NoteRow, session: string): void {
+  if (!SESSION_ID.test(session) || !row.source?.startsWith(`session:${session}:`))
+    throw new HttpError(
+      403,
+      "This session didn't make that note, so it stays; the owner can delete it on the Notes page",
+    )
+  if (row.edited_at > row.created_at)
+    throw new HttpError(
+      403,
+      'The owner has edited that note since this session made it, so it stays; they can delete it on the Notes page',
+    )
+}
+
 function created(res: ServerResponse, payload: unknown): typeof RAW {
   sendJson(res, 201, payload)
   return RAW
@@ -390,6 +427,7 @@ export function registerNoteRoutes(router: Router, deps: NoteDeps): void {
       }
     })
     const row = notes.create({
+      source: madeBySource(body.madeBy),
       kind: optionalKind(body),
       title,
       body: text,
@@ -424,6 +462,8 @@ export function registerNoteRoutes(router: Router, deps: NoteDeps): void {
 
   router.on('DELETE', '/api/notes/:id', (ctx) => {
     const row = need(ctx.params.id)
+    const session = ctx.query.get('madeBy')
+    if (session !== null) refuseUnlessMadeBy(row, session)
     notes.remove(row.id)
     return { deleted: true, id: row.id }
   })

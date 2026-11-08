@@ -4,6 +4,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"net/http"
+	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
@@ -113,6 +115,7 @@ func (h *Hook) Send(o SendOpts) (row map[string]any, duplicate bool, err error) 
 		return nil, false, err
 	}
 	now := time.Now().UTC()
+	window := h.WindowOf(h.ID.AgentID)
 	err = h.withLedger(func(rows []map[string]any, d map[string]any) ([]map[string]any, bool, error) {
 		row, duplicate = nil, false
 		for _, r := range rows {
@@ -131,7 +134,8 @@ func (h *Hook) Send(o SendOpts) (row map[string]any, duplicate bool, err error) 
 		if o.FYI {
 			state = "fyi"
 		}
-		row = map[string]any{"id": shortID(), "from": h.ID.AgentID, "from_session": h.ID.SessionID, "to": o.To,
+		row = map[string]any{"id": shortID(), "from": h.ID.AgentID, "from_session": h.ID.SessionID,
+			"from_window": nilIfEmpty(window), "to": o.To,
 			"project": nilIfEmpty(o.Project), "source_key": nilIfEmpty(o.SourceKey), "text": body,
 			"created": stamp(now), "state": state, "intent": nil, "eta_min": nil, "note": nil, "acked_at": nil,
 			"closed_at": nil, "surfaced_at": nil, "ack_seen": false}
@@ -207,17 +211,53 @@ func (h *Hook) CloseBareAck(id string) (map[string]any, error) {
 	return out, err
 }
 
-// Confirm closes an acked request the caller sent; withdraw closes one nobody acked.
+// sessionState reads one Aico session: its descriptor, or ended true when Tether says it is gone. Both empty when
+// Tether did not answer, which proves nothing. A var so tests need no Tether.
+var sessionState = func(window string) (desc map[string]any, ended bool) {
+	status, err := tetherCall("GET", "/v1/sessions/"+url.PathEscape(window), nil, &desc)
+	if status == http.StatusNotFound || status == http.StatusGone {
+		return nil, true
+	}
+	if err != nil {
+		return nil, false
+	}
+	return desc, false
+}
+
+// mayCloseFor: someone other than the sender may close its request once Tether says the sender's Aico session has
+// ended (a dead process alone proves nothing: a session relaunches and reads its acks), or when they launched it.
+// A request from outside an Aico session names no window, so only its sender closes it.
+func (h *Hook) mayCloseFor(r map[string]any) bool {
+	window := str(r["from_window"])
+	if window == "" {
+		return false
+	}
+	desc, ended := sessionState(window)
+	if ended {
+		return true
+	}
+	own := h.WindowOf(h.ID.AgentID)
+	return own != "" && (str(desc["parentId"]) == own || str(desc["coordinatorId"]) == own)
+}
+
+// Confirm closes an acked request the caller sent; withdraw closes one nobody acked. See mayCloseFor for others.
 func (h *Hook) Confirm(id string, withdraw bool) (map[string]any, error) {
 	mine := h.lineage().SelfIDs(h.ID)
+	// Asked before the lock, which holds no network call: a row's sender and window never change.
+	onBehalf := false
+	for _, r := range h.Rows() {
+		if str(r["id"]) == id && !mine[str(r["from"])] {
+			onBehalf = h.mayCloseFor(r)
+		}
+	}
 	var out map[string]any
 	err := h.withLedger(func(rows []map[string]any, _ map[string]any) ([]map[string]any, bool, error) {
 		r, err := find(rows, id)
 		if err != nil {
 			return rows, false, err
 		}
-		if !mine[str(r["from"])] {
-			return rows, false, fmt.Errorf("request %s was sent by %s, and only its sender can close it (you are %s); it clears itself within 24 hours", id, str(r["from"]), h.ID.AgentID)
+		if !mine[str(r["from"])] && !onBehalf {
+			return rows, false, fmt.Errorf("request %s was sent by %s, and only its sender, whoever launched it, or anyone once its session has ended can close it (you are %s); it clears itself within 24 hours", id, str(r["from"]), h.ID.AgentID)
 		}
 		state := str(r["state"])
 		if state == "closed" && truthy(r["auto_closed"]) && !withdraw {

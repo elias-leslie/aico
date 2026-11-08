@@ -245,6 +245,11 @@ describe('main', () => {
     const withCode = capture()
     expect(await main(['-i', 'clitest', 'share', 'list', '--all'], withCode.io)).toBe(0)
     expect(withCode.out[0]).toBe(`${(coded.body as { id: string }).id}  https://example.com/signin`)
+    const asJson = capture()
+    expect(await main(['-i', 'clitest', '--json', 'share', 'list'], asJson.io)).toBe(0)
+    expect(asJson.out.join('\n')).toContain('https://example.com/signin')
+    expect(asJson.out.join('\n')).not.toContain('code=abc')
+    expect(asJson.out.join('\n')).not.toContain('u:p')
     await main(
       ['-i', 'clitest', 'share', 'remove', (coded.body as { id: string }).id],
       capture().io,

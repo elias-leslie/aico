@@ -401,3 +401,53 @@ func TestTakesRideMatchesFixture(t *testing.T) {
 		}
 	}
 }
+
+func TestOthersCloseOnlyForAnEndedOrLaunchedSender(t *testing.T) {
+	sandbox(t)
+	a, b := agent(sidA, ""), agent(sidB, "")
+	acked := func(window string) string {
+		row, _, err := a.Send(SendOpts{To: "cc:222222", Text: "q " + shortID()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		id := str(row["id"])
+		if _, err := b.Ack(id, "no", "why"); err != nil {
+			t.Fatal(err)
+		}
+		if err := b.withLedger(func(rows []map[string]any, _ map[string]any) ([]map[string]any, bool, error) {
+			for _, r := range rows {
+				if str(r["id"]) == id {
+					r["from_window"] = nilIfEmpty(window)
+				}
+			}
+			return rows, true, nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	saved := sessionState
+	t.Cleanup(func() { sessionState = saved })
+
+	// Tether silent or the sender still running (a stale process proves nothing): the row stays.
+	sessionState = func(string) (map[string]any, bool) { return nil, false }
+	id := acked("aabbccdd")
+	if _, err := b.Confirm(id, false); err == nil {
+		t.Error("Tether silent: only the sender closes")
+	}
+	sessionState = func(string) (map[string]any, bool) { return map[string]any{"id": "aabbccdd"}, false }
+	if _, err := b.Confirm(id, false); err == nil {
+		t.Error("sender running: only the sender closes")
+	}
+
+	// Its session ended: anyone may.
+	sessionState = func(w string) (map[string]any, bool) { return nil, w == "aabbccdd" }
+	if r, err := b.Confirm(id, false); err != nil || r["state"] != "closed" {
+		t.Fatalf("ended sender: %v %v", r, err)
+	}
+
+	// A row with no window (sent outside Aico) stays its sender's, ended or not.
+	if _, err := b.Confirm(acked(""), false); err == nil {
+		t.Error("no window: only the sender closes")
+	}
+}

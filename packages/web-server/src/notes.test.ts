@@ -232,6 +232,27 @@ describe('notes', () => {
       return { status: response.status, body: (await response.json()) as Record<string, any> }
     }
     try {
+      // A session deletes the note it made, not another session's, the owner's or a reworded one.
+      const mine = await call('POST', '/api/notes', { title: 'Mine', madeBy: '12345678' })
+      expect(mine.body.source).toMatch(/^session:12345678:/)
+      const second = await call('POST', '/api/notes', { title: 'Mine too', madeBy: '12345678' })
+      const owners = await call('POST', '/api/notes', { title: 'Owner made' })
+      expect((await call('POST', '/api/notes', { madeBy: 'nope' })).status).toBe(422)
+      const asSession = (id: string, session: string) =>
+        call('DELETE', `/api/notes/${id}?madeBy=${session}`)
+      expect((await asSession(mine.body.id, 'abcdef01')).status).toBe(403)
+      expect((await asSession(owners.body.id, '12345678')).status).toBe(403)
+      expect((await asSession(mine.body.id, '12345678')).body.deleted).toBe(true)
+      expect((await call('GET', `/api/notes/${mine.body.id}`)).status).toBe(404)
+      await call('POST', `/api/notes/${second.body.id}/items`, { text: 'an item is no rewording' })
+      wall += MINUTE
+      await call('PATCH', `/api/notes/${second.body.id}`, { body: 'the owner wrote this' })
+      const reworded = await asSession(second.body.id, '12345678')
+      expect(reworded.status).toBe(403)
+      expect(reworded.body.detail).toMatch(/has edited/)
+      expect((await call('DELETE', `/api/notes/${owners.body.id}`)).body.deleted).toBe(true)
+      expect((await call('DELETE', `/api/notes/${second.body.id}`)).body.deleted).toBe(true)
+
       const made = await call('POST', '/api/notes', {
         kind: 'list',
         title: 'Trip',

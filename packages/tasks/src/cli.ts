@@ -24,7 +24,7 @@ const PROJECTS_USAGE = `Usage: aico projects <command>
   register ID --root PATH [--name N] [--category C]
   rename ID NAME                       the name shown for a project (the id stays)
   runtime ID [--set JSON | --clear]    where the project runs: a JSON list of places
-                                       {kind: host|vm|ct, id?, label, power, machine?}
+                                       {kind: host|vm|ct, id?, label, power, machine?, ssh?}
   retire ID --reason TEXT              the project leaves lists; its history stays`
 
 function opts<const T extends ParseArgsOptionsConfig>(argv: string[], options: T) {

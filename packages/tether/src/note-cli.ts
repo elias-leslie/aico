@@ -15,7 +15,9 @@ export const NOTE_USAGE = `Usage:
   tether note add "title" [--body TEXT] [--list] [--project P | --global] [--json]
       Make a note; --list makes it a checklist. It belongs to project P, else to
       this session's project ($AICO_PROJECT_ID); --global makes it a note of no project.
-  (Deleting a note is the owner's, on Aico's Notes page.)
+  tether note delete <id> [--json]
+      Delete a note this session made, unless the owner has edited it since.
+      Every other note is the owner's to delete, on Aico's Notes page.
   tether note move <id> <project|none> [--json]
       Move a note to another project, or to none (a global note).
   tether note item add <id> "text" [--json]
@@ -173,6 +175,7 @@ export async function runNote(
     body = {
       title,
       ...(project ? { project } : {}),
+      ...(env.AICO_WIDGET_ID ? { madeBy: env.AICO_WIDGET_ID } : {}),
       ...(flags.values.body !== undefined ? { body: flags.values.body } : {}),
       kind: isList ? 'list' : 'note',
     }
@@ -180,6 +183,15 @@ export async function runNote(
       const note = answer as NoteJson
       return `${note.id}  ${note.title}  (${note.project ? `project ${note.project}` : 'no project'})`
     }
+  } else if (sub === 'delete') {
+    if (positional.length !== 1) return fail('delete takes one note id')
+    if (!env.AICO_WIDGET_ID)
+      return fail(
+        "delete works only inside the Aico session that made the note; other notes are the owner's, on the Notes page",
+      )
+    method = 'DELETE'
+    path = `/api/notes/${enc(positional[0] as string)}?madeBy=${enc(env.AICO_WIDGET_ID)}`
+    print = () => `Deleted ${positional[0]}`
   } else if (sub === 'move') {
     if (positional.length !== 2) return fail('move takes a note id and a project (or none)')
     const [id, project] = positional as [string, string]

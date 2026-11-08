@@ -15,7 +15,7 @@ import {
   parseDeployArgs,
   Refusal,
 } from './deploy'
-import { journalArgs, parseLogsArgs } from './logs'
+import { journalArgs, otherProjectLogs, parseLogsArgs, statusPointer } from './logs'
 import { plug, plugDeps } from './plug'
 import { run } from './sh'
 import { snapDeps, snapshots } from './snapshots'
@@ -30,6 +30,8 @@ const USAGE = `Usage:
       its own code or the running daemon's API is behind the release; otherwise only when named
   aico deploy result|wait JOB [--timeout S]   a detached deploy's result (wait: until it ends)
   aico logs UNIT|PROJECT [-n N] [--since 2h] [-l ERROR|WARN|INFO|DEBUG] [-f]
+      a unit's journal, or every unit of any registered project, on the machine it runs on; a job
+      named in Status (its id or name) says where its log is
   aico snapshots take [NAME] | list | restore ID|NAME|-N  [--root DIR] [--project ID]
       read-only Btrfs points of the project (the catalogue st snap keeps); restore only for a project
       that is its own subvolume outside the production workspace
@@ -118,7 +120,12 @@ export async function main(argv: string[], env = process.env): Promise<number> {
       const project = loadProject(repoRoot(env))
       const args = journalArgs(req, project, run)
       if (args) return run('journalctl', args, { inherit: true }).code
+      const other = otherProjectLogs(req, run)
+      if (typeof other === 'string') throw new Refusal(other, 2)
+      if (other) return run(other.cmd, other.args, { inherit: true }).code
       if (env.AICO_OPS_CALLER === 'st') return NOT_HANDLED
+      const pointer = statusPointer(req.target, run)
+      if (pointer) throw new Refusal(`no unit ${canonical(req.target)}. ${pointer}`, 2)
       throw new Refusal(
         `no unit ${canonical(req.target)} (user or system). A routine's last run: aico routines log KIND. The scheduler: aico logs aico-jobs. Units: systemctl --user list-units 'aico-*'`,
         2,

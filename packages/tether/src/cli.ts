@@ -285,22 +285,31 @@ export function shareBody(
 const SHARES_SHOWN = 20
 const SHARE_TITLE_CHARS = 60
 
+/** A shared link as the CLI prints it, plain or --json: its query can hold a sign-in code, its
+ * host a username and password. Only the owner's own view (Files > Shared) has the whole link. */
+const shareLink = (url: string) => (url.split(/[?#]/)[0] ?? '').replace(/\/\/[^/@]*@/, '//')
+
 /** `tether share remove ID...`: each entry goes; exit 1 if any ID was unknown. */
 async function runShareList(io: Io, json: boolean, socket: string, all = false): Promise<number> {
   const response = await callSocket(socket, 'GET', '/v1/shares')
-  if (json || response.status !== 200) return render(io, json, response.status, response.body)
+  if (response.status !== 200) return render(io, json, response.status, response.body)
   const { items } = response.body as {
     items: { id: string; title?: string | null; paths?: string[] | null; url?: string | null }[]
+  }
+  if (json) {
+    const body = {
+      ...(response.body as object),
+      items: items.map((item) => (item.url ? { ...item, url: shareLink(item.url) } : item)),
+    }
+    return render(io, json, response.status, body)
   }
   if (!items.length) io.out('Nothing is shared.')
   const shown = all ? items : items.slice(-SHARES_SHOWN)
   const clip = (text: string, max: number) =>
     text.length > max ? `${text.slice(0, max - 1)}…` : text
-  // Newest first. A link's query can hold a sign-in code; whole links are --json.
+  // Newest first.
   for (const { id, title, paths, url } of [...shown].reverse()) {
-    const where = url
-      ? (url.split(/[?#]/)[0] ?? '').replace(/\/\/[^/@]*@/, '//')
-      : (paths?.join(', ') ?? '')
+    const where = url ? shareLink(url) : (paths?.join(', ') ?? '')
     io.out(`${id}  ${title ? `${clip(title, SHARE_TITLE_CHARS)}  ` : ''}${where}`)
   }
   if (shown.length < items.length)
