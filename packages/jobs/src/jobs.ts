@@ -3,6 +3,7 @@
 
 import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
+import { jobEnv } from '@aico/status'
 
 export interface JobDef {
   kind: string
@@ -315,6 +316,19 @@ export function nextRun(
   return job.every_min !== undefined
     ? after + job.every_min * 60_000
     : nextAt(job.at as string, after, job.tz, job.on)
+}
+
+/**
+ * A command job as it runs on `machine`: on its home machine it is told its schedule, for the rows it
+ * writes itself (@aico/status jobEnv). A stand-in's run isn't, nor is a POST job (the server writes).
+ */
+export function withSchedule(job: JobDef, machine: string, now: number): JobDef {
+  if (job.home !== machine || !('command' in job.run)) return job
+  const told = Object.entries(jobEnv(job.kind, nextRun(job, now), job.every_min))
+  return {
+    ...job,
+    run: { command: ['env', ...told.map(([key, value]) => `${key}=${value}`), ...job.run.command] },
+  }
 }
 
 /** The day part of a schedule in words: "daily", "every Monday", "the first Saturday of each month". */

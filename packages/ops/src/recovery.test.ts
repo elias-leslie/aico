@@ -53,6 +53,20 @@ it('publishes a failed drill row when the script fails before producing JSON', a
   expect(code).toBe(1)
   expect(JSON.parse(fetcher.mock.calls[0][1].body)[0].state).toBe('failed')
 })
+it('the scheduled drill says when it is next due; one run by hand does not', async () => {
+  const fetcher = vi.fn().mockResolvedValue({ ok: true })
+  vi.stubGlobal('fetch', fetcher)
+  const fail = async () => ({ code: 1, out: '', err: '' })
+  const next = '2026-11-09T11:00:00.000Z'
+  const scheduled = { AICO_JOB_KIND: 'backups-drill', AICO_JOB_NEXT_RUN: next }
+  await recovery(['drill', '--scheduled'], config({}), scheduled, fail)
+  expect(JSON.parse(fetcher.mock.calls[0][1].body)[0]).toMatchObject({
+    next_run: next,
+    run_by: 'jobs/backups-drill',
+  })
+  await recovery(['drill'], config({}), {}, fail)
+  expect(JSON.parse(fetcher.mock.calls[1][1].body)[0]).not.toHaveProperty('next_run')
+})
 it('keeps drill help read only without publishing or parsing it as a receipt', async () => {
   const fetcher = vi.fn()
   vi.stubGlobal('fetch', fetcher)

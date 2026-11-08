@@ -4,7 +4,8 @@
 
 import { describe, expect, it } from 'vitest'
 import type { AlertBatch } from './alerts'
-import { parseRow, type StatusRow } from './row'
+import type { Major } from './major'
+import { jobEnv, jobSchedule, parseRow, type StatusRow } from './row'
 import { concentration, counted } from './show'
 import { StatusStore } from './store'
 
@@ -100,5 +101,183 @@ describe('expected states never count as problems', () => {
     expect(concentration(view.rows)).toEqual({ machine: 'apps', count: JOBS + 1 })
     expect(w.batches).toHaveLength(1) // one alert for the machine, not one per row
     expect(w.batches[0]?.changes).toHaveLength(1)
+  })
+})
+
+// Rows a scheduled job writes (nightly publication, the restore drill, the caretaker) carry the job's
+// next run, so a stopped job can't stay green; they must not read late for anything done on purpose.
+describe('rows a job writes, with its next run', () => {
+  const iso = (at: number) => new Date(at).toISOString()
+  const job = (fields: Record<string, unknown>) =>
+    row({ id: 'jobs/nightly', what: 'Nightly', ...fields })
+  const written = (due: number, extra: Record<string, unknown> = {}) => [
+    row({ id: 'publish:one', what: 'One', next_run: iso(due), run_by: 'jobs/nightly', ...extra }),
+    row({ id: 'publish:two', what: 'Two', next_run: iso(due), run_by: 'jobs/nightly', ...extra }),
+    row({
+      id: 'apps/backup/drill',
+      what: 'Restore drill',
+      kind: 'backup',
+      next_run: iso(due),
+      run_by: 'jobs/nightly',
+      ...extra,
+    }),
+  ]
+  const machine = (due: number) =>
+    row({ id: 'apps/machine', what: 'apps', kind: 'machine', next_run: iso(due) })
+  const shown = (w: ReturnType<typeof world>) =>
+    Object.fromEntries(w.store.read().rows.map((r) => [r.id, r.shown]))
+  const sustained = (w: ReturnType<typeof world>) => {
+    const told: string[] = []
+    const windows: Record<Major, number> = { 'data-risk': 26 * HOUR, outage: HOUR / 2 }
+    w.store.onSustained(windows, ({ stayed }) => told.push(...stayed.map((s) => s.row.id)))
+    return told
+  }
+
+  it('its machine off reads Off and raises nothing, and coming back raises no storm', () => {
+    for (const intent of ['always', 'on-demand', 'off'] as const) {
+      const w = world(intent)
+      const told = sustained(w)
+      w.store.upsert([
+        machine(T0 + HOUR),
+        job({ next_run: iso(T0 + HOUR), last_run: iso(T0) }),
+        ...written(T0 + HOUR),
+      ])
+      if (intent === 'always') w.store.planOutage(['apps'], T0 + 1000)
+      w.clock.now = T0 + 30 * HOUR
+      w.store.checkAlerts()
+      const view = quiet(w)
+      for (const r of view.rows) expect(r.shown, r.id).toBe('off')
+      // Back on: the machine reports, and nothing it missed while off counts.
+      w.clock.now = T0 + 31 * HOUR
+      w.store.upsert([machine(T0 + 32 * HOUR)])
+      w.store.checkAlerts()
+      quiet(w)
+      expect(told).toEqual([])
+    }
+  })
+
+  it('a paused job holds them; resuming raises nothing until its next run', () => {
+    const w = world('always')
+    w.store.upsert([
+      machine(T0 + 900 * HOUR),
+      job({ state: 'off', meaning: 'Paused.', last_run: iso(T0 - HOUR) }),
+      ...written(T0 + HOUR),
+    ])
+    w.clock.now = T0 + 40 * HOUR
+    w.store.checkAlerts()
+    quiet(w)
+    expect(shown(w)['publish:one']).toBe('ok')
+    // Resumed: its row says when it next runs, and the rows wait for that run.
+    w.store.upsert([job({ next_run: iso(T0 + 44 * HOUR), last_run: iso(T0 - HOUR) })])
+    w.store.checkAlerts()
+    quiet(w)
+  })
+
+  it('wait out a long run, then go late if that run left them behind', () => {
+    const w = world('always')
+    w.store.upsert([
+      machine(T0 + 900 * HOUR),
+      job({ next_run: iso(T0 + 25 * HOUR), last_run: iso(T0 - HOUR) }),
+      ...written(T0 + HOUR),
+    ])
+    w.clock.now = T0 + 2 * HOUR // past their due time, the job still holds its lease
+    w.store.checkAlerts()
+    quiet(w)
+    w.store.upsert([job({ next_run: iso(T0 + 25 * HOUR), last_run: iso(T0 + 2 * HOUR) })])
+    w.store.checkAlerts()
+    expect(shown(w)['publish:one']).toBe('late')
+  })
+
+  it.each(['writer first', 'scheduler first'])(
+    'uses the completed scheduler deadline after a run crosses its following slot, once (%s)',
+    (order) => {
+      const w = world('always')
+      w.store.upsert([
+        machine(T0 + 900 * HOUR),
+        job({ next_run: iso(T0 + 30 * HOUR), last_run: iso(T0) }),
+      ])
+      w.clock.now = T0 + 26 * HOUR
+      const report = written(T0 + 24 * HOUR, { last_run: iso(w.clock.now) })
+      const complete = job({ next_run: iso(T0 + 48 * HOUR), last_run: iso(w.clock.now) })
+      // A writer's delayed outbox can reach Status after the scheduler has already completed.
+      if (order === 'writer first') {
+        w.store.upsert(report)
+        w.store.upsert([complete])
+      } else {
+        w.store.upsert([complete])
+        w.store.upsert(report)
+      }
+      expect(w.store.read().rows.find((r) => r.id === 'publish:one')?.next_run).toBe(
+        iso(T0 + 48 * HOUR),
+      )
+      quiet(w)
+      // A later run that omits these reports must not keep extending their deadline.
+      w.clock.now = T0 + 49 * HOUR
+      w.store.upsert([job({ next_run: iso(T0 + 72 * HOUR), last_run: iso(w.clock.now) })])
+      expect(shown(w)['publish:one']).toBe('late')
+    },
+  )
+
+  it('a job without a next deadline cannot hold a due report forever', () => {
+    const w = world('always')
+    w.store.upsert([machine(T0 + 900 * HOUR), job({}), ...written(T0 + HOUR)])
+    w.clock.now = T0 + 2 * HOUR
+    expect(shown(w)['publish:one']).toBe('late')
+  })
+
+  it('a stopped job on a running machine reads late, and the first late stays off the phone', () => {
+    const w = world('always')
+    const told = sustained(w)
+    w.store.upsert([
+      machine(T0 + 900 * HOUR),
+      job({ next_run: iso(T0 + HOUR), last_run: iso(T0 - HOUR) }),
+      ...written(T0 + HOUR),
+    ])
+    w.clock.now = T0 + 2 * HOUR
+    w.store.upsert([machine(T0 + 900 * HOUR)])
+    w.store.checkAlerts()
+    expect(shown(w)).toMatchObject({
+      'jobs/nightly': 'late',
+      'publish:one': 'late',
+      'publish:two': 'late',
+      'apps/backup/drill': 'late',
+    })
+    // One tray batch, for the backup row alone; a job row late alerts nothing.
+    expect(w.batches.flatMap((b) => b.changes.map((c) => c.row.id))).toEqual(['apps/backup/drill'])
+    expect(told).toEqual([])
+    // Only a backup still late past its window goes further; a job row never does.
+    w.clock.now = T0 + 30 * HOUR
+    w.store.upsert([machine(T0 + 900 * HOUR)])
+    w.store.checkAlerts()
+    expect(told).toEqual(['apps/backup/drill'])
+  })
+})
+
+describe('what a job tells the rows it writes', () => {
+  const NEXT = T0 + 24 * HOUR
+  it('a timed job names its next run; only that job, and only on its scheduled run', () => {
+    const env = jobEnv('nightly', NEXT)
+    expect(jobSchedule('nightly', env)).toEqual({
+      next_run: new Date(NEXT).toISOString(),
+      run_by: 'jobs/nightly',
+    })
+    expect(jobSchedule('other', env)).toEqual({})
+    expect(jobSchedule('nightly', {})).toEqual({})
+  })
+  it('an interval job counts from now: it repeats after it completes', () => {
+    expect(jobSchedule('often', jobEnv('often', T0, 5), T0 + HOUR).next_run).toBe(
+      new Date(T0 + HOUR + 5 * 60_000).toISOString(),
+    )
+  })
+
+  it('ignores malformed scheduler metadata instead of emitting an invalid deadline', () => {
+    for (const fields of [
+      { AICO_JOB_NEXT_RUN: 'tomorrow' },
+      { AICO_JOB_EVERY_MIN: '-5' },
+      { AICO_JOB_EVERY_MIN: 'Infinity' },
+      { AICO_JOB_EVERY_MIN: 'NaN' },
+    ]) {
+      expect(jobSchedule('nightly', { ...jobEnv('nightly', NEXT), ...fields })).toEqual({})
+    }
   })
 })

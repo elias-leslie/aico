@@ -37,13 +37,14 @@ STATES = ("ok", "warn", "failed", "off")
 ACTION_KINDS = ("run", "log", "detail", "look", "session")
 TEXT_LIMITS: dict[str, tuple[int, re.Pattern[str] | None]] = {
     "id": (200, re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@-]*$")),
+    "run_by": (200, re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@-]*$")),
     "what": (120, None),
     "machine": (100, re.compile(r"^[a-z0-9][a-z0-9._-]*$")),
     "project": (100, re.compile(r"^[a-z0-9][a-z0-9_-]*$")),
     "meaning": (800, None),
 }
 REQUIRED = ("id", "what", "kind", "machine", "state", "meaning")
-FIELDS = frozenset(REQUIRED + ("project", "last_run", "next_run", "actions"))
+FIELDS = frozenset(REQUIRED + ("project", "last_run", "next_run", "run_by", "actions"))
 MAX_ACTIONS = 4
 MAX_ACTION_REF = 500
 
@@ -159,10 +160,13 @@ def check_row(row: Any) -> dict[str, Any]:
         "project": _text(row, "project", False),
         "last_run": _time(row, "last_run"),
         "next_run": _time(row, "next_run"),
+        "run_by": _text(row, "run_by", False),
         "actions": _actions(row.get("actions")),
     }
     if checked["kind"] == "machine" and optional["next_run"] is None:
         raise RowError("next_run", "a machine row needs next_run: the unknown rule reads it")
+    if optional["run_by"] is not None and optional["next_run"] is None:
+        raise RowError("run_by", "run_by needs next_run")
     checked.update({key: value for key, value in optional.items() if value is not None})
     return checked
 

@@ -3,6 +3,8 @@
 //
 // Late: a row past its next_run shows "late since next_run" (whatever it last
 // reported, except off: stopped on purpose is never late).
+// Run by a job: a row with run_by waits on that job. While the job is off (paused), or hasn't had its
+// turn since the row fell due, the row isn't late; the job's own row goes late if the job stops.
 // Off on purpose: every other row of a machine whose own machine row says off (or that is meant to
 // be off) shows "off" since then, with machine_off set and its last report kept. Off is not a
 // problem: it sorts and counts with the healthy rows, on the screen, the badge and `aico status`.
@@ -139,6 +141,17 @@ function lateSince(stored: StoredRow, now: number): number | null {
   return due !== null && now > due + LATE_GRACE_MS ? due : null
 }
 
+/** Whether a row's job excuses it from being late at `now` (the header's "run by a job"). */
+function waitsOnJob(stored: StoredRow, byId: ReadonlyMap<string, StoredRow>, now: number): boolean {
+  const job = stored.row.run_by === undefined ? undefined : byId.get(stored.row.run_by)
+  if (!job) return false
+  if (job.row.state === 'off') return true
+  if (job.row.next_run === undefined) return false
+  const due = dueAt(stored)
+  const ran = job.row.last_run ? Date.parse(job.row.last_run) : 0
+  return due !== null && ran < due && lateSince(job, now) === null
+}
+
 /** How long a row past due waits for its machine or this server to settle. Overridable (config.ts). */
 export const SETTLE_MS = 10 * 60_000
 
@@ -201,6 +214,7 @@ export function show(
     stopped.set(machine, since)
     silent.set(machine, { since, why: 'off' })
   }
+  const byId = new Map(rows.map((stored) => [stored.row.id, stored]))
   return rows.map((stored) => {
     const base = { ...stored.row, updated_at: iso(stored.updatedAt) }
     const stoppedAt = stopped.get(stored.row.machine)
@@ -227,7 +241,7 @@ export function show(
     }
     if (stored.row.state === 'off')
       return { ...base, shown: 'off', shown_since: iso(stored.offAt ?? stored.updatedAt) }
-    const due = lateSince(stored, now)
+    const due = waitsOnJob(stored, byId, now) ? null : lateSince(stored, now)
     if (due === null) return { ...base, shown: stored.row.state, shown_since: null }
     const settled = settledAt(stored.row.machine, due, settling)
     if (now < settled)

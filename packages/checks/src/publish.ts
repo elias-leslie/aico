@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { parseArgs } from 'node:util'
 import { aicoDataDir } from '@aico/shared/data-dir'
 import {
+  jobSchedule,
   LIMITS,
   machineId,
   outboxDir,
@@ -566,7 +567,7 @@ export async function publishCli(argv: string[], env = process.env): Promise<num
     acceptance: values['no-accept'] ? undefined : acceptanceRunner(publishLogDir(env)),
     refusalLog: refusalLogger(publishLogDir(env)),
     authorizedWorkflows: values['authorize-workflow'],
-    post: (row) => postPublicationRow(row, env),
+    post: (row) => postPublicationRow({ ...row, ...jobSchedule('github-publish', env) }, env),
   })
   if (values.json) console.log(JSON.stringify({ status: 'completed', projects: results }))
   else {

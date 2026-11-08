@@ -42,6 +42,8 @@ export interface StatusRow {
   last_run?: string
   /** When the next report is due, normalized like last_run; required for kind machine. */
   next_run?: string
+  /** The job row whose run writes this one: not late while that job is paused or hasn't had its turn. */
+  run_by?: string
   actions?: Action[]
 }
 
@@ -64,6 +66,7 @@ const FIELDS = new Set([
   'meaning',
   'last_run',
   'next_run',
+  'run_by',
   'actions',
 ])
 
@@ -188,7 +191,50 @@ export function parseRow(value: unknown): StatusRow {
   if (nextRun !== undefined) row.next_run = nextRun
   else if (row.kind === 'machine')
     throw new RowError('next_run', 'a machine row needs next_run: the unknown rule reads it')
+  const runBy = text(body, 'run_by', LIMITS.id, false)
+  if (runBy !== undefined) {
+    if (nextRun === undefined) throw new RowError('run_by', 'run_by needs next_run')
+    row.run_by = runBy
+  }
   const list = actions(body.actions)
   if (list !== undefined) row.actions = list
   return row
+}
+
+/**
+ * What the scheduler hands a job it runs on its home machine, so the rows that job writes can say
+ * when they are next due from the job's real schedule. A stand-in's run gets none: its rows would
+ * go late the moment the home took the job back.
+ */
+export const jobEnv = (
+  kind: string,
+  nextRun: number,
+  everyMin?: number,
+): Record<string, string> => ({
+  AICO_JOB_KIND: kind,
+  AICO_JOB_NEXT_RUN: new Date(nextRun).toISOString(),
+  ...(everyMin === undefined ? {} : { AICO_JOB_EVERY_MIN: String(everyMin) }),
+})
+
+/**
+ * next_run and run_by for a row written by the job `kind`; nothing when this isn't that job's
+ * scheduled run (run by hand, or a command another job started). An interval job repeats after it
+ * completes, so its next report counts from now.
+ */
+export function jobSchedule(
+  kind: string,
+  env: NodeJS.ProcessEnv,
+  now = Date.now(),
+): Pick<StatusRow, 'next_run' | 'run_by'> {
+  if (env.AICO_JOB_KIND !== kind || !env.AICO_JOB_NEXT_RUN) return {}
+  const next = parseTime(env.AICO_JOB_NEXT_RUN)
+  if (next === null || !LIMITS.id.pattern.test(`jobs/${kind}`)) return {}
+  const every = env.AICO_JOB_EVERY_MIN === undefined ? undefined : Number(env.AICO_JOB_EVERY_MIN)
+  if (every !== undefined && (!Number.isFinite(every) || every <= 0)) return {}
+  const due = every === undefined ? next : now + every * 60_000
+  if (!Number.isFinite(due) || Math.abs(due) > 8.64e15) return {}
+  return {
+    next_run: new Date(due).toISOString(),
+    run_by: `jobs/${kind}`,
+  }
 }

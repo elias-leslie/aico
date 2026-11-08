@@ -196,6 +196,31 @@ export class StatusStore {
         // A planned outage ends when the machine reports again after it was due to be gone.
         if (showsBack(row)) ended.run(row.machine, at)
       }
+      // A timed run can cross the following slot it was handed at launch. Once that run completes,
+      // the scheduler knows its real next slot. Correct that expired deadline once, keeping the
+      // writer's own report time: later runs that omit the report must still let it go late. The
+      // same transaction handles either arrival order (including a report retried from the outbox).
+      if (checked.some((row) => row.kind === 'job' || row.run_by !== undefined)) {
+        const all = readRows(this.db)
+        const byId = new Map(all.map(({ row }) => [row.id, row]))
+        const correct = this.db.prepare('UPDATE status_rows SET doc = ? WHERE id = ?')
+        for (const { row } of all) {
+          if (!row.run_by || !row.next_run || !row.last_run) continue
+          const reported = Date.parse(row.last_run)
+          if (reported < Date.parse(row.next_run)) continue
+          const job = byId.get(row.run_by)
+          if (
+            job?.kind !== 'job' ||
+            job.machine !== row.machine ||
+            !job.last_run ||
+            !job.next_run ||
+            Date.parse(job.last_run) < reported ||
+            Date.parse(job.next_run) <= reported
+          )
+            continue
+          correct.run(JSON.stringify({ ...row, next_run: job.next_run }), row.id)
+        }
+      }
     })
     if (this.alertHook || this.sustained) this.checkAlerts()
   }

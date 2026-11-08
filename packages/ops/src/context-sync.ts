@@ -143,6 +143,7 @@ const ROW_FIELDS = [
   'project',
   'last_run',
   'next_run',
+  'run_by',
   'actions',
 ] as const
 type AppRow = { id: string; project?: string; last_run?: string } & Record<string, unknown>

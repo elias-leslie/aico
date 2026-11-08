@@ -24,6 +24,7 @@ describe('row.ts matches the schema', () => {
       'meaning',
       'next_run',
       'project',
+      'run_by',
       'state',
       'what',
     ])
@@ -40,6 +41,9 @@ describe('row.ts matches the schema', () => {
     expect(schema.then).toEqual({ required: ['next_run'] })
     expect(props.what.maxLength).toBe(LIMITS.what.max)
     expect(props.meaning.maxLength).toBe(LIMITS.meaning.max)
+    expect(props.run_by.pattern).toBe(LIMITS.id.pattern.source)
+    expect(props.run_by.maxLength).toBe(LIMITS.id.max)
+    expect(schema.dependentRequired).toEqual({ run_by: ['next_run'] })
   })
 })
 
@@ -98,6 +102,12 @@ describe('parseRow', () => {
   it('refuses February 30th', () => {
     expect(() => parseRow({ ...fixtures.valid[0].row, next_run: '2026-02-30T00:00:00Z' })).toThrow(
       RowError,
+    )
+  })
+
+  it('requires a deadline when naming the job that writes a row', () => {
+    expect(() => parseRow({ ...fixtures.valid[0].row, run_by: 'jobs/nightly' })).toThrow(
+      'run_by needs next_run',
     )
   })
 })

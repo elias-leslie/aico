@@ -24,6 +24,8 @@ export {
   ACTION_KINDS,
   type Action,
   type ActionKind,
+  jobEnv,
+  jobSchedule,
   KINDS,
   type Kind,
   LIMITS,

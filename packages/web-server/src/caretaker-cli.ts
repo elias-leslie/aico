@@ -12,7 +12,7 @@ import {
 } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { ask } from '@aico/agent'
-import { deleteStatusRow, machineId, postStatusRows } from '@aico/status'
+import { deleteStatusRow, jobSchedule, machineId, postStatusRows } from '@aico/status'
 import { generate, silenceBound } from '@aico/video'
 import {
   ANSWER_SCHEMA,
@@ -198,6 +198,7 @@ async function report(io: CaretakerIo, state: CaretakerState, failure?: string):
             : 'ok',
         meaning: meaning.slice(0, 800),
         last_run: new Date().toISOString(),
+        ...jobSchedule('caretaker', io.env),
         actions: [{ kind: 'log', ref: 'aico caretaker log' }],
       },
     ],
@@ -219,6 +220,16 @@ async function checkRoutes(io: CaretakerIo, policy: Policy, state: CaretakerStat
   if (state.routesAt && now - state.routesAt < policy.route_check_hours * 3600_000) return
   state.routesAt = now
   const { state: shown, meaning } = await routeCheck(policy, routes(policy, io))
+  // Due with the first pass after route_check_hours: a pass from now, then that long.
+  const { next_run, run_by } = jobSchedule('caretaker', io.env)
+  const due = next_run
+    ? {
+        next_run: new Date(
+          Date.parse(next_run) + policy.route_check_hours * 3600_000,
+        ).toISOString(),
+        run_by,
+      }
+    : {}
   await postStatusRows(
     io.baseUrl,
     [
@@ -231,6 +242,7 @@ async function checkRoutes(io: CaretakerIo, policy: Policy, state: CaretakerStat
         state: shown,
         meaning: meaning.slice(0, 800),
         last_run: new Date(now).toISOString(),
+        ...due,
         actions: [{ kind: 'log', ref: 'aico caretaker log' }],
       },
     ],

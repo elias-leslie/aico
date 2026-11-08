@@ -14,6 +14,19 @@
       }
     },
     {
+      "name": "written by a job",
+      "row": {
+        "id": "publish:aico",
+        "what": "aico GitHub publication",
+        "kind": "job",
+        "machine": "davion-sidarli",
+        "state": "ok",
+        "meaning": "Published main.",
+        "next_run": "2026-11-09T08:05:00Z",
+        "run_by": "jobs/github-publish"
+      }
+    },
+    {
       "name": "every field",
       "row": {
         "id": "davion-sidarli/notes-export",
@@ -101,6 +114,19 @@
     }
   ],
   "invalid": [
+    {
+      "name": "a job writer without its deadline",
+      "row": {
+        "id": "publish:aico",
+        "what": "Publication",
+        "kind": "job",
+        "machine": "m",
+        "state": "ok",
+        "meaning": "Published.",
+        "run_by": "jobs/github-publish"
+      },
+      "field": "run_by"
+    },
     {
       "name": "not an object",
       "row": ["davion-sidarli/x"],

@@ -14,6 +14,7 @@ import { type Config, loadConfig } from './plan'
 import {
   publicationPolicyCli,
   publicationRow,
+  publishCli,
   publishRepos,
   refusalLogger,
   scanRefusal,
@@ -24,7 +25,39 @@ import type { CheckSummary } from './status'
 const roots: string[] = []
 afterEach(() => {
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
+})
+
+it('the scheduled publication posts its real next deadline; a manual pass has no schedule', async () => {
+  const root = repo()
+  const file = join(root, '.git', 'tasks.db')
+  const db = openTasksDb(file)
+  new Registry(db).register({ id: 'example', root })
+  db.close()
+  const rows: StatusRow[] = []
+  vi.stubGlobal('fetch', async (_url: unknown, init: RequestInit) => {
+    rows.push(...JSON.parse(String(init.body)))
+    return new Response('{}')
+  })
+  vi.spyOn(console, 'log').mockImplementation(() => {})
+  const next = '2026-11-09T08:05:00.000Z'
+  const env = {
+    AICO_TASKS_DB: file,
+    AICO_DATA_DIR: join(root, 'state'),
+    AICO_WEB_URL: 'http://local',
+  }
+  // Unchecked commits are refused before any GitHub publication: both outcomes still report.
+  expect(
+    await publishCli(['--all', '--no-accept'], {
+      ...env,
+      AICO_JOB_KIND: 'github-publish',
+      AICO_JOB_NEXT_RUN: next,
+    }),
+  ).toBe(1)
+  expect(rows[0]).toMatchObject({ next_run: next, run_by: 'jobs/github-publish' })
+  expect(await publishCli(['--source', 'example', '--no-accept'], env)).toBe(1)
+  expect(rows[1]).not.toHaveProperty('next_run')
 })
 
 it('policy controls update the registry that scheduled and manual publishing read', async () => {

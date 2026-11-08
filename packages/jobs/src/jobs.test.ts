@@ -6,7 +6,16 @@ import { join } from 'node:path'
 import type { StatusRow } from '@aico/status'
 import { describe, expect, it, vi } from 'vitest'
 import { answerResult, commandJob, postJob, selfArgv, startBootClean } from './act'
-import { type JobDef, nextAt, nextRun, parseJobs, readJobs, runTime, schedule } from './jobs'
+import {
+  type JobDef,
+  nextAt,
+  nextRun,
+  parseJobs,
+  readJobs,
+  runTime,
+  schedule,
+  withSchedule,
+} from './jobs'
 import { JobStore, StaleLease } from './leases'
 import { main } from './main'
 import { jobRow, Runner } from './runner'
@@ -624,4 +633,63 @@ it('asks for the after-boot cleanup in its own unit, and a start that fails stay
   } as never)
   expect(quiet).toHaveBeenCalledOnce()
   quiet.mockRestore()
+})
+
+describe('a command job is told its schedule', () => {
+  const job = {
+    kind: 'nightly',
+    what: 'Nightly',
+    project: 'aico',
+    home: 'home',
+    at: '03:05',
+    run: { command: ['/bin/aico', 'publish', '--all'] },
+    lease_s: 60,
+  } as JobDef
+  const now = Date.parse('2026-11-08T12:00:00Z')
+
+  it('on its home machine, from the real schedule, the job itself unchanged', () => {
+    const next = new Date(nextRun(job, now)).toISOString()
+    expect(withSchedule(job, 'home', now).run).toEqual({
+      command: [
+        'env',
+        'AICO_JOB_KIND=nightly',
+        `AICO_JOB_NEXT_RUN=${next}`,
+        '/bin/aico',
+        'publish',
+        '--all',
+      ],
+    })
+    expect(job.run).toEqual({ command: ['/bin/aico', 'publish', '--all'] })
+  })
+  it('an interval job says so: its next run counts from when it completes', () => {
+    const often = { ...job, at: undefined, every_min: 5 } as JobDef
+    expect((withSchedule(often, 'home', now).run as { command: string[] }).command).toContain(
+      'AICO_JOB_EVERY_MIN=5',
+    )
+  })
+  it('the command receives that metadata through its actual argv', async () => {
+    const print = {
+      ...job,
+      run: {
+        command: [
+          process.execPath,
+          '-e',
+          'console.log(process.env.AICO_JOB_KIND + " " + process.env.AICO_JOB_NEXT_RUN)',
+        ],
+      },
+    }
+    const scheduled = withSchedule(print, 'home', now)
+    if (!('command' in scheduled.run)) throw new Error('not a command')
+    expect(await commandJob(scheduled.run.command)).toEqual({
+      state: 'ok',
+      meaning: `nightly ${new Date(nextRun(job, now)).toISOString()}`,
+    })
+  })
+  it('never on a stand-in, whose rows would go late once the home took the job back', () => {
+    expect(withSchedule(job, 'standby', now)).toBe(job)
+  })
+  it('a POST job writes nothing itself', () => {
+    const posted = { ...job, run: { post: '/api/x' } } as JobDef
+    expect(withSchedule(posted, 'home', now)).toBe(posted)
+  })
 })

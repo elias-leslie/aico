@@ -17,6 +17,9 @@
   "then": {
     "required": ["next_run"]
   },
+  "dependentRequired": {
+    "run_by": ["next_run"]
+  },
   "properties": {
     "id": {
       "description": "Stable key the writer chooses, unique across the fleet: start it with the machine, e.g. 'davion-sidarli/notes-export'. Posting the same id again replaces the row.",
@@ -65,6 +68,13 @@
       "description": "When the next report is due (RFC 3339), slack included. Past it the row shows 'late since' this time. Leave it out for rows with no schedule; a kind=machine row must have it. Writers stamp it from their own clock: every host runs NTP and the slack covers what skew is left.",
       "type": "string",
       "format": "date-time"
+    },
+    "run_by": {
+      "description": "The id of the job row whose run writes this row. Only with next_run. While that job is off (paused), or has not had its turn since this row fell due, this row is not late: stopping or resuming a routine is never a problem here. The job's own row goes late if the job stops.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@-]*$"
     },
     "actions": {
       "description": "What a person or agent can do about it, as data; the screen and CLI decide how to offer each. run: the command that runs it now. log: the command or path that shows its log; a command should print its last lines and end (for journalctl, -n 200 --no-pager), since Aico stops it after 10 seconds and shows what it printed by then as cut off. detail: an Aico app path with more. look: where a session looking into it should start (a path, project or hint). session: the id of a session the row is about; the screen offers Resume when Aico holds it after a crash, else Open.",

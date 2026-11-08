@@ -16,7 +16,7 @@ import {
 } from '@aico/status'
 import { act, postJob, selfArgv, startBootClean, systemdUnits, unitInFlight, whereOf } from './act'
 import { remoteAuthority, serveLeases } from './fleet-leases'
-import { clippedMeaning, type JobDef, runTime } from './jobs'
+import { clippedMeaning, type JobDef, runTime, withSchedule } from './jobs'
 import { type JobState, JobStore, jobsDbPath } from './leases'
 import { loadJobs, readEither } from './routines'
 import { routinesCommand } from './routines-cli'
@@ -201,6 +201,7 @@ export async function main(argv: string[], env = process.env): Promise<number> {
   const units = { host: systemdUnits(env), dir: join(dataDir, 'job-runs') }
   const outbox = { dir: outboxDir(dataDir) }
   const rowsUrl = statusRowsUrl(webUrl)
+  const run = act(selfArgv(), units)
   const runner = new Runner({
     store,
     jobs: () => loadJobs(jobsFile, store),
@@ -212,7 +213,7 @@ export async function main(argv: string[], env = process.env): Promise<number> {
         job.kind,
         TICK_MS,
       ),
-    act: act(selfArgv(), units),
+    act: (job) => run(withSchedule(job, machine, Date.now())),
     inFlight: (job) => unitInFlight(job.kind, units, whereOf(job)),
     drain: async () => void (await drainOutbox(rowsUrl, outbox)),
     postRows: (rows) => postRows(webUrl, rows),
