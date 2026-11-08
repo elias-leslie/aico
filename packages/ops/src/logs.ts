@@ -127,10 +127,12 @@ export function otherProjectLogs(
   const units = projectUnits(project)
   if (!units.length) return `${registered.id} has no services to read logs from`
   const placed = project.deployment
-  const args = tailArgs(req, units, placed?.manager !== 'system')
+  // Another machine's clock may run in another zone: times carry their offset.
+  const local = tailArgs(req, units, placed?.manager !== 'system')
+  const args = [...local, '-o', 'short-iso']
   const host = registered.runtime?.find((place) => place.ssh)?.ssh
   if (host) return { cmd: 'ssh', args: [host, 'journalctl', ...args].map(shellWord) }
-  if (!placed) return { cmd: 'journalctl', args }
+  if (!placed) return { cmd: 'journalctl', args: local }
   if (placed.guest_type !== 'lxc')
     return `${registered.id} runs on VM ${placed.vmid}, which has no ssh address here: aico projects runtime ${registered.id} can name one`
   const asUser =
@@ -158,7 +160,10 @@ export function statusPointer(target: string, run: Runner): string | null {
   }
   const wanted = target.toLowerCase()
   const row = rows.find(
-    (r) => r.what?.toLowerCase() === wanted || r.id?.toLowerCase().endsWith(`/${wanted}`),
+    (r) =>
+      r.what?.toLowerCase() === wanted ||
+      r.id?.toLowerCase() === wanted ||
+      r.id?.toLowerCase().endsWith(`/${wanted}`),
   )
   if (!row) return null
   const log = row.actions?.find((action) => action.kind === 'log')?.ref

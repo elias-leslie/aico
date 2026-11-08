@@ -5,6 +5,5 @@ Aico is a Linux companion for people working with terminal AI tools. Agent sessi
 - Confirm the nightly GitHub publication runs clean and the morning digest reaches the phone (Nov 8)
 ## Next
 - Power-off test and remote power control: on hold until the owner picks it up (plugs, `aico plug` and the open choices in docs/power-off-test.md)
-- Command-line user test leftovers: wording, handshakes that outlive their sender, note deletion for agents (plan: docs/plans/cli-usertest-leftovers.md)
 - Web user test round 7 leftovers: tooltips on touch, "gem" in routine names, Files find in open folders, and refactors not taken (plan: evidence/user-test-7/findings.md)
 ## Later

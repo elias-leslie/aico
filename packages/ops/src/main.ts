@@ -125,7 +125,7 @@ export async function main(argv: string[], env = process.env): Promise<number> {
       if (other) return run(other.cmd, other.args, { inherit: true }).code
       if (env.AICO_OPS_CALLER === 'st') return NOT_HANDLED
       const pointer = statusPointer(req.target, run)
-      if (pointer) throw new Refusal(`no unit ${canonical(req.target)}. ${pointer}`, 2)
+      if (pointer) throw new Refusal(pointer, 2)
       throw new Refusal(
         `no unit ${canonical(req.target)} (user or system). A routine's last run: aico routines log KIND. The scheduler: aico logs aico-jobs. Units: systemctl --user list-units 'aico-*'`,
         2,

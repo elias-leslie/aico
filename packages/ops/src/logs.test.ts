@@ -39,7 +39,7 @@ describe('aico logs', () => {
     expect(there.cmd).toBe('ssh')
     expect(there.args.slice(0, 3)).toEqual(['vm.lan', 'journalctl', '--user'])
     expect(there.args).toContain('aico-web.service')
-    expect(there.args.slice(-3)).toEqual(['-n', '5', '--no-pager'])
+    expect(there.args.slice(-5)).toEqual(['-n', '5', '--no-pager', '-o', 'short-iso'])
     expect(otherProjectLogs(request('nope'), answers('', 1))).toBeNull()
     expect(
       otherProjectLogs(request('other'), answers(JSON.stringify({ id: 'other', root_path: null }))),
@@ -88,6 +88,7 @@ describe('aico logs', () => {
       what: 'Refresh property valuations',
       project: 'portfolio-ai',
     }
+    expect(statusPointer(job.id, rows(job))).toMatch(/is a job of portfolio-ai/)
     expect(statusPointer('Refresh property valuations', rows(job))).toBe(
       'Refresh property valuations is a job of portfolio-ai: aico logs portfolio-ai',
     )
