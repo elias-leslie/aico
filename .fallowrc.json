@@ -4,6 +4,7 @@
     "packages/checks/src/guards.ts",
     "scripts/perf-bench.cjs",
     "vitest.load-proof.ts",
+    "packages/checks/src/vitest-tmp.ts",
     "packages/web-frontend/public/sw.js",
     "packages/web-frontend/test-stubs/*"
   ],

@@ -44,7 +44,7 @@ describe('hub with the engine', () => {
   const state = () => hub.hosts()[0]?.state
 
   beforeEach(async () => {
-    dir = mkdtempSync(join(tmpdir(), 'tether-hub-'))
+    dir = mkdtempSync(join(tmpdir(), 'hub-'))
     events = []
     settings = new Map()
     localRoots.clear()

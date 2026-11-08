@@ -25,4 +25,6 @@ const projects = readdirSync(`${here}packages`)
     },
   }))
 
-export default defineConfig({ test: { projects } })
+export default defineConfig({
+  test: { projects, globalSetup: [`${here}packages/checks/src/vitest-tmp.ts`] },
+})
