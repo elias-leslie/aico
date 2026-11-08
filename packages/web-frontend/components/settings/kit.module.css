@@ -197,6 +197,11 @@ button.rowHead:focus-visible {
   color: var(--mist);
   font-size: 12px;
 }
+.checks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  column-gap: 12px;
+}
 .form .check {
   flex-direction: row;
   align-items: center;

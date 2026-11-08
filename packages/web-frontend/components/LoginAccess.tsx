@@ -211,65 +211,69 @@ export function AccessChecklist({
         {choices.hostsStatus === 'ready' && machines.length === 0 && (
           <Quiet>No linked machines are available.</Quiet>
         )}
-        {machines.map((m) => (
-          <label className={kit.check} key={m}>
-            <input
-              type="checkbox"
-              checked={value.machines.includes(m)}
-              onChange={(e) => {
-                setCopied('')
-                onChange({
-                  ...value,
-                  machines: toggle(value.machines, m, e.target.checked),
-                })
-              }}
-            />
-            {m}
-          </label>
-        ))}
+        <div className={kit.checks}>
+          {machines.map((m) => (
+            <label className={kit.check} key={m}>
+              <input
+                type="checkbox"
+                checked={value.machines.includes(m)}
+                onChange={(e) => {
+                  setCopied('')
+                  onChange({
+                    ...value,
+                    machines: toggle(value.machines, m, e.target.checked),
+                  })
+                }}
+              />
+              {m}
+            </label>
+          ))}
+        </div>
       </fieldset>
       <fieldset disabled={disabled}>
         <legend>Roles</legend>
         {choices.registeredFailed && (
           <Quiet role="alert">Roles could not load.</Quiet>
         )}
-        <label className={kit.check}>
-          <input
-            type="checkbox"
-            checked={value.all}
-            onChange={(e) => {
-              setCopied('')
-              onChange({
-                ...value,
-                all: e.target.checked,
-                roles: e.target.checked ? roles : value.roles,
-              })
-            }}
-          />
-          All roles
-        </label>
-        {roles.map((r) => (
-          <label
-            className={kit.check}
-            key={r}
-            title={
-              value.all && !value.roles.includes(r) ? 'Blocked' : undefined
-            }
-          >
+        <div className={kit.checks}>
+          <label className={kit.check}>
             <input
               type="checkbox"
-              checked={value.roles.includes(r)}
+              checked={value.all}
               onChange={(e) => {
                 setCopied('')
                 onChange({
                   ...value,
-                  roles: toggle(value.roles, r, e.target.checked),
+                  all: e.target.checked,
+                  roles: e.target.checked ? roles : value.roles,
                 })
               }}
             />
-            {r}
+            All roles
           </label>
-        ))}
+          {roles.map((r) => (
+            <label
+              className={kit.check}
+              key={r}
+              title={
+                value.all && !value.roles.includes(r) ? 'Blocked' : undefined
+              }
+            >
+              <input
+                type="checkbox"
+                checked={value.roles.includes(r)}
+                onChange={(e) => {
+                  setCopied('')
+                  onChange({
+                    ...value,
+                    roles: toggle(value.roles, r, e.target.checked),
+                  })
+                }}
+              />
+              {r}
+            </label>
+          ))}
+        </div>
         <label>
           Other role
           <input
