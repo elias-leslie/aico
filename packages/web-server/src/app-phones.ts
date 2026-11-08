@@ -41,6 +41,8 @@ export interface Phone {
   last_probe?: number
   read_error?: string
   read_error_at?: number
+  /** When a good ack last cleared `read_error`: the merge needs the time, or the other copy's old error comes back. */
+  read_ok_at?: number
   state?: PhoneState
   state_at?: number
   [extra: string]: unknown
@@ -297,6 +299,7 @@ export class PhoneRegistry {
       } else if (readOk) {
         delete phone.read_error
         delete phone.read_error_at
+        phone.read_ok_at = now
       }
       if (state) {
         phone.state = state
@@ -360,9 +363,15 @@ export function mergePhones(theirs: Phone[], ours: Phone[], lastSync: number): P
       keep.state = here.state
       keep.state_at = here.state_at as number
     }
-    if ((here.read_error_at ?? 0) > (sent.read_error_at ?? 0) && here.read_error) {
-      keep.read_error = here.read_error
-      keep.read_error_at = here.read_error_at as number
+    // The newest word on the alert it could not read wins, whether that was an error or an ack that cleared it.
+    const wordAt = (p: Phone) => Math.max(p.read_error_at ?? 0, p.read_ok_at ?? 0)
+    if (wordAt(here) > wordAt(sent)) {
+      delete keep.read_error
+      delete keep.read_error_at
+      delete keep.read_ok_at
+      if (here.read_error) keep.read_error = here.read_error
+      if (here.read_error_at) keep.read_error_at = here.read_error_at
+      if (here.read_ok_at) keep.read_ok_at = here.read_ok_at
     }
     return keep
   })
@@ -373,20 +382,37 @@ export function mergePhones(theirs: Phone[], ours: Phone[], lastSync: number): P
   ]
 }
 
-/** One side of that sync, on the file: writes the merged list here and returns it to the sender. */
+/**
+ * One side of that sync, on the file: writes the merged list here and returns it to the sender. The
+ * sync time only moves when the sender confirms it has the reply (`confirmPhonesMerge`): until then a
+ * phone paired here since the last confirmed sync is still new, so a dropped link cannot lose it.
+ */
 export function mergePhonesFile(path: string, sent: Phone[], now: number): Phone[] {
   const syncFile = `${path}.sync.json`
-  let lastSync = 0
-  try {
-    lastSync = Number((JSON.parse(readFileSync(syncFile, 'utf8')) as { at?: unknown }).at) || 0
-  } catch {
-    /* First sync: nothing has been paired here since. */
-  }
-  const merged = mergePhones(sent, readPhones(path) ?? [], lastSync)
+  const merged = mergePhones(sent, readPhones(path) ?? [], readSync(syncFile).at)
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
   const tmp = `${path}.${process.pid}.tmp`
   writeFileSync(tmp, JSON.stringify(merged), { mode: 0o600 })
   renameSync(tmp, path)
-  writeFileSync(syncFile, JSON.stringify({ at: now }), { mode: 0o600 })
+  writeFileSync(syncFile, JSON.stringify({ ...readSync(syncFile), pending: now }), { mode: 0o600 })
   return merged
+}
+
+/** The sender has the merged list: phones paired here before that merge are now part of it. */
+export function confirmPhonesMerge(path: string): void {
+  const syncFile = `${path}.sync.json`
+  const { at, pending } = readSync(syncFile)
+  if (pending === undefined || pending < at) return
+  writeFileSync(syncFile, JSON.stringify({ at: pending }), { mode: 0o600 })
+}
+
+function readSync(file: string): { at: number; pending?: number } {
+  try {
+    const raw = JSON.parse(readFileSync(file, 'utf8')) as { at?: unknown; pending?: unknown }
+    const pending = Number(raw.pending)
+    return { at: Number(raw.at) || 0, ...(pending > 0 ? { pending } : {}) }
+  } catch {
+    /* First sync: nothing has been paired here since. */
+    return { at: 0 }
+  }
 }

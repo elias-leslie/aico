@@ -2,7 +2,13 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, expect, it } from 'vitest'
-import { mergePhones, type Phone, PhoneRegistry } from './app-phones'
+import {
+  confirmPhonesMerge,
+  mergePhones,
+  mergePhonesFile,
+  type Phone,
+  PhoneRegistry,
+} from './app-phones'
 
 const dirs: string[] = []
 afterEach(() => {
@@ -68,4 +74,53 @@ it('merges phones: a removed token stays gone unless the phone sent a newer one'
     0,
   )
   expect(merged[0]).toMatchObject({ token_at: 30, token_gone: 31 })
+})
+
+it('merges phones: a read error a good ack cleared on one side stays cleared', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'aico-phone-readerr-'))
+  dirs.push(dir)
+  const a = new PhoneRegistry(join(dir, 'a.json'))
+  const fixture = [phone('p')]
+  writeFileSync(join(dir, 'a.json'), JSON.stringify(fixture))
+  await a.ack('p', { acks: [{ t: 'e', error: 'decrypt' }] }, 100)
+  const withError = a.all() as Phone[]
+  expect(withError[0]).toMatchObject({ read_error: 'decrypt', read_error_at: 100 })
+  // The other machine got the good ack later.
+  writeFileSync(join(dir, 'b.json'), JSON.stringify(withError))
+  const b = new PhoneRegistry(join(dir, 'b.json'))
+  await b.ack('p', { acks: [{ t: 'm', id: 'x', received_at: 1, shown: true }] }, 200)
+  const cleared = b.all() as Phone[]
+  expect(cleared[0]?.read_error).toBeUndefined()
+  // Either direction of the sync keeps it cleared.
+  expect(mergePhones(withError, cleared, 0)[0]?.read_error).toBeUndefined()
+  expect(mergePhones(cleared, withError, 0)[0]?.read_error).toBeUndefined()
+  // A later error on the other side still wins over the older clear.
+  const later = [phone('p', { read_error: 'late', read_error_at: 300 })]
+  expect(mergePhones(cleared, later, 0)[0]).toMatchObject({
+    read_error: 'late',
+    read_error_at: 300,
+  })
+  expect(mergePhones(later, cleared, 0)[0]).toMatchObject({
+    read_error: 'late',
+    read_error_at: 300,
+  })
+})
+
+it('keeps a phone paired here when the reply to the merge never reached the sender', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'aico-phone-sync-'))
+  dirs.push(dir)
+  const file = join(dir, 'phones.json')
+  writeFileSync(
+    file,
+    JSON.stringify([phone('old', { added_at: 1 }), phone('new', { added_at: 150 })]),
+  )
+  writeFileSync(`${file}.sync.json`, JSON.stringify({ at: 100 }))
+  const sender = [phone('old', { added_at: 1 })]
+  // First sync: the phone paired here is kept and returned, but the reply is lost (no confirm).
+  expect(mergePhonesFile(file, sender, 200).map((p) => p.id)).toEqual(['old', 'new'])
+  // The sender never got it, so its list still lacks the phone: it must survive again.
+  expect(mergePhonesFile(file, sender, 300).map((p) => p.id)).toEqual(['old', 'new'])
+  // Once a reply is confirmed, the sender's list decides.
+  confirmPhonesMerge(file)
+  expect(mergePhonesFile(file, sender, 400).map((p) => p.id)).toEqual(['old'])
 })

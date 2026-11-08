@@ -3,13 +3,17 @@
 // A token's first look only records where its history ends; later hits alert once each, through the
 // same trip record, repeat rule and phone notice as the LAN webhook.
 
-import { readFileSync, renameSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import type { Notifier } from '@aico/notify'
 import { alertTrip, type CanaryEvents, type CanaryTrip } from './canary'
 
 const DEFAULT_API = 'https://canarytokens.org/d3aece8093b71007b5ccfedad91ebb11'
 const DEFAULT_INTERVAL_S = 15 * 60
+/** A cursor nobody looked at or synced for this long is from before the other machine took over. */
+const STALE_S = 60 * 60
+/** How long a machine with such a cursor waits after starting for the other one's cursor (the sync runs every 5 min). */
+const SYNC_GRACE_S = 15 * 60
 
 interface PolledEntry {
   token?: string
@@ -41,6 +45,45 @@ const clean = (v: unknown) =>
     .replace(/[\p{Cc}\p{Cf}]/gu, ' ')
     .slice(0, 160)
 
+/** The cursor of hits already looked at: per token, the newest hit time seen. Newer wins, per token. */
+export type PollCursor = Record<string, number>
+
+function mergeCursor(a: PollCursor, b: PollCursor): PollCursor {
+  const out: PollCursor = {}
+  for (const side of [a, b])
+    for (const [token, at] of Object.entries(side))
+      if (Number.isFinite(at)) out[token] = Math.max(out[token] ?? at, at)
+  return out
+}
+
+function readCursor(file: string): PollCursor {
+  try {
+    const raw = JSON.parse(readFileSync(file, 'utf8'))
+    return raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as PollCursor) : {}
+  } catch {
+    return {}
+  }
+}
+
+function writeCursor(file: string, cursor: PollCursor): void {
+  mkdirSync(dirname(file), { recursive: true, mode: 0o700 })
+  const temp = `${file}.${process.pid}.tmp`
+  writeFileSync(temp, JSON.stringify(cursor), { mode: 0o600 })
+  renameSync(temp, file)
+}
+
+/**
+ * The other Aico machine's cursor (`aico context-sync` sends it): both machines keep the newer time
+ * for every token, so a hit one of them already alerted is not alerted again by the other, and a
+ * hit only the other had seen reaches nobody twice. Writing the file also marks it as freshly synced.
+ */
+export function mergeCursorFile(folder: string, sent: PollCursor): PollCursor {
+  const file = join(folder, 'poll.json')
+  const merged = mergeCursor(sent, readCursor(file))
+  writeCursor(file, merged)
+  return merged
+}
+
 export class CanaryPoller {
   private timer: NodeJS.Timeout | null = null
   private running: Promise<PollResult> | null = null
@@ -51,7 +94,28 @@ export class CanaryPoller {
     private readonly events: CanaryEvents,
     private readonly api: string = DEFAULT_API,
     private readonly fetchJson: HistoryFetcher = fetchHistory,
-  ) {}
+    private readonly clock: () => number = Date.now,
+  ) {
+    this.startedAt = clock()
+  }
+
+  private readonly startedAt: number
+
+  /**
+   * A cursor nobody touched for an hour (a machine coming back after being off) may be far behind
+   * what the other machine alerted. Right after starting, wait for the sync to bring the other
+   * cursor rather than alert old hits again; past the grace, nothing else is looking, so poll.
+   */
+  private waitingForSync(): boolean {
+    let touched: number
+    try {
+      touched = statSync(this.file).mtimeMs
+    } catch {
+      return false
+    }
+    const now = this.clock()
+    return now - touched > STALE_S * 1000 && now - this.startedAt < SYNC_GRACE_S * 1000
+  }
 
   /** `elsewhere`: the workstation is polling, so the standby leaves it (a hit alerts once). */
   start(intervalS: number = DEFAULT_INTERVAL_S, elsewhere?: () => Promise<boolean>): void {
@@ -80,6 +144,10 @@ export class CanaryPoller {
 
   private async pass(): Promise<PollResult> {
     const out: PollResult = { checked: 0, baselined: 0, alerts: 0, errors: [] }
+    if (this.waitingForSync()) {
+      out.held = true
+      return out
+    }
     let entries: PolledEntry[]
     try {
       const registry = JSON.parse(readFileSync(join(this.folder, 'registry.json'), 'utf8'))
@@ -91,6 +159,7 @@ export class CanaryPoller {
     const seen = this.readSeen()
     for (const entry of entries) {
       if ((entry.kind ?? 'canarytokens') !== 'canarytokens' || !entry.token || !entry.auth) continue
+      Object.assign(seen, mergeCursor(seen, this.readSeen()))
       const label = clean(entry.name) || clean(entry.token).slice(0, 6)
       const query = new URLSearchParams({ token: entry.token, auth: entry.auth })
       let hits: PollHit[]
@@ -132,18 +201,14 @@ export class CanaryPoller {
     return join(this.folder, 'poll.json')
   }
 
-  private readSeen(): Record<string, number> {
-    try {
-      return JSON.parse(readFileSync(this.file, 'utf8')) as Record<string, number>
-    } catch {
-      return {}
-    }
+  private readSeen(): PollCursor {
+    return readCursor(this.file)
   }
 
-  private writeSeen(seen: Record<string, number>): void {
-    const temp = `${this.file}.tmp`
-    writeFileSync(temp, JSON.stringify(seen), { mode: 0o600 })
-    renameSync(temp, this.file)
+  /** Writes the cursor, keeping anything a sync put there meanwhile (newer wins per token). */
+  private writeSeen(seen: PollCursor): void {
+    Object.assign(seen, mergeCursor(seen, this.readSeen()))
+    writeCursor(this.file, seen)
   }
 }
 
@@ -152,4 +217,6 @@ export interface PollResult {
   baselined: number
   alerts: number
   errors: string[]
+  /** The pass waited for the other machine's cursor (see waitingForSync). */
+  held?: boolean
 }
