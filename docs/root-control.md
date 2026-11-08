@@ -415,7 +415,13 @@ and optional opaque `leadRootReference`, `facetCapsuleRef`, and
 
 Antigravity (`agy`) is root-capable: it resumes with `--conversation <id>` (the id read
 from the conversation the process holds open) and takes the launch prompt through `-i`,
-since it has no positional prompt.
+since it has no positional prompt. Its rules arrive through a SessionStart hook, and it
+runs with skip-permissions only when that hook is installed, because the hook then answers
+every tool call through the leash (`native/hook/guard/leash.go`, rows in
+`native/hook/data/leash.json`). The leash stops careless commands, not hostile programs: it
+reads the command line and what scripts it can see, and a dead hook lets the call through.
+It refuses `st aico`, tmux, kill, `st commit --skip-checks`, closed paths and unbounded
+searches, among others.
 
 A tmux tool is root-capable exactly when it has a resume adapter; `GET /v1/tools`
 reports it as `rootCapable`. Any other tool string, aliases included, returns
