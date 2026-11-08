@@ -2,8 +2,9 @@
 // material is displayed or copied; root pins it after the exact ask is approved.
 import { spawn } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
-import { homedir, hostname } from 'node:os'
+import { hostname } from 'node:os'
 import { join } from 'node:path'
+import { aicoDataDir } from '@aico/shared/data-dir'
 import { runExec } from '../exec'
 import { hostsFilePath, loadHosts } from '../hosts'
 import { enrollmentCode, fingerprint, loadIdentity, machineName } from '../identity'
@@ -189,10 +190,7 @@ export async function runFleet(
     const role = rest[0]
     if (role !== 'full' && role !== 'worker')
       throw new Error('Usage: tether fleet identity full|worker')
-    const dir =
-      process.env.AICO_DATA_DIR ||
-      join(process.env.XDG_STATE_HOME || join(homedir(), '.local/state'), 'aico')
-    const identity = loadIdentity(dir, machineName(hostname()))
+    const identity = loadIdentity(aicoDataDir(), machineName(hostname()))
     io.out(
       JSON.stringify({
         name: identity.name,

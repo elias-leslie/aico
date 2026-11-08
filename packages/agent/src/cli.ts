@@ -1,10 +1,9 @@
 // `aico agent run|show`: a run in the current folder on Aico's own harness, resumed or
 // branched from agent.db, and what a stored run did turn by turn.
 
-import { homedir } from 'node:os'
-import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { contextDbPath } from '@aico/context'
+import { aicoDataDir } from '@aico/shared/data-dir'
 import type { Database } from '@aico/store'
 import type { Models } from '@earendil-works/pi-ai'
 import { type NextPrompt, promptReader } from './prompt'
@@ -52,12 +51,7 @@ const EXIT: Record<string, number> = {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-export function dataDir(env: NodeJS.ProcessEnv): string {
-  return resolve(
-    env.AICO_DATA_DIR?.trim() ||
-      join(env.XDG_STATE_HOME?.trim() || join(homedir(), '.local', 'state'), 'aico'),
-  )
-}
+export const dataDir = (env: NodeJS.ProcessEnv): string => aicoDataDir(env)
 
 /** What tests swap out: the rules source and the provider collection. */
 export interface CliDeps {

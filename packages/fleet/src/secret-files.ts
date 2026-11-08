@@ -12,16 +12,13 @@ import {
 } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { aicoDataDir } from '@aico/shared/data-dir'
 import staticLoginRows from './static-logins.json' with { type: 'json' }
 
 const staticLogins: { tool: string; name: string; envVar?: string; authFile?: string }[] =
   staticLoginRows
 export function secretsDir(env = process.env): string {
-  return join(
-    env.AICO_DATA_DIR ||
-      join(env.XDG_STATE_HOME || join(env.HOME || homedir(), '.local/state'), 'aico'),
-    'secrets',
-  )
+  return join(aicoDataDir(env), 'secrets')
 }
 export function toolLoginsFile(env = process.env): string {
   return join(

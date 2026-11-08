@@ -2,8 +2,8 @@
 // through this package. The task system's tables (tasks, subtasks, claims, task log) were dropped by
 // the second migration; per-project plans live in ROADMAP.md at each repo root. Times are epoch milliseconds.
 
-import { homedir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { join } from 'node:path'
+import { aicoDataDir } from '@aico/shared/data-dir'
 import { type Database, type Migration, openDatabase } from '@aico/store'
 
 export type { Database }
@@ -128,9 +128,5 @@ export function openTasksDb(path: string): Database {
 /** AICO_TASKS_DB, else tasks.db in AICO_DATA_DIR or ~/.local/state/aico (where the other Aico DBs live). */
 export function tasksDbPathFromEnv(env: NodeJS.ProcessEnv): string {
   if (env.AICO_TASKS_DB?.trim()) return env.AICO_TASKS_DB.trim()
-  const dataDir = resolve(
-    env.AICO_DATA_DIR?.trim() ||
-      join(env.XDG_STATE_HOME?.trim() || join(homedir(), '.local', 'state'), 'aico'),
-  )
-  return tasksDbPath(dataDir)
+  return tasksDbPath(aicoDataDir(env))
 }

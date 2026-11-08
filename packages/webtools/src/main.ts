@@ -1,9 +1,9 @@
 // The `aico web` entry point (bundled to dist/aico-webtools.mjs).
 
 import { existsSync, readFileSync } from 'node:fs'
-import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { aicoDataDir } from '@aico/shared/data-dir'
 import { machineId } from '@aico/status'
 import { runWebCli } from './cli'
 
@@ -32,10 +32,7 @@ function statusUrl(): string | null {
 process.exitCode = await runWebCli(process.argv.slice(2), {
   out: (text) => process.stdout.write(text),
   err: (text) => process.stderr.write(text),
-  dataDir: resolve(
-    env.AICO_DATA_DIR?.trim() ||
-      join(env.XDG_STATE_HOME?.trim() || join(homedir(), '.local', 'state'), 'aico'),
-  ),
+  dataDir: aicoDataDir(env),
   env,
   fetch,
   now: () => new Date(),

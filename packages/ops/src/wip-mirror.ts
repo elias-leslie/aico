@@ -23,6 +23,7 @@ import { requestExec, runExec } from '@aico/fleet/exec'
 import { fullPeers } from '@aico/fleet/peers'
 import { readSettings } from '@aico/fleet/settings'
 import { readPins } from '@aico/fleet/trust'
+import { aicoDataDir } from '@aico/shared/data-dir'
 import {
   deleteStatusRow,
   machineId,
@@ -751,7 +752,7 @@ async function postRows(rows: StatusRow[], gone: string[], env: NodeJS.ProcessEn
   const base = env.AICO_WEB_URL || wipConfig.webUrl
   if (rows.length) {
     const waiting = await postOrKeep(statusRowsUrl(base), rows, {
-      dir: outboxDir(env.AICO_DATA_DIR || expandHome('~/.local/state/aico')),
+      dir: outboxDir(aicoDataDir(env)),
       timeoutMs: 10_000,
     })
     if (waiting !== null) console.error(`Repo copy Status will go out later: ${waiting}`)

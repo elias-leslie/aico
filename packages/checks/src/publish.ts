@@ -2,9 +2,9 @@
 // each repo writes Status directly, with no owner ask and no GitHub Actions wait.
 import { spawn } from 'node:child_process'
 import { createWriteStream, existsSync, mkdirSync } from 'node:fs'
-import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { parseArgs } from 'node:util'
+import { aicoDataDir } from '@aico/shared/data-dir'
 import { machineId, outboxDir, postOrKeep, type StatusRow, statusRowsUrl } from '@aico/status'
 import {
   openTasksDb,
@@ -315,17 +315,14 @@ function acceptanceRunner(logDir: string): NonNullable<PublishOptions['acceptanc
     })
 }
 
-const dataDir = (env: NodeJS.ProcessEnv) =>
-  env.AICO_DATA_DIR?.trim() ||
-  join(env.XDG_STATE_HOME?.trim() || join(homedir(), '.local', 'state'), 'aico')
-const publishLogDir = (env: NodeJS.ProcessEnv) => join(dataDir(env), 'publish-logs')
+const publishLogDir = (env: NodeJS.ProcessEnv) => join(aicoDataDir(env), 'publish-logs')
 
 async function postPublicationRow(row: StatusRow, env = process.env): Promise<void> {
   const base = webUrl(env)
   if (!base) throw new Error('Publication Status address is unavailable')
   // aico-web restarting keeps the row waiting instead of dropping it.
   await postOrKeep(statusRowsUrl(base), [row], {
-    dir: outboxDir(dataDir(env)),
+    dir: outboxDir(aicoDataDir(env)),
   })
 }
 
