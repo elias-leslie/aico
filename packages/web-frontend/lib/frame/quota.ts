@@ -30,6 +30,8 @@ export interface QuotaGlance {
   meaning: string
   /** Used up or not known. */
   warn: boolean
+  /** Some window isn't reporting, so `left` may not be the tightest. */
+  partly: boolean
 }
 
 /** What a window has left: 0 when used up, null when not known. */
@@ -161,6 +163,7 @@ function glanceOf(provider: UsageProvider, now: number): QuotaGlance {
     line,
     meaning: meaning || line,
     warn: state === 'used_up' || state === 'unknown',
+    partly: provider.status === 'partly_unknown',
   }
 }
 
@@ -176,7 +179,7 @@ export function toolGlance(
 export function pickerSuffix(glance: QuotaGlance): string | null {
   if (glance.state === 'credits') return 'on credits'
   if (glance.state === 'used_up') return 'used up'
-  return glance.left === null ? null : `${glance.left}% left`
+  return glance.partly || glance.left === null ? null : `${glance.left}% left`
 }
 
 /** Every subscription's glance, in the order the report lists them. */

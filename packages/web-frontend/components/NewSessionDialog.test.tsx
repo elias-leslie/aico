@@ -139,16 +139,31 @@ describe('NewSessionDialog', () => {
       ],
     }
     renderDialog()
-    const agent = screen.getByRole('group', { name: 'Agent' })
-    const claude = within(agent).getByRole('button', { name: /Claude Code/ })
-    expect(claude).toHaveTextContent('73% left')
-    expect(claude).toHaveAttribute('title', 'claude answer')
+    const agent = () => screen.getByRole('group', { name: 'Agent' })
+    const claude = () =>
+      within(agent()).getByRole('button', { name: /Claude Code/ })
+    expect(claude()).toHaveTextContent('73% left')
+    expect(claude()).toHaveAttribute('title', 'claude answer')
     expect(
-      within(agent).getByRole('button', { name: /Codex/ }),
+      within(agent()).getByRole('button', { name: /Codex/ }),
     ).toHaveTextContent('on credits')
     expect(
-      within(agent).getByRole('button', { name: 'Pi' }),
+      within(agent()).getByRole('button', { name: 'Pi' }),
     ).not.toHaveAttribute('title')
+    cleanup()
+    usage.report = {
+      providers: [
+        provider('claude', 'partly_unknown', 90),
+        provider('codex', 'used_up', 0),
+      ],
+    }
+    renderDialog()
+    // A window not reporting could be the tighter one, so no number; the tooltip says why.
+    expect(claude()).toHaveTextContent(/^Claude Code$/)
+    expect(claude()).toHaveAttribute('title', 'claude answer')
+    expect(
+      within(agent()).getByRole('button', { name: /Codex/ }),
+    ).toHaveTextContent('used up')
     usage.report = null
   })
 

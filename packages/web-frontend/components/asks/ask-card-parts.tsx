@@ -391,7 +391,7 @@ export function AskActions({
           title={
             waitTitle ??
             (wantsFiles && note
-              ? 'Sends the agent “Not now” and what you typed; the question counts as answered'
+              ? 'Sends the agent “Not now” and what you typed, without any files; the question counts as answered'
               : 'Sends the agent “Not now”; the question counts as answered, and it moves on')
           }
         >

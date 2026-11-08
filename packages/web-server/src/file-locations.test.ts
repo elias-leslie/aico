@@ -108,6 +108,16 @@ describe('file locations', () => {
     expect(byName.entries.every((entry) => typeof entry.modified === 'number')).toBe(true)
   })
 
+  it('lists only the names holding what was looked for, in any case', async () => {
+    const dir = join(top, 'finding')
+    mkdirSync(dir)
+    for (const name of ['Report.md', 'notes.txt']) writeFileSync(join(dir, name), name)
+    const res = await fetch(`${server.base}/api/files/tree?${query(dir)}&match=REPORT`)
+    const body = (await res.json()) as { entries: { name: string }[]; total: number }
+    expect(body.entries.map((entry) => entry.name)).toEqual(['Report.md'])
+    expect(body.total).toBe(1)
+  })
+
   it('lists a folder and reads a file where it is, leaving secrets out', async () => {
     const tree = (await (await get('tree', join(top, 'work'))).json()) as {
       entries: { name: string }[]

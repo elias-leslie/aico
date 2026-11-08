@@ -1242,12 +1242,18 @@ function Assignment({
 /** One activity line: when, what, which login, who, and what changed when it says. */
 /** Sessions by id, so activity names the session rather than its id. */
 type Who = { id: string; label: string }[]
-/** A lab login's site, as its row names it (`_lab_example.com--default` is example.com). */
-const shownEventName = (name: string) =>
-  name.match(/^_lab_(.*)--[^-]*(?:-[^-]+)*$/)?.[1] ?? name
+/** A lab login as its row names it: `_lab_example.com--default` is example.com;
+ * another account on the site adds its name. */
+const shownEventName = (name: string) => {
+  const lab = name.match(
+    /^_lab_([a-z0-9][a-z0-9._-]{0,79})--([a-z0-9][a-z0-9._-]{0,49})$/,
+  )
+  if (!lab) return name
+  return lab[2] === 'default' ? lab[1] : `${lab[1]} · ${lab[2]}`
+}
 const ACTION_WORDS: Record<string, string> = {
   set: 'added',
-  rotate: 'password changed',
+  rotate: 'changed',
 }
 const eventLine = (e: Event, named = true, who: Who = []) =>
   [

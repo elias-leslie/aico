@@ -72,6 +72,15 @@ export function HistoryList({
       )
     : visible
 
+  // The list stops at a page, so a full one is only the newest; a filter counts within those.
+  const counted = !shown
+    ? ''
+    : (items?.length ?? 0) < HISTORY_PAGE
+      ? countOf(shown.length, 'session')
+      : shown.length === items?.length
+        ? `Newest ${countOf(shown.length, 'session')}`
+        : `${shown.length} of the newest ${items?.length}`
+
   const sub = searching
     ? 'Search'
     : loading
@@ -81,7 +90,7 @@ export function HistoryList({
         : stale
           ? `As of ${clock(readAt)} · couldn’t refresh`
           : shown?.length
-            ? `${(items?.length ?? 0) >= HISTORY_PAGE ? 'Newest ' : ''}${countOf(shown.length, 'session')} · updated ${agoAt(readAt, now)}`
+            ? `${counted} · updated ${agoAt(readAt, now)}`
             : 'None yet'
 
   return (

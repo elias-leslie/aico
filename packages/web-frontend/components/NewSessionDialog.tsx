@@ -5,7 +5,7 @@ import { clsx } from 'clsx'
 import { Search } from 'lucide-react'
 import { type ReactNode, useMemo, useState } from 'react'
 import { pickerSuffix, quotaGlances, toolGlance } from '@/lib/frame/quota'
-import { useAgentTools } from '@/lib/hooks/use-agent-tools'
+import { type AgentTool, useAgentTools } from '@/lib/hooks/use-agent-tools'
 import {
   HOST_STATE_LABELS,
   startingLabel,
@@ -60,6 +60,44 @@ function matchesProject(project: ProjectSetting, query: string): boolean {
  * then a project, and optionally name it. The picker stays put above the
  * project list, which scrolls on its own.
  */
+/** The agent buttons, each with what its subscription has left. Mounted only while
+ * the dialog is open, so a closed dialog doesn't poll usage. */
+function AgentChoices({
+  tools,
+  picked,
+  onPick,
+}: {
+  tools: readonly AgentTool[]
+  picked: string | undefined
+  onPick: (slug: string) => void
+}) {
+  const glances = quotaGlances(useUsage().report)
+  return tools.map((t) => {
+    const glance = toolGlance(glances, [t.slug, ...t.aliases])
+    const suffix = glance && pickerSuffix(glance)
+    return (
+      <button
+        key={t.slug}
+        type="button"
+        aria-pressed={t.slug === picked}
+        onClick={() => onPick(t.slug)}
+        className="lantern-tool"
+        title={glance?.answer}
+      >
+        <AgentIcon slug={t.slug} color={getAgentColor(t.slug, t.color)} />
+        <span className="flex min-w-0 flex-col leading-tight">
+          <span className="truncate">{t.name}</span>
+          {suffix && (
+            <span className="truncate text-xs" style={{ color: 'var(--mist)' }}>
+              {suffix}
+            </span>
+          )}
+        </span>
+      </button>
+    )
+  })
+}
+
 export function NewSessionDialog({
   isOpen,
   onClose,
@@ -70,7 +108,6 @@ export function NewSessionDialog({
 }: NewSessionDialogProps) {
   const local = useProjectSettings()
   const { enabledTools, defaultTool } = useAgentTools()
-  const glances = quotaGlances(useUsage().report)
   const [query, setQuery] = useState('')
   const [pickedProjectId, setPickedProjectId] = useState<string | null>(null)
   const [kind, setKind] = useState<'agent' | 'shell'>('agent')
@@ -235,34 +272,11 @@ export function NewSessionDialog({
               )}
               {kind === 'agent' && enabledTools.length > 0 && (
                 <fieldset aria-label="Agent" className="lantern-tools mt-2.5">
-                  {enabledTools.map((t) => {
-                    const glance = toolGlance(glances, [t.slug, ...t.aliases])
-                    const suffix = glance && pickerSuffix(glance)
-                    return (
-                      <button
-                        key={t.slug}
-                        type="button"
-                        aria-pressed={t.slug === tool?.slug}
-                        onClick={() => setPickedToolSlug(t.slug)}
-                        className="lantern-tool"
-                        title={suffix ? glance.answer : undefined}
-                      >
-                        <AgentIcon
-                          slug={t.slug}
-                          color={getAgentColor(t.slug, t.color)}
-                        />
-                        <span className="truncate">{t.name}</span>
-                        {suffix && (
-                          <span
-                            className="ml-auto flex-none text-xs"
-                            style={{ color: 'var(--mist)' }}
-                          >
-                            {suffix}
-                          </span>
-                        )}
-                      </button>
-                    )
-                  })}
+                  <AgentChoices
+                    tools={enabledTools}
+                    picked={tool?.slug}
+                    onPick={setPickedToolSlug}
+                  />
                 </fieldset>
               )}
               {toolIsLastUsed && (

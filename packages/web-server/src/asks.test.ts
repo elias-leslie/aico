@@ -443,6 +443,13 @@ describe('an ask with a minimum is not answered below it', () => {
     await asks.answer(ask.id, { text: 'Not now', skippedFiles: true })
     expect(posts().map((call) => call.body)).toEqual([{ text: 'Not now' }])
   })
+
+  it('a decline keeps what the owner typed, and only then may go below the minimum', async () => {
+    const { asks, posts } = setup()
+    await expect(asks.answer(ask.id, { note: 'no camera here' })).rejects.toThrow(/at least/)
+    await asks.answer(ask.id, { text: 'Not now', note: 'no camera here', skippedFiles: true })
+    expect(posts().map((call) => call.body)).toEqual([{ text: 'Not now', note: 'no camera here' }])
+  })
 })
 
 describe('Aico grant taps', () => {

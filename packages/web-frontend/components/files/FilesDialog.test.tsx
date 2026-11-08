@@ -421,6 +421,66 @@ describe('FilesDialog', () => {
     ).toHaveValue('')
   })
 
+  it('keeps an open folder open while finding, and offers Download on a text file', async () => {
+    renderDialog(null, null, (url) => {
+      const { pathname, searchParams } = new URL(url, 'http://aico.test')
+      if (pathname === '/api/files/content')
+        return json({
+          path: searchParams.get('path'),
+          name: 'inner.txt',
+          content: 'hello',
+          size: 5,
+          lines: 1,
+          extension: '.txt',
+          language: null,
+          is_binary: false,
+          is_truncated: false,
+        })
+      if (pathname !== '/api/files/tree') return serve(url)
+      return json(
+        searchParams.get('path')
+          ? {
+              entries: [
+                {
+                  name: 'inner.txt',
+                  path: 'tmp-dir/inner.txt',
+                  is_directory: false,
+                  size: 5,
+                  extension: '.txt',
+                },
+              ],
+              path: 'tmp-dir',
+              total: 1,
+            }
+          : {
+              entries: [
+                {
+                  name: 'tmp-dir',
+                  path: 'tmp-dir',
+                  is_directory: true,
+                  children_count: 1,
+                },
+              ],
+              path: '',
+              total: 1,
+            },
+      )
+    })
+    fireEvent.click(await screen.findByText('tmp-dir'))
+    const inner = await screen.findByText('inner.txt')
+    fireEvent.change(
+      screen.getByRole('searchbox', { name: 'Find in this folder' }),
+      { target: { value: 'tmp' } },
+    )
+    await waitFor(() => expect(lastTree().get('match')).toBe('tmp'))
+    await waitFor(() => expect(screen.queryByText('Loading files')).toBeNull())
+    // The same row, never unmounted: the list stayed up through the new answer.
+    expect(inner).toBeInTheDocument()
+    fireEvent.click(inner)
+    const download = await screen.findByRole('link', { name: 'Download' })
+    expect(download).toHaveAttribute('download', 'inner.txt')
+  })
+
   it('works when storage is out of reach', async () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('blocked')

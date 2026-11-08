@@ -142,7 +142,11 @@ pub fn lines(data: &Value, questions: &Result<Vec<Value>, String>, now: f64, lin
         (true, n) => out.push(Line::Head(format!("NEEDS YOU ({n})"))),
     }
     for n in needs {
-        let mut meta = vec![s(n, "host").to_string(), format!("open {}", s(n, "age_text"))];
+        let opened = match s(n, "age_text") {
+            "now" => "new".to_string(),
+            age => format!("open {age}"),
+        };
+        let mut meta = vec![s(n, "host").to_string(), opened];
         meta.retain(|m| !m.is_empty() && m != "open ");
         let text = strs(&n["text"]);
         out.push(Line::Item(Item {

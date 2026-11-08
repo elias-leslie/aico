@@ -1,4 +1,8 @@
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import {
+  keepPreviousData,
+  useInfiniteQuery,
+  useQuery,
+} from '@tanstack/react-query'
 import {
   type FilesSource,
   fetchFileContent,
@@ -64,6 +68,8 @@ export function useFileTree(
     enabled,
     staleTime: 10_000,
     retry: retryFiles,
+    // A new sort or find keeps the list up, and its open folders, until the answer is in.
+    placeholderData: keepPreviousData,
   })
   const pages = query.data?.pages
   return {

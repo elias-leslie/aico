@@ -547,7 +547,32 @@ it('lists roles and sessions together under Used by, with All roles for an accou
   )
   expect(
     screen.getByRole('list', { name: "This login's activity" }),
-  ).toHaveTextContent('password changed · Dadbot')
+  ).toHaveTextContent('changed · Dadbot')
+})
+it('recent activity names a login as its row does, and an account beside its site', async () => {
+  vi.stubGlobal(
+    'fetch',
+    schoolApi({}, [
+      {
+        at: '2026-11-07T11:00:00Z',
+        action: 'set',
+        name: '_lab_school--default',
+        actor: 'owner',
+      },
+      {
+        at: '2026-11-07T12:00:00Z',
+        action: 'rotate',
+        name: '_lab_school--dadbot',
+        actor: 'owner',
+      },
+    ]),
+  )
+  render(<LoginsPage />)
+  fireEvent.click(
+    await screen.findByRole('button', { name: /Recent activity/ }),
+  )
+  await screen.findByText(/added · school · owner/)
+  expect(screen.getByText(/changed · school · dadbot · owner/)).toBeTruthy()
 })
 it('a lab login that is not an account shows no All roles and ticks only named roles', async () => {
   const lab = {

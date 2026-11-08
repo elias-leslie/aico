@@ -1,7 +1,7 @@
 'use client'
 
 import { ChevronLeft } from 'lucide-react'
-import { useDeferredValue, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   type FilePlace,
   fetchPathInfo,
@@ -81,11 +81,13 @@ export function FilesPanel({
   // The owner's pick of order holds across folders; until then each folder has its own default.
   const [sortPick, setSortPick] = useState<SortBy | null>(null)
   const [showHidden, setShowHiddenState] = useState(readShowHidden)
-  // What is being found belongs to the folder it was typed in; a new folder starts unfiltered.
-  const [found, setFound] = useState({
-    folder: null as string | null,
-    text: '',
-  })
+  const [match, setMatch] = useState('')
+  const [shownMatch, setShownMatch] = useState('')
+  // A typed name narrows once typing pauses, not with a request per key.
+  useEffect(() => {
+    const timer = setTimeout(() => setShownMatch(match.trim()), 300)
+    return () => clearTimeout(timer)
+  }, [match])
   const setShowHidden = (show: boolean) => {
     setShowHiddenState(show)
     saveShowHidden(show)
@@ -167,9 +169,15 @@ export function FilesPanel({
     : undefined
 
   const shownFolder = view.kind === 'place' ? view.root : null
-  const match = found.folder === shownFolder ? found.text : ''
-  // A typed name narrows without a request per key.
-  const shownMatch = useDeferredValue(match)
+  // Going anywhere else starts unfiltered, before the new place is asked for.
+  const place =
+    view.kind === 'place' ? `${view.root}:${view.select?.path ?? ''}` : null
+  const [findingIn, setFindingIn] = useState(place)
+  if (findingIn !== place) {
+    setFindingIn(place)
+    setMatch('')
+    setShownMatch('')
+  }
   // biome-ignore lint/correctness/useExhaustiveDependencies: only a new folder is reported
   useEffect(() => {
     if (view.kind === 'place' || view.kind === 'shared') onLocate?.(shownFolder)
@@ -288,7 +296,7 @@ export function FilesPanel({
                 showHidden={showHidden}
                 onShowHidden={setShowHidden}
                 match={match}
-                onMatch={(text) => setFound({ folder: shownFolder, text })}
+                onMatch={setMatch}
               />
               <FileBrowser
                 key={`at:${view.root}:${view.select?.path ?? ''}`}
