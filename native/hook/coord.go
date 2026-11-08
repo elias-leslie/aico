@@ -410,14 +410,14 @@ func send(h *lease.Hook, pos []string, flags map[string]string) int {
 		fmt.Printf("existing %s -> %s (%s; state %s); not sent again. Track it with st sessions inbox\n", id, to, why, state)
 		return 0
 	}
-	waited := "If you wait on the answer, arm st aico wait reply " + id + ": a yes otherwise may reach you without a wake"
+	waited := "to be woken by the answer: st aico wait reply " + id + "; acks: st sessions inbox"
 	switch queued, werr := h.Wake(to, from, false); {
 	case fyi:
-		fmt.Printf("sent FYI %s -> %s; it does not wake anyone: the recipient's hook shows it on its next turn (or with the next message that does wake it). No ack or confirm needed\n", id, to)
+		fmt.Printf("sent FYI %s -> %s (no wake; shown on its next turn; no ack needed)\n", id, to)
 	case queued != "":
-		fmt.Printf("sent %s -> %s; Tether delivers a [Message] line to its window when it is idle, and its hook shows the request. Track seen/ack with st sessions inbox. %s\n", id, to, waited)
+		fmt.Printf("sent %s -> %s (a [Message] line wakes it when idle); %s\n", id, to, waited)
 	default:
-		fmt.Printf("sent %s -> %s; the recipient's hook shows it on its next turn or wakes it when idle. Track seen/ack with st sessions inbox. %s\n", id, to, waited)
+		fmt.Printf("sent %s -> %s (shown on its next turn); %s\n", id, to, waited)
 		if werr != nil {
 			fmt.Fprintf(os.Stderr, "WARNING Tether did not take the wake line (%v); the recipient's hook still shows the request\n", werr)
 		}
