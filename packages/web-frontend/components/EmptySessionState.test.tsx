@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { EmptySessionState } from './EmptySessionState'
 
@@ -19,6 +19,11 @@ vi.mock('@/lib/hooks/use-session-attention', () => ({
 }))
 vi.mock('@/lib/hooks/use-terminal-panes', () => ({
   usePaneListError: () => ({ isError: false, retry: () => undefined }),
+}))
+const openNotes = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/notes-window', () => ({ openNotes }))
+vi.mock('./capture/CaptureLauncher', () => ({
+  CaptureLauncher: () => <button type="button">Capture</button>,
 }))
 vi.mock('@/lib/chat', () => ({ newChat: () => undefined }))
 vi.mock('./SessionList', () => ({
@@ -46,6 +51,16 @@ describe('EmptySessionState', () => {
     frame.value = { docked: true, tier: 'rail' }
     rerender(<EmptySessionState slots={[slot]} onOpen={() => undefined} />)
     expect(screen.getByTestId('session-list')).toBeInTheDocument()
+  })
+
+  it('offers Notes (on All), Capture and Files when no session is open', () => {
+    const onFiles = vi.fn()
+    render(<EmptySessionState slots={[]} onFiles={onFiles} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Notes' }))
+    expect(openNotes).toHaveBeenCalledWith(null)
+    expect(screen.getByRole('button', { name: 'Capture' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Files' }))
+    expect(onFiles).toHaveBeenCalled()
   })
 
   it('says a linked session was not found only on the home link', () => {

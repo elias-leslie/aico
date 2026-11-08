@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { openFiles } from '@/lib/files-opener'
 import type { TerminalPane } from '@/lib/hooks/use-terminal-panes'
 import type { TerminalSession } from '@/lib/hooks/use-terminal-sessions'
 import {
@@ -367,6 +368,19 @@ describe('SessionView', () => {
       { kind: 'pane', paneId: 'pane-1' },
       { kind: 'session', sessionId: 'ab12cd34' },
     ])
+  })
+
+  it('opens Files on Home and Shared with no session open', () => {
+    filesProps.length = 0
+    renderView({ slots: [], activeSessionId: null })
+    expect(filesProps).toHaveLength(0)
+    act(() => {
+      expect(openFiles({ kind: 'shared' })).toBe(true)
+    })
+    const props = filesProps[filesProps.length - 1]
+    expect(props?.project).toBeNull()
+    expect(props?.request).toEqual({ kind: 'shared' })
+    expect(props?.onInsertPath).toBeUndefined()
   })
 
   it('routes upload to the session and offers redraw without a parent callback', () => {

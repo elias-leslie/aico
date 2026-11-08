@@ -1,12 +1,14 @@
 'use client'
 
 import { clsx } from 'clsx'
-import { Folder, Pencil } from 'lucide-react'
+import { Folder, Pencil, StickyNote } from 'lucide-react'
 import { memo, useCallback, useState } from 'react'
 import { useAgentTools } from '@/lib/hooks/use-agent-tools'
 import { useTerminalPanes } from '@/lib/hooks/use-terminal-panes'
 import { useTerminalSessions } from '@/lib/hooks/use-terminal-sessions'
+import { openNotes } from '@/lib/notes-window'
 import { getSlotPanelId, getSlotSessionId, isPaneSlot } from '@/lib/utils/slot'
+import { CaptureLauncher } from '../capture/CaptureLauncher'
 import { useFrame } from '../frame/FrameContext'
 import { SideEdgeButton } from '../frame/SideEdgeButton'
 import { ModeToggle } from '../ModeToggle'
@@ -55,6 +57,9 @@ export const UnifiedTerminalHeaderContent = memo(
     // shows it too); a pane name is only for sessions Tether does not own.
     const sessionRenameId = slot.can.rename ? getSlotSessionId(slot) : null
     const canRename = !!paneId || !!sessionRenameId
+    // Notes opens on the session's project; a session in no project opens All.
+    const notesProject =
+      slot.projectKey ?? (slot.type === 'project' ? slot.projectId : null)
 
     const handleRename = useCallback(
       (newName: string) => {
@@ -142,6 +147,32 @@ export const UnifiedTerminalHeaderContent = memo(
               <span className="hidden @min-[760px]:inline">Compose</span>
             </button>
           )}
+
+          {/* Notes opens on this session's project; Capture sends a photo or files. Icon only on a phone and under 760px. */}
+          {isMobile ? (
+            <HeaderIconButton
+              icon={
+                <StickyNote className="h-[18px] w-[18px]" strokeWidth={1.7} />
+              }
+              onClick={() => openNotes(notesProject)}
+              tooltip="Notes: opens in its own window"
+              isMobile={isMobile}
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => openNotes(notesProject)}
+              title="Notes: open this project's notes in their own window"
+              aria-label="Notes"
+              data-testid="header-notes"
+              className="lantern-btn ghost"
+              style={{ height: 34, padding: '0 10px' }}
+            >
+              <StickyNote className="h-4 w-4" strokeWidth={1.7} />
+              <span className="hidden @min-[760px]:inline">Notes</span>
+            </button>
+          )}
+          <CaptureLauncher variant={isMobile ? 'touch' : 'bar'} />
 
           {/* Icon only on a phone and when the session pane is under 760px, so the bar fits. */}
           {onFiles &&

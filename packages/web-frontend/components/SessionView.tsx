@@ -134,11 +134,11 @@ export function SessionView({
         ? { kind: 'session', sessionId }
         : null
   // Shares and clicked paths open in this view's Files.
+  // With no session open they open on Home and Shared.
   useEffect(() => {
-    if (!sessionId) return
     setFilesOpener((request) => setFiles({ request }))
     return () => setFilesOpener(null)
-  }, [sessionId])
+  }, [])
   const sessionName = (session: string) => {
     const match = slots.find((candidate) =>
       getSlotSessionId(candidate)?.startsWith(session),
@@ -187,13 +187,31 @@ export function SessionView({
     }
   }, [])
 
+  // One Files dialog for the session on screen, or, with none, for Home and Shared.
+  const filesDialog = files && (
+    <FilesDialog
+      isOpen={true}
+      project={sessionId ? project : null}
+      request={files.request}
+      onClose={() => setFiles(null)}
+      onInsertPath={
+        sessionId ? (path) => handleRef.current?.pasteInput(path) : undefined
+      }
+      sessionName={sessionName}
+    />
+  )
+
   if (!slot) {
     return (
-      <EmptySessionState
-        slots={slots}
-        onOpen={onSwitch}
-        onNewSession={onNewSession}
-      />
+      <>
+        <EmptySessionState
+          slots={slots}
+          onOpen={onSwitch}
+          onNewSession={onNewSession}
+          onFiles={() => setFiles({ request: null })}
+        />
+        {filesDialog}
+      </>
     )
   }
 
@@ -355,16 +373,7 @@ export function SessionView({
             />
           )}
         </div>
-        {files && sessionId && (
-          <FilesDialog
-            isOpen={true}
-            project={project}
-            request={files.request}
-            onClose={() => setFiles(null)}
-            onInsertPath={(path) => handleRef.current?.pasteInput(path)}
-            sessionName={sessionName}
-          />
-        )}
+        {filesDialog}
       </div>
     </div>
   )

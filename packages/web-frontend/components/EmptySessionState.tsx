@@ -1,12 +1,14 @@
 'use client'
 
-import { Plus, RotateCcw } from 'lucide-react'
+import { Folder, Plus, RotateCcw, StickyNote } from 'lucide-react'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { newChat } from '@/lib/chat'
 import { useServerReach } from '@/lib/frame/server-reach'
 import { useSessionAttention } from '@/lib/hooks/use-session-attention'
 import { usePaneListError } from '@/lib/hooks/use-terminal-panes'
+import { openNotes } from '@/lib/notes-window'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
+import { CaptureLauncher } from './capture/CaptureLauncher'
 import { useFrame } from './frame/FrameContext'
 import { SideEdgeButton, sideIsAway } from './frame/SideEdgeButton'
 import { SessionList } from './SessionList'
@@ -16,6 +18,8 @@ interface EmptySessionStateProps {
   slots: Array<TerminalSlot | PaneSlot>
   onOpen?: (slot: TerminalSlot | PaneSlot) => void
   onNewSession?: () => void
+  /** Open Files on Home and Shared (there is no project to start on). */
+  onFiles?: () => void
 }
 
 /**
@@ -25,6 +29,7 @@ export function EmptySessionState({
   slots,
   onOpen,
   onNewSession,
+  onFiles,
 }: EmptySessionStateProps) {
   const attention = useSessionAttention()
   // Can't reach the server: the list is its last answer, so its states are muted.
@@ -89,6 +94,33 @@ export function EmptySessionState({
               <button type="button" className="lantern-btn" onClick={newChat}>
                 New chat
               </button>
+            </div>
+            <div
+              className="flex flex-wrap justify-center gap-2"
+              role="group"
+              aria-label="Without a session"
+            >
+              <button
+                type="button"
+                className="lantern-btn ghost"
+                onClick={() => openNotes(null)}
+                title="Notes: open all notes in their own window"
+              >
+                <StickyNote className="h-4 w-4" strokeWidth={1.7} />
+                Notes
+              </button>
+              <CaptureLauncher variant="row" />
+              {onFiles && (
+                <button
+                  type="button"
+                  className="lantern-btn ghost"
+                  onClick={onFiles}
+                  title="Files: Home and what agents shared"
+                >
+                  <Folder className="h-4 w-4" strokeWidth={1.7} />
+                  Files
+                </button>
+              )}
             </div>
           </>
         )}

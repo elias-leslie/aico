@@ -63,6 +63,16 @@ vi.mock('./HeaderIconButton', () => ({
   ),
 }))
 
+const openNotes = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/notes-window', () => ({ openNotes }))
+vi.mock('../capture/CaptureLauncher', () => ({
+  CaptureLauncher: ({ variant }: { variant: string }) => (
+    <button type="button" data-testid="capture-mock" data-variant={variant}>
+      Capture
+    </button>
+  ),
+}))
+
 vi.mock('./ContextFillBadge', () => ({ ContextFillBadge: () => null }))
 
 vi.mock('./PaneStatusBadge', () => ({
@@ -227,6 +237,58 @@ describe('UnifiedTerminalHeaderContent', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Files' }))
 
     expect(onFiles).toHaveBeenCalledTimes(1)
+  })
+
+  it("opens Notes on the session's project and offers Capture beside Files", () => {
+    render(
+      <UnifiedTerminalHeaderContent
+        slot={makeProjectSlot('a', 'Alpha')}
+        onFiles={vi.fn()}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Notes' }))
+    expect(openNotes).toHaveBeenCalledWith('a-project')
+    expect(screen.getByTestId('capture-mock')).toHaveAttribute(
+      'data-variant',
+      'bar',
+    )
+  })
+
+  it("opens Notes on a free session's project key, and on All when it has none", () => {
+    const base = makeProjectSlot('a', 'Alpha')
+    const adhoc = {
+      ...base,
+      type: 'adhoc',
+      sessionId: 'a-session',
+      name: 'Alpha',
+      workingDir: null,
+    } as unknown as AdHocSlot
+    const { rerender } = render(
+      <UnifiedTerminalHeaderContent
+        slot={{ ...adhoc, projectKey: 'portfolio' }}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Notes' }))
+    expect(openNotes).toHaveBeenLastCalledWith('portfolio')
+    rerender(
+      <UnifiedTerminalHeaderContent slot={{ ...adhoc, projectKey: null }} />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Notes' }))
+    expect(openNotes).toHaveBeenLastCalledWith(null)
+  })
+
+  it('uses icon buttons for Notes and Capture on a phone', () => {
+    render(
+      <UnifiedTerminalHeaderContent
+        slot={makeProjectSlot('a', 'Alpha')}
+        isMobile
+      />,
+    )
+    expect(screen.getByRole('button', { name: /^Notes/ })).toBeInTheDocument()
+    expect(screen.getByTestId('capture-mock')).toHaveAttribute(
+      'data-variant',
+      'touch',
+    )
   })
 
   it('labels the files action Files on desktop, with a tooltip', () => {

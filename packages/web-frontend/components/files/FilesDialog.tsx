@@ -65,7 +65,8 @@ export function FilesDialog({
   /** What to show on opening; a new request reopens on it */
   request: FilesRequest | null
   onClose: () => void
-  onInsertPath: (path: string) => void
+  /** Absent with no session open: there is no terminal to put a path into, so the button is not offered. */
+  onInsertPath?: (path: string) => void
   sessionName?: (session: string) => string | null
 }) {
   const [view, setView] = useState<View>(() => initialView(request, project))
@@ -146,10 +147,12 @@ export function FilesDialog({
       : 'name')
   const tab = view.kind === 'project' ? 'project' : 'everywhere'
   const here = view.kind === 'place' ? view.root : null
-  const insert = (path: string) => {
-    onInsertPath(path)
-    onClose()
-  }
+  const insert = onInsertPath
+    ? (path: string) => {
+        onInsertPath(path)
+        onClose()
+      }
+    : undefined
 
   return (
     <Dialog.Root open={isOpen} onOpenChange={(open) => !open && onClose()}>
