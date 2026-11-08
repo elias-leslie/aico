@@ -261,6 +261,21 @@ describe('CLI cutover', () => {
     expect(await run(['mockup', 'remove', 'abc123def456', '--project', 'aico'])).toBe(0)
     expect(calls[1].url).toBe('http://127.0.0.1:3002/api/mockups/abc123def456?project=aico')
     expect(calls[1].init?.method).toBe('DELETE')
+    // --no-ask: no question in the owner's Needs you; without it the field is not sent at all.
+    expect(JSON.parse(String(calls[0].init?.body))).not.toHaveProperty('ask')
+    expect(
+      await run([
+        'mockup',
+        'add',
+        join(dir, 'shot.png'),
+        '--project',
+        'aico',
+        '--title',
+        'Shot',
+        '--no-ask',
+      ]),
+    ).toBe(0)
+    expect(JSON.parse(String(calls[2].init?.body))).toMatchObject({ ask: false })
   })
 })
 describe('versioned extensions', () => {

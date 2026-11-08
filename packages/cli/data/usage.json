@@ -152,7 +152,7 @@
   {
     "surface": "st.mockup.add",
     "tier": "reference",
-    "cmd": "st mockup add FILE --project ID --title TITLE [--note TEXT] | st mockup remove ID --project ID",
+    "cmd": "st mockup add FILE --project ID --title TITLE [--note TEXT] [--no-ask] | st mockup remove ID --project ID",
     "when": "put a design (HTML, SVG, image, PDF, Markdown, Mermaid) in the owner's Designs tab; the same title again replaces it live; Use this one answers the asking session"
   },
   {

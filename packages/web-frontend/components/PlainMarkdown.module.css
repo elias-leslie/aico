@@ -18,3 +18,12 @@
   outline: 2px solid var(--amber-line);
   outline-offset: 2px;
 }
+
+/* A link in an agent's text, as a small button that stays on its line when it can. */
+.chip {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  text-decoration: none;
+}

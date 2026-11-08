@@ -420,6 +420,7 @@ async function mockupCommand(cli: Cli, rest: string[]): Promise<number> {
       title: { type: 'string' },
       note: { type: 'string' },
       session: { type: 'string' },
+      'no-ask': { type: 'boolean' },
       help: { type: 'boolean' },
     },
   })
@@ -457,6 +458,7 @@ async function mockupCommand(cli: Cli, rest: string[]): Promise<number> {
       name: basename(positionals[0]),
       data: readFileSync(resolve(cwd, positionals[0])).toString('base64'),
       session: /^[0-9a-f]{8}$/.test(candidate) ? candidate : null,
+      ...(values['no-ask'] ? { ask: false } : {}),
     }),
   })
   const body = (await response.json()) as { detail?: string; pageUrl?: string }

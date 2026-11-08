@@ -9,6 +9,7 @@ import {
   sourceKey,
 } from '@/lib/api/pane-files'
 import type { FilesRequest } from '@/lib/files-opener'
+import { useNewShares } from '@/lib/hooks/use-agent-shows'
 import { useFilePlaces, useProjectRoot } from '@/lib/hooks/use-pane-files'
 import { FileBrowser, type FileChoice } from './FileBrowser'
 import {
@@ -75,6 +76,7 @@ export function FilesPanel({
   onLocate?: (folder: string | null) => void
 }) {
   const [view, setView] = useState<View>(() => initialView(request, project))
+  const newShares = useNewShares(view.kind === 'shared')
   const opening = useRef(0)
   // The owner's pick of order holds across folders; until then each folder has its own default.
   const [sortPick, setSortPick] = useState<SortBy | null>(null)
@@ -219,6 +221,7 @@ export function FilesPanel({
             }
             placesFailed={places.isError}
             sharedActive={view.kind === 'shared'}
+            newShares={newShares}
             onGo={(path) => void openPath(path, false)}
             onFolder={(path) => goFolder(path)}
             onShared={() => setView({ kind: 'shared' })}

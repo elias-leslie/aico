@@ -1,5 +1,6 @@
 'use client'
 
+import { useQuery } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiFetch } from '@/lib/api-fetch'
 import { openFiles } from '@/lib/files-opener'
@@ -22,6 +23,8 @@ const MAX_SHOWS = 200
 /** On opening the app, at most this many shares made while it was closed pop up. */
 const MAX_CATCH_UP = 3
 const SEEN_KEY = 'aico:shares-seen-at'
+/** The newest share Files > Shared has shown (shares after it are new there). */
+const OPENED_KEY = 'aico:shared-opened-at'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
@@ -67,7 +70,7 @@ function parseShows(value: unknown): AgentShow[] {
   return items
 }
 
-export function fetchShows(since?: string, signal?: AbortSignal) {
+function fetchShows(since?: string, signal?: AbortSignal) {
   return apiFetch<unknown>(`/api/shows${since ? `?since=${since}` : ''}`, {
     signal,
     cache: 'no-store',
@@ -156,4 +159,52 @@ export function useAgentShows() {
 
   const dismiss = useCallback(() => setPending((queue) => queue.slice(1)), [])
   return { show: pending[0], dismiss }
+}
+
+/** Everything agents shared, oldest first, kept fresh (what Files > Shared lists). */
+export function useShareList() {
+  return useQuery<AgentShow[]>({
+    queryKey: ['agent-shows', 'all'],
+    queryFn: ({ signal }) => fetchShows(undefined, signal),
+    refetchInterval: 10_000,
+  })
+}
+
+function readOpenedAt(): string | null {
+  try {
+    return window.localStorage.getItem(OPENED_KEY)
+  } catch {
+    return null
+  }
+}
+
+function writeOpenedAt(value: string): void {
+  try {
+    window.localStorage.setItem(OPENED_KEY, value)
+  } catch {
+    // Without storage the mark just stays off: nothing is claimed new.
+  }
+}
+
+/** How many shares came since Files > Shared was last open: the number on its button. `viewing` is
+ * true while Shared is on screen, which counts everything as seen. A first visit starts from now:
+ * the shares already there are not new. */
+export function useNewShares(viewing: boolean): number {
+  const list = useShareList()
+  const [openedAt, setOpenedAt] = useState<string | null>(null)
+  useEffect(() => setOpenedAt(readOpenedAt()), [])
+  const newest = list.data?.at(-1)?.createdAt ?? null
+  useEffect(() => {
+    if (!list.data) return
+    const stored = readOpenedAt()
+    if (stored !== null && !viewing) return
+    const mark =
+      newest && (stored === null || newest > stored)
+        ? newest
+        : (stored ?? new Date().toISOString())
+    if (mark !== stored) writeOpenedAt(mark)
+    setOpenedAt(mark)
+  }, [list.data, newest, viewing])
+  if (viewing || openedAt === null) return 0
+  return (list.data ?? []).filter((share) => share.createdAt > openedAt).length
 }

@@ -254,7 +254,7 @@ function serve(): void {
     projects: () => registry.list().map((project) => ({ id: project.id, name: project.name })),
   })
   registerLoginRoutes(api, process.env, tether)
-  registerMockupRoutes(api, { dataDir: config.dataDir, tether })
+  registerMockupRoutes(api, { dataDir: config.dataDir, tether, publicHost: config.publicHost })
   registerSharedPageRoutes(api, { shares: () => shows.list('here') })
   // The tray alert rule: checked on every write of rows. aico-web's own heartbeat writes every
   // few minutes, so a backup or machine row that goes late is seen then too. A notice notify

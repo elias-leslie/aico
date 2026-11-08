@@ -403,6 +403,28 @@ describe('Needs you', () => {
     store.close()
   })
 
+  it('gives a todo no Done choice unless its sender offered done (the card is its title and Open link)', async () => {
+    const store = new NotifyStore(':memory:')
+    const asks = new FakeAsks()
+    const todo = parseNotice({
+      v: 1,
+      source: 'aico',
+      kind: 'todo',
+      title: 'A receipt is waiting for your tap',
+      body: 'Open it to send it on.',
+      open: 'https://aico.example/captures?id=abc',
+      actions: ['open'],
+    })
+    const { id } = store.accept(todo, 'local', [], 0)
+    await new NeedsYou({ store, asks }).noticeAccepted(id, todo)
+    expect(asks.created).toHaveLength(1)
+    expect(asks.created[0]).toMatchObject({
+      options: [],
+      open: 'https://aico.example/captures?id=abc',
+    })
+    store.close()
+  })
+
   it('files no ask for a session waiting notice: the session is already in Needs you, with Open', async () => {
     const store = new NotifyStore(':memory:')
     const asks = new FakeAsks()

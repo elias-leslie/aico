@@ -2,9 +2,11 @@
 
 import { clsx } from 'clsx'
 import { Check, Copy } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { openFiles } from '@/lib/files-opener'
 import type { AskReply, AttachedFile, OwnerAsk } from '@/lib/hooks/use-asks'
+import { openAppPath, workbenchPathOf } from '@/lib/workbench'
 import { PlainMarkdown } from '../PlainMarkdown'
 import { AttachedFiles } from './AskAttached'
 import { askTitle, Meta, OpenSession } from './ask-shared'
@@ -55,6 +57,19 @@ export function openLink(ask: OwnerAsk): string | null {
     : null
 }
 
+/** The Workbench page the ask leads to (the Designs tab on one design, say), else null. It opens in
+ * the Workbench window, or in place on a phone, so it is never a plain link. */
+export function workbenchPath(ask: OwnerAsk): string | null {
+  return workbenchPathOf(openLink(ask))
+}
+
+/** The button for it: "Open design" on the Designs tab, else "Open". */
+function workbenchLabel(path: string): string {
+  return new URLSearchParams(path.split('?')[1] ?? '').get('tab') === 'designs'
+    ? 'Open design'
+    : 'Open'
+}
+
 /** What a down host is, in the owner's words. */
 function awayText(state: string | undefined): string {
   return state === 'powered_off'
@@ -77,11 +92,14 @@ function agoWords(ms: number): string {
  * the side's list it folds to a few lines, with the rest one click away. */
 function AskBody({ text, clamp }: { text: string; clamp: boolean }) {
   const [open, setOpen] = useState(false)
+  const router = useRouter()
   const long = clamp && (text.length > 220 || text.split('\n').length > 4)
   return (
     <div className="mb-2">
       <PlainMarkdown
         text={text}
+        buttons
+        onOpenApp={(path) => openAppPath(path, (to) => router.push(to))}
         className={clsx(
           'lantern-ask-body text-[13.5px]',
           long && !open && 'folded',
@@ -276,6 +294,7 @@ export function AskActions({
   wantsFiles,
   inSession,
   link,
+  workbench,
   sessionId,
   busy,
   waitTitle,
@@ -288,6 +307,8 @@ export function AskActions({
   inSession: boolean
   /** The https link the ask opens, if any. */
   link: string | null
+  /** The Workbench page the ask leads to, if it does (see workbenchPath). */
+  workbench: string | null
   sessionId: string | null
   /** An answer is being saved, or the server or host can't take one. */
   busy: boolean
@@ -295,9 +316,23 @@ export function AskActions({
   onOpenSession?: () => void
   onSend: (answer: AskReply, said: string) => void
 }) {
+  const router = useRouter()
   return (
     <div className="lantern-ask-actions">
-      {app && !hasOptions && (
+      {workbench && (
+        <a
+          href={workbench}
+          className="lantern-btn primary small"
+          onClick={(event) => {
+            event.preventDefault()
+            openAppPath(workbench, (to) => router.push(to))
+          }}
+        >
+          {workbenchLabel(workbench)}
+        </a>
+      )}
+      {/* Without choices or a link, Done is all there is to press; with a link the work is there. */}
+      {app && !hasOptions && !link && (
         <button
           type="button"
           className="lantern-btn primary small"
@@ -308,7 +343,7 @@ export function AskActions({
           Done
         </button>
       )}
-      {app && link && (
+      {app && link && !workbench && (
         <a
           href={link}
           target="_blank"
@@ -321,7 +356,7 @@ export function AskActions({
       {!app && !inSession && (
         <OpenSession sessionId={sessionId} onOpen={onOpenSession} />
       )}
-      {!app && !hasOptions && !wantsFiles && (
+      {!app && !hasOptions && !wantsFiles && !workbench && (
         <button
           type="button"
           className="lantern-btn small"

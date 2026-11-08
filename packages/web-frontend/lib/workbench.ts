@@ -5,6 +5,7 @@ import { notesHref } from './api/notes'
 import { shownProject } from './frame/shown-project'
 import {
   type Params,
+  readTab,
   WORKBENCH_TABS,
   type WorkbenchTab,
   workbenchHref,
@@ -164,4 +165,26 @@ export function openFilesWindow(
     view: shared ? 'shared' : undefined,
     show: typeof shared === 'string' ? shared : undefined,
   })
+}
+
+/** An Aico path from an agent's text or a question's link (`/workbench?tab=designs&design=…`): a
+ * Workbench tab opens in the Workbench window where there is one; anything else, and a phone,
+ * goes there in place through `goTo`. */
+export function openAppPath(path: string, goTo: (path: string) => void): void {
+  const url = new URL(path, 'http://aico.invalid')
+  const tab =
+    url.pathname === '/workbench' ? readTab(url.searchParams.get('tab')) : null
+  if (tab && openWorkbench(tab, url.searchParams)) return
+  goTo(`${url.pathname}${url.search}${url.hash}`)
+}
+
+/** The Workbench path a question's link leads to (any host's `/workbench?…` becomes this one's), else null. */
+export function workbenchPathOf(link: string | null): string | null {
+  if (!link) return null
+  try {
+    const url = new URL(link)
+    return url.pathname === '/workbench' ? `${url.pathname}${url.search}` : null
+  } catch {
+    return null
+  }
 }

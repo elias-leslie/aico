@@ -21,6 +21,7 @@ import {
   answerRoute,
   isAppAsk,
   openLink,
+  workbenchPath,
 } from './ask-card-parts'
 import { useAsker, useSessionName } from './ask-shared'
 
@@ -165,6 +166,7 @@ export function AskCard({
         wantsFiles={wantsFiles}
         inSession={inSession}
         link={link}
+        workbench={workbenchPath(ask)}
         sessionId={asker.sessionId}
         busy={reply.isPending || away}
         waitTitle={waitTitle}

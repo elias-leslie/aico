@@ -45,7 +45,8 @@ interface StoredMockup {
   mime: string | null
   size: number
   session: string | null
-  askId: string
+  /** The owner's question this design answers; null for a design added without one (a test, a plain add). */
+  askId: string | null
   createdAt: string
   /** Last time an agent added this design again (the time it was created, at first). */
   updatedAt: string
@@ -90,13 +91,19 @@ function pageUrl(project: string, id?: string): string {
   return `/workbench?${query}`
 }
 
+/** The design that settled this design's question, if one did. A design with no question settles itself. */
+function choiceOf(items: StoredMockup[], mockup: StoredMockup): StoredMockup | undefined {
+  if (mockup.askId === null) return mockup.selectedAt ? mockup : undefined
+  return items.find((item) => item.askId === mockup.askId && item.selectedAt !== null)
+}
+
 function itemUrl(mockup: Pick<StoredMockup, 'project' | 'id'>): string {
   return `/api/mockups/${mockup.id}?project=${encodeURIComponent(mockup.project)}`
 }
 
 function present(mockup: StoredMockup, items: StoredMockup[]) {
   const { html: _html, ...fields } = mockup
-  const chosen = items.find((item) => item.askId === mockup.askId && item.selectedAt !== null)
+  const chosen = choiceOf(items, mockup)
   return {
     ...fields,
     state: mockup.selectedAt ? 'selected' : chosen ? 'passed' : 'pending',
@@ -120,8 +127,7 @@ function readStored(value: unknown, project?: string): StoredMockup | null {
     DESIGN_KINDS.includes(kind as DesignKind) &&
     (row.mime === undefined || row.mime === null || typeof row.mime === 'string') &&
     (row.session === null || (typeof row.session === 'string' && SESSION.test(row.session))) &&
-    typeof row.askId === 'string' &&
-    ID.test(row.askId) &&
+    (row.askId === null || (typeof row.askId === 'string' && ID.test(row.askId))) &&
     typeof row.createdAt === 'string' &&
     Number.isFinite(Date.parse(row.createdAt)) &&
     (row.updatedAt === undefined ||
@@ -234,7 +240,12 @@ function designOf(body: Record<string, unknown>): {
  * together (an image or PDF is a file of its own); a project name never becomes a filesystem path. */
 export function registerMockupRoutes(
   router: Router,
-  options: { dataDir: string; tether: Pick<TetherClient, 'request'> },
+  options: {
+    dataDir: string
+    tether: Pick<TetherClient, 'request'>
+    /** Where the owner reaches Aico from outside, so a design's question can link to it. */
+    publicHost?: string | null
+  },
 ): void {
   const directory = join(options.dataDir, 'mockups')
   const files = join(directory, 'files')
@@ -314,6 +325,7 @@ export function registerMockupRoutes(
   }
   /** The open question a design is waiting on; undefined when it was pruned, closed or is another's. */
   const openAsk = async (mockup: StoredMockup): Promise<MockupAsk | undefined> => {
+    if (mockup.askId === null) return undefined
     try {
       const ask = await request('GET', `/v1/asks/${mockup.askId}`)
       checkOrigin(ask, mockup)
@@ -324,8 +336,7 @@ export function registerMockupRoutes(
       throw error
     }
   }
-  const chosen = (items: StoredMockup[], askId: string) =>
-    items.some((item) => item.askId === askId && item.selectedAt)
+  const settled = (items: StoredMockup[], mockup: StoredMockup) => !!choiceOf(items, mockup)
 
   // Without a project: every project's designs, for the Designs tab.
   router.on('GET', '/api/mockups', async (ctx) => {
@@ -351,14 +362,16 @@ export function registerMockupRoutes(
       const design = designOf(body)
       const note = noteOf(body)
       const session = optionalString(body, 'session', { pattern: SESSION }) ?? null
+      // `ask: false` adds the design without a question to the owner (a test, or a design nobody has to pick).
+      const asked = body.ask !== false
       return serial(async () => {
         const items = await load(project)
         const now = new Date().toISOString()
         // The same design again, before anyone chose: replace it where it is.
         const same = items.findLast(
-          (item) => item.title === title && item.session === session && !chosen(items, item.askId),
+          (item) => item.title === title && item.session === session && !settled(items, item),
         )
-        if (same && (await openAsk(same))) {
+        if (same && (same.askId === null || (await openAsk(same)))) {
           if (design.bytes) await saveBytes(same.id, design.bytes)
           else await rm(join(files, same.id), { force: true })
           Object.assign(same, {
@@ -377,16 +390,22 @@ export function registerMockupRoutes(
           }
         }
         const id = randomBytes(6).toString('hex')
-        const last = items.findLast((item) => item.session === session)
+        const last = items.findLast((item) => item.session === session && item.askId !== null)
         let ask: MockupAsk | undefined
-        if (last && !chosen(items, last.askId)) ask = await openAsk(last)
-        ask ??= await request('POST', '/v1/asks', {
-          session,
-          requester: session ? null : requester(project),
-          question: `Which design should we use? (${id})`,
-          body: `Project: ${project}\nReview the designs: ${pageUrl(project, id)}`,
-          blocking: false,
-        })
+        if (asked && last && !settled(items, last)) ask = await openAsk(last)
+        // The title is plain words (Tether merges asks with the same asker and question, which is what a
+        // session's next design should do); the card's Open design button leads to this design.
+        if (asked)
+          ask ??= await request('POST', '/v1/asks', {
+            session,
+            requester: session ? null : requester(project),
+            question: 'Which design should we use?',
+            body: `Project: ${project}`,
+            ...(options.publicHost
+              ? { open: `https://${options.publicHost}${pageUrl(project, id)}` }
+              : {}),
+            blocking: false,
+          })
         const mockup: StoredMockup = {
           id,
           project,
@@ -397,12 +416,12 @@ export function registerMockupRoutes(
           mime: design.mime,
           size: design.size,
           session,
-          askId: ask.id,
+          askId: ask?.id ?? null,
           createdAt: now,
           updatedAt: now,
           selectedAt: null,
         }
-        checkOrigin(ask, mockup)
+        if (ask) checkOrigin(ask, mockup)
         if (design.bytes) await saveBytes(id, design.bytes)
         items.push(mockup)
         await save(project, items)
@@ -417,7 +436,7 @@ export function registerMockupRoutes(
     const note = noteOf(objectBody(await ctx.body()))
     return serial(async () => {
       const { items, mockup } = await find(project, ctx.params.id)
-      if (chosen(items, mockup.askId)) throw new HttpError(409, 'This choice has already been sent')
+      if (settled(items, mockup)) throw new HttpError(409, 'This choice has already been sent')
       mockup.note = note
       await save(project, items)
       return { mockup: present(mockup, items) }
@@ -433,7 +452,7 @@ export function registerMockupRoutes(
       else await rm(file(project), { force: true })
       await rm(join(files, mockup.id), { force: true })
       // Nothing is left to choose from: the question goes too (best effort; it may be gone already).
-      if (!rest.some((item) => item.askId === mockup.askId)) {
+      if (mockup.askId !== null && !rest.some((item) => item.askId === mockup.askId)) {
         try {
           if (await openAsk(mockup)) await request('POST', `/v1/asks/${mockup.askId}/withdraw`)
         } catch {}
@@ -448,10 +467,17 @@ export function registerMockupRoutes(
     const note = body.note === undefined ? undefined : noteOf(body)
     return serial(async () => {
       const { items, mockup } = await find(project, ctx.params.id)
-      const selected = items.find((item) => item.askId === mockup.askId && item.selectedAt)
+      const selected = choiceOf(items, mockup)
       if (selected && selected.id !== mockup.id)
         throw new HttpError(409, 'Another design was already chosen')
       if (selected) return { mockup: present(mockup, items) }
+      if (mockup.askId === null) {
+        // Nobody asked: the choice is only kept here.
+        if (note !== undefined) mockup.note = note
+        mockup.selectedAt = new Date().toISOString()
+        await save(project, items)
+        return { mockup: present(mockup, items), delivery: 'pull' as const, answerTo: null }
+      }
       const ask = await request('GET', `/v1/asks/${mockup.askId}`)
       checkOrigin(ask, mockup)
       if (note !== undefined) mockup.note = note

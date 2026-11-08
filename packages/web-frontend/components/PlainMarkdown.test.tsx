@@ -59,3 +59,29 @@ it('names a local file when the page cannot open it', () => {
   expect(container.textContent).toBe('report')
   expect(container.querySelector('button')).toBeNull()
 })
+
+it('shows web addresses and Aico paths as buttons only where asked, and leaves file paths alone', () => {
+  const text =
+    'See https://example.com/a. Then /workbench?tab=designs&design=1, and /srv/workspaces/x or `/workbench`.'
+  const plain = render(<PlainMarkdown text={text} />)
+  expect(plain.container.querySelector('a')).toBeNull()
+  plain.unmount()
+  const opened: string[] = []
+  const { container } = render(
+    <PlainMarkdown
+      text={text}
+      buttons
+      onOpenApp={(path) => opened.push(path)}
+    />,
+  )
+  const links = [...container.querySelectorAll('a')]
+  expect(links.map((a) => a.textContent)).toEqual([
+    'example.com/a',
+    'Open Designs',
+  ])
+  expect(links.every((a) => a.classList.contains('lantern-btn'))).toBe(true)
+  expect(container.textContent).toContain('/srv/workspaces/x')
+  expect(container.querySelector('code')?.textContent).toBe('/workbench')
+  links[1].click()
+  expect(opened).toEqual(['/workbench?tab=designs&design=1'])
+})

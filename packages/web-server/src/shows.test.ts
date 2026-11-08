@@ -1,3 +1,4 @@
+import { asksOwner, parseNotice } from '@aico/notify'
 import { TetherError } from '@aico/tether-client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -104,17 +105,25 @@ describe('Shows', () => {
       {
         v: 1,
         source: 'aico',
-        kind: 'todo',
+        kind: 'info',
         severity: 'info',
         title: 'Shared: Report',
         body: 'Open Aico to see it.',
         key: `show:${SHOW_ID}`,
         push: 'tray',
-        actions: ['done'],
-        primary: 'done',
+        actions: ['open'],
+        primary: 'open',
         open: `https://aico.example.dev/?show=${SHOW_ID}`,
       },
     ])
+  })
+
+  it('is for the record: the notifier files no question for a share', () => {
+    for (const host of ['aico.example.dev', null]) {
+      const notice = parseNotice(showNotice(share(), host))
+      expect(notice.kind).toBe('info')
+      expect(asksOwner(notice)).toBe(false)
+    }
   })
 
   it('names what was shared and never puts a URL in the notice', () => {

@@ -71,13 +71,17 @@ function noticeAsk(id: string, notice: Notice): AskRequest {
   return {
     requester: notice.source,
     question: `${cut(oneLine(verdict ? `Was this you? ${notice.title}` : notice.title), 190)} (#${id.slice(0, 6)})`,
-    options: verdict ? [THAT_WAS_ME, NOT_ME] : notice.kind === 'todo' ? [DONE] : [],
+    options: verdict ? [THAT_WAS_ME, NOT_ME] : offersDone(notice) ? [DONE] : [],
     body: cut(body, 4000),
     command: notice.command ?? null,
     open: notice.open ?? null,
     origin: 'notice',
   }
 }
+
+/** A todo has a Done choice only when its sender offered `done`. Without it the card is the notice's
+ * title, body and Open link (the work happens there), never a made-up "Done" to press. */
+const offersDone = (notice: Notice) => notice.kind === 'todo' && notice.actions.includes('done')
 
 function rowAsk(row: StatusRow): AskRequest {
   const run = row.actions?.find((action) => action.owner_only === true && action.kind === 'run')

@@ -65,7 +65,7 @@ interface Mockup {
   title: string
   note: string
   session: string | null
-  askId: string
+  askId: string | null
   selectedAt: string | null
   state: string
   viewUrl: string
@@ -80,7 +80,9 @@ describe('mockup routes', () => {
   const project = '../aico'
   const query = `?project=${encodeURIComponent(project)}`
   const start = () =>
-    serveRoutes((router) => registerMockupRoutes(router, { dataDir: directory, tether }))
+    serveRoutes((router) =>
+      registerMockupRoutes(router, { dataDir: directory, tether, publicHost: 'aico.example' }),
+    )
   const call = (path: string, body: unknown, method = 'POST') =>
     fetch(`${server.base}${path}`, {
       method,
@@ -154,7 +156,7 @@ describe('mockup routes', () => {
       answerTo: '0123abcd',
       mockup: { state: 'selected' },
     })
-    expect(tether.asks.get(first.askId)).toMatchObject({
+    expect(tether.asks.get(first.askId as string)).toMatchObject({
       session: '0123abcd',
       note: 'Use compact spacing',
       answer: `Use this one: Compact layout (${first.id})`,
@@ -171,7 +173,7 @@ describe('mockup routes', () => {
 
   it('refuses to deliver an answer when the associated ask has a different origin', async () => {
     const { mockup } = await add()
-    const ask = tether.asks.get(mockup.askId) as Ask
+    const ask = tether.asks.get(mockup.askId as string) as Ask
     ask.session = 'ffffffff'
     const response = await call(`/api/mockups/${mockup.id}/select${query}`, { session: 'ffffffff' })
     expect(response.status).toBe(409)
@@ -181,7 +183,7 @@ describe('mockup routes', () => {
 
   it('keeps a failed delivery pending and a standalone CLI choice pull-only', async () => {
     const { mockup } = await add({ session: null })
-    expect(tether.asks.get(mockup.askId)?.requester).toMatch(/^mockups:[0-9a-f]{12}$/)
+    expect(tether.asks.get(mockup.askId as string)?.requester).toMatch(/^mockups:[0-9a-f]{12}$/)
     tether.unavailable = true
     expect((await call(`/api/mockups/${mockup.id}/select${query}`, {})).status).toBe(503)
     expect((await list()).items[0].state).toBe('pending')
@@ -196,7 +198,7 @@ describe('mockup routes', () => {
 
   it('does not overwrite an answer made outside the mockup page', async () => {
     const { mockup } = await add()
-    const ask = tether.asks.get(mockup.askId) as Ask
+    const ask = tether.asks.get(mockup.askId as string) as Ask
     ask.state = 'answered'
     ask.answer = 'Keep exploring'
     expect((await call(`/api/mockups/${mockup.id}/select${query}`, {})).status).toBe(409)
@@ -205,7 +207,7 @@ describe('mockup routes', () => {
 
   it('starts a new question when Tether no longer retains the old one', async () => {
     const first = (await add()).mockup
-    tether.asks.delete(first.askId)
+    tether.asks.delete(first.askId as string)
     const next = (await add()).mockup
     expect(next.state).toBe('pending')
     expect(tether.calls.filter((call) => call.path === '/v1/asks')).toHaveLength(2)
@@ -334,6 +336,49 @@ describe('mockup routes', () => {
     expect((await list()).items).toEqual([])
     expect(tether.calls.some((call) => call.path === `/v1/asks/${mine.askId}/withdraw`)).toBe(true)
     expect((await view(mine)).status).toBe(404)
+  })
+
+  it('asks in plain words with a link to the design, no id in the title', async () => {
+    const { mockup } = await add()
+    const post = tether.calls.find((call) => call.method === 'POST' && call.path === '/v1/asks')
+    expect(post?.body).toMatchObject({
+      question: 'Which design should we use?',
+      body: `Project: ${project}`,
+      open: `https://aico.example/workbench?tab=designs&project=..%2Faico&design=${mockup.id}`,
+    })
+    expect(JSON.stringify(post?.body)).not.toMatch(/\(\w{12}\)/)
+  })
+
+  it('adds a design with no question to the owner when asked not to, and still replaces it in place', async () => {
+    const { mockup } = await add({ ask: false })
+    expect(mockup.askId).toBeNull()
+    expect(tether.calls).toEqual([])
+    expect(mockup.state).toBe('pending')
+    const again = await add({ ask: false, html: '<!doctype html><h1>New</h1>' })
+    expect(again.mockup.id).toBe(mockup.id)
+    expect((await list()).items).toHaveLength(1)
+    // Using it is kept here: nobody is told, and nothing is sent to Tether.
+    const picked = await call(`/api/mockups/${mockup.id}/select${query}`, {})
+    expect(picked.status).toBe(200)
+    expect(await picked.json()).toMatchObject({ mockup: { state: 'selected' }, answerTo: null })
+    expect(tether.calls).toEqual([])
+    expect((await call(`/api/mockups/${mockup.id}${query}`, { note: 'x' }, 'PATCH')).status).toBe(
+      409,
+    )
+    const removed = await fetch(`${server.base}/api/mockups/${mockup.id}${query}`, {
+      method: 'DELETE',
+    })
+    expect(removed.status).toBe(200)
+    expect(tether.calls).toEqual([])
+    expect((await list()).items).toEqual([])
+  })
+
+  it('files no question for a no-question design even when the session has an open one', async () => {
+    const first = (await add()).mockup
+    const quiet = (await add({ title: 'Quiet', ask: false })).mockup
+    expect(quiet.askId).toBeNull()
+    expect(first.askId).not.toBeNull()
+    expect(tether.asks.size).toBe(1)
   })
 
   it('wraps Markdown and diagrams in pages that load only the vendored viewers that are shipped', () => {

@@ -43,8 +43,9 @@ is gone answers 404, shown as "This file was moved or deleted".
 File paths in the terminal (absolute, or starting with `~/`) are clickable and
 open in the same viewer.
 
-Each new share sends a notice to aico-web's own Notifier (in process, a tray todo with Done, key `show:<id>`). Its
-link `https://<hosts.browser_frontend>/?show=<id>` opens the share in Files.
+Each new share sends a notice to aico-web's own Notifier (in process, an `info` notice for the tray with Open, key
+`show:<id>`). A share is not a question: it files no ask and never shows in Needs you. Files › Shared marks it with a
+"N new" count until Shared is opened. Its link `https://<hosts.browser_frontend>/?show=<id>` opens the share in Files.
 
 ## Desktop
 

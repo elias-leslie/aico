@@ -651,6 +651,102 @@ describe('Needs you page', () => {
     expect(screen.queryByRole('link', { name: 'Open' })).toBeNull()
   })
 
+  const designAsk = (patch: Partial<OwnerAsk> = {}) =>
+    ask({
+      question: 'Which design should we use?',
+      options: [],
+      recommended: null,
+      body: 'Project: aico',
+      command: null,
+      open: 'https://aico.example/workbench?tab=designs&project=aico&design=30974e9bcdb4',
+      blocking: false,
+      answerTo: '0123abcd',
+      ...patch,
+    })
+
+  it('puts Open design and Not now on a design question (no Reply Done), and opens the Workbench window', () => {
+    const open = vi.fn(() => ({ focus: vi.fn() }))
+    vi.stubGlobal('open', open)
+    state.asks = [designAsk()]
+    render(<NeedsYouPage />)
+    const card = screen.getByTestId('ask-card')
+    expect(within(card).getByText('Which design should we use?')).toBeVisible()
+    expect(card).not.toHaveTextContent('30974e9bcdb4)')
+    expect(card).not.toHaveTextContent('/workbench')
+    expect(within(card).queryByRole('button', { name: /Reply/ })).toBeNull()
+    expect(within(card).getByRole('button', { name: 'Not now' })).toBeVisible()
+    fireEvent.click(within(card).getByRole('link', { name: 'Open design' }))
+    expect(open).toHaveBeenCalledWith(
+      '/workbench?tab=designs&project=aico&design=30974e9bcdb4',
+      'aico-workbench',
+      expect.stringContaining('popup'),
+    )
+    expect(push).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
+  })
+
+  it('opens the design in place where the phone has no side windows', () => {
+    const open = vi.fn()
+    vi.stubGlobal('open', open)
+    vi.stubGlobal('matchMedia', () => ({ matches: false }))
+    state.asks = [designAsk()]
+    render(<NeedsYouPage />)
+    fireEvent.click(screen.getByRole('link', { name: 'Open design' }))
+    expect(open).not.toHaveBeenCalled()
+    expect(push).toHaveBeenCalledWith(
+      '/workbench?tab=designs&project=aico&design=30974e9bcdb4',
+    )
+    vi.unstubAllGlobals()
+  })
+
+  it('shows web addresses and Aico paths in a question as buttons, not bare amber text', () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: false }))
+    state.asks = [
+      ask({
+        options: [],
+        body: 'Mock-ups: /workbench?tab=files&view=shared. Docs at https://example.com/docs, thanks.',
+        command: null,
+      }),
+    ]
+    render(<NeedsYouPage />)
+    const card = screen.getByTestId('ask-card')
+    const files = within(card).getByRole('link', { name: 'Open Files' })
+    expect(files).toHaveClass('lantern-btn')
+    const docs = within(card).getByRole('link', { name: 'example.com/docs' })
+    expect(docs).toHaveAttribute('href', 'https://example.com/docs')
+    expect(docs).toHaveAttribute('target', '_blank')
+    expect(docs).toHaveClass('lantern-btn')
+    // The sentence's own full stop and comma stay text.
+    expect(card).toHaveTextContent('example.com/docs, thanks.')
+    fireEvent.click(files)
+    expect(push).toHaveBeenCalledWith('/workbench?tab=files&view=shared')
+    vi.unstubAllGlobals()
+  })
+
+  it('gives a notice with no choices only its Open link, never a made-up Done', () => {
+    state.asks = [
+      ask({
+        session: null,
+        requester: 'aico',
+        question: 'Model changed in Disk merge (#a7234c)',
+        options: [],
+        recommended: null,
+        body: 'It is on another model.',
+        command: null,
+        open: 'https://aico.example/?session=0123abcd',
+        origin: 'notice',
+        blocking: false,
+        answerTo: null,
+      }),
+    ]
+    render(<NeedsYouPage />)
+    const card = screen.getByTestId('ask-card')
+    expect(within(card).getByRole('link', { name: 'Open' })).toBeVisible()
+    expect(within(card).queryByRole('radio')).toBeNull()
+    expect(within(card).queryByRole('button', { name: 'Send' })).toBeNull()
+    expect(within(card).queryByRole('button', { name: 'Done' })).toBeNull()
+  })
+
   it('gives a failed Status row the same card: Done and its command, no agent reply', () => {
     state.asks = [
       ask({

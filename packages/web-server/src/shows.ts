@@ -120,21 +120,24 @@ export function pushTitle(share: Share): string {
   return what ? `Shared: ${what}` : 'Shared a link'
 }
 
-/** The notice for a new share: something to look at, so a tray todo that leads to the share. */
+/** The notice for a new share: something to look at, not a question. An info notice for the tray that
+ * leads to the share; it files no ask, so nothing waits in Needs you (Files > Shared marks it new). */
 export function showNotice(share: Share, publicHost: string | null): Notice {
   const notice: Notice = {
     v: 1,
     source: 'aico',
-    kind: 'todo',
+    kind: 'info',
     severity: 'info',
     title: pushTitle(share),
     body: 'Open Aico to see it.',
     key: `show:${share.id}`,
     push: 'tray',
-    actions: ['done'],
-    primary: 'done',
   }
-  if (publicHost) notice.open = `https://${publicHost}/?show=${share.id}`
+  if (publicHost) {
+    notice.open = `https://${publicHost}/?show=${share.id}`
+    notice.actions = ['open']
+    notice.primary = 'open'
+  }
   return notice
 }
 
