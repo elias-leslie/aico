@@ -20,14 +20,16 @@
   "usage": [
     {
       "surface": "st.logins",
-      "cmd": "st logins <list|show|set|rotate|run|get|grant|revoke|assign|unassign|lab>",
+      "cmd": "st logins <list|show|allow|edit|set|rotate|run|get|grant|revoke|assign|unassign|lab>",
       "when": "put and use logins from the Aico secrets folder; values via hidden input or stdin, lab values via fd handoff only",
       "precautions": [
         "Never put values in argv, logs or tool output.",
-        "Hunters see and change only coordinator-assigned lab targets."
+        "Hunters see and change only coordinator-assigned lab targets.",
+        "Other agents fix access, login page, notes and site name themselves (st logins allow/edit, logged); only username and password are the owner's."
       ],
       "examples": [
         "st logins run --with NAME=ENV -- COMMAND",
+        "st logins allow NAME",
         "st logins assign SESSION --target TARGET",
         "st logins lab refs"
       ]

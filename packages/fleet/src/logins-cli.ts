@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import { fstatSync, readFileSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
+import { probeLoginPage } from './login-probe'
 import {
   type LoginCaller,
   LoginError,
@@ -9,6 +10,7 @@ import {
   labIdentity,
   labPayload,
   loginMachine,
+  loginPage,
   loginPolicy,
 } from './logins'
 import { LoginClient } from './logins-client'
@@ -16,7 +18,15 @@ import { privateFile } from './secret-files'
 
 export const LOGINS_USAGE = `Usage: aico logins <command> (also st logins)
 Logins live in Aico's private secrets folder. Values enter through hidden input or stdin.
-  list | show NAME                    metadata only
+  list                                every login: usable ones in full; the rest with what is
+                                      missing and the command that fixes it
+  show NAME                           metadata only (NAME or an account login's site name)
+  allow NAME [--role ROLE | --session ID] [--machine NAME]
+                                      give yourself (or ROLE / session ID) what is missing to use
+                                      NAME: machine, role or session. Logged on the login; no owner step
+  edit NAME [--notes TEXT] [--login-url URL] [--site NAME]
+                                      fix notes, the login page (same site) or the site name; the
+                                      login page is checked for a password field. Logged
   set NAME [--kind KIND] [--notes TEXT] hidden prompt or piped stdin
   set NAME --account --username USER --login-url URL [--notes TEXT]
                                       account login (username, password, login page); the
@@ -24,17 +34,19 @@ Logins live in Aico's private secrets folder. Values enter through hidden input 
   rotate NAME                         replace through hidden input or stdin
   get NAME                            only to an owner-only file; never a session log
   run --with NAME[=ENV] ... -- CMD      inject into one command's environment
-  grant|revoke NAME --machine NAME | --role ROLE
-  assign SESSION --target TARGET ...  coordinator or owner; replaces assigned targets
-  unassign SESSION                    coordinator or owner; removes all target access
-  assignments                        coordinator or owner; list assignments
+  grant|revoke NAME --machine NAME | --role ROLE     logged on the login
+  assign SESSION --target TARGET ...  replaces the session's assigned targets; logged
+  unassign SESSION                    removes all target access
+  assignments                        list assignments
   remove NAME                         owner only; type the name to confirm
   lab refs [--target TARGET]           assigned target references, no values
   lab enroll|refresh|patch --target TARGET --actor ACTOR [--kind synthetic|temporary|account]
       [--expires-at ISO] [--input FILE|-]   private fields JSON; stdin by default
   lab run --target TARGET --request FILE -- /absolute/child [ARGS]
       selected fields through AGENT_HUB_LAB_CREDENTIAL_FD; no child output
-Coordinators assign lab targets with aico logins assign. The owner can also change them on the Logins page.`
+Only the username and password are the owner's: a wrong or missing one is one plain ask
+(tether ask create). Everything else agents fix themselves, logged in the login's activity
+(restricted roles get lab targets from a coordinator).`
 
 /** Recover only caller metadata when a harness filters its child environment. Never log /proc data. */
 export function loginCaller(env: NodeJS.ProcessEnv = process.env): LoginCaller {
@@ -121,6 +133,8 @@ export interface LoginsIo {
   input(): Promise<string>
   outputSafe(): boolean
   execute(command: string[], env: NodeJS.ProcessEnv, bundle?: string): Promise<number>
+  /** Checks a login page for a password field (login-probe.ts). */
+  probe(url: string): Promise<{ warning: string }>
 }
 export async function commandEnvironment(
   store: { value(name: string, caller: LoginCaller): Buffer | Promise<Buffer> },
@@ -186,6 +200,7 @@ export async function runLogins(
     err: (value) => process.stderr.write(value),
     caller: loginCaller(env),
     input: secretInput,
+    probe: probeLoginPage,
     outputSafe: () => {
       if (process.stdout.isTTY) return false
       const stat = fstatSync(1)
@@ -237,9 +252,59 @@ export async function runLogins(
       if ((f[key]?.length || 0) > 1) throw new LoginError('Duplicate login option')
       return f[key]?.[0]
     }
+    const probe = async (url: string) => {
+      const checked = await io.probe(url)
+      if (checked.warning) io.err(`${checked.warning}\n`)
+    }
     if (command === 'list') {
       if (rest.length) throw new LoginError('list takes no values')
-      output(await store.list(io.caller))
+      output(io.caller.owner ? await store.list(io.caller) : await store.catalog(io.caller))
+      return 0
+    }
+    if (command === 'allow') {
+      const [name, ...options] = rest,
+        f = flags(options, ['--role', '--session', '--machine'])
+      const role = one(f, '--role'),
+        session = one(f, '--session')
+      if (!name) throw new LoginError('allow needs a login name; aico logins list shows them')
+      if (role && session) throw new LoginError('Choose --role or --session, not both')
+      const result = await store.allow(
+        name,
+        {
+          ...(role ? { role } : {}),
+          ...(session ? { session } : {}),
+          ...(one(f, '--machine') ? { machine: one(f, '--machine') } : {}),
+        },
+        io.caller,
+      )
+      output(result)
+      io.err(
+        result.changed.length
+          ? `Allowed ${result.changed.join(', ')} for ${result.name}; logged in its activity. Say so in your report.\n`
+          : `${result.name} is already usable; nothing changed.\n`,
+      )
+      return 0
+    }
+    if (command === 'edit') {
+      const [name, ...options] = rest,
+        f = flags(options, ['--notes', '--login-url', '--site'])
+      const notes = one(f, '--notes'),
+        loginUrl = one(f, '--login-url'),
+        site = one(f, '--site')
+      if (!name || (notes === undefined && !loginUrl && !site))
+        throw new LoginError('edit needs a login and --notes, --login-url or --site')
+      output(
+        await store.edit(
+          name,
+          {
+            ...(notes !== undefined ? { notes } : {}),
+            ...(loginUrl ? { login_url: loginUrl } : {}),
+            ...(site ? { target: site } : {}),
+          },
+          io.caller,
+        ),
+      )
+      if (loginUrl) await probe(loginUrl)
       return 0
     }
     if (command === 'show') {
@@ -262,6 +327,7 @@ export async function runLogins(
           throw new LoginError(
             'An account login needs set NAME --account --username USER --login-url URL',
           )
+        loginPage(loginUrl)
         output(
           await saveAccount(
             store,
@@ -272,6 +338,7 @@ export async function runLogins(
             one(f, '--notes'),
           ),
         )
+        await probe(loginUrl)
       } else
         output(
           await store.set(

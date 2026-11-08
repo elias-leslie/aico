@@ -336,6 +336,7 @@ it('CLI set --account saves an account login, shows only length, and the summary
     execute: vi.fn<LoginsIo['execute']>(async () => 0),
     input: async () => 'fixture-private-value',
     outputSafe: () => false,
+    probe: async () => ({ warning: 'No password field at https://school.example.test/.' }),
   }
   expect(
     await runLogins(
@@ -549,4 +550,229 @@ it('takes a kernel lock that a crashed holder cannot leave behind', () => {
   expect(held.signal).toBe('SIGKILL')
   store.set('after-crash', 'fixture-private-value', {}, owner)
   expect(store.show('after-crash', owner).name).toBe('after-crash')
+})
+function account(target = 'canvas-pcsb', url = 'https://canvas.example.test/') {
+  const identity = labIdentity(target, 'default')
+  const values = { username: 'me@example.test', password: 'fixture-password', login_url: url }
+  store.set(
+    identity.name,
+    JSON.stringify({
+      schema_version: 1,
+      reference: identity.reference,
+      kind: 'account',
+      expires_at: null,
+      values,
+    }),
+    {
+      kind: 'lab login',
+      lab: {
+        target,
+        actor: 'default',
+        kind: 'account',
+        expires_at: null,
+        fields: Object.keys(values),
+      },
+    },
+    owner,
+  )
+  return identity
+}
+it('lists every login to an agent: unusable ones with what is missing and the command that fixes it', () => {
+  const identity = account()
+  store.grant(identity.name, 'role', '*', false, owner)
+  store.set('sample', 'fixture-private-value', { kind: 'API key' }, owner)
+  const agent = { role: 'school-check', machine: 'elsewhere', session: 'a1b2c3d4' }
+  const listed = store.catalog(agent)
+  expect(listed.map((e) => e.name).sort()).toEqual([identity.name, 'sample'])
+  expect(listed.find((e) => e.name === identity.name)).toMatchObject({
+    available: false,
+    missing: [
+      { kind: 'machine', value: 'elsewhere' },
+      { kind: 'session', value: 'a1b2c3d4' },
+      { kind: 'role', value: 'school-check' },
+    ],
+    fix: 'aico logins allow canvas-pcsb',
+    lab: { target: 'canvas-pcsb', login_url: 'https://canvas.example.test/' },
+  })
+  expect(JSON.stringify(listed)).not.toContain('fixture-')
+  expect(JSON.stringify(listed)).not.toContain('me@example.test')
+  // A restricted role is not shown the owner's own logins it can never use.
+  expect(store.catalog(hunter).map((e) => e.name)).toEqual([identity.name])
+})
+it('names what is missing in the refusal, with the one self-service command', () => {
+  const identity = account()
+  store.grant(identity.name, 'role', '*', false, owner)
+  const agent = { role: 'school-check', machine: loginMachine(), session: 'a1b2c3d4' }
+  expect(() => store.show('canvas-pcsb', agent)).toThrow(
+    'Login canvas-pcsb unavailable to session a1b2c3d4: session a1b2c3d4 is not assigned target canvas-pcsb; role school-check is not allowed. Fix it yourself (logged, no owner step): aico logins allow canvas-pcsb',
+  )
+  expect(() => store.show('nothing-here', agent)).toThrow('No login named nothing-here')
+  store.set('sample', 'fixture-private-value', {}, owner)
+  store.grant('sample', 'machine', loginMachine(), false, owner)
+  expect(() => store.value('sample', agent)).toThrow(`machine ${loginMachine()} is not allowed`)
+})
+it('an account login opens through All roles for unrestricted roles; restricted roles still need a target', () => {
+  account()
+  const agent = { role: 'school-check', machine: loginMachine() }
+  expect(store.show('canvas-pcsb', agent).lab?.target).toBe('canvas-pcsb')
+  expect(() => store.show('canvas-pcsb', hunter)).toThrow('not assigned target canvas-pcsb')
+})
+it('lets any agent give itself what is missing, logged on the login with who and what', () => {
+  const identity = account()
+  store.grant(identity.name, 'role', '*', false, owner)
+  store.grant(identity.name, 'machine', loginMachine(), false, owner)
+  const agent = { role: 'school-check', machine: loginMachine(), session: 'a1b2c3d4' }
+  expect(store.allow('canvas-pcsb', {}, agent)).toEqual({
+    name: 'canvas-pcsb',
+    changed: [`machine ${loginMachine()}`, 'session a1b2c3d4', 'role school-check'],
+  })
+  expect(store.show('canvas-pcsb', agent).name).toBe(identity.name)
+  expect(store.allow('canvas-pcsb', {}, agent).changed).toEqual([])
+  // A job without a session gets its role named; a role subject works the same for another role.
+  expect(store.allow('canvas-pcsb', { role: 'nightly' }, agent).changed).toEqual(['role nightly'])
+  expect(store.audit(owner)).toContainEqual(
+    expect.objectContaining({
+      action: 'allow',
+      name: identity.name,
+      actor: 'a1b2c3d4',
+      detail: `machine ${loginMachine()}, session a1b2c3d4, role school-check`,
+    }),
+  )
+  // Restricted roles keep coordinator-given access only; no one but the owner removes a login.
+  expect(() => store.allow('canvas-pcsb', {}, hunter)).toThrow('coordinator')
+  expect(() => store.grant(identity.name, 'role', 'hunting', true, hunter)).toThrow('coordinator')
+  expect(() => store.remove(identity.name, agent, true)).toThrow('owner')
+  store.grant(identity.name, 'role', 'review', true, agent)
+  expect(store.audit(owner).at(-1)).toMatchObject({ action: 'grant', detail: 'role review' })
+})
+it('lets any agent fix notes, the login page on the same site and the site name, never the password', () => {
+  const identity = account()
+  const agent = { role: 'school-check', machine: loginMachine(), session: 'a1b2c3d4' }
+  store.assign('a1b2c3d4', ['canvas-pcsb', 'other'], owner)
+  const edited = store.edit(
+    'canvas-pcsb',
+    { notes: 'Dadbot school check', login_url: 'https://canvas.example.test/login/canvas' },
+    agent,
+  )
+  expect(edited.notes).toBe('Dadbot school check')
+  expect(edited.lab?.login_url).toBe('https://canvas.example.test/login/canvas')
+  expect(JSON.parse(store.value(identity.name, owner).toString()).values).toEqual({
+    username: 'me@example.test',
+    password: 'fixture-password',
+    login_url: 'https://canvas.example.test/login/canvas',
+  })
+  expect(() =>
+    store.edit('canvas-pcsb', { login_url: 'https://evil.example.test/login' }, agent),
+  ).toThrow('another site')
+  expect(() =>
+    store.edit('canvas-pcsb', { login_url: 'http://canvas.example.test/' }, agent),
+  ).toThrow('https')
+  const renamed = store.edit('canvas-pcsb', { target: 'canvas' }, agent)
+  expect(renamed.name).toBe(labIdentity('canvas', 'default').name)
+  expect(existsSync(join(store.folder, identity.name))).toBe(false)
+  expect(store.assignments(owner)['a1b2c3d4']).toEqual(['canvas', 'other'])
+  expect(JSON.parse(store.value(renamed.name, owner).toString()).reference).toBe(
+    'secret://lab/canvas/default',
+  )
+  expect(
+    store
+      .audit(owner)
+      .filter((e) => e.action === 'edit')
+      .map((e) => e.detail),
+  ).toEqual([
+    'notes, login page https://canvas.example.test/login/canvas',
+    'site name canvas-pcsb to canvas',
+  ])
+  expect(JSON.stringify(store.audit(owner))).not.toContain('fixture-password')
+  expect(() => store.edit('canvas', { notes: 'x' }, hunter)).toThrow('coordinator')
+})
+it('keeps hunters and other sessions a coordinator call, and the saved site the owner one', () => {
+  const identity = account()
+  const agent = { role: 'school-check', machine: loginMachine(), session: 'a1b2c3d4' }
+  const coordinator = { role: 'coordinator', machine: loginMachine(), session: 'coord-one' }
+  expect(() => store.allow('canvas-pcsb', { role: 'hunting' }, agent)).toThrow('coordinator')
+  expect(() => store.grant(identity.name, 'role', 'recon', true, agent)).toThrow('coordinator')
+  expect(() => store.allow('canvas-pcsb', { session: 'hunt-one' }, agent)).toThrow(
+    'another session',
+  )
+  expect(() => store.assign('hunt-one', ['canvas-pcsb'], agent)).toThrow('coordinator')
+  expect(store.allow('canvas-pcsb', { session: 'hunt-one' }, coordinator).changed).toEqual([
+    'session hunt-one',
+  ])
+  // A hunter is pointed at its coordinator, not at a command that refuses it.
+  store.assign('hunt-one', [], owner)
+  expect(() => store.show('canvas-pcsb', hunter)).toThrow(
+    'A coordinator runs: aico logins assign hunt-one --target canvas-pcsb',
+  )
+  // An agent never changes an account login's username, password or site through the lab patch.
+  expect(() =>
+    store.patchLab('canvas-pcsb', 'default', { set: { password: 'other-password' } }, agent),
+  ).toThrow("owner's")
+  expect(() => store.patchLab('canvas-pcsb', 'default', { remove: ['login_url'] }, agent)).toThrow(
+    "owner's",
+  )
+  // The owner may move the login page to another site; Edit on the page does it.
+  expect(
+    store.edit('canvas-pcsb', { login_url: 'https://lms.example.test/' }, owner).lab?.login_url,
+  ).toBe('https://lms.example.test/')
+})
+it('a rename keeps the old site for sessions while another login uses it; long details are cut', () => {
+  account('school')
+  const teacher = lab('school', 'teacher')
+  store.set(teacher.identity.name, teacher.value, teacher.metadata, owner)
+  store.assign('a1b2c3d4', ['school'], owner)
+  const agent = { role: 'school-check', machine: loginMachine(), session: 'a1b2c3d4' }
+  store.edit(teacher.identity.name, { target: 'school2' }, agent)
+  expect(store.assignments(owner)['a1b2c3d4']).toEqual(['school', 'school2'])
+  store.edit('school', { login_url: `https://canvas.example.test/${'a'.repeat(700)}` }, agent)
+  expect(store.audit(owner).at(-1)?.detail?.length).toBe(600)
+  const peer = new LoginStore({ HOME: join(home, 'peer') })
+  peer.list()
+  expect(peer.mergeSnapshot(store.snapshot(loginMachine(), true))).toBe(true)
+  // Removing by site name removes that login, not a name that is not there.
+  store.remove('school', owner, true)
+  expect(store.list(owner).map((e) => e.name)).toEqual([labIdentity('school2', 'teacher').name])
+})
+it('an unrestricted session that saves a new lab login gets its target, logged', () => {
+  const one = lab('school')
+  const agent = { role: 'implementation', machine: loginMachine(), session: 'a1b2c3d4' }
+  store.set(one.identity.name, one.value, one.metadata, agent)
+  expect(store.assignments(owner)['a1b2c3d4']).toEqual(['school'])
+  expect(store.audit(owner)).toContainEqual(
+    expect.objectContaining({ action: 'allow', detail: 'session a1b2c3d4' }),
+  )
+})
+it('CLI allow and edit print what changed; list shows unusable logins to agents', async () => {
+  const identity = account()
+  store.grant(identity.name, 'role', '*', false, owner)
+  const out = vi.fn(),
+    err = vi.fn(),
+    probe = vi.fn(async () => ({ warning: 'No password field at https://canvas.example.test/.' }))
+  const io = {
+    caller: { role: 'school-check', machine: loginMachine(), session: 'a1b2c3d4' },
+    out,
+    err,
+    execute: vi.fn<LoginsIo['execute']>(async () => 0),
+    input: async () => '',
+    outputSafe: () => false,
+    probe,
+  }
+  expect(await runLogins(['list'], env, io)).toBe(0)
+  expect(JSON.parse(out.mock.calls[0][0])[0]).toMatchObject({
+    fix: 'aico logins allow canvas-pcsb',
+  })
+  expect(await runLogins(['allow', 'canvas-pcsb'], env, io)).toBe(0)
+  expect(err.mock.calls.at(-1)?.[0]).toBe(
+    'Allowed session a1b2c3d4, role school-check for canvas-pcsb; logged in its activity. Say so in your report.\n',
+  )
+  expect(
+    await runLogins(
+      ['edit', 'canvas-pcsb', '--login-url', 'https://canvas.example.test/'],
+      env,
+      io,
+    ),
+  ).toBe(0)
+  expect(probe).toHaveBeenCalledWith('https://canvas.example.test/')
+  expect(err.mock.calls.at(-1)?.[0]).toBe('No password field at https://canvas.example.test/.\n')
+  expect(JSON.stringify([...out.mock.calls, ...err.mock.calls])).not.toContain('fixture-password')
 })

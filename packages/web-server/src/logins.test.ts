@@ -9,10 +9,22 @@ import { Router } from './http'
 import { registerLoginRoutes } from './logins'
 
 let home: string, server: Server, base: string
+const probed: string[] = []
 beforeEach(async () => {
   home = mkdtempSync(join(tmpdir(), 'aico-logins-api-'))
   const router = new Router()
-  registerLoginRoutes(router, { HOME: home })
+  probed.length = 0
+  registerLoginRoutes(router, { HOME: home }, undefined, undefined, async (url) => {
+    probed.push(url)
+    return url.endsWith('/login/canvas')
+      ? { finalUrl: url, password: true, suggestion: null, warning: '' }
+      : {
+          finalUrl: url,
+          password: false,
+          suggestion: 'https://canvas.example.test/login/canvas',
+          warning: 'No password field.',
+        }
+  })
   server = createServer((req, res) => {
     void router.handle(req, res, new URL(req.url || '/', 'http://localhost'))
   })
@@ -113,4 +125,48 @@ it('lists the registered work roles for the access checklist, none when no data 
     await new Promise<void>((resolve) => other.close(() => resolve()))
     rmSync(dir, { recursive: true, force: true })
   }
+})
+it('checks an account login page on save and lets the owner fix notes, page and site name', async () => {
+  const saved = await post('/api/logins/lab', {
+    target: 'canvas-pcsb',
+    actor: 'default',
+    kind: 'account',
+    values: {
+      username: 'me@example.test',
+      password: 'fixture-private-value',
+      login_url: 'https://canvas.example.test/',
+    },
+  })
+  expect(await saved.json()).toMatchObject({
+    probe: { password: false, suggestion: 'https://canvas.example.test/login/canvas' },
+  })
+  const edited = await post('/api/logins/canvas-pcsb/edit', {
+    notes: 'School check',
+    login_url: 'https://canvas.example.test/login/canvas',
+  })
+  const body = await edited.json()
+  expect(body).toMatchObject({
+    entry: {
+      notes: 'School check',
+      lab: { login_url: 'https://canvas.example.test/login/canvas' },
+    },
+    probe: { password: true },
+  })
+  expect(JSON.stringify(body)).not.toContain('fixture-private-value')
+  expect(probed).toEqual([
+    'https://canvas.example.test/',
+    'https://canvas.example.test/login/canvas',
+  ])
+  expect((await post('/api/logins/canvas-pcsb/edit', { notes: 3 })).status).toBe(400)
+  const audit = (await (await fetch(`${base}/api/logins/audit`)).json()) as {
+    events: Record<string, unknown>[]
+  }
+  expect(audit.events.at(-1)).toMatchObject({
+    action: 'edit',
+    actor: 'owner',
+    detail: 'notes, login page https://canvas.example.test/login/canvas',
+  })
+  expect(
+    await (await post('/api/logins/probe', { url: 'https://canvas.example.test/' })).json(),
+  ).toMatchObject({ probe: { suggestion: 'https://canvas.example.test/login/canvas' } })
 })

@@ -28,6 +28,7 @@
     "./service": "./src/service.ts",
     "./logins-client": "./src/logins-client.ts",
     "./logins": "./src/logins.ts",
+    "./login-probe": "./src/login-probe.ts",
     "./logins-cli": "./src/logins-cli.ts",
     "./logins-delivery": "./src/logins-delivery.ts",
     "./secrets": "./src/secrets.ts",

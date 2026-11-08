@@ -203,6 +203,13 @@ button.rowHead:focus-visible {
   grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
   column-gap: 8px;
 }
+.sessionMark {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border: 1px solid var(--mist);
+  border-radius: 2px;
+}
 .named {
   flex: none;
   width: 6px;

@@ -70,6 +70,23 @@ interface Entry {
     login_url?: string
   }
 }
+interface Event {
+  at: string
+  action: string
+  name: string
+  actor: string
+  detail?: string
+}
+/** A saved login page that shows no password field, and the page that does when one was found. */
+interface Probe {
+  password: boolean
+  suggestion: string | null
+  warning: string
+}
+/** What the page last checked, for one login. */
+interface Checked extends Probe {
+  name: string
+}
 interface Data {
   entries: Entry[]
   /** This computer's name: where a new login is allowed until changed. */
@@ -203,7 +220,16 @@ export function LoginsPage() {
   const { hosts, ...hostState } = useHosts()
   const [registered, setRegistered] = useState<string[]>([]),
     [registeredFailed, setRegisteredFailed] = useState(false)
+  const [events, setEvents] = useState<Event[] | null>(null),
+    [eventsFailed, setEventsFailed] = useState(false),
+    [checked, setChecked] = useState<Checked | null>(null)
   const load = useCallback(async () => {
+    api<{ events: Event[] }>('/api/logins/audit')
+      .then((r) => {
+        setEvents(r.events)
+        setEventsFailed(false)
+      })
+      .catch(() => setEventsFailed(true))
     try {
       setData(await api<Data>('/api/logins'))
       setError('')
@@ -211,6 +237,9 @@ export function LoginsPage() {
       setError((error as Error).message)
     }
   }, [])
+  /** A login page check after a save: kept only when it found something to say. */
+  const check = (name: string, probe?: Probe) =>
+    setChecked(probe?.warning ? { name, ...probe } : null)
   useEffect(() => {
     void load()
     api<{ sessions: typeof sessions }>('/api/logins/sessions')
@@ -301,11 +330,21 @@ export function LoginsPage() {
       {!data && !error && <Quiet role="status">Loading logins…</Quiet>}
       {data?.warning && <Notice>{data.warning}</Notice>}
       {message && <Notice>{message}</Notice>}
+      {checked && (
+        <PageCheck
+          checked={checked}
+          onFixed={(text) => {
+            setChecked(null)
+            void changed(text)
+          }}
+        />
+      )}
       {adding && (
         <AddLogin
           choices={choices}
-          onSaved={(saved, warning) => {
+          onSaved={(saved, warning, probe) => {
             setAdding(false)
+            if (probe) check(probe.name, probe)
             void changed(warning ? `${saved}. ${warning}` : saved)
           }}
         />
@@ -342,6 +381,10 @@ export function LoginsPage() {
                       entry={entry}
                       choices={choices}
                       onChanged={changed}
+                      onChecked={check}
+                      events={(events ?? []).filter(
+                        (e) => e.name === entry.name,
+                      )}
                       revealSeconds={data.revealSeconds}
                       readOnly={data.readOnly}
                     />
@@ -421,7 +464,7 @@ export function LoginsPage() {
       )}
       <Group title="Activity" label="Activity">
         <Row name="Recent activity" meta="The last 30 changes to logins">
-          <Audit />
+          <Audit events={events} failed={eventsFailed} />
         </Row>
       </Group>
     </section>
@@ -432,7 +475,7 @@ function AddLogin({
   onSaved,
 }: {
   choices: AccessChoices
-  onSaved(saved: string, warning?: string): void
+  onSaved(saved: string, warning?: string, probe?: Checked): void
 }) {
   const [kind, setKind] = useState<Choice>('API key'),
     [error, setError] = useState(''),
@@ -449,7 +492,7 @@ function AddLogin({
           setBusy(true)
           setError('')
           try {
-            let result: { warning?: string; entry?: Entry }
+            let result: { warning?: string; entry?: Entry; probe?: Probe }
             const secret = String(f.get('value') ?? '')
             if (kind === ACCOUNT)
               result = await api('/api/logins/lab', {
@@ -500,6 +543,9 @@ function AddLogin({
               savedChars(secret),
               [result.warning, ...failed].filter(Boolean).join('. ') ||
                 undefined,
+              made && result.probe
+                ? { name: made.name, ...result.probe }
+                : undefined,
             )
           } catch (error) {
             setError(
@@ -608,6 +654,7 @@ function AddLogin({
           onChange={setEdited}
           disabled={busy}
           lab={kind === ACCOUNT || kind === 'lab login'}
+          account={kind === ACCOUNT}
         />
         {error && <Quiet role="alert">{error}</Quiet>}
         <button type="submit" disabled={busy} className="lantern-btn small">
@@ -621,18 +668,24 @@ function LoginRow({
   entry,
   choices,
   onChanged,
+  onChecked,
+  events,
   revealSeconds,
   readOnly,
 }: {
   entry: Entry
   choices: AccessChoices
   onChanged(text: string): Promise<void>
+  onChecked(name: string, probe?: Probe): void
+  /** This login's activity, oldest first. */
+  events: Event[]
   revealSeconds: number
   readOnly?: boolean
   warning?: string
 }) {
+  const account = entry.lab?.kind === 'account'
   const [panel, setPanel] = useState<
-      'replace' | 'edit' | 'grants' | 'remove' | null
+      'replace' | 'edit' | 'fields' | 'grants' | 'remove' | null
     >(null),
     [value, setValue] = useState<string | null>(null),
     [busy, setBusy] = useState(false),
@@ -720,12 +773,20 @@ function LoginRow({
             </button>
           </>
         )}
-        {entry.lab && (
+        <button
+          type="button"
+          className="lantern-btn small"
+          disabled={readOnly}
+          onClick={() => toggle('edit')}
+        >
+          Edit
+        </button>
+        {entry.lab && !account && (
           <button
             type="button"
             className="lantern-btn small"
             disabled={readOnly}
-            onClick={() => toggle('edit')}
+            onClick={() => toggle('fields')}
           >
             Edit fields
           </button>
@@ -754,7 +815,45 @@ function LoginRow({
         </div>
       )}
       {error && <Quiet role="alert">{error}</Quiet>}
-      {panel === 'replace' && (
+      {panel === 'replace' && account && (
+        <Form
+          onSubmit={(event) => {
+            event.preventDefault()
+            const form = event.currentTarget,
+              f = new FormData(form),
+              password = String(f.get('value'))
+            void run(async () => {
+              const result = await api(
+                `/api/logins/lab/${entry.lab?.target}/${entry.lab?.actor}`,
+                { set: { username: String(f.get('username')), password } },
+                'PATCH',
+              )
+              form.reset()
+              setPanel(null)
+              await onChanged(
+                result.warning
+                  ? `${savedChars(password)}. ${result.warning}`
+                  : `Login replaced. ${savedChars(password)}`,
+              )
+            })
+          }}
+        >
+          <label>
+            Username or email
+            <input
+              name="username"
+              required
+              autoComplete="off"
+              defaultValue={entry.lab?.username ?? ''}
+            />
+          </label>
+          <SecretField label="Password (hidden)" />
+          <button type="submit" className="lantern-btn small" disabled={busy}>
+            Replace login
+          </button>
+        </Form>
+      )}
+      {panel === 'replace' && !account && (
         <Form
           onSubmit={(event) => {
             event.preventDefault()
@@ -784,7 +883,25 @@ function LoginRow({
           </button>
         </Form>
       )}
-      {panel === 'edit' && entry.lab && (
+      {panel === 'edit' && (
+        <DetailsEdit
+          entry={entry}
+          busy={busy}
+          save={(patch) =>
+            run(async () => {
+              const result = await api<{
+                warning?: string
+                probe?: Probe
+                entry: Entry
+              }>(`${path}/edit`, patch)
+              setPanel(null)
+              onChecked(result.entry.name, result.probe)
+              await onChanged(result.warning || 'Login saved.')
+            })
+          }
+        />
+      )}
+      {panel === 'fields' && entry.lab && (
         <LabEdit
           entry={entry}
           busy={busy}
@@ -808,6 +925,7 @@ function LoginRow({
           path={path}
           onSaved={onChanged}
           onCancel={() => setPanel(null)}
+          events={events}
         />
       )}
       {panel === 'remove' && (
@@ -853,12 +971,14 @@ function AccessPanel({
   path,
   onSaved,
   onCancel,
+  events,
 }: {
   entry: Entry
   choices: AccessChoices
   path: string
   onSaved(text: string): Promise<void>
   onCancel(): void
+  events: Event[]
 }) {
   const known = knownRoles(choices),
     current = accessOf(entry, known, sessionsOf(choices, entry.lab?.target))
@@ -900,7 +1020,20 @@ function AccessPanel({
         exclude={entry.name}
         disabled={busy}
         lab={!!entry.lab}
+        account={entry.lab?.kind === 'account'}
       />
+      {events.length > 0 && (
+        <ul className={kit.activity} aria-label="This login's activity">
+          {events
+            .slice(-5)
+            .reverse()
+            .map((e) => (
+              <li key={`${e.at}-${e.action}-${e.actor}`}>
+                {eventLine(e, false)}
+              </li>
+            ))}
+        </ul>
+      )}
       {failed.map((text) => (
         <Quiet role="alert" key={text}>
           {text}
@@ -1057,29 +1190,132 @@ function Assignment({
     </Form>
   )
 }
-function Audit() {
-  const [events, setEvents] = useState<
-      { at: string; action: string; name: string; actor: string }[] | null
-    >(null),
-    [error, setError] = useState('')
-  useEffect(() => {
-    api<{ events: NonNullable<typeof events> }>('/api/logins/audit')
-      .then((r) => setEvents(r.events.slice(-30).reverse()))
-      .catch(() => setError('Activity could not load.'))
-  }, [])
-  return error ? (
-    <Quiet role="alert">{error}</Quiet>
-  ) : !events ? (
+/** One activity line: when, what, which login, who, and what changed when it says. */
+const eventLine = (e: Event, named = true) =>
+  [when(e.at), e.action, named ? e.name : null, e.actor, e.detail]
+    .filter(Boolean)
+    .join(' · ')
+function Audit({
+  events,
+  failed,
+}: {
+  events: Event[] | null
+  failed: boolean
+}) {
+  const recent = events ? events.slice(-30).reverse() : null
+  return failed && !recent ? (
+    <Quiet role="alert">Activity could not load.</Quiet>
+  ) : !recent ? (
     <Quiet role="status">Loading activity…</Quiet>
-  ) : events.length === 0 ? (
+  ) : recent.length === 0 ? (
     <Quiet>No activity recorded yet.</Quiet>
   ) : (
     <ul className={kit.activity}>
-      {events.map((e) => (
-        <li key={`${e.at}-${e.action}-${e.name}-${e.actor}`}>
-          {when(e.at)} · {e.action} · {e.name} · {e.actor}
-        </li>
+      {recent.map((e) => (
+        <li key={`${e.at}-${e.action}-${e.name}-${e.actor}`}>{eventLine(e)}</li>
       ))}
     </ul>
+  )
+}
+/** Notes for any login; the login page and site name for an account or lab login. */
+function DetailsEdit({
+  entry,
+  busy,
+  save,
+}: {
+  entry: Entry
+  busy: boolean
+  save(patch: {
+    notes: string
+    login_url?: string
+    target?: string
+  }): Promise<void>
+}) {
+  return (
+    <Form
+      onSubmit={(event) => {
+        event.preventDefault()
+        const f = new FormData(event.currentTarget),
+          page = String(f.get('loginUrl') ?? ''),
+          site = String(f.get('target') ?? '')
+        void save({
+          notes: String(f.get('notes') ?? ''),
+          ...(page && page !== entry.lab?.login_url ? { login_url: page } : {}),
+          ...(site && site !== entry.lab?.target ? { target: site } : {}),
+        })
+      }}
+    >
+      {entry.lab && (
+        <label>
+          Site name
+          <input
+            name="target"
+            required
+            autoComplete="off"
+            pattern="[a-z0-9][a-z0-9._\-]*"
+            defaultValue={entry.lab.target}
+          />
+        </label>
+      )}
+      {entry.lab?.kind === 'account' && (
+        <label>
+          Login page
+          <input
+            name="loginUrl"
+            type="url"
+            required
+            autoComplete="off"
+            defaultValue={entry.lab.login_url ?? ''}
+          />
+        </label>
+      )}
+      <label>
+        Notes
+        <input name="notes" autoComplete="off" defaultValue={entry.notes} />
+      </label>
+      <button type="submit" className="lantern-btn small" disabled={busy}>
+        Save
+      </button>
+    </Form>
+  )
+}
+/** A saved login page with no password field: what was found, and one tap to save the page that has one. */
+function PageCheck({
+  checked,
+  onFixed,
+}: {
+  checked: Checked
+  onFixed(text: string): void
+}) {
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState('')
+  const suggestion = checked.suggestion
+  return (
+    <Notice
+      failed={!!error}
+      actions={
+        suggestion && (
+          <button
+            type="button"
+            className="lantern-btn small"
+            disabled={busy}
+            title={suggestion}
+            onClick={() => {
+              setBusy(true)
+              api(`/api/logins/${encodeURIComponent(checked.name)}/edit`, {
+                login_url: suggestion,
+              })
+                .then((r) => onFixed(r.warning || 'Login page saved.'))
+                .catch((e) => setError((e as Error).message))
+                .finally(() => setBusy(false))
+            }}
+          >
+            Use this page
+          </button>
+        )
+      }
+    >
+      {error || checked.warning}
+    </Notice>
   )
 }

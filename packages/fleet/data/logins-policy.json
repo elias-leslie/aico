@@ -11,5 +11,17 @@
   "auditCollapseSeconds": 3600,
   "auditExplicitActions": ["reveal"],
   "auditReadActions": ["use", "tool use", "lab use", "VM operation"],
-  "lockWaitSeconds": 5
+  "lockWaitSeconds": 5,
+  "probePaths": [
+    "/login",
+    "/signin",
+    "/sign_in",
+    "/users/sign_in",
+    "/login/canvas",
+    "/auth/login",
+    "/account/login"
+  ],
+  "probeSeconds": 12,
+  "probeMaxBytes": 1048576,
+  "probeMaxTries": 8
 }

@@ -239,12 +239,15 @@ export function AccessChecklist({
   exclude,
   disabled,
   lab,
+  account,
 }: {
   choices: AccessChoices
   value: Access
   onChange(next: Access): void
-  /** A lab login: it also gets the sessions checklist. */
+  /** A lab login: sessions join its roles in one "Used by" list. */
   lab?: boolean
+  /** An account login: "All roles" opens it too (other lab logins need a named role or session). */
+  account?: boolean
   /** The login being edited, left out of "Same access as". */
   exclude?: string
   disabled?: boolean
@@ -279,6 +282,10 @@ export function AccessChecklist({
       ),
     )
   }
+  // A lab login other than an account login opens only for a role named on it, never "All roles".
+  const allRoles = !lab || !!account
+  const ticked = (role: string) =>
+    allRoles ? value.roles.includes(role) : value.named.includes(role)
   const toggle = (list: string[], item: string, on: boolean) =>
     on ? unique([...list, item]) : list.filter((v) => v !== item)
   return (
@@ -331,38 +338,45 @@ export function AccessChecklist({
         </div>
       </fieldset>
       <fieldset disabled={disabled}>
-        <legend>Roles</legend>
+        <legend>{lab ? 'Used by' : 'Roles'}</legend>
         {choices.registeredFailed && (
           <Quiet role="alert">Roles could not load.</Quiet>
         )}
+        {lab && choices.sessionsFailed && (
+          <Quiet role="alert">Sessions could not load.</Quiet>
+        )}
         <div className={kit.checks}>
-          <label className={kit.check}>
-            <input
-              type="checkbox"
-              checked={value.all}
-              onChange={(e) => {
-                setCopied('')
-                onChange({
-                  ...value,
-                  all: e.target.checked,
-                  roles: e.target.checked ? roles : value.roles,
-                  named: value.all ? value.named : value.roles,
-                })
-              }}
-            />
-            All roles
-          </label>
+          {allRoles && (
+            <label className={kit.check}>
+              <input
+                type="checkbox"
+                checked={value.all}
+                onChange={(e) => {
+                  setCopied('')
+                  onChange({
+                    ...value,
+                    all: e.target.checked,
+                    roles: e.target.checked ? roles : value.roles,
+                    named: value.all ? value.named : value.roles,
+                  })
+                }}
+              />
+              All roles
+            </label>
+          )}
           {roles.map((r) => (
             <label
               className={kit.check}
               key={r}
               title={
-                value.all && !value.roles.includes(r) ? 'Blocked' : undefined
+                allRoles && value.all && !value.roles.includes(r)
+                  ? 'Blocked'
+                  : undefined
               }
             >
               <input
                 type="checkbox"
-                checked={value.roles.includes(r)}
+                checked={ticked(r)}
                 onChange={(e) => {
                   setCopied('')
                   onChange({
@@ -374,16 +388,45 @@ export function AccessChecklist({
                 }}
               />
               {r}
-              {value.all && value.roles.includes(r) && isNamed(r) && (
-                <span
-                  className={kit.named}
-                  role="img"
-                  aria-label="Named"
-                  title="Named on this login. It still counts if All roles is turned off, and a lab login needs it."
-                />
-              )}
+              {allRoles &&
+                value.all &&
+                value.roles.includes(r) &&
+                isNamed(r) && (
+                  <span
+                    className={kit.named}
+                    role="img"
+                    aria-label="Named"
+                    title="Named on this login. It still counts if All roles is turned off, and a lab login needs it."
+                  />
+                )}
             </label>
           ))}
+          {lab &&
+            choices.sessions.map((s) => (
+              <label
+                className={kit.check}
+                key={`session-${s.id}`}
+                title="Session"
+              >
+                <input
+                  type="checkbox"
+                  checked={value.sessions.includes(s.id)}
+                  onChange={(e) => {
+                    setCopied('')
+                    onChange({
+                      ...value,
+                      sessions: toggle(value.sessions, s.id, e.target.checked),
+                    })
+                  }}
+                />
+                <span
+                  className={kit.sessionMark}
+                  role="img"
+                  aria-label="Session"
+                />
+                {s.label}
+              </label>
+            ))}
         </div>
         <label>
           Other role
@@ -408,35 +451,6 @@ export function AccessChecklist({
           Add role
         </button>
       </fieldset>
-      {lab && (
-        <fieldset disabled={disabled}>
-          <legend>Sessions</legend>
-          {choices.sessionsFailed && (
-            <Quiet role="alert">Sessions could not load.</Quiet>
-          )}
-          {!choices.sessionsFailed && choices.sessions.length === 0 && (
-            <Quiet>No sessions are available to assign.</Quiet>
-          )}
-          <div className={kit.checks}>
-            {choices.sessions.map((s) => (
-              <label className={kit.check} key={s.id}>
-                <input
-                  type="checkbox"
-                  checked={value.sessions.includes(s.id)}
-                  onChange={(e) => {
-                    setCopied('')
-                    onChange({
-                      ...value,
-                      sessions: toggle(value.sessions, s.id, e.target.checked),
-                    })
-                  }}
-                />
-                {s.label}
-              </label>
-            ))}
-          </div>
-        </fieldset>
-      )}
     </>
   )
   function isNamed(role: string) {

@@ -1,12 +1,14 @@
 // The owner page uses the same authority and read-copy rules as agents.
 
 import { contextDbPath, loadPolicy, openContext } from '@aico/context'
+import { probeLoginPage } from '@aico/fleet/login-probe'
 import {
   LoginError,
   type LoginKind,
   labIdentity,
   labPayload,
   loginMachine,
+  loginPage,
   loginPolicy,
 } from '@aico/fleet/logins'
 import { LoginClient } from '@aico/fleet/logins-client'
@@ -19,6 +21,7 @@ export function registerLoginRoutes(
   env = process.env,
   tether?: TetherClient,
   dataDir?: string,
+  probe: typeof probeLoginPage = probeLoginPage,
 ) {
   const owner = { owner: true, role: 'owner', machine: loginMachine() }
   const safe =
@@ -116,6 +119,8 @@ export function registerLoginRoutes(
         target,
         actor,
       )
+      // A page the check (and st browser login) refuses is refused before it is saved.
+      if (p.kind === 'account' && p.values.login_url) loginPage(p.values.login_url)
       const entry = await client.set(
         labIdentity(target, actor).name,
         JSON.stringify(p),
@@ -133,7 +138,37 @@ export function registerLoginRoutes(
         owner,
         body.replace === true,
       )
-      return { entry, warning: client.warning }
+      const url = entry.lab?.kind === 'account' ? entry.lab.login_url : undefined
+      return { entry, warning: client.warning, ...(url ? { probe: await probe(url) } : {}) }
+    })(),
+  )
+  // Checks a login page for a password field before or after it is saved.
+  router.on('POST', '/api/logins/probe', (ctx) =>
+    safe(async () => ({
+      probe: await probe(requiredString(objectBody(await ctx.body()), 'url')),
+    }))(),
+  )
+  // Notes, the login page (same site) and the site name; the username and password stay in Replace.
+  router.on('POST', '/api/logins/:name/edit', (ctx) =>
+    safe(async (client) => {
+      const body = objectBody(await ctx.body())
+      for (const key of ['notes', 'login_url', 'target'] as const)
+        if (body[key] !== undefined && typeof body[key] !== 'string')
+          throw new LoginError(`Invalid ${key}`)
+      const entry = await client.edit(
+        ctx.params.name,
+        {
+          ...(body.notes !== undefined ? { notes: body.notes as string } : {}),
+          ...(body.login_url ? { login_url: body.login_url as string } : {}),
+          ...(body.target ? { target: body.target as string } : {}),
+        },
+        owner,
+      )
+      return {
+        entry,
+        warning: client.warning,
+        ...(body.login_url ? { probe: await probe(body.login_url as string) } : {}),
+      }
     })(),
   )
   router.on('POST', '/api/logins/:name/replace', (ctx) =>

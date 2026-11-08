@@ -3,8 +3,10 @@ import { join } from 'node:path'
 import {
   type Login,
   type LoginCaller,
+  type LoginEdit,
   LoginError,
   LoginStore,
+  type LoginUnavailable,
   loginMachine,
   loginPolicy,
 } from './logins'
@@ -25,13 +27,24 @@ type Operation =
   | 'audit'
   | 'resolveLab'
   | 'patchLab'
+  | 'catalog'
+  | 'allow'
+  | 'edit'
 interface LoginRequest {
   operation: Operation
   args: unknown[]
   caller: LoginCaller
 }
 type View = Login & { state: string }
-const reads = new Set<Operation>(['list', 'show', 'value', 'resolveLab', 'assignments', 'audit'])
+const reads = new Set<Operation>([
+  'list',
+  'catalog',
+  'show',
+  'value',
+  'resolveLab',
+  'assignments',
+  'audit',
+])
 export function loginPeers(env = process.env) {
   const settings = readSettings(env, '')
   const full = settings
@@ -57,6 +70,14 @@ function perform(store: LoginStore, request: LoginRequest): unknown {
   switch (operation) {
     case 'list':
       return store.list(caller).map((entry) => ({ ...entry, state: store.state(entry) }))
+    case 'catalog':
+      return store
+        .catalog(caller)
+        .map((entry) => ('available' in entry ? entry : { ...entry, state: store.state(entry) }))
+    case 'allow':
+      return store.allow(args[0] as string, args[1] as Parameters<LoginStore['allow']>[1], caller)
+    case 'edit':
+      return store.edit(args[0] as string, args[1] as LoginEdit, caller)
     case 'show':
       return store.show(args[0] as string, caller)
     case 'value':
@@ -197,6 +218,16 @@ export class LoginClient {
   }
   list(caller: LoginCaller) {
     return this.request<View[]>('list', [], caller)
+  }
+  /** Every login an agent could be given: usable ones in full, the rest with what is missing. */
+  catalog(caller: LoginCaller) {
+    return this.request<(View | LoginUnavailable)[]>('catalog', [], caller)
+  }
+  allow(name: string, subject: Parameters<LoginStore['allow']>[1], caller: LoginCaller) {
+    return this.request<ReturnType<LoginStore['allow']>>('allow', [name, subject], caller)
+  }
+  edit(name: string, patch: LoginEdit, caller: LoginCaller) {
+    return this.request<Login>('edit', [name, patch], caller)
   }
   show(name: string, caller: LoginCaller) {
     return this.request<Login>('show', [name], caller)

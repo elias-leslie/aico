@@ -464,3 +464,173 @@ it('copies a lab login named roles and session assignments, and saves both', asy
     ],
   ])
 })
+
+const school = {
+  ...entry,
+  name: '_lab_school--default',
+  kind: 'lab login',
+  notes: '',
+  machines: ['aico'],
+  roles: ['*'],
+  lab: {
+    target: 'school',
+    actor: 'default',
+    kind: 'account',
+    fields: ['username', 'password', 'login_url'],
+    expires_at: null,
+    username: 'me@example.test',
+    login_url: 'https://school.example.test/',
+  },
+}
+const schoolApi = (
+  answers: Record<string, unknown> = {},
+  events: unknown[] = [],
+) =>
+  vi.fn(async (path: string, options?: { method?: string; body?: string }) =>
+    Response.json(
+      path in answers
+        ? answers[path]
+        : path.endsWith('/roles')
+          ? { roles: ['review'] }
+          : options?.method
+            ? { entry: school }
+            : path.endsWith('/sessions')
+              ? { sessions: [{ id: 'a1b2c3d4', label: 'Dadbot' }] }
+              : path.endsWith('/audit')
+                ? { events }
+                : {
+                    entries: [school],
+                    machine: 'aico',
+                    assignments: {},
+                    revealSeconds: 30,
+                  },
+    ),
+  )
+const openSchool = async () => {
+  fireEvent.click(await screen.findByRole('button', { name: /school/ }))
+  fireEvent.click(screen.getByRole('button', { name: 'Access' }))
+}
+it('lists roles and sessions together under Used by, with All roles for an account login', async () => {
+  vi.stubGlobal(
+    'fetch',
+    schoolApi({}, [
+      {
+        at: '2026-11-07T12:00:00Z',
+        action: 'allow',
+        name: '_lab_school--default',
+        actor: 'a1b2c3d4',
+        detail: 'session a1b2c3d4',
+      },
+    ]),
+  )
+  render(<LoginsPage />)
+  await openSchool()
+  const usedBy = screen.getByRole('group', { name: 'Used by' })
+  expect(usedBy).toHaveTextContent('All roles')
+  expect(usedBy).toHaveTextContent('review')
+  expect(usedBy).toHaveTextContent('Dadbot')
+  expect(screen.queryByRole('group', { name: 'Sessions' })).toBeNull()
+  // Who changed what, on the login itself.
+  expect(
+    screen.getByRole('list', { name: "This login's activity" }),
+  ).toHaveTextContent('allow · a1b2c3d4 · session a1b2c3d4')
+})
+it('a lab login that is not an account shows no All roles and ticks only named roles', async () => {
+  const lab = {
+    ...school,
+    roles: ['*', 'review'],
+    lab: { ...school.lab, kind: 'synthetic' },
+  }
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (path: string) =>
+      Response.json(
+        path.endsWith('/roles')
+          ? { roles: ['review', 'implementation'] }
+          : path.endsWith('/sessions')
+            ? { sessions: [] }
+            : path.endsWith('/audit')
+              ? { events: [] }
+              : {
+                  entries: [lab],
+                  machine: 'aico',
+                  assignments: {},
+                  revealSeconds: 30,
+                },
+      ),
+    ),
+  )
+  render(<LoginsPage />)
+  await openSchool()
+  const usedBy = screen.getByRole('group', { name: 'Used by' })
+  expect(usedBy).not.toHaveTextContent('All roles')
+  expect(screen.getByRole('checkbox', { name: 'review' })).toBeChecked()
+  expect(
+    screen.getByRole('checkbox', { name: 'implementation' }),
+  ).not.toBeChecked()
+})
+it('edits notes and the login page, then offers the page that has a password field', async () => {
+  const fetcher = schoolApi({
+    '/api/logins/_lab_school--default/edit': {
+      entry: school,
+      probe: {
+        password: false,
+        suggestion: 'https://school.example.test/login/canvas',
+        warning: 'No password field at https://school.example.test/.',
+      },
+    },
+  })
+  vi.stubGlobal('fetch', fetcher)
+  render(<LoginsPage />)
+  await screen.findByRole('button', { name: /school/ })
+  fireEvent.click(screen.getByRole('button', { name: /school/ }))
+  fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+  fireEvent.change(screen.getByLabelText('Notes'), {
+    target: { value: 'School check' },
+  })
+  fireEvent.change(screen.getByLabelText('Login page'), {
+    target: { value: 'https://school.example.test/home' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+  expect(
+    await screen.findByText(
+      'No password field at https://school.example.test/.',
+    ),
+  ).toBeInTheDocument()
+  const edit = fetcher.mock.calls.find(([p]) => p.endsWith('/edit'))
+  expect(JSON.parse(String(edit?.[1]?.body))).toEqual({
+    notes: 'School check',
+    login_url: 'https://school.example.test/home',
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Use this page' }))
+  expect(await screen.findByText('Login page saved.')).toBeInTheDocument()
+  expect(
+    fetcher.mock.calls.some(
+      ([p, o]) =>
+        p.endsWith('/edit') &&
+        JSON.parse(String(o?.body)).login_url ===
+          'https://school.example.test/login/canvas',
+    ),
+  ).toBe(true)
+})
+it('replaces an account login with a username and password, not a JSON bundle', async () => {
+  const fetcher = schoolApi()
+  vi.stubGlobal('fetch', fetcher)
+  render(<LoginsPage />)
+  await screen.findByRole('button', { name: /school/ })
+  fireEvent.click(screen.getByRole('button', { name: /school/ }))
+  fireEvent.click(screen.getByRole('button', { name: 'Replace' }))
+  expect(screen.getByLabelText('Username or email')).toHaveValue(
+    'me@example.test',
+  )
+  fireEvent.change(screen.getByLabelText('Password (hidden)'), {
+    target: { value: 'fixture-only' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Replace login' }))
+  expect(await screen.findByText(/Saved, 12 characters/)).toBeInTheDocument()
+  const patch = fetcher.mock.calls.find(([, o]) => o?.method === 'PATCH')
+  expect(patch?.[0]).toBe('/api/logins/lab/school/default')
+  expect(JSON.parse(String(patch?.[1]?.body))).toEqual({
+    set: { username: 'me@example.test', password: 'fixture-only' },
+  })
+})
