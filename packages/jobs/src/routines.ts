@@ -12,7 +12,9 @@ const DEFAULT_LEASE_S = 300
 const PROJECT = /^[a-z0-9][a-z0-9_-]{0,99}$/
 
 /** A routine as a job definition: it runs on the machine it was registered on. */
-function routineJob(routine: Routine): JobDef {
+function routineJob(routine: Routine, either: EitherHosts | null): JobDef {
+  // Registered before zones were stored: an either-host routine reads `at` in the pair's zone.
+  const tz = routine.tz ?? (routine.lease_host === either?.lease_host ? either?.tz : undefined)
   return {
     kind: routine.kind,
     what: routine.what,
@@ -21,7 +23,7 @@ function routineJob(routine: Routine): JobDef {
     ...(routine.lease_host !== undefined ? { lease_host: routine.lease_host } : {}),
     ...(routine.workers !== undefined ? { workers: routine.workers } : {}),
     ...(routine.at !== undefined ? { at: routine.at } : {}),
-    ...(routine.tz !== undefined ? { tz: routine.tz } : {}),
+    ...(tz !== undefined ? { tz } : {}),
     ...(routine.every_min !== undefined ? { every_min: routine.every_min } : {}),
     run: routine.post !== undefined ? { post: routine.post } : { command: routine.command ?? [] },
     lease_s: routine.lease_s,
@@ -35,12 +37,13 @@ function routineJob(routine: Routine): JobDef {
 export function loadJobs(jobsFile: string, store: JobStore): JobDef[] {
   const builtIn = readJobs(jobsFile).map((job) => ({ ...job, source: 'built-in' as const }))
   const taken = new Set(builtIn.map((job) => job.kind))
+  const either = readEither(jobsFile)
   return [
     ...builtIn,
     ...store
       .routines()
       .filter((routine) => !taken.has(routine.kind))
-      .map(routineJob),
+      .map((routine) => routineJob(routine, either)),
   ]
 }
 

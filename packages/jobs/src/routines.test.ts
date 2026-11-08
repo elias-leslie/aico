@@ -420,6 +420,10 @@ describe('a routine that runs on either host', () => {
     // 11:00 UTC on 8 Nov is 06:00 EST: the next 16:30 is 21:30 UTC, whatever zone the process is in.
     expect(nextRun(job as JobDef, Date.UTC(2026, 10, 8, 11, 0))).toBe(Date.UTC(2026, 10, 8, 21, 30))
     expect(store.routines()[0]?.tz).toBe('America/New_York')
+    // A routine stored before zones existed gets the pair's zone too.
+    store.addRoutine({ ...routine, kind: 'older', tz: undefined })
+    const older = loadJobs(file, store).find((entry) => entry.kind === 'older')
+    expect(older?.tz).toBe('America/New_York')
   })
 
   it('needs the either entry, and refuses --host with it', () => {
