@@ -48,13 +48,17 @@ export function parseLogsArgs(argv: string[]): LogsRequest | string {
   return req
 }
 
-const projectUnits = (project: Project) =>
-  [
-    project.backend,
-    ...project.defaultWorkers,
-    ...project.optionalWorkers,
-    ...project.manualWorkers,
-  ].filter(Boolean)
+const projectUnits = (project: Project) => [
+  ...new Set(
+    [
+      project.backend,
+      project.frontend,
+      ...project.defaultWorkers,
+      ...project.optionalWorkers,
+      ...project.manualWorkers,
+    ].filter((unit): unit is string => !!unit),
+  ),
+]
 
 /** The journalctl argv for a request; units of the project when the target names it; null for no such unit. */
 export function journalArgs(req: LogsRequest, project: Project, run: Runner): string[] | null {

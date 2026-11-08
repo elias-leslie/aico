@@ -60,6 +60,8 @@ export interface Project {
   names: string[]
   root: string
   backend: string
+  /** The unit that serves the web front end when it is not the backend (a socket-activated one is its .service). */
+  frontend?: string
   port: number
   health: string
   defaultWorkers: string[]
@@ -95,6 +97,9 @@ export function loadProject(root: string): Project {
     names: [identity.project.id, ...(identity.project.legacy_ids ?? [])],
     root,
     backend: services.backend ? canonical(services.backend) : '',
+    ...(services.frontend
+      ? { frontend: canonical(String(services.frontend).replace(/\.socket$/, '')) }
+      : {}),
     port: Number(runtime.backend_port) || 0,
     health: runtime.health_endpoint || '/health',
     defaultWorkers: list(services.default_workers),

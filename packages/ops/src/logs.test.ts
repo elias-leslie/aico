@@ -81,6 +81,26 @@ describe('aico logs', () => {
     }
   })
 
+  it('reads the front-end unit of a project with no backend, a socket-activated one as its service', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'logs-frontend-'))
+    try {
+      writeFileSync(
+        join(dir, 'project.identity.json'),
+        JSON.stringify({
+          project: { id: 'webonly' },
+          services: { backend: '', frontend: 'webonly-web.socket', default_workers: [] },
+        }),
+      )
+      const project = loadProject(dir)
+      expect(project.frontend).toBe('webonly-web.service')
+      const req = parseLogsArgs(['webonly']) as Exclude<ReturnType<typeof parseLogsArgs>, string>
+      const args = journalArgs(req, project, () => ({ code: 0, out: '', err: '' })) as string[]
+      expect(args).toContain('webonly-web.service')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   it('points at a Status row: its log action, else its project', () => {
     const rows = (row: object) => answers(JSON.stringify({ rows: [row] }))
     const job = {
