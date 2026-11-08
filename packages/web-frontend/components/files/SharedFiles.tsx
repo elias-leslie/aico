@@ -98,7 +98,7 @@ export function SharedFiles({
               <p
                 className="m-0 min-w-0 flex-1 px-2.5 pt-2.5 pb-1 text-xs"
                 style={{ color: 'var(--mist)' }}
-                title={`Shared by ${from ? `session “${from}”` : 'an agent whose session has ended'}, ${sharedAt(share.createdAt)}`}
+                title={`Shared by ${from ? `session “${from}”` : 'an agent'}, ${sharedAt(share.createdAt)}`}
               >
                 <span style={{ color: 'var(--bone)' }} dir="auto">
                   {share.title ??
