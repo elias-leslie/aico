@@ -771,9 +771,7 @@ export async function scheduledEntries(
       item.running = false
       continue
     }
-    const job = jobs.find(
-      (j) => j.kind === `backups-${item.target}${machine === cfg.workstation ? '' : '-' + machine}`,
-    )?.state
+    const job = jobs.find((j) => j.kind === backupJobKind(cfg, machine, item.target))?.state
     item.running = !!job?.leaseId && !!job.leaseExpires && job.leaseExpires > Date.now()
     // While the job runs, the scheduler still holds the due time it started at; posting that would
     // show the row late from the run's first report until the next one. Due a period after now,
@@ -787,6 +785,10 @@ export async function scheduledEntries(
   return items
 }
 
+/** The scheduler job that runs a target's backup on a machine (packages/jobs/data/jobs.json). */
+const backupJobKind = (cfg: BackupConfig, machine: string, target: string) =>
+  `backups-${target}${machine === cfg.workstation ? '' : `-${machine}`}`
+
 export function validateScheduledTarget(target: string | undefined): void {
   if (!['native', 'drive', 'append', 'snapshots', 'guard', 'verify'].includes(target ?? ''))
     throw new Error('Unknown backup job target.')
@@ -794,6 +796,5 @@ export function validateScheduledTarget(target: string | undefined): void {
 export async function requestBackup(rt: Runtime, machine: string, target: string): Promise<void> {
   if (!['native', 'drive', 'append'].includes(target))
     throw new Error('Choose T7, Drive or CT 160.')
-  const kind = `backups-${target}${machine === rt.cfg.workstation ? '' : '-' + machine}`
-  await checked(rt.run, ['aico', 'jobs', 'run', kind])
+  await checked(rt.run, ['aico', 'jobs', 'run', backupJobKind(rt.cfg, machine, target)])
 }
