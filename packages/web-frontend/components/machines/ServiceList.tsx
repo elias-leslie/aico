@@ -40,7 +40,8 @@ export function ServiceList({ machine }: { machine: Machine }) {
       </span>
     ) : null
   const units = group.units
-  const down = units.filter((unit) => unit.state !== 'active').length
+  // Off isn't down: the standby's address stays off while the Workstation is on.
+  const down = units.filter((unit) => unit.state === 'failed').length
 
   async function restart() {
     if (!asking) return
@@ -65,8 +66,8 @@ export function ServiceList({ machine }: { machine: Machine }) {
           className={`status-chip ${down ? 'failed' : 'ok'}`}
           title={
             down
-              ? `${down} of ${units.length} not running`
-              : `All ${units.length} running`
+              ? `${down} of ${units.length} failed`
+              : `None of ${units.length} failed`
           }
         >
           {down ? down : units.length}
