@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Notifier, NotifyStore, typeOf } from '@aico/notify'
-import type { StatusRow, ThermalGuard } from '@aico/status'
+import { type StatusRow, type ThermalGuard, view } from '@aico/status'
 import type { SessionDescriptor, TetherTool } from '@aico/tether-client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { WebStore } from './db'
@@ -57,7 +57,13 @@ function setup(path = ':memory:') {
   const log = vi.fn()
   const deps = () => ({
     machine: 'aico',
-    status: { rows: () => rows.map((value) => ({ row: value, updatedAt: 0 })) },
+    status: {
+      read: () =>
+        view(
+          rows.map((value) => ({ row: value, updatedAt: 0 })),
+          Date.parse('2026-11-08T12:00:00Z'),
+        ),
+    },
     store,
     tether: { listSessions: async () => sessions, tools, request },
     notices: { receive, resolve },
@@ -96,6 +102,45 @@ function setup(path = ':memory:') {
 }
 
 describe('native thermal event delivery', () => {
+  it('ends a warning when its machine is off, withdraws queued heat, and skips off-row startup replay', async () => {
+    const folder = mkdtempSync(join(tmpdir(), 'aico-thermal-off-'))
+    close.push(() => rmSync(folder, { recursive: true, force: true }))
+    const work = setup(join(folder, 'web.db'))
+    await work.tick()
+    const machine: StatusRow = {
+      id: 'gem/machine',
+      machine: 'gem',
+      what: 'gem',
+      kind: 'machine',
+      state: 'off',
+      meaning: 'Stopped.',
+      next_run: '2026-11-08T12:10:00Z',
+    }
+    work.rows([row(), machine])
+    await work.tick()
+    expect(work.resolve).toHaveBeenCalledWith(
+      'aico',
+      thermalNoticeKey('gem'),
+      'gem is off, so its heat warning has ended.',
+    )
+    expect(work.request).toHaveBeenLastCalledWith(
+      'DELETE',
+      `/v1/sessions/00000001/deliveries?source=${encodeURIComponent(thermalSource('gem', 'boot:episode'))}`,
+    )
+    work.restart()
+    await work.tick()
+    expect(work.receive).toHaveBeenCalledTimes(1)
+    expect(work.resolve).toHaveBeenCalledTimes(1)
+    expect(work.request).toHaveBeenCalledTimes(2)
+    // Returning power alone must not replay the old hot observation.
+    work.rows([row(), { ...machine, state: 'ok' }])
+    await work.tick()
+    expect(work.request).toHaveBeenCalledTimes(2)
+    work.write(row('hot', '2026-11-08T12:01:00Z'))
+    await work.tick()
+    expect(work.receive).toHaveBeenCalledTimes(2)
+    expect(work.request).toHaveBeenCalledTimes(3)
+  })
   it('wakes a standalone agent when there is no coordinator', async () => {
     const work = setup()
     await work.tick()

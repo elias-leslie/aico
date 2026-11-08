@@ -4,14 +4,16 @@
 // on this host over SSH, and its Tether host alias is not a physical-host identity.
 import { createHash } from 'node:crypto'
 import type { Notifier } from '@aico/notify'
-import type { StatusRow, StatusStore, ThermalGuard } from '@aico/status'
-import type { SessionDescriptor, TetherClient } from '@aico/tether-client'
+import type { ShownRow, StatusRow, StatusStore, ThermalGuard } from '@aico/status'
+import { type SessionDescriptor, type TetherClient, TetherError } from '@aico/tether-client'
 import type { WebStore } from './db'
 
 type Phase = ThermalGuard['phase']
 interface Receipts {
-  owner?: Phase
+  owner?: Phase | 'off'
   sessions: Record<string, Phase>
+  /** A deliberate stop ends the warning; a fresh native observation can resume it. */
+  off_at?: string
 }
 interface Latest {
   at: string
@@ -21,7 +23,7 @@ interface Latest {
 
 export interface ThermalGuardDeps {
   machine: string
-  status: Pick<StatusStore, 'rows'>
+  status: Pick<StatusStore, 'read'>
   store: Pick<WebStore, 'syncHandle'>
   tether: Pick<TetherClient, 'listSessions' | 'tools'> & {
     request(method: string, path: string, body?: unknown): Promise<unknown>
@@ -120,23 +122,63 @@ export class ThermalGuardDelivery {
 
   private async pass(): Promise<void> {
     const rows = this.deps.status
-      .rows()
-      .map(({ row }) => row)
-      .filter((row): row is StatusRow & { guard: ThermalGuard } =>
+      .read()
+      .rows.filter((row): row is ShownRow & { guard: ThermalGuard } =>
         Boolean(row.guard && row.guard.delivery_machine === this.deps.machine && row.last_run),
       )
     if (!rows.length) return
     let sessions: SessionDescriptor[] = []
     try {
-      sessions = await this.recipients()
+      if (rows.some((row) => row.shown !== 'off')) sessions = await this.recipients()
     } catch (error) {
       this.failed('session list', error)
     }
     for (const row of rows) {
       try {
-        await this.deliver(row, sessions)
+        if (row.shown === 'off') await this.machineOff(row)
+        else await this.deliver(row, sessions)
       } catch (error) {
         this.failed(row.machine, error)
+      }
+    }
+  }
+
+  /** End only our warning and withdraw queued heat lines; being off is not a temperature reading. */
+  private async machineOff(row: StatusRow & { guard: ThermalGuard }): Promise<void> {
+    const meta = this.deps.store.syncHandle()
+    const source = thermalSource(row.machine, row.guard.episode_id)
+    const key = `thermal.receipts:${source}`
+    const stored = meta.meta(key)
+    const receipts: Receipts = stored ? (JSON.parse(stored) as Receipts) : { sessions: {} }
+    const save = () => meta.setMeta(key, JSON.stringify(receipts))
+    receipts.off_at = row.last_run as string
+    save()
+    if (receipts.owner !== 'off') {
+      try {
+        await this.deps.notices.resolve(
+          'aico',
+          thermalNoticeKey(row.machine),
+          `${row.machine} is off, so its heat warning has ended.`,
+        )
+        receipts.owner = 'off'
+        save()
+      } catch (error) {
+        this.failed(`end owner notice for ${row.machine}`, error)
+      }
+    }
+    for (const id of Object.keys(receipts.sessions)) {
+      try {
+        await this.deps.tether.request(
+          'DELETE',
+          `/v1/sessions/${encodeURIComponent(id)}/deliveries?source=${encodeURIComponent(source)}`,
+        )
+        delete receipts.sessions[id]
+        save()
+      } catch (error) {
+        if (error instanceof TetherError && error.status === 404) {
+          delete receipts.sessions[id]
+          save()
+        } else this.failed(`withdraw session ${id}`, error)
       }
     }
   }
@@ -168,6 +210,11 @@ export class ThermalGuardDelivery {
     const stored = meta.meta(key)
     const receipts: Receipts = stored ? (JSON.parse(stored) as Receipts) : { sessions: {} }
     const save = () => meta.setMeta(key, JSON.stringify(receipts))
+    if (receipts.off_at) {
+      if (Date.parse(at) <= Date.parse(receipts.off_at)) return
+      delete receipts.off_at
+      if (receipts.owner === 'off') delete receipts.owner
+    }
     const summary = thermalSummary(row)
     const line =
       guard.phase === 'recovered'
