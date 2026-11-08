@@ -280,6 +280,28 @@
       "lease_s": 300
     },
     {
+      "kind": "session-copies-davion-sidarli",
+      "what": "Session copies to the standby",
+      "project": "aico",
+      "home": "davion-sidarli",
+      "every_min": 3,
+      "run": {
+        "command": ["../../web-server/scripts/aico", "shift", "run"]
+      },
+      "lease_s": 300
+    },
+    {
+      "kind": "session-copies-aico",
+      "what": "Session copies to the workstation",
+      "project": "aico",
+      "home": "aico",
+      "every_min": 3,
+      "run": {
+        "command": ["../../web-server/scripts/aico", "shift", "run"]
+      },
+      "lease_s": 300
+    },
+    {
       "kind": "context-sync",
       "what": "Memories, prompts and launch policy to the standby",
       "project": "aico",

@@ -47,6 +47,7 @@ const STANDBY = {
     /^jobs\/peer-release$/,
     /^jobs\/context-sync$/,
     /^jobs\/wip-mirror-/,
+    /^jobs\/session-copies-/,
     /\/wip-mirror\//,
   ],
 }
