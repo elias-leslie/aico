@@ -2,23 +2,27 @@ import { readFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { describe, expect, it } from 'vitest'
+import { resolveWaitingConfig } from './config'
 import {
   noticeFor,
   postAicoNotice,
   readWaitingState,
-  WAIT_NOTICE_MS,
   type WaitingNotice,
   WaitingNotices,
   type WaitingState,
 } from './waiting'
 
 const ORIGIN = 'https://aico.example.dev'
+const WAIT_NOTICE_MS = resolveWaitingConfig({}).confirmMs
 const TOOLS = [
   { slug: 'claude-code', name: 'Claude Code', processName: 'claude', aliases: ['claude'] },
   { slug: 'codex', name: 'Codex', processName: 'codex', aliases: [] },
 ]
 
-function harness(initial: WaitingState = { seen: {}, sent: {} }) {
+function harness(
+  initial: WaitingState = { seen: {}, sent: {} },
+  covers?: (host: string | undefined) => boolean,
+) {
   let clock = 1_000_000
   const timers = new Map<number, { at: number; fn: () => void }>()
   let next = 1
@@ -27,6 +31,8 @@ function harness(initial: WaitingState = { seen: {}, sent: {} }) {
   let saved = JSON.stringify(initial)
   const waiting = new WaitingNotices({
     origin: ORIGIN,
+    confirmMs: WAIT_NOTICE_MS,
+    ...(covers ? { covers } : {}),
     tools: () => TOOLS,
     send: (notice) => sent.push(notice),
     resolve: (key) => resolved.push(key),
@@ -72,7 +78,7 @@ describe('waiting notices', () => {
       {
         v: 1,
         source: 'aico',
-        kind: 'todo',
+        kind: 'alert',
         severity: 'warning',
         title: 'Claude Code waiting in Disk merge',
         body: 'Open it in Aico to answer.',
@@ -139,6 +145,34 @@ describe('waiting notices', () => {
     const third = harness(JSON.parse(first.saved()))
     third.waiting.sweep()
     expect(third.resolved).toEqual(['aico-waiting:abcd1234'])
+  })
+
+  it('sends nothing for a state that clears inside the confirm window, and sends once it holds', () => {
+    // The 19:24 case: the state read blocked for a moment, then moved on.
+    const h = harness()
+    h.waiting.session(blocked(h.now()))
+    h.advance(WAIT_NOTICE_MS - 1)
+    h.waiting.session({ ...blocked(h.now()), state: 'idle' })
+    h.advance(WAIT_NOTICE_MS * 2)
+    expect(h.sent).toHaveLength(0)
+    expect(h.resolved).toHaveLength(0)
+    h.waiting.session(blocked(h.now()))
+    h.advance(WAIT_NOTICE_MS)
+    expect(h.sent).toHaveLength(1)
+  })
+
+  it('leaves a session on a host with its own Aico to that host, so one session sends one notice', () => {
+    // The hub and the standby both see the workstation's session; the standby is the workstation's peer.
+    const hub = harness(undefined, (host) => host !== 'aico')
+    hub.waiting.session(blocked(hub.now(), { host: 'aico' }))
+    hub.waiting.session(blocked(hub.now(), { id: 'bbbb2222', host: 'agent-work' }))
+    hub.waiting.session(blocked(hub.now(), { id: 'cccc3333' }))
+    hub.advance(WAIT_NOTICE_MS)
+    expect(hub.sent.map((notice) => notice.key)).toEqual([
+      'aico-waiting:bbbb2222',
+      'aico-waiting:cccc3333',
+    ])
+    expect(hub.waiting.pending().sort()).toEqual(['bbbb2222', 'cccc3333'])
   })
 
   it('names the agent the state came from', () => {

@@ -145,13 +145,13 @@ Session errors:
 Aico web sends it when the owner has sessions open and visible (an agent's automated browser never does).
 
 The Tether that knows where Aico is (`TETHER_AICO_URL`) tells the owner when something waits on them: a
-session `blocked` (a permission prompt or a question), local or on a remote host, not seen for 2 minutes since its wait began, gets one notice through Aico's notify (contract
-v1 posted to `POST /api/notices` on loopback at `AICO_WEB_URL`, default `http://127.0.0.1:3002`; `kind: todo`,
-`push: phone` with `interrupt: needs-you`, so an unattended stuck agent reaches the phone and Needs you; Open as the one action:
+session `blocked` (a permission prompt or a question), local or on a remote host, not seen for the confirm window (`TETHER_WAIT_NOTICE_SEC`, default 120 s) since its wait began, gets one notice through Aico's notify (contract
+v1 posted to `POST /api/notices` on loopback at `AICO_WEB_URL`, default `http://127.0.0.1:3002`; `kind: alert`,
+`push: phone` with `interrupt: needs-you`, so an unattended stuck agent reaches the phone; the session itself is already in Needs you, so the notice files no ask of its own; Open as the one action:
 `<aico>/?session=<id>`, a run's page only on Aico's origin). A repeat for the same key stays quiet for the
 notice cooldown (an hour). The key is `aico-waiting:<session id>`. Tether posts
 `POST /api/notices/resolve` `{source: "aico", key, text}` once it no longer waits: answered, seen, ended or
-gone from the run list. A model-switch notice (`aico-model:...`) goes the same way to the tray. Seen marks and open notices are
+gone from the run list. A session on a remote host that has an Aico of its own (`sync` in hosts.json, a standby hub) is left to that host's Tether, so one session sends one notice. A model-switch notice (`aico-model:...`, a `todo`) goes the same way to the tray. Seen marks and open notices are
 kept in the `waiting_notices` setting, so a restart neither repeats nor strands one.
 
 ### Session files

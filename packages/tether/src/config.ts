@@ -45,6 +45,20 @@ export const API_VERSION = 32
 /** Where Aico's web server listens on this host (`AICO_WEB_URL` overrides it). */
 export const AICO_WEB_DEFAULT_URL = 'http://127.0.0.1:3002'
 
+export interface WaitingConfig {
+  /** A session blocked on the owner and unseen this long gets one notice (tray and phone). It is
+   * the confirm window: a state that clears before it never interrupts anyone. */
+  confirmMs: number
+}
+
+export function resolveWaitingConfig(env: NodeJS.ProcessEnv = process.env): WaitingConfig {
+  const raw = env.TETHER_WAIT_NOTICE_SEC
+  const seconds = raw === undefined ? 120 : Number(raw)
+  if ((raw !== undefined && !/^\d+$/.test(raw)) || !(seconds >= 1))
+    throw new Error('TETHER_WAIT_NOTICE_SEC must be a whole number of seconds, at least 1')
+  return { confirmMs: seconds * 1000 }
+}
+
 export interface ShowConfig {
   /** Shares older than this are dropped when the next one arrives. */
   retentionDays: number

@@ -413,36 +413,68 @@ const TURN_TAIL_BYTES = 1024 * 1024
 const TURN_MAX_STEP_BYTES = 4 * 1024 * 1024
 const TURN_ROW = /"type":"(?:user|assistant)"|"subtype":"turn_duration"/
 
-/** What one transcript line says about the main thread's turn: `over` for the
- * `turn_duration` row Claude Code writes when the main turn ends (it also
+/** What one transcript line says about the main thread: `turn` is `over` for
+ * the `turn_duration` row Claude Code writes when the main turn ends (it also
  * counts the background agents still running), `active` for a prompt, a tool
  * result, a background task's notice or an assistant reply, null for anything
- * else (bookkeeping rows, hook summaries, a subagent's own rows). */
-export function mainTurnRow(line: string): 'over' | 'active' | null {
+ * else (bookkeeping rows, hook summaries, a subagent's own rows). `opened` are
+ * the tool calls an assistant row starts, `closed` the ones a result row
+ * answers, and `reset` a user row that is not a tool result (a prompt, an
+ * interrupt marker, a notice): no tool call is pending after it. */
+export interface MainThreadRow {
+  turn: 'over' | 'active' | null
+  opened: string[]
+  closed: string[]
+  reset: boolean
+}
+
+export function mainThreadRow(line: string): MainThreadRow | null {
   if (!TURN_ROW.test(line)) return null
   const row = parse(line)
   if (!row || row.isSidechain === true) return null
-  if (row.type === 'system') return row.subtype === 'turn_duration' ? 'over' : null
-  return row.type === 'user' || row.type === 'assistant' ? 'active' : null
+  const none = { opened: [], closed: [], reset: false }
+  if (row.type === 'system')
+    return row.subtype === 'turn_duration' ? { turn: 'over', ...none, reset: true } : null
+  if (row.type !== 'user' && row.type !== 'assistant') return null
+  const content = (row.message as { content?: unknown } | undefined)?.content
+  const parts = Array.isArray(content) ? (content as { type?: unknown; id?: unknown }[]) : []
+  const ids = (type: string, key: 'id' | 'tool_use_id') =>
+    parts.flatMap((part) =>
+      part?.type === type && typeof (part as Record<string, unknown>)[key] === 'string'
+        ? [(part as Record<string, unknown>)[key] as string]
+        : [],
+    )
+  if (row.type === 'assistant') return { turn: 'active', ...none, opened: ids('tool_use', 'id') }
+  const closed = ids('tool_result', 'tool_use_id')
+  return { turn: 'active', ...none, closed, reset: closed.length === 0 }
+}
+
+/** The turn part of `mainThreadRow`. */
+export function mainTurnRow(line: string): 'over' | 'active' | null {
+  return mainThreadRow(line)?.turn ?? null
 }
 
 /** Incremental reader of a conversation's transcript: whether the latest
- * thing on the main thread is the end of its turn. Claude Code keeps its
- * status `busy` while background agents run after that, though its prompt
- * takes input again; the status file cannot tell that from a turn at work. */
+ * thing on the main thread is the end of its turn, and which tool calls are
+ * still waiting for a result. Claude Code keeps its status `busy` while
+ * background agents run after that turn end, though its prompt takes input
+ * again; the status file cannot tell that from a turn at work. It also says
+ * `waiting` for any open dialog; a question for the owner (a permission
+ * prompt, AskUserQuestion, an MCP elicitation) is always a tool call without
+ * its result yet. */
 export class ClaudeMainTurn {
   private offset = 0
   private started = false
   private over = false
+  private readonly pending = new Set<string>()
+  private readable = false
 
   constructor(
     readonly path: string,
     private readonly tail: FileTail = nodeFileTail,
   ) {}
 
-  /** True when the main turn has ended; false while it runs or when the
-   * transcript cannot say (unreadable, or no turn row in its tail yet). */
-  isOver(): boolean {
+  private read(): boolean {
     try {
       const chunk = this.tail.read(
         this.path,
@@ -452,13 +484,30 @@ export class ClaudeMainTurn {
       this.offset = chunk.offset
       this.started = true
       for (const line of chunk.text.split('\n')) {
-        const row = line ? mainTurnRow(line) : null
-        if (row) this.over = row === 'over'
+        const row = line ? mainThreadRow(line) : null
+        if (!row) continue
+        if (row.turn) this.over = row.turn === 'over'
+        if (row.reset) this.pending.clear()
+        for (const id of row.closed) this.pending.delete(id)
+        for (const id of row.opened) this.pending.add(id)
       }
+      this.readable = true
     } catch {
-      return false
+      this.readable = false
     }
-    return this.over
+    return this.readable
+  }
+
+  /** True when the main turn has ended; false while it runs or when the
+   * transcript cannot say (unreadable, or no turn row in its tail yet). */
+  isOver(): boolean {
+    return this.read() && this.over
+  }
+
+  /** Whether a tool call waits for its result: true or false when the
+   * transcript can say, null when it cannot be read. */
+  hasPendingTool(): boolean | null {
+    return this.read() ? this.pending.size > 0 : null
   }
 }
 
@@ -482,21 +531,38 @@ class ClaudeProbe implements AgentProbe {
     } catch {
       return null
     }
+    if (!signal?.agentSessionId) return signal
+    if (signal.state === 'blocked') {
+      // `waiting` is any open dialog. Blocked on the owner only when a tool call
+      // is waiting for its result (a permission prompt, a question); a transcript
+      // that cannot say keeps the status file's word.
+      const reader = this.reader(signal.agentSessionId)
+      if (reader?.hasPendingTool() === false)
+        return {
+          ...signal,
+          state: reader.isOver() ? 'idle' : 'working',
+          detail: null,
+        }
+      return signal
+    }
     // busy while the main turn is over: background agents still run.
-    if (signal?.state === 'working' && signal.agentSessionId && this.mainTurnOver(signal))
+    if (signal.state === 'working' && this.mainTurnOver(signal))
       return { ...signal, detail: MAIN_TURN_OVER }
     return signal
   }
 
-  private mainTurnOver(signal: AgentSignal): boolean {
-    const sessionId = signal.agentSessionId as string
+  private reader(sessionId: string): ClaudeMainTurn | null {
     if (this.turn?.sessionId !== sessionId) this.turn = { sessionId, reader: null }
     if (!this.turn.reader) {
       const path = claudeTranscriptPath(this.fs, this.home, sessionId)
-      if (!path) return false
+      if (!path) return null
       this.turn.reader = new ClaudeMainTurn(path, this.tail)
     }
-    return this.turn.reader.isOver()
+    return this.turn.reader
+  }
+
+  private mainTurnOver(signal: AgentSignal): boolean {
+    return this.reader(signal.agentSessionId as string)?.isOver() ?? false
   }
 
   models(signal: AgentSignal | null) {

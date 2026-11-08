@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { FileTail, ProcFs } from '../../../proc-fs'
-import { ClaudeMainTurn, claudeCode, mainTurnRow } from './claude-code'
+import { ClaudeMainTurn, claudeCode, mainThreadRow, mainTurnRow } from './claude-code'
 import { MAIN_TURN_OVER, type StateContext } from './contract'
 
 const SESSION = '5a7741ea-e6b1-4062-853b-0d9d2e03d549'
@@ -17,6 +17,21 @@ const toolResult = row({
   message: { content: [{ type: 'tool_result', tool_use_id: 't', content: 'ok' }] },
 })
 const reply = row({ type: 'assistant', message: { stop_reason: 'end_turn', content: [] } })
+// A tool call and its result by id; Claude Code writes one assistant row per content block.
+const call = (id: string, name = 'Bash') =>
+  row({
+    type: 'assistant',
+    message: { stop_reason: 'tool_use', content: [{ type: 'tool_use', id, name, input: {} }] },
+  })
+const result = (id: string) =>
+  row({
+    type: 'user',
+    message: { content: [{ type: 'tool_result', tool_use_id: id, content: 'ok' }] },
+  })
+const interrupted = row({
+  type: 'user',
+  message: { content: [{ type: 'text', text: '[Request interrupted by user for tool use]' }] },
+})
 const hookSummary = row({ type: 'system', subtype: 'stop_hook_summary' })
 const turnOver = (pending?: number) =>
   row({ type: 'system', subtype: 'turn_duration', pendingBackgroundAgentCount: pending })
@@ -139,12 +154,16 @@ describe('Claude Code state with background agents', () => {
     expect(claudeCode.state.find(ctx, first)?.poll()?.detail).toBeNull()
   })
 
-  it('reads idle and waiting from the status file alone, even after a turn end', () => {
-    const lines = [prompt, reply, turnOver(1)]
-    expect(setup('idle', lines).probe()?.poll()).toMatchObject({ state: 'idle', detail: null })
-    expect(setup('waiting', lines).probe()?.poll()).toMatchObject({ state: 'blocked' })
+  it('reads idle from the status file alone, even after a turn end', () => {
+    expect(
+      setup('idle', [prompt, reply, turnOver(1)])
+        .probe()
+        ?.poll(),
+    ).toMatchObject({
+      state: 'idle',
+      detail: null,
+    })
   })
-
   it('stays plain working when the transcript cannot say', () => {
     const missing = setup('busy', [])
     delete missing.files[TRANSCRIPT]
@@ -165,5 +184,70 @@ describe('Claude Code state with background agents', () => {
       .probe()
       ?.poll()
     expect(JSON.parse(JSON.stringify(signal))).toEqual(signal)
+  })
+})
+
+describe('Claude Code waiting needs a tool call without its result', () => {
+  const poll = (lines: string[]) => setup('waiting', lines).probe()?.poll()
+
+  it('is blocked for a permission prompt or a question: the tool call has no result yet', () => {
+    expect(poll([prompt, call('a'), result('a'), call('b')])).toMatchObject({
+      state: 'blocked',
+      source: 'claude-status',
+    })
+    expect(poll([prompt, call('q', 'AskUserQuestion')])).toMatchObject({ state: 'blocked' })
+    // two calls at once, one answered: the other still waits
+    expect(poll([prompt, call('a'), call('b'), result('a')])).toMatchObject({ state: 'blocked' })
+  })
+
+  it('is idle when the turn ended with background agents running: the 19:24 session that was not asking', () => {
+    // Real rows around 19:24:12 on 7 Nov: Agent launched in the background, a reply, the turn
+    // end counting four agents, then the status file said waiting.
+    const lines = [
+      prompt,
+      call('agent', 'Agent'),
+      result('agent'),
+      reply,
+      hookSummary,
+      turnOver(4),
+      ...subagent,
+      ...bookkeeping,
+    ]
+    expect(poll(lines)).toMatchObject({ state: 'idle', detail: null, source: 'claude-status' })
+  })
+
+  it('is working when a dialog is open mid-turn with nothing waiting for a result', () => {
+    expect(poll([prompt, call('a'), result('a')])).toMatchObject({ state: 'working' })
+    expect(poll([prompt])).toMatchObject({ state: 'working' })
+  })
+
+  it('forgets calls an interrupt, a new prompt or the turn end left without a result', () => {
+    expect(poll([prompt, call('a'), interrupted])).toMatchObject({ state: 'working' })
+    expect(poll([prompt, call('a'), prompt])).toMatchObject({ state: 'working' })
+    expect(poll([prompt, call('a'), reply, turnOver(0)])).toMatchObject({ state: 'idle' })
+  })
+
+  it('follows the transcript: blocked while the call waits, off once it is answered', () => {
+    const { files, probe } = setup('waiting', [prompt, call('a')])
+    const found = probe()
+    expect(found?.poll()?.state).toBe('blocked')
+    files[TRANSCRIPT] += `${result('a')}\n`
+    expect(found?.poll()?.state).toBe('working')
+    files[TRANSCRIPT] += `${call('b')}\n`
+    expect(found?.poll()?.state).toBe('blocked')
+  })
+
+  it('keeps the status file waiting when the transcript cannot say', () => {
+    const missing = setup('waiting', [])
+    delete missing.files[TRANSCRIPT]
+    expect(missing.probe()?.poll()).toMatchObject({ state: 'blocked' })
+  })
+
+  it('reads tool calls and results off main-thread rows only', () => {
+    expect(mainThreadRow(call('a'))).toMatchObject({ opened: ['a'], closed: [], reset: false })
+    expect(mainThreadRow(result('a'))).toMatchObject({ opened: [], closed: ['a'], reset: false })
+    expect(mainThreadRow(prompt)).toMatchObject({ reset: true })
+    expect(mainThreadRow(turnOver(1))).toMatchObject({ turn: 'over', reset: true })
+    expect(mainThreadRow(row({ type: 'assistant', isSidechain: true, message: {} }))).toBeNull()
   })
 })

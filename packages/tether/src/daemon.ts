@@ -64,7 +64,7 @@ import { hostAdmissionPath, hostAdmissionRed } from '@aico/shared/host-admission
 import { listenPrivateSocket } from '@aico/shared/http'
 import { registryProjects } from '@aico/tasks/registry'
 import { type AskDelivery, AskStore, aicoOrigin, handOffAsks, type NeedsYouFeed } from './asks'
-import { AICO_WEB_DEFAULT_URL, resolveShowConfig } from './config'
+import { AICO_WEB_DEFAULT_URL, resolveShowConfig, resolveWaitingConfig } from './config'
 import { CoordinationDocs } from './coordination/docs'
 import { tetherHubPorts } from './hub/ports'
 import { LaneReporter, LaneReportStore, laneView } from './lane-reports'
@@ -86,7 +86,7 @@ import { persistSizeHolders } from './size-holder'
 import { VERSION } from './version'
 import type { PullKind } from './wait-kinds'
 import { anchorWidget, PullReaders, systemdCmdUnits, systemdProbe } from './wait-readers'
-import { postAicoNotice, readWaitingState, WAIT_NOTICE_MS, WaitingNotices } from './waiting'
+import { postAicoNotice, readWaitingState, WaitingNotices } from './waiting'
 import { WaitService, WaitStore } from './waits'
 import { bindWaitingOn, bindWakeStore, WakeService } from './wake-runtime'
 
@@ -432,12 +432,16 @@ function startWaitingNotices(
   context: DaemonContext,
   env: NodeJS.ProcessEnv,
   aicoUrl: string | null,
+  hosts: Hub | null,
 ): WaitingNotices | null {
   const { store, events } = context
   const waiting =
     aicoUrl && reconcileEnabled(env)
       ? new WaitingNotices({
           origin: aicoUrl,
+          confirmMs: resolveWaitingConfig(env).confirmMs,
+          // A host with its own Aico (a standby hub) tells its own owner about its sessions.
+          covers: (host) => !host || !hosts?.peerView(host)?.entry.sync,
           tools: () => store.listTools(),
           send: (notice) =>
             postAicoNotice(env, '/api/notices', notice, `waiting_notice key=${notice.key}`),
@@ -459,7 +463,9 @@ function startWaitingNotices(
     events.subscribe((event) => {
       if (event.type === 'session.created' || event.type === 'session.updated') {
         const session = event.data.session as { id?: unknown } | undefined
-        if (session && typeof session.id === 'string') waiting.session(session as { id: string })
+        const host = typeof event.data.host === 'string' ? event.data.host : undefined
+        if (session && typeof session.id === 'string')
+          waiting.session({ ...(session as { id: string }), ...(host ? { host } : {}) })
       } else if (event.type === 'session.ended' && typeof event.data.id === 'string') {
         waiting.removed(event.data.id)
       }
@@ -852,6 +858,7 @@ function sweepNoticesWhenReady(
   ready: Promise<void>,
   waiting: WaitingNotices | null,
   modelNotices: ModelNotices | null,
+  settleMs: number,
 ): void {
   if (waiting)
     void ready
@@ -859,7 +866,7 @@ function sweepNoticesWhenReady(
         // Sessions already waiting when Tether started; then, once remote hosts
         // have had time to list theirs, resolve what no longer waits.
         for (const row of listSessions()) waiting.session(sessionSnapshot(row) as { id: string })
-        setTimeout(() => waiting.sweep(), WAIT_NOTICE_MS).unref()
+        setTimeout(() => waiting.sweep(), settleMs).unref()
       })
       .catch(() => {})
   if (modelNotices)
@@ -869,7 +876,7 @@ function sweepNoticesWhenReady(
         // listed theirs, resolve the notices of sessions that are gone.
         for (const row of listSessions())
           modelNotices.session(sessionSnapshot(row) as { id: string }, null)
-        setTimeout(() => modelNotices.sweep(), WAIT_NOTICE_MS).unref()
+        setTimeout(() => modelNotices.sweep(), settleMs).unref()
       })
       .catch(() => {})
 }
@@ -926,7 +933,7 @@ export async function startDaemon(
   if (hosts) context.hub = hosts
   context.placement = createPlacement(context, env, hosts)
   const aicoUrl = aicoOrigin(env.TETHER_AICO_URL)
-  const waiting = startWaitingNotices(context, env, aicoUrl)
+  const waiting = startWaitingNotices(context, env, aicoUrl, hosts)
   if (waiting) context.waiting = waiting
   const modelNotices = startModelNotices(context, env, aicoUrl)
   const lanes = startLaneReports(context, env, wakes, hosts, modelNotices)
@@ -946,7 +953,12 @@ export async function startDaemon(
   hosts?.start()
   const idleOff = hosts ? startIdleOff(context, env, hosts) : null
   // Agent state: hook reports always; the poll only where Tether observes tmux.
-  const agentStates = new AgentStateTracker((id) => {
+  const agentStates = new AgentStateTracker((id, record) => {
+    // What blocked a session, for the owner's "why did it ask?" (the waiting notice follows it).
+    if (record.state === 'blocked')
+      console.log(
+        `[tether:agent-state] session=${id} blocked source=${record.stateSource} detail=${record.stateDetail ?? '-'}`,
+      )
     notifySessionChanged(id, { force: true })
     wakes.scheduler.nudge()
   })
@@ -958,7 +970,7 @@ export async function startDaemon(
   void context.continuity?.start()
   startHistoryScan(context.history)
   void ready.then(() => context.recovery?.start()).catch(() => {})
-  sweepNoticesWhenReady(ready, waiting, modelNotices)
+  sweepNoticesWhenReady(ready, waiting, modelNotices, resolveWaitingConfig(env).confirmMs)
   console.log(`[tether] ${VERSION} instance=${paths.instance} listening on ${paths.socket}`)
   return {
     server,

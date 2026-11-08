@@ -65,6 +65,7 @@ function modelNotice(
   const request = typeof session.rootRequestId === 'string' ? session.rootRequestId : null
   const { what, tail } = modelSwitchText(change, tool, request)
   return waitingNotice({
+    kind: 'todo',
     key: `aico-model:${session.id}:${change.key}`,
     title: `${change.kind === 'paused' ? 'Model refused' : 'Model changed'} in ${name.slice(0, 80)}`,
     body: `It ${change.kind === 'paused' ? '' : 'is '}${what}. ${tail.charAt(0).toUpperCase()}${tail.slice(1)}.`,

@@ -7,7 +7,7 @@ import {
 } from '@aico/session-engine/paths'
 import { EXPECTED_TETHER_API_VERSION } from '@aico/tether-client'
 import { describe, expect, it } from 'vitest'
-import { API_VERSION } from './config'
+import { API_VERSION, resolveWaitingConfig } from './config'
 
 const env = { HOME: '/home/u', XDG_RUNTIME_DIR: '/run/user/1000' }
 const id = '06e633492f792ad10439f675491801ee'
@@ -64,5 +64,16 @@ describe('tmux server units', () => {
 describe('API version', () => {
   it('is the one the web server expects of the daemon', () => {
     expect(API_VERSION).toBe(EXPECTED_TETHER_API_VERSION)
+  })
+})
+
+describe('resolveWaitingConfig', () => {
+  it('confirms a wait for two minutes unless TETHER_WAIT_NOTICE_SEC says otherwise', () => {
+    expect(resolveWaitingConfig({}).confirmMs).toBe(120_000)
+    expect(resolveWaitingConfig({ TETHER_WAIT_NOTICE_SEC: '30' }).confirmMs).toBe(30_000)
+    for (const bad of ['0', '-1', '1.5', 'soon'])
+      expect(() => resolveWaitingConfig({ TETHER_WAIT_NOTICE_SEC: bad })).toThrow(
+        /TETHER_WAIT_NOTICE_SEC/,
+      )
   })
 })

@@ -1,14 +1,19 @@
 // The owner's "waiting" notice. A session blocked on the owner (a permission
-// prompt or a question) that nobody
-// has opened for 2 minutes gets one notice through Aico's notify (contract v1,
+// prompt or a question) that nobody has opened for the confirm window
+// (config.ts, 2 minutes) gets one notice through Aico's notify (contract v1,
 // `POST /api/notices` on loopback), pushed to the phone so an unattended
 // stuck agent is noticed; a repeat for the same session stays quiet for the
-// notice cooldown (an hour). It is resolved once the session no longer waits:
-// answered, seen or gone. "Seen" is Aico web telling Tether the owner had the
-// session open and visible (POST /v1/sessions/seen).
+// notice cooldown (an hour). Nothing is sent before the window ends, and a
+// session that stops waiting inside it sends nothing. The notice is resolved
+// once the session no longer waits: answered, seen or gone. "Seen" is Aico web
+// telling Tether the owner had the session open and visible (POST
+// /v1/sessions/seen). It is an alert, not a todo: the session itself is already
+// in Needs you (live, with its Open button), so it files no ask of its own.
 //
 // Only the Tether that knows where Aico is (TETHER_AICO_URL) sends these: it
 // sees its own sessions and every remote host's, so a remote Tether stays quiet.
+// A remote host with an Aico of its own (a standby hub) tells its own owner, so
+// the hub leaves its sessions to it: one session, one notice.
 
 import { HttpError, type Router, readJsonObject, sendJson } from '@aico/shared/http'
 import { type WaitingNotice, waitingNotice } from './aico-notice'
@@ -16,8 +21,6 @@ import { AICO_WEB_DEFAULT_URL } from './config'
 
 export type { WaitingNotice }
 
-/** Blocked and unseen this long: one notice. */
-export const WAIT_NOTICE_MS = 2 * 60_000
 /** Seen marks kept across restarts (newest first). */
 const SEEN_KEPT = 500
 const SESSION_ID = /^[0-9a-f]{8}$/
@@ -26,6 +29,8 @@ const SEEN_MAX_IDS = 50
 /** The part of a session descriptor the notice reads. */
 export interface WaitingSession {
   id: string
+  /** The linked host the session runs on; absent for this computer's own. */
+  host?: string
   tool?: string
   label?: string
   displayTitle?: string
@@ -96,6 +101,10 @@ export function readWaitingState(raw: string | null): WaitingState {
 }
 
 export interface WaitingDeps {
+  /** Blocked and unseen this long: one notice (config.ts `confirmMs`). */
+  confirmMs: number
+  /** Whether this Tether tells the owner about sessions on `host` (absent: its own). */
+  covers?(host: string | undefined): boolean
   /** Aico's `POST /api/notices`. */
   send(notice: WaitingNotice): void
   /** Aico's `POST /api/notices/resolve` for this key. */
@@ -136,7 +145,9 @@ export class WaitingNotices {
 
   /** A session's latest descriptor. */
   session(session: WaitingSession): void {
-    if (session.state === 'blocked') this.wait(session.id, session.stateAt ?? null, { session })
+    if (!(this.deps.covers?.(session.host) ?? true)) this.over(session.id)
+    else if (session.state === 'blocked')
+      this.wait(session.id, session.stateAt ?? null, { session })
     else this.over(session.id)
   }
 
@@ -184,7 +195,7 @@ export class WaitingNotices {
     if (this.state.sent[id]?.since === since) return
     entry.timer = this.setTimer(
       () => this.fire(id, entry),
-      Math.max(0, since + WAIT_NOTICE_MS - this.now()),
+      Math.max(0, since + this.deps.confirmMs - this.now()),
     )
   }
 

@@ -403,6 +403,31 @@ describe('Needs you', () => {
     store.close()
   })
 
+  it('files no ask for a session waiting notice: the session is already in Needs you, with Open', async () => {
+    const store = new NotifyStore(':memory:')
+    const asks = new FakeAsks()
+    // Exactly what Tether sends (packages/tether/src/aico-notice.ts): an alert to the phone.
+    const waiting = parseNotice({
+      v: 1,
+      source: 'aico',
+      kind: 'alert',
+      severity: 'warning',
+      title: 'Claude Code waiting in Aico codebase cleanup handoff',
+      body: 'Open it in Aico to answer.',
+      key: 'aico-waiting:fa41c0c8',
+      open: 'https://aico.summitflow.dev/?session=fa41c0c8',
+      actions: ['open'],
+      primary: 'open',
+      push: 'phone',
+      interrupt: 'needs-you',
+    })
+    expect(waiting.push).toBe('phone')
+    const { id } = store.accept(waiting, 'local', [], 0)
+    await new NeedsYou({ store, asks }).noticeAccepted(id, waiting)
+    expect(asks.created).toEqual([])
+    store.close()
+  })
+
   it('leaves "Not me" open on the hub and files no ask for a plain alert', async () => {
     const store = new NotifyStore(':memory:')
     const asks = new FakeAsks()
