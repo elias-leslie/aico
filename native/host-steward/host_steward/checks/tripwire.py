@@ -652,7 +652,11 @@ def _items(e: dict[str, Any]) -> list[str]:
 
 
 def _short(text: str, limit: int) -> str:
-    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+    """Whole sentences that fit (the row adds the last full stop); a cut with … only for one long sentence."""
+    if len(text) <= limit:
+        return text
+    end = text.rfind(". ", 0, limit)
+    return text[:end] if end > 0 else text[: limit - 1].rstrip() + "…"
 
 
 def recorded_text(e: dict[str, Any]) -> str:

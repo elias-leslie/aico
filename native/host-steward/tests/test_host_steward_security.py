@@ -1072,3 +1072,12 @@ def test_the_checks_are_registered_with_sudo_before_the_tripwire():
     assert order.index("sudo") < order.index("tripwire") and "security" in order
     for name in ("tripwire", "sudo", "security"):
         assert {"what", "every_min", "slack_min"} <= set(DATA["checks"][name])
+
+
+def test_a_long_message_keeps_whole_sentences_instead_of_cutting_one_midway():
+    from host_steward.checks.tripwire import _short
+
+    text = "Listening ports changed. A root login falls in its window. Root logins since the last check: 11:31"
+    assert _short(text, 200) == text
+    assert _short(text, 80) == "Listening ports changed. A root login falls in its window"
+    assert _short("One long sentence with no stop in it at all", 20) == "One long sentence w…"
