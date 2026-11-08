@@ -482,7 +482,6 @@ export interface TrayDeps {
   notify: Pick<NotifyStore, 'list' | 'get' | 'readMarks' | 'rowAskIds' | 'markRead' | 'markAllRead'>
   asks: { list(): Promise<Ask[]>; approvals(): Promise<Approval[] | null> }
   publicHost: string | null
-  /** This Aico's name in the shared notification list. */
   choices?: NoticeChoices
   now?: () => number
 }
