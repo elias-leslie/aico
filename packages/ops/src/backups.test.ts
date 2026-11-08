@@ -74,8 +74,8 @@ const cfg = () => {
   return c
 }
 const ok = (_argv: string[]) => Promise.resolve({ code: 0, out: '', err: '' })
-it('migrates all 66 source records, both backend records and the three external checks, preserving paths and excludes', () => {
-  expect(migrated.sources).toHaveLength(66)
+it('migrates all 67 source records, both backend records and the three external checks, preserving paths and excludes', () => {
+  expect(migrated.sources).toHaveLength(67)
   expect(migrated.backends).toHaveLength(2)
   expect(migrated.external).toHaveLength(3)
   expect(migrated.sources.find((s) => s.id === 'pve-ct-190-aico-data')?.path).toContain(

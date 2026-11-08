@@ -160,6 +160,7 @@
     "pve-ct-190-aico-data": "aico",
     "pve-vm-180-app-recovery": "portfolio-ai",
     "pve-ct-191-jobinator-data": "jobinator-4000",
+    "pve-vm-210-dadbot-data": "dadbot",
     "ominull-evidence-replica": "ominull"
   },
   "displayNames": {

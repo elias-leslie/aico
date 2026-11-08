@@ -540,6 +540,17 @@
       "storage_backend_id": null
     },
     {
+      "id": "pve-vm-210-dadbot-data",
+      "name": "VM 210 Dadbot data: family documents, a safe database copy and the push key",
+      "path": "proxmox://proxmox-gem/qemu/210/files?via=agent&path=/srv/dadbot/data&exclude=data/dadbot.db&exclude=data/dadbot.db-wal&exclude=data/dadbot.db-shm&exclude=data/school.db&exclude=data/school.db-wal&exclude=data/school.db-shm",
+      "source_type": "workspace",
+      "project_id": null,
+      "enabled": true,
+      "frequency": "daily",
+      "retention_days": 30,
+      "storage_backend_id": null
+    },
+    {
       "id": "pve-vm-100-browser-state",
       "name": "VM 100 st-browser profiles and settings",
       "path": "proxmox://proxmox-gem/qemu/100/files?via=agent&path=%2Fhome%2Fkasadis%2F.local%2Fshare%2Fst-browser%2Fprofiles&path=%2Fhome%2Fkasadis%2F.config%2Fst-browser&exclude=Cache&exclude=Code+Cache&exclude=GPUCache&exclude=CacheStorage&exclude=ScriptCache&exclude=GrShaderCache&exclude=GraphiteDawnCache&exclude=ShaderCache&exclude=Service+Worker&exclude=optimization_guide_model_store&exclude=component_crx_cache&exclude=Crashpad&exclude=Singleton%2A&exclude=Safe+Browsing&exclude=BrowserMetrics%2A&exclude=Dawn%2ACache&exclude=%2ACache",
