@@ -42,7 +42,7 @@ import { NotesStore } from './notes-db'
 import { registerExportRoutes } from './notes-export'
 import { resolveNotice } from './notice'
 import { registerNotificationRoutes } from './notifications'
-import { NotifyHub } from './notify'
+import { holdingFor, NOTICE_FIRST_SYNC_MS, NOTICE_PEER_ALIVE_PASSES, NotifyHub } from './notify'
 import { NotesOwner } from './owners/notes'
 import { PortfolioAiOwner } from './owners/portfolio-ai'
 import type { OwnerAdapter } from './owners/types'
@@ -52,7 +52,7 @@ import { ProjectsService, registerProjectRoutes } from './projects'
 import { registerRoutineRoutes } from './routines'
 import { createWebServer } from './server'
 import { createServiceAppsServer } from './service-apps'
-import { primaryUrl } from './service-primary'
+import { primaryAnswers, primaryUrl } from './service-primary'
 import { registerSharedPageRoutes } from './shared-pages'
 import { Shows } from './shows'
 import { createStaticSite } from './static'
@@ -93,6 +93,7 @@ function serve(): void {
     dataDir: config.dataDir,
     publicHost: config.publicHost,
     machine,
+    hostName: config.hostName,
     status,
     tether,
   })
@@ -192,7 +193,25 @@ function serve(): void {
       router,
     },
   })
-  const sync = startSync({ config, store, notes, blobsDir })
+  const standby = primaryUrl(process.env, 0) !== null
+  const sync = startSync({
+    config,
+    store,
+    notes,
+    blobsDir,
+    notify: notify.syncHandle(),
+    standby,
+  })
+  const syncStarted = Date.now()
+  notify.holding = () =>
+    holdingFor({
+      hostName: config.hostName,
+      standby,
+      peers: () => sync.loop.status(),
+      aliveMs: config.sync.intervalMs * NOTICE_PEER_ALIVE_PASSES,
+      settleMs: NOTICE_FIRST_SYNC_MS,
+      startedAt: syncStarted,
+    })
   registerContextRoutes(api, {
     dataDir: config.dataDir,
     machine,
@@ -294,6 +313,7 @@ function serve(): void {
     notify: notify.store,
     asks,
     publicHost: config.publicHost,
+    hostName: config.hostName,
     choices: noticeChoices,
   })
   registerNotificationRoutes(api, {
@@ -345,13 +365,11 @@ function serve(): void {
 
   background.start()
   const canaryListen = process.env.AICO_CANARY_LISTEN
+  const canaryPrimary = canaryListen
+    ? primaryUrl(process.env, canaryListen.split(':')[1] as string)
+    : null
   const canary = canaryListen
-    ? createCanaryServer(
-        notify.notifier,
-        canaryFolder,
-        canaryEvents,
-        primaryUrl(process.env, canaryListen.split(':')[1] as string),
-      )
+    ? createCanaryServer(notify.notifier, canaryFolder, canaryEvents, canaryPrimary)
     : null
   if (canary && canaryListen) {
     const [host, port] = canaryListen.split(':')
@@ -359,7 +377,10 @@ function serve(): void {
     canary.listen(Number(port), host)
   }
   notify.start()
-  canaryPoller.start(Number(process.env.AICO_CANARY_POLL_SECONDS) || undefined)
+  canaryPoller.start(
+    Number(process.env.AICO_CANARY_POLL_SECONDS) || undefined,
+    canaryPrimary ? () => primaryAnswers(canaryPrimary) : undefined,
+  )
   reader.start()
   let selfRows: ReturnType<typeof startSelfRows> | null = null
   server.listen(config.port, config.host, () => {

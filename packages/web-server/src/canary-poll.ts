@@ -53,12 +53,13 @@ export class CanaryPoller {
     private readonly fetchJson: HistoryFetcher = fetchHistory,
   ) {}
 
-  start(intervalS: number = DEFAULT_INTERVAL_S): void {
+  /** `elsewhere`: the workstation is polling, so the standby leaves it (a hit alerts once). */
+  start(intervalS: number = DEFAULT_INTERVAL_S, elsewhere?: () => Promise<boolean>): void {
     if (this.timer) return
     const run = () =>
-      void this.poll().catch((error) =>
-        console.error('[canary] poll failed:', (error as Error).message),
-      )
+      void (async () => {
+        if (!(await elsewhere?.())) await this.poll()
+      })().catch((error) => console.error('[canary] poll failed:', (error as Error).message))
     this.timer = setInterval(run, intervalS * 1000)
     this.timer.unref()
     setTimeout(run, 5000).unref()

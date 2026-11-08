@@ -529,6 +529,31 @@ describe('standby in front of the workstation', () => {
     expect(rowsWritten).not.toHaveBeenCalled()
   })
 
+  it('keeps nothing of a row the workstation refused', async () => {
+    primaryUp.mockImplementation((req: IncomingMessage, res: ServerResponse) => {
+      req.resume()
+      req.on('end', () => res.writeHead(400).end('{}'))
+    })
+    const res = await fetch(`${standbyBase}/v1/status/rows`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'portfolio-ai/refused',
+        what: 'Job',
+        kind: 'job',
+        machine: apps['portfolio-ai']?.machine,
+        project: 'portfolio-ai',
+        state: 'ok',
+        meaning: 'Fine.',
+      }),
+    })
+    expect(res.status).toBe(400)
+    await new Promise((done) => setTimeout(done, 20))
+    expect(status.read({ project: ['portfolio-ai'] }).rows.map((r) => r.id)).not.toContain(
+      'portfolio-ai/refused',
+    )
+  })
+
   it('looks here for an ask the workstation has never heard of', async () => {
     const res = await fetch(`${standbyBase}/v1/asks/0123456789ab`, {
       headers: { authorization: `Bearer ${token}` },

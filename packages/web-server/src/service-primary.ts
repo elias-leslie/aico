@@ -10,6 +10,7 @@ import {
   type RequestListener,
   type ServerResponse,
 } from 'node:http'
+import { connect } from 'node:net'
 import { Readable } from 'node:stream'
 
 export interface PrimaryOptions {
@@ -19,7 +20,7 @@ export interface PrimaryOptions {
   downMs?: number
   maxBodyBytes: number
   now?: () => number
-  /** A request the primary took, with its body: what this machine should remember of it anyway. */
+  /** A request the primary accepted (2xx), with its body: what this machine should remember of it anyway. */
   taken?: (req: IncomingMessage, body: Buffer) => void
   /** The primary's answer is not the last word: the answer it gave means "try here". */
   askHere?: (req: IncomingMessage, status: number) => boolean
@@ -85,7 +86,7 @@ class ServicePrimary {
       this.downUntil = this.now() + (this.options.downMs ?? DOWN_MS)
       return local(replay(req, body))
     }
-    this.options.taken?.(req, body)
+    if (res.statusCode >= 200 && res.statusCode < 300) this.options.taken?.(req, body)
   }
 
   private forward(
@@ -141,6 +142,21 @@ class ServicePrimary {
 export function primaryUrl(env: NodeJS.ProcessEnv, port: number | string): string | null {
   const host = env.AICO_PRIMARY_HOST?.trim()
   return host ? `http://${host}:${port}` : null
+}
+
+/** Whether the workstation's listener takes a connection: its own timers run only then, not twice. */
+export function primaryAnswers(url: string, connectMs = CONNECT_MS): Promise<boolean> {
+  const target = new URL(url)
+  return new Promise((resolve) => {
+    const socket = connect({ host: target.hostname, port: Number(target.port) })
+    const done = (up: boolean) => {
+      socket.destroy()
+      resolve(up)
+    }
+    socket.setTimeout(connectMs, () => done(false))
+    socket.once('connect', () => done(true))
+    socket.once('error', () => done(false))
+  })
 }
 
 /** A listener that hands each request to the primary first; without one, it is just `local`. */
