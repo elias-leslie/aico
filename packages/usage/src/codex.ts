@@ -173,6 +173,40 @@ export function gatherFiles(
   return { files, saved, hashedKey }
 }
 
+/**
+ * Where a pass resumes a file: its saved state and offset, or a fresh start when the file shrank
+ * or its first bytes changed (it was replaced), after `takeBack` undoes what each of the old
+ * file's rollups added. Null when its first bytes cannot be read now: left for a later pass.
+ */
+export function resumeFile<
+  S extends { private?: boolean; head?: string; rolls?: Record<string, number[]> },
+>(
+  file: Found,
+  prior: SavedCursor | undefined,
+  isPrivate: (path: string) => boolean,
+  takeBack: (key: string, rolled: NonNullable<S['rolls']>[string]) => void,
+): { state: S; offset: number } | null {
+  let state = (prior ? JSON.parse(prior.state) : { private: isPrivate(file.path) }) as S
+  let offset = prior?.offset ?? 0
+  if (prior) {
+    let replaced = prior.offset > file.size
+    if (!replaced && state.head) {
+      try {
+        replaced = headHash(file.path, file.size) !== state.head
+      } catch {
+        return null
+      }
+    }
+    if (replaced) {
+      for (const [key, rolled] of Object.entries(state.rolls ?? {}))
+        takeBack(key, rolled as NonNullable<S['rolls']>[string])
+      state = { private: state.private } as S
+      offset = 0
+    }
+  }
+  return { state, offset }
+}
+
 /** The JSONL files under the sessions root changed since `sinceMs`, newest day folders only. */
 function recentFiles(root: string, sinceMs: number): Found[] {
   const out: Found[] = []
@@ -264,33 +298,21 @@ function pass(db: Database, options: CodexOptions): CodexResult {
 
   for (const file of [...files.values()].sort((a, b) => a.mtime - b.mtime)) {
     const prior = saved.get(hashedKey(file.path)) ?? saved.get(file.path)
-    let state: FileState = prior
-      ? JSON.parse(prior.state)
-      : { private: options.isPrivate(file.path) }
-    let offset = prior?.offset ?? 0
-    // Shrunk, or its first bytes changed: the file was replaced. Read it again from the start
-    // and take back what the old one added.
-    if (prior) {
-      let replaced = prior.offset > file.size
-      if (!replaced && state.head) {
-        try {
-          replaced = headHash(file.path, file.size) !== state.head
-        } catch {
-          continue
-        }
-      }
-      if (replaced) {
-        for (const [key, [requests, input, cached, output]] of Object.entries(state.rolls ?? {})) {
-          const back = roll(key)
-          back.requests -= requests
-          back.input -= input
-          back.cached -= cached
-          back.output -= output
-        }
-        state = { private: state.private }
-        offset = 0
-      }
-    }
+    const resumed = resumeFile<FileState>(
+      file,
+      prior,
+      options.isPrivate,
+      (key, [requests, input, cached, output]) => {
+        const back = roll(key)
+        back.requests -= requests
+        back.input -= input
+        back.cached -= cached
+        back.output -= output
+      },
+    )
+    if (!resumed) continue
+    const { state } = resumed
+    let { offset } = resumed
     // Untouched since before the cutover and never read: its tail is all that can still matter.
     const old = !prior && file.mtime < cutoverMs
     if (old) offset = Math.max(file.size - cfg.tail_bytes, 0)

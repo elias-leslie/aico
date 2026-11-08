@@ -664,6 +664,27 @@ describe('Claude Code transcripts', () => {
     expect(cursor.offset).toBeGreaterThan(0)
   })
 
+  it('replaces what a shrunk or rewritten transcript added instead of adding to it', async () => {
+    const db = openUsage(':memory:')
+    const path = join(folder(), 's3.jsonl')
+    const message = (id: string) =>
+      assistant(id, 'claude-opus-5-5', { input: 1, read: 10, write: 5, output: 2 })
+    write(path, [message('m1'), message('m2'), message('m3')])
+    await run(db)
+    expect(rows(db)[0]).toMatchObject({ requests: 3, input: 3, cached: 30, written: 15, output: 6 })
+    // Shorter file.
+    write(path, [message('m1')])
+    await run(db)
+    expect(rows(db)[0]).toMatchObject({ requests: 1, input: 1, cached: 10, written: 5, output: 2 })
+    // Longer again, different first line (another session wrote it).
+    write(path, [message('n1'), message('n2')])
+    await run(db)
+    expect(rows(db)[0]).toMatchObject({ requests: 2, input: 2, cached: 20, written: 10, output: 4 })
+    // Nothing changed: nothing moves.
+    await run(db)
+    expect(rows(db)[0]).toMatchObject({ requests: 2, input: 2, cached: 20, written: 10, output: 4 })
+  })
+
   it('keeps only numbers from a private working directory', async () => {
     const db = openUsage(':memory:')
     write(join(folder(), 's3.jsonl'), [

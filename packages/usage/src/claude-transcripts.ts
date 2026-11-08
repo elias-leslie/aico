@@ -14,7 +14,7 @@ import { existsSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { transaction } from '@aico/store'
 import config from '../data/usage.json' with { type: 'json' }
-import { type Found, gatherFiles, headHash, newLines, projectOf } from './codex'
+import { type Found, gatherFiles, headHash, newLines, projectOf, resumeFile } from './codex'
 import type { Database } from './db'
 import { localDay } from './plans'
 
@@ -120,30 +120,17 @@ function pass(db: Database, options: ClaudeTranscriptOptions): ClaudeTranscriptR
   const cursors = new Map<string, { offset: number; state: FileState }>()
 
   for (const file of [...files.values()].sort((a, b) => a.mtime - b.mtime)) {
-    const prior = saved.get(hashedKey(file.path)) ?? saved.get(file.path)
-    let state: FileState = prior
-      ? JSON.parse(prior.state)
-      : { private: options.isPrivate(file.path) }
-    let offset = prior?.offset ?? 0
-    // Shrunk, or its first bytes changed: replaced. Read it again and take back what it added.
-    if (prior) {
-      let replaced = prior.offset > file.size
-      if (!replaced && state.head) {
-        try {
-          replaced = headHash(file.path, file.size) !== state.head
-        } catch {
-          continue
-        }
-      }
-      if (replaced) {
-        for (const [key, back] of Object.entries(state.rolls ?? {}))
-          roll(key).forEach((_, i, own) => {
-            own[i] = (own[i] as number) - (back[i] as number)
-          })
-        state = { private: state.private }
-        offset = 0
-      }
-    }
+    const resumed = resumeFile<FileState>(
+      file,
+      saved.get(hashedKey(file.path)) ?? saved.get(file.path),
+      options.isPrivate,
+      (key, back) =>
+        roll(key).forEach((_, i, own) => {
+          own[i] = (own[i] as number) - (back[i] as number)
+        }),
+    )
+    if (!resumed) continue
+    const { state, offset } = resumed
     if (offset >= file.size) {
       if (file.size === 0 || state.head) continue
       state.head = headHash(file.path, file.size)
