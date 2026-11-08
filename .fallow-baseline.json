@@ -104,7 +104,7 @@
   ],
   "unused_types": [
     "unused-type:packages/context/src/editor.ts:ContextRole",
-    "unused-type:packages/tether/src/hub/placement.ts:ProxmoxReading",
+    "unused-type:packages/fleet/src/hub/placement.ts:ProxmoxReading",
     "unused-type:packages/tether/src/markers.ts:SessionOrigin",
     "unused-type:packages/usage/src/opencode.ts:OpenCodeWindow",
     "unused-type:packages/web-frontend/lib/hooks/use-file-upload.ts:UploadError",
@@ -139,7 +139,7 @@
     "unused-class-member:packages/fleet/src/hub/host-admin.ts:HostAdmin:power",
     "unused-class-member:packages/fleet/src/hub/host-admin.ts:HostAdmin:signInOut",
     "unused-class-member:packages/fleet/src/hub/hub.ts:Hub:hostEntry",
-    "unused-class-member:packages/tether/src/hub/placement.ts:Placement:restore",
+    "unused-class-member:packages/fleet/src/hub/placement.ts:Placement:restore",
     "unused-class-member:packages/tether/src/lane-reports.ts:LaneReportStore:forget",
     "unused-class-member:packages/tether/src/lane-reports.ts:LaneReportStore:pruneLocal",
     "unused-class-member:packages/tether/src/lane-reports.ts:LaneReportStore:save",

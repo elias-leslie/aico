@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { Placement } from '@aico/fleet/hub/placement'
 import {
   getWidget,
   insertWidget,
@@ -11,7 +12,6 @@ import { type RestoreReport, readJsonFile, writeJsonFile } from '@aico/session-e
 import { rootLaunchEnvironment } from '@aico/session-engine/root-launch'
 import { initStore } from '@aico/session-engine/testing'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { Placement } from './hub/placement'
 import type { LifecycleApiContext } from './lifecycle-api'
 import { Continuity } from './reboot'
 

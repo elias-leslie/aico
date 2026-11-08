@@ -740,7 +740,7 @@ export class Hub {
     return this.listed !== null && !this.listed.has(name)
   }
 
-  /** What placement reads about a host (src/hub/placement.ts), or null. */
+  /** What placement reads about a host (packages/fleet/src/hub/placement.ts), or null. */
   peerView(name: string): PeerView | null {
     const peer = this.peers.get(name)
     if (!peer) return null

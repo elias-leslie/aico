@@ -173,7 +173,7 @@ export interface RootControlOperations {
   /** Tether: the roots on remote hosts for this list query, tagged with `host`. */
   remoteRoots?(search: string): Promise<Record<string, unknown>[]>
   /** Tether: `host: "auto"` picks a host from `pool` (absent = default) for
-   * these `needs` and reserves them there (src/hub/placement.ts), or refuses
+   * these `needs` and reserves them there (packages/fleet/src/hub/placement.ts), or refuses
    * with each host's reason. With `host` (a create naming its host with
    * `needs`) only that host is judged and reserved. */
   place?(requestId: string, needs: unknown, pool: unknown, host?: string): Promise<RootPlacement>

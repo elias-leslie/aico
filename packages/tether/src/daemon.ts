@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { HostAdmin } from '@aico/fleet/hub/host-admin'
 import { Hub } from '@aico/fleet/hub/hub'
 import { IdleOff, releaseStatusWriter, statusWriter } from '@aico/fleet/hub/idle-off'
+import { LOCAL_HOST, localRootFate, Placement } from '@aico/fleet/hub/placement'
 import { installedRelease } from '@aico/fleet/hub/update'
 import { FleetService } from '@aico/fleet/service'
 import { hostAdmissionPath, hostAdmissionRed } from '@aico/session-engine/agent-admission'
@@ -69,7 +70,6 @@ import {
 } from './config'
 import { CoordinationDocs } from './coordination/docs'
 import { listenPrivateSocket } from './http'
-import { LOCAL_HOST, localRootFate, Placement } from './hub/placement'
 import { tetherHubPorts } from './hub/ports'
 import { LaneReporter, LaneReportStore, laneView } from './lane-reports'
 import {
@@ -394,7 +394,7 @@ function startIdleOff(context: DaemonContext, env: NodeJS.ProcessEnv, hosts: Hub
   return idle
 }
 
-/** `--host auto`: pick a host with room from live readings (src/hub/placement.ts). */
+/** `--host auto`: pick a host with room from live readings (packages/fleet/src/hub/placement.ts). */
 function createPlacement(
   context: DaemonContext,
   env: NodeJS.ProcessEnv,

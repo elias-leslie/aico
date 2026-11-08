@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import type { HostEntry } from '@aico/fleet/hosts'
 import type { RunResult } from '@aico/fleet/hub/host-admin'
 import { PveError } from '@aico/fleet/proxmox'
-import { DEFAULT_AGENT_ADMISSION_LIMITS } from '@aico/session-engine/agent-admission'
+import { DEFAULT_AGENT_ADMISSION_LIMITS } from '@aico/shared/host-pressure'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   GUEST_LINE,

@@ -25,6 +25,7 @@ import { writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
+import { type Needs, parseNeeds } from '@aico/fleet/hub/placement'
 import {
   admissionOverrideFromEnv,
   hostAdmissionPath,
@@ -78,7 +79,6 @@ import { adapterOf, getTui } from '@aico/session-engine/tui/registry'
 import type { TuiSpec } from '@aico/session-engine/tui/spec'
 import { agentExitMarkerDir } from './config'
 import { HttpError, type Router, readJsonObject, sendJson } from './http'
-import { type Needs, parseNeeds } from './hub/placement'
 import type { LifecycleContext } from './lifecycle-context'
 import {
   CRASH_RESULTS,

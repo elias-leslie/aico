@@ -6,6 +6,16 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { hostname } from 'node:os'
 import type { Hub } from '@aico/fleet/hub/hub'
 import {
+  AUTO_HOST,
+  type HostVerdict,
+  LOCAL_HOST,
+  type Needs,
+  type Placement,
+  parseNeeds,
+  parsePool,
+  UnknownPool,
+} from '@aico/fleet/hub/placement'
+import {
   agentSessionIdOf,
   agentStateOf,
   type HookReport,
@@ -126,16 +136,6 @@ import { type AskDelivery, AskStore, sessionAsks, transferAskNotices } from './a
 import type { TetherPaths } from './config'
 import { ContinuationError, continuation } from './continue-from'
 import { type Handler, HttpError, type Router, readJsonObject, sendError, sendJson } from './http'
-import {
-  AUTO_HOST,
-  type HostVerdict,
-  LOCAL_HOST,
-  type Needs,
-  type Placement,
-  parseNeeds,
-  parsePool,
-  UnknownPool,
-} from './hub/placement'
 import { type LaneReporter, laneView, registerLaneRoutes } from './lane-reports'
 import type { ModelSwitch, ModelWatch } from './model-switch'
 import { paneModeArgs, parsePaneMode } from './pane-mode'

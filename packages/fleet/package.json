@@ -38,6 +38,7 @@
     "./hub/host-admin": "./src/hub/host-admin.ts",
     "./hub/idle-off": "./src/hub/idle-off.ts",
     "./hub/peer": "./src/hub/peer.ts",
+    "./hub/placement": "./src/hub/placement.ts",
     "./hub/update": "./src/hub/update.ts",
     "./hub/types": "./src/hub/types.ts",
     "./hub/wake": "./src/hub/wake.ts",
