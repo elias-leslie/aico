@@ -29,6 +29,8 @@ swap_clear = true
 # First matching pattern wins. GEM10 logs corrected memory errors without DRAM ECC (owner 2026-10-30).
 [caps]
 "ecc.corrected" = "ok"
+# A corrected-error jump is worth a mention, not a red (owner 2026-11-05): only uncorrected errors fail.
+"ecc.spike" = "warn"
 # Long-term memory trends remain record-only; the ECC check evaluates the configured daily rate jump.
 "pve.ecc.trend" = "ok"
 
@@ -122,8 +124,8 @@ run_on_host = false
 every_min = 15
 slack_min = 10
 push_codes = ["ecc.uncorrected"]
-spike_factor = 3.0
-spike_min = 50
+spike_factor = 5.0
+spike_min = 100
 event_gap_s = 2.0
 region_shift = 21
 # Keep a note of newly seen corrected-error regions for this long; they do not fail the check.
@@ -303,6 +305,17 @@ package_caches = [
   { name = "pnpm", path = "/srv/workspaces/.pnpm-store/v11", max_gib = 0, query = ["pnpm", "store", "path"], clean = ["pnpm", "store", "prune"] },
   { name = "npm", path = "/home/{owner}/.npm/_cacache", max_gib = 2, query = ["npm", "config", "get", "cache"], suffix = "_cacache", clean = ["npm", "cache", "clean", "--force"] },
   { name = "go", path = "/home/{owner}/.cache/go-build", max_gib = 4, query = ["go", "env", "GOCACHE"], clean = ["go", "clean", "-cache"] },
+]
+
+# Old top-level entries of the scratch disk (replaceable by definition) nothing has touched or holds open.
+# keep: names or fnmatch patterns it never touches: files other tools read by path, and runs that may be evidence.
+scratch_root = "/srv/scratch"
+scratch_older_days = 21
+scratch_keep = ["models", "cache", "briefs", "latest", "restic*", "st-*", "passive*", "traffic*", "*redteam*", ".*"]
+# Untagged image layers no container uses, older than a week. Tagged images stay.
+image_prune = [
+  { name = "podman", as_owner = true, argv = ["podman", "image", "prune", "--force", "--filter", "until=168h"] },
+  { name = "docker", as_owner = false, argv = ["docker", "image", "prune", "--force", "--filter", "until=168h"] },
 ]
 
 [jobs.space-guard]

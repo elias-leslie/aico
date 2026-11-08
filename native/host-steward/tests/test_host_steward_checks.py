@@ -351,12 +351,12 @@ def test_ecc_uncorrected_error_is_failed_and_corrected_ones_are_record_only():
 def test_ecc_a_spike_over_the_baseline_and_a_new_region():
     first = int(NOW) - 8 * 86400
     quiet = "".join(f"CE {NOW - (i + 1) * 86400 - 60} 0 0 0x100000 1\n" for i in range(1, 6))
-    burst = "".join(f"CE {NOW - 100 - i} 0 0 0x{(i % 2 + 5):x}00000 1\n" for i in range(0, 3 * 60, 3))
+    burst = "".join(f"CE {NOW - 100 - i} 0 0 0x{(i % 2 + 5):x}00000 1\n" for i in range(0, 3 * 120, 3))
     out = states(ecc.run(ctx("ecc", pve_run(pve_answer(ecc_text=f"FIRST {first}\n" + quiet + burst)))))
     assert out["ecc.spike"] == "failed"
     signals = ecc.run(ctx("ecc", pve_run(pve_answer(ecc_text=f"FIRST {first}\n" + quiet + burst))))
     row = core.make_row("ecc", signals, DATA["checks"]["ecc"], DATA["meanings"], "m", NOW, DATA["caps"])
-    assert row["state"] == "failed"
+    assert row["state"] == "warn"  # Worth a mention, never a red: only uncorrected errors fail.
 
 
 def test_ecc_new_corrected_regions_remain_record_only():

@@ -539,7 +539,7 @@ def test_corrected_rate_jump_is_visible_but_only_uncorrected_errors_push(cfg, mo
     from pve_sender import watch
 
     now = 8 * 86400
-    burst = "".join(f"CE {now - 100 - i * 3} 0 0 0x1000 1\n" for i in range(60))
+    burst = "".join(f"CE {now - 100 - i * 3} 0 0 0x1000 1\n" for i in range(120))
     journal = f"FIRST 0\n{burst}" + (f"UE {now - 10} 0 0 0x1000 1\n" if uncorrected else "")
     monkeypatch.setattr(watch.core, "run_command", lambda *_a, **_k: watch.core.Result(
         0, f"===NS ecc\n{journal}===NS end\n", ""
@@ -549,7 +549,7 @@ def test_corrected_rate_jump_is_visible_but_only_uncorrected_errors_push(cfg, mo
     status = watchdog.tick(cfg, now=now, boot=0, send=lambda n: notices.append(n) or {"ok": True},
                            door=lambda *_a: None, publish=False)
     ecc_row = next(r for r in status["rows"] if r["id"].endswith("/check-ecc"))
-    assert ecc_row["state"] == "failed"
+    assert ecc_row["state"] == ("failed" if uncorrected else "warn")
     pushes = [n for n in notices if n["key"].endswith("/check-ecc")]
     assert bool(pushes) is uncorrected
 
@@ -582,7 +582,7 @@ def test_uncorrected_episode_still_sends_its_recovery(cfg, monkeypatch, middle):
         if phase == "unreadable":
             journal = "ERR unreadable\n"
         elif phase == "spike":
-            journal = "FIRST 0\n" + "".join(f"CE {now - 100 - i * 3} 0 0 0x1000 1\n" for i in range(60))
+            journal = "FIRST 0\n" + "".join(f"CE {now - 100 - i * 3} 0 0 0x1000 1\n" for i in range(120))
         else:
             journal = "FIRST 0\n" + (f"UE {now - 10} 0 0 0x1000 1\n" if phase == "uncorrected" else "")
         return watch.core.Result(0, f"===NS ecc\n{journal}===NS end\n", "")

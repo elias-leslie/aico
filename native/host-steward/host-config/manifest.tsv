@@ -25,3 +25,4 @@ user/tether@.service.d/50-aico-oomd.conf	@USER@/tether@.service.d/50-aico-oomd.c
 user/wireplumber.service.d/50-aico-session.conf	@USER@/wireplumber.service.d/50-aico-session.conf	@HOME@/.config/systemd/user/wireplumber.service.d/50-nightshift-session.conf
 user/xdg-desktop-portal-gnome.service.d/50-aico-session.conf	@USER@/xdg-desktop-portal-gnome.service.d/50-aico-session.conf	@HOME@/.config/systemd/user/xdg-desktop-portal-gnome.service.d/50-nightshift-session.conf
 user/xdg-desktop-portal.service.d/50-aico-session.conf	@USER@/xdg-desktop-portal.service.d/50-aico-session.conf	@HOME@/.config/systemd/user/xdg-desktop-portal.service.d/50-nightshift-session.conf
+tmpfiles.d/tmp.conf	@ETC@/tmpfiles.d/tmp.conf	

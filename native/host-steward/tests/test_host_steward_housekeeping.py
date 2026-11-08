@@ -763,3 +763,48 @@ def test_nvme_test_dry_and_live(tmp_path, monkeypatch):
         "/job-nvme-long-test"
     )
     assert nvme_test.main(argparse.Namespace(kind="bogus", no_post=True), data, lambda r: True) == 2
+
+
+def scratch_cfg(root):
+    return {"scratch_root": str(root), "scratch_older_days": 21, "scratch_keep": ["models", "st-*"]}
+
+
+def test_scratch_sweep_takes_only_old_untouched_unused_entries(tmp_path):
+    old = NOW - 30 * 86400
+    for name in ("old-run", "models", "st-keep", "held", "fresh", "deep"):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "f").write_text("x")
+        os.utime(tmp_path / name / "f", (old, old))
+        os.utime(tmp_path / name, (old, old))
+    (tmp_path / "deep" / "sub").mkdir()
+    (tmp_path / "deep" / "sub" / "new").write_text("x")
+    os.utime(tmp_path / "deep" / "sub" / "new", (NOW, NOW))
+    os.utime(tmp_path / "fresh" / "f", (NOW, NOW))
+    target = tmp_path / "outside"
+    target.mkdir()
+    (tmp_path / "link").symlink_to(target)
+    os.utime(tmp_path / "link", (old, old), follow_symlinks=False)
+    os.utime(target, (NOW, NOW))
+    in_use = {str(tmp_path / "held" / "f")}
+
+    dry = acts.Actor(False, run=Fake())
+    housekeeping.sweep_scratch(scratch_cfg(tmp_path), dry, NOW, [], in_use)
+    assert (tmp_path / "old-run").exists() and any("old-run" in text for text in dry.would)
+
+    notes = []
+    housekeeping.sweep_scratch(scratch_cfg(tmp_path), acts.Actor(True, run=Fake()), NOW, notes, in_use)
+    names = {path.name for path in tmp_path.iterdir()}
+    assert "old-run" not in names and "link" not in names
+    assert {"models", "st-keep", "held", "fresh", "deep", "outside"} <= names
+    assert (target).is_dir()  # A link goes, what it points at stays.
+
+
+def test_image_prune_stays_on_untagged_layers_and_reports_failure(monkeypatch):
+    monkeypatch.setattr(housekeeping.shutil, "which", lambda name: f"/usr/bin/{name}")
+    specs = DATA["jobs"]["housekeeping"]["image_prune"]
+    for spec in specs:
+        assert "-a" not in spec["argv"] and "--all" not in spec["argv"] and "--volumes" not in spec["argv"]
+    fake = Fake((["prune"], Result(1, "", "")))
+    notes = []
+    assert housekeeping.prune_images({"image_prune": specs}, "kasadis", acts.Actor(True, run=fake), notes)
+    assert any("failed" in note for note in notes)

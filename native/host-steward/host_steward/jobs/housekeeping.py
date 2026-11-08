@@ -2,8 +2,8 @@
 
 Port of `maintain` in ns/housekeeping.py: the journal size cap, apt and snap caches, an inactive Spotify cache above
 its size, a stale libguestfs appliance, old versions in the families marked prune (Playwright browsers), and
-package-manager caches above their configured caps. Broader scratch, model and project-artifact retention is
-left to the consolidation audit; there is no delegate to the retired cleanup namespace.
+package-manager caches above their configured caps, old top-level scratch entries nothing touches or holds open, and
+unused untagged container image layers. Model and project-artifact retention stays out.
 
 Everything that changes the host goes through acts.Actor. With [acting] housekeeping off it only lists what it
 would do and the row says "Dry run: ..."; the read-only looks (snap list, pgrep, directory sizes) still run.
@@ -12,9 +12,13 @@ would do and the row says "Dry run: ..."; the read-only looks (snap list, pgrep,
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
+import os
 import shutil
 import time
+from collections.abc import Collection
+from fnmatch import fnmatchcase
 from pathlib import Path
 from typing import Any
 
@@ -90,6 +94,82 @@ def package_caches(cfg: dict[str, Any], owner: str, actor: acts.Actor, notes: li
                 failed = True
             else:
                 notes.append(f"pruned {name} cache")
+    return failed
+
+
+def newest_touch(path: Path, depth: int = 4) -> float:
+    """The newest change time in the top of a tree, without following links; a deep walk would cost more than it says."""
+    newest = path.lstat().st_mtime
+    if depth and path.is_dir() and not path.is_symlink():
+        try:
+            for child in path.iterdir():
+                newest = max(newest, newest_touch(child, depth - 1))
+        except OSError:
+            return time.time()  # Can't look inside: count it as in use.
+    return newest
+
+
+def open_paths(root: Path, proc: Path = Path("/proc")) -> set[str]:
+    """Paths under `root` some process has as its working directory or an open file."""
+    prefix = f"{root}/"
+    out: set[str] = set()
+    for entry in proc.iterdir():
+        if not entry.name.isdigit():
+            continue
+        links = [entry / "cwd", entry / "root"]
+        with contextlib.suppress(OSError):
+            links += list((entry / "fd").iterdir())
+        for link in links:
+            with contextlib.suppress(OSError):
+                target = os.readlink(link).removesuffix(" (deleted)")
+                if target.startswith(prefix):
+                    out.add(target)
+    return out
+
+
+def sweep_scratch(
+    cfg: dict[str, Any], actor: acts.Actor, now: float, notes: list[str], in_use: Collection[str]
+) -> int:
+    """Remove old top-level scratch entries nothing has touched or holds open. Returns the bytes freed."""
+    root = Path(cfg.get("scratch_root", ""))
+    if not cfg.get("scratch_root") or not root.is_dir():
+        return 0
+    cutoff = now - float(cfg["scratch_older_days"]) * 86400
+    freed = 0
+    for entry in sorted(root.iterdir()):
+        if any(fnmatchcase(entry.name, keep) for keep in cfg["scratch_keep"]):
+            continue
+        text = str(entry)
+        if any(path == text or path.startswith(text + "/") for path in in_use):
+            continue
+        if newest_touch(entry) > cutoff:
+            continue
+        size = versioned.tree_size(entry) if entry.is_dir() and not entry.is_symlink() else 0
+        remove = (
+            (lambda path=entry: shutil.rmtree(path, ignore_errors=True))
+            if entry.is_dir() and not entry.is_symlink()
+            else (lambda path=entry: path.unlink(missing_ok=True))
+        )
+        done, _ = actor.apply(f"remove old scratch {entry.name} ({size / GIB:.1f} GiB)", remove)
+        if done:
+            freed += size
+            notes.append(f"removed old scratch {entry.name} ({size / GIB:.1f} GiB)")
+    return freed
+
+
+def prune_images(cfg: dict[str, Any], owner: str, actor: acts.Actor, notes: list[str]) -> bool:
+    """Untagged, unused image layers of each container tool present here; tagged images stay."""
+    failed = False
+    for spec in cfg.get("image_prune", []):
+        if not shutil.which(spec["argv"][0]):
+            continue
+        argv = acts.as_owner(owner, spec["argv"]) if spec["as_owner"] else list(spec["argv"])
+        if argv is None:
+            continue
+        result = actor.do(argv, f"prune unused {spec['name']} image layers", 1800)
+        if result is not None and result.rc:
+            notes.append(f"{spec['name']} image prune failed (exit {result.rc})")
+            failed = True
     return failed
 
 
@@ -173,6 +253,13 @@ def maintain(
     except OSError as error:  # cache retention must never stop the rest of housekeeping
         notes.append(f"versioned cache retention failed: {type(error).__name__}")
     failed = False
+    try:
+        in_use = {*versioned.in_use_paths(), *open_paths(Path(cfg.get("scratch_root", "/nonexistent")))}
+        freed += sweep_scratch(cfg, actor, now, notes, in_use)
+    except OSError as error:  # scratch retention must never stop the rest of housekeeping
+        notes.append(f"scratch sweep failed: {type(error).__name__}")
+        failed = True
+    failed = prune_images(cfg, owner, actor, notes) or failed
     try:
         failed = package_caches(cfg, owner, actor, notes, home)
     except Exception as error:  # noqa: BLE001 - the backstop must never stop the rest of housekeeping
