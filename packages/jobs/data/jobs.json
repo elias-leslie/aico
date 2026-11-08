@@ -216,6 +216,15 @@
       "lease_s": 60
     },
     {
+      "kind": "standby-disk",
+      "what": "The standby's disk has room: fails under 6 GiB free",
+      "project": "aico",
+      "home": "aico",
+      "every_min": 60,
+      "run": { "command": ["../../../scripts/standby-disk.sh", "6"] },
+      "lease_s": 120
+    },
+    {
       "kind": "backups-drive-aico",
       "what": "Standby databases, its guests and the Ominull hub to Google Drive",
       "project": "aico",
