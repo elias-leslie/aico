@@ -386,7 +386,7 @@ export async function backupJob(
       : [
           ...base,
           '--exclude-file',
-          excludesPath(rt.cfg),
+          excludesPath(),
           '--exclude-caches',
           '--exclude-if-present',
           '.nobackup',

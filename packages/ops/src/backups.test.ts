@@ -11,19 +11,21 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
 import { parseRow } from '@aico/status'
 import { openDatabase, snapshotDatabase } from '@aico/store'
 import { afterEach, expect, it, vi } from 'vitest'
 import {
   backupJob,
   copiedDataTime,
+  diskAway,
   hostReadsStoppedDisk,
   payloadTime,
   prepareFolder,
   volumeJobs,
 } from './backup-drive'
 import { observeExternal } from './backup-external'
+import * as backupNative from './backup-native'
 import { beginBootCapture, expiredCapture, nativeOperation, preserveNative } from './backup-native'
 import {
   backupRows,
@@ -45,6 +47,7 @@ import {
 } from './backup-retention'
 import {
   copyRootAuth,
+  excludesPath,
   failureReason,
   type Runtime,
   readState,
@@ -63,6 +66,12 @@ import {
   snapshotsFor,
   validateScheduledTarget,
 } from './backups'
+
+// Real native runs need root btrbk; a test can swap one run for its own.
+vi.mock('./backup-native', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./backup-native')>()
+  return { ...actual, nativeBackup: vi.fn(actual.nativeBackup) }
+})
 
 const dirs: string[] = []
 const temp = () => {
@@ -88,7 +97,7 @@ it('migrates all 67 source records, both backend records and the three external 
   expect(migrated.sources.find((s) => s.id === 'pve-ct-190-aico-data')?.path).toContain(
     'aico-snapshot',
   )
-  const excludes = readFileSync(new URL('../data/backup.excludes', import.meta.url), 'utf8')
+  const excludes = readFileSync(excludesPath(), 'utf8')
   for (const line of [
     'node_modules',
     '.venv',
@@ -1050,4 +1059,123 @@ it('snapshots list the newest copies with the ids restore takes, and say how to 
   expect(text).toContain('2 older: add --all')
   expect(snapshotLines(copies, 'aico', 'drive', true)).toContain(copies[11]?.id)
   expect(snapshotLines([], 'aico', 'drive', false)).toContain('No copies of aico')
+})
+
+const t7Run = {
+  started: '2026-11-03T02:00:00.000Z',
+  finished: '2026-11-03T02:40:00.000Z',
+  ok: true,
+}
+it('an unplugged T7 records only that it is away: no unfinished run, and the last finished run stays', async () => {
+  const c = cfg(),
+    state = emptyState()
+  c.nativeDriveUuid = 'no-such-t7-uuid'
+  state.runs.native = { ...t7Run }
+  saveState(c, state)
+  const rt: Runtime = { cfg: c, run: ok, now: () => new Date(now) }
+  expect(await runBackup(rt, state, 'native', c.workstation, true)).toBe(true)
+  const away = { ...t7Run, unpluggedAt: new Date(now).toISOString() }
+  expect(state.runs.native).toEqual(away)
+  expect(readState(c).runs.native).toEqual(away)
+  expect(backupNative.nativeBackup).not.toHaveBeenCalled()
+})
+it('a real native run keeps the away mark until it finishes, then clears it', async () => {
+  const c = cfg(),
+    state = emptyState()
+  c.nativeDriveUuid = 'no-such-t7-uuid'
+  state.runs.native = { ...t7Run }
+  const rt: Runtime = { cfg: c, run: ok, now: () => new Date(now) }
+  await runBackup(rt, state, 'native', c.workstation, true)
+  const awayAt = state.runs.native?.unpluggedAt
+  expect(awayAt).toBe(new Date(now).toISOString())
+  // The T7 is back: this path stands in for its by-uuid link.
+  c.nativeDriveUuid = relative('/dev/disk/by-uuid', temp())
+  let during: unknown
+  vi.mocked(backupNative.nativeBackup).mockImplementationOnce(async () => {
+    during = readState(c).runs.native
+  })
+  expect(await runBackup(rt, state, 'native', c.workstation, true)).toBe(true)
+  expect(during).toEqual({ started: new Date(now).toISOString(), ok: false, unpluggedAt: awayAt })
+  const done = readState(c).runs.native
+  expect(done).toEqual({
+    started: new Date(now).toISOString(),
+    finished: new Date(now).toISOString(),
+    ok: true,
+  })
+  expect(done?.unpluggedAt).toBeUndefined()
+})
+const goodCopy = {
+  source: 'guest',
+  target: 'drive' as const,
+  dataAt: '2026-11-03T02:00:00.000Z',
+  snapshot: 'a'.repeat(64),
+  copiedAt: '2026-11-03T02:10:00.000Z',
+  observed: 'ok' as const,
+  path: '/files',
+}
+const power = (state: 'on' | 'off') => async () => ({ state }) as { state: 'on' } | { state: 'off' }
+it('a copy that fails because its machine changed keeps an earlier real error and the last good copy', async () => {
+  const c = cfg(),
+    state = emptyState(),
+    key = copyKey('guest', 'drive'),
+    failing: Runtime = {
+      cfg: c,
+      run: async () => ({ code: 1, out: '', err: 'restic failed' }),
+      now: () => new Date(now),
+    }
+  const job = {
+    id: 'guest',
+    paths: ['/files'],
+    binds: [] as [string, string][],
+    dataAt: new Date(now).toISOString(),
+    machine: { before: { state: 'off' as const }, read: power('on') },
+  }
+  state.copies[key] = { ...goodCopy, observed: 'failed', error: 'Drive refused the last copy' }
+  const kept = await backupJob(failing, state, job)
+  expect(kept).toEqual({
+    ...goodCopy,
+    observed: 'failed',
+    error: 'Drive refused the last copy',
+    attemptedAt: new Date(now).toISOString(),
+  })
+  // With no earlier error it stays free of one: the machine is why it failed.
+  state.copies[key] = { ...goodCopy }
+  const clean = await backupJob(failing, state, job)
+  expect(clean.error).toBeUndefined()
+  expect(clean).toMatchObject({ observed: 'ok', snapshot: goodCopy.snapshot })
+  // A machine that stayed on failed for real.
+  const stayed = await backupJob(failing, state, {
+    ...job,
+    machine: { before: { state: 'on' as const }, read: power('on') },
+  })
+  expect(stayed).toMatchObject({ observed: 'failed', snapshot: goodCopy.snapshot })
+  expect(stayed.error).toContain('The Drive copy failed')
+})
+it('a disk that is away reads as off and keeps the last good copy', async () => {
+  const mounts = '/dev/sda1 /mnt/summitflow-native btrfs rw 0 0\n'
+  expect(diskAway('/mnt/t7-missing/state', mounts)).toBe(true)
+  expect(diskAway('/media/kasadis/OTHER/folder', mounts)).toBe(true)
+  expect(
+    diskAway('/media/kasadis/OTHER/folder', '/dev/sdb1 /media/kasadis/OTHER ext4 rw 0 0\n'),
+  ).toBe(false)
+  expect(diskAway(temp(), '')).toBe(false)
+  const c = cfg(),
+    state = emptyState()
+  state.copies[copyKey('guest', 'drive')] = { ...goodCopy }
+  const rt: Runtime = { cfg: c, run: ok, now: () => new Date(now) }
+  const copy = await backupJob(rt, state, {
+    id: 'guest',
+    paths: [],
+    binds: [],
+    dataAt: new Date(now).toISOString(),
+    offline: diskAway('/mnt/t7-missing/state', mounts),
+  })
+  expect(copy).toMatchObject({
+    observed: 'offline',
+    snapshot: goodCopy.snapshot,
+    copiedAt: goodCopy.copiedAt,
+    dataAt: goodCopy.dataAt,
+    offlineSince: new Date(now).toISOString(),
+  })
+  expect(copy.error).toBeUndefined()
 })

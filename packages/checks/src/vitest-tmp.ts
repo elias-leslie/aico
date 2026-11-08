@@ -46,9 +46,23 @@ export function startRun(alive = running) {
   rmSync(dir, { recursive: true, force: true }) // A dead run's, if the system reused this pid.
   mkdirSync(dir)
   process.env.TMPDIR = dir
+  // A test's idea of home is this folder too: nothing it writes or deletes reaches real state.
+  const home = join(dir, 'home')
+  mkdirSync(home)
+  const names = ['HOME', 'XDG_STATE_HOME', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'AICO_DATA_DIR']
+  const real = names.map((name) => [name, process.env[name]] as const)
+  process.env.HOME = home
+  process.env.XDG_STATE_HOME = join(home, '.local', 'state')
+  process.env.XDG_CONFIG_HOME = join(home, '.config')
+  process.env.XDG_DATA_HOME = join(home, '.local', 'share')
+  delete process.env.AICO_DATA_DIR
   return () => {
     if (before === undefined) delete process.env.TMPDIR
     else process.env.TMPDIR = before
+    for (const [name, value] of real) {
+      if (value === undefined) delete process.env[name]
+      else process.env[name] = value
+    }
     rmSync(dir, { recursive: true, force: true })
   }
 }

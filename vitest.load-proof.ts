@@ -1,5 +1,6 @@
 // Setup for every project, so the gate's verdict and speed do not depend on how busy the machine is.
 import { vi } from 'vitest'
+import './vitest.no-real-deletes'
 
 // Waits that poll for a condition get a timeout sized for a loaded machine instead of vitest's 1 s.
 // A wait that is satisfied returns as soon as it is; only one that never is takes the full time to fail.

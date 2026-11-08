@@ -328,11 +328,9 @@ export function summary(result: Result): { snapshot_id?: string; total_bytes_pro
   }
   return {}
 }
-export function excludesPath(cfg: BackupConfig): string {
-  const dest = join(cfg.scratchRoot, 'backup.excludes')
-  mkdirSync(dirname(dest), { recursive: true, mode: 0o700 })
-  copyFileSync(fileURLToPath(new URL('../data/backup.excludes', import.meta.url)), dest)
-  return dest
+/** Read straight from the release: nothing a live backup needs may sit in scratch. */
+export function excludesPath(): string {
+  return fileURLToPath(new URL('../data/backup.excludes', import.meta.url))
 }
 
 export function copyRootAuth(source: string, destination: string): void {
