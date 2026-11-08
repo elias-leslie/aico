@@ -160,7 +160,7 @@ export class Runner {
             this.who,
             this.now(),
             job.lease_s * 1000,
-            job.home === machine ? 0 : job.lease_s * 1000,
+            homeFirstMs(job, machine, store.get(job.kind)?.lastMachine),
           )
         } catch (error) {
           if (!standsIn || !(error instanceof Unreachable)) {
@@ -175,7 +175,7 @@ export class Runner {
                   this.who,
                   this.now(),
                   job.lease_s * 1000,
-                  job.home === machine ? 0 : job.lease_s * 1000,
+                  homeFirstMs(job, machine, store.get(job.kind)?.lastMachine),
                 )
           if (!lease) continue
           authority = store
@@ -256,7 +256,7 @@ export class Runner {
     if (!standinOf || !others.length) return false
     const now = this.now()
     const state = store.get(job.kind)
-    const delay = job.home === machine ? 0 : job.lease_s * 1000
+    const delay = homeFirstMs(job, machine, state?.lastMachine)
     if (!state || state.runNow || state.paused || now < state.nextRun + delay) return false
     if (state.leaseId && (state.leaseExpires ?? 0) > now) return false
     for (const other of others) {
@@ -420,6 +420,16 @@ const rowSignature = (state: JobState) =>
     state.leaseExpires,
   ].join('|')
 
+/**
+ * How long past due a machine other than the home waits, so the home goes first. Once a stand-in
+ * has run the job the home is away: waiting again would run it later than its schedule every time
+ * (and show it late). The home's next run hands it back.
+ */
+export function homeFirstMs(job: JobDef, machine: string, lastMachine?: string | null): number {
+  if (job.home === machine) return 0
+  return lastMachine && lastMachine !== job.home ? 0 : job.lease_s * 1000
+}
+
 /** The job's one Status row: where and how it last ran, and when it is due next. */
 export function jobRow(job: JobDef, state: JobState): StatusRow {
   const ran = state.lastRun !== null
@@ -451,7 +461,13 @@ export function jobRow(job: JobDef, state: JobState): StatusRow {
     ...(ran ? { last_run: iso(state.lastRun as number) } : {}),
     // While it runs the scheduler still holds the due time it started at, so a long run would read
     // late; it is due when its lease runs out instead (a dead worker's row goes late from there).
-    next_run: iso(Math.max(state.nextRun, state.leaseExpires ?? 0)),
+    // It isn't due until its stand-in's turn has passed too: the home being off is not a late run.
+    next_run: iso(
+      Math.max(
+        state.nextRun + (job.lease_host ? homeFirstMs(job, job.lease_host, state.lastMachine) : 0),
+        state.leaseExpires ?? 0,
+      ),
+    ),
     actions: actionsOf(job),
   }
 }

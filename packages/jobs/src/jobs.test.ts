@@ -324,7 +324,8 @@ describe('the runner', () => {
       machine: 'a',
       state: 'ok',
       meaning: 'Copied 3 notes.',
-      next_run: new Date(clock.now + 86_400_000).toISOString(),
+      // Due once the lease host's own turn has passed too.
+      next_run: new Date(clock.now + 86_400_000 + def.lease_s * 1000).toISOString(),
     })
   })
 

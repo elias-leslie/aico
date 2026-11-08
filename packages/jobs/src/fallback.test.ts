@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { type LeaseCall, leaseCall } from './fleet-leases'
 import { type JobDef, parseJobs } from './jobs'
 import { type JobResult, type JobState, JobStore, type Lease, Unreachable } from './leases'
-import { type LeaseAuthority, Runner } from './runner'
+import { homeFirstMs, jobRow, type LeaseAuthority, Runner } from './runner'
 
 const job: JobDef = {
   kind: 'digest',
@@ -356,5 +356,53 @@ describe('fallback in jobs.json', () => {
     expect(parseJobs({ jobs: [{ ...base, fallback: ['ws'] }] })[0]?.fallback).toEqual(['ws'])
     expect(() => parseJobs({ jobs: [{ ...base, fallback: ['ct'] }] })).toThrow('jobs[0].fallback')
     expect(() => parseJobs({ jobs: [{ ...base, fallback: ['pi'] }] })).toThrow('jobs[0].fallback')
+  })
+})
+
+describe('the home away', () => {
+  const every5: JobDef = {
+    kind: 'digest',
+    what: 'Check',
+    project: 'aico',
+    home: 'ws',
+    lease_host: 'ct',
+    workers: ['ws', 'ct'],
+    every_min: 5,
+    run: { post: '/x' },
+    lease_s: 600,
+  }
+  const MIN = 60_000
+
+  it('waits for the home once, then keeps the schedule and never reads late', async () => {
+    const w = world(every5)
+    await w.tick('ct')
+    const due = w.stores.ct.get('digest')?.nextRun as number
+    const row = () =>
+      Date.parse(jobRow(every5, w.stores.ct.get('digest') as JobState).next_run as string)
+    w.clock.now = due
+    await w.tick('ct')
+    expect(w.ran).toEqual([])
+    // The home's turn counts as not due yet, so the row isn't late while it passes.
+    expect(row()).toBe(due + 10 * MIN)
+    w.clock.now = due + 10 * MIN
+    await w.tick('ct')
+    expect(w.ran).toEqual(['ct'])
+    const next = w.stores.ct.get('digest')?.nextRun as number
+    expect(row()).toBe(next)
+    w.clock.now = next
+    await w.tick('ct')
+    expect(w.ran).toEqual(['ct', 'ct'])
+  })
+
+  it('hands back when the home returns', async () => {
+    const w = world(every5)
+    await w.tick('ct')
+    w.clock.now = (w.stores.ct.get('digest')?.nextRun as number) + 10 * MIN
+    await w.tick('ct')
+    w.clock.now = w.stores.ct.get('digest')?.nextRun as number
+    await w.tick('ws', 'ct')
+    expect(w.ran).toEqual(['ct', 'ws'])
+    expect(w.stores.ct.get('digest')?.lastMachine).toBe('ws')
+    expect(homeFirstMs(every5, 'ct', 'ws')).toBe(10 * MIN)
   })
 })
