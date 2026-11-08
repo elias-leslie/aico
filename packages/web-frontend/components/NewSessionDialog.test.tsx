@@ -8,6 +8,7 @@ import {
 } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { rememberWorkstation } from '@/lib/machine-name'
 import { NewSessionDialog } from './NewSessionDialog'
 
 type Start = ComponentProps<typeof NewSessionDialog>['onStart']
@@ -33,6 +34,7 @@ const tools = [
 vi.mock('@/lib/hooks/use-project-settings', () => ({
   useProjectSettings: () => projectState,
 }))
+const statusState = vi.hoisted(() => ({ machine: 'davion-sidarli' }))
 const hostState = vi.hoisted(() => ({
   hosts: [] as Array<{ name: string; state: string; wake?: unknown }>,
   isLoading: false,
@@ -44,6 +46,12 @@ const hostProjects = vi.hoisted(() => ({
     Array<{ id: string; name: string; root_path: string | null }>
   >,
   failures: {} as Record<string, string>,
+}))
+vi.mock('@/lib/hooks/use-status', () => ({
+  useStatus: () => {
+    rememberWorkstation(statusState.machine)
+    return {}
+  },
 }))
 vi.mock('@/lib/hooks/use-hosts', async (importOriginal) => ({
   startingLabel: (
@@ -179,6 +187,17 @@ describe('NewSessionDialog', () => {
   it('offers no host choice when Tether links to no host', () => {
     renderDialog()
     expect(screen.queryByRole('group', { name: 'Runs on' })).toBeNull()
+  })
+
+  it('names this machine the Standby when the Standby serves the page', () => {
+    statusState.machine = 'aico'
+    hostState.hosts = [{ name: 'davion-sidarli', state: 'offline' }]
+    renderDialog('neri')
+    const hosts = screen.getByRole('group', { name: 'Runs on' })
+    expect(within(hosts).getByRole('button', { name: 'Standby' })).toBeTruthy()
+    expect(within(hosts).getAllByRole('button', { name: /Workstation/ })).toHaveLength(1)
+    statusState.machine = 'davion-sidarli'
+    rememberWorkstation('davion-sidarli')
   })
 
   it('starts on a chosen host, with Workstation as the default', () => {

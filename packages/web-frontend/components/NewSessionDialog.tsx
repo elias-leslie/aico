@@ -22,6 +22,7 @@ import {
   type ProjectSetting,
   useProjectSettings,
 } from '@/lib/hooks/use-project-settings'
+import { useStatus } from '@/lib/hooks/use-status'
 import { useUsage } from '@/lib/hooks/use-usage'
 import { sessionHostLabel } from '@/lib/machines'
 import { AgentIcon, getAgentColor } from './AgentIcon'
@@ -136,6 +137,8 @@ export function NewSessionDialog({
     isLoading: hostsLoading,
     isError: hostsError,
   } = useHosts(isOpen, starting && !!pickedHost)
+  // Status says which machine serves this page: on the Standby, "here" isn't the Workstation.
+  useStatus()
 
   // The pick, else the agent this device started last, else the newest
   // session's, else the registry's default; past one with no plan to the next
