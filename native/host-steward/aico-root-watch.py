@@ -191,7 +191,7 @@ HOST_CREATE_SECONDS = 420
 # How long a --host create waits for an answer before saying the host may be powering on.
 HOST_WAIT_NOTICE_SECONDS = 3
 # Refusals besides every 400 and 422: the owner created nothing.
-REFUSED_CREATES = frozenset({"request_conflict", "recovery_pending", "at_capacity"})
+REFUSED_CREATES = frozenset({"request_conflict", "recovery_pending", "conversation_open", "at_capacity"})
 # `--host auto`: Tether picks the host from live readings (packages/tether/src/hub/placement.ts).
 AUTO_HOST = "auto"
 # This computer by name: `--host local --needs` books a reservation here like a VM create does.
@@ -1729,8 +1729,8 @@ def create_main(argv: list[str]) -> int:
             waiting.cancel()
         errors = {400: ("invalid_body", "unsupported_tool", "work_role_required", "prompt_too_long", "unknown_host",
                         "unknown_pool", "unknown_entry", "entry_unsupported"),
-                  409: ("request_conflict", "recovery_pending", "host_unavailable", "outcome_uncertain",
-                        "at_capacity"),
+                  409: ("request_conflict", "recovery_pending", "conversation_open", "host_unavailable",
+                        "outcome_uncertain", "at_capacity"),
                   422: ("launch_unavailable", "unknown_agent", "unknown_model", "entry_unavailable"),
                   503: ("unavailable",)}
         if status not in (200, 202):
@@ -3097,7 +3097,14 @@ def wait_main(argv: list[str]) -> int:
         rest = [a for a in argv[1:] if a != deploys[0]]
         if "--until" in rest:
             del rest[rest.index("--until"):rest.index("--until") + 2]
-        argv = ["cmd", *rest, "--", shutil.which("aico") or "aico", "deploy", "wait", deploys[0]]
+        # The command stays until this wait's own timeout: its default would report a running deploy as over.
+        span = next((rest[i + 1] for i, a in enumerate(rest[:-1]) if a == "--timeout"), None)
+        try:
+            minutes = wait_minutes(span) if span else CMD_DEFAULT_MINUTES
+        except argparse.ArgumentTypeError:
+            minutes = CMD_DEFAULT_MINUTES  # the cmd parser below refuses the bad span
+        argv = ["cmd", *rest, "--", shutil.which("aico") or "aico", "deploy", "wait", deploys[0],
+                "--timeout", str(int(minutes * 60))]
         operation = "cmd"
     pull = PULL_WAITS.get(operation)
     command: list[str] = []

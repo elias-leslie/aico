@@ -52,7 +52,12 @@ function outputText(output: unknown): string {
   return output === undefined ? '' : JSON.stringify(output)
 }
 
-function read(record: Record<string, unknown>, _state: State, wantEvents: boolean): Reading {
+function read(
+  record: Record<string, unknown>,
+  _state: State,
+  wantEvents: boolean,
+  textMax?: number,
+): Reading {
   const fold: Fold = {}
   const events: EventDraft[] = []
   const at = time(record.timestamp)
@@ -94,7 +99,7 @@ function read(record: Record<string, unknown>, _state: State, wantEvents: boolea
         if (said) fold.doing = said
       }
       if (wantEvents && text && !injected && (role === 'user' || role === 'assistant')) {
-        events.push({ at: at ?? null, role, kind: 'text', text: clip(text) })
+        events.push({ at: at ?? null, role, kind: 'text', text: clip(text, textMax) })
       }
     } else if (kind === 'function_call' || kind === 'custom_tool_call') {
       const name = str(payload.name) ?? 'tool'

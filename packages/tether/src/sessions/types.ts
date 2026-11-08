@@ -77,8 +77,9 @@ export interface Reader<S = Record<string, unknown>> {
   initialState(): S
   /** True for a line that holds nothing a reader uses (checked before parsing). */
   skip?(line: string): boolean
-  /** Reads one parsed JSON line. `events` is false while ingesting (no text built). */
-  read(record: Record<string, unknown>, state: S, wantEvents: boolean): Reading
+  /** Reads one parsed JSON line. `events` is false while ingesting (no text built). `textMax`
+   * replaces the longest reply text an event carries. */
+  read(record: Record<string, unknown>, state: S, wantEvents: boolean, textMax?: number): Reading
 }
 
 export interface TranscriptFile {

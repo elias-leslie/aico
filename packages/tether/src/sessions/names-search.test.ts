@@ -328,6 +328,17 @@ describe("a session's last message and context fill", () => {
     },
   })
 
+  it('gives a report the whole reply when asked; others stay cut', async () => {
+    const long = `${'word '.repeat(1500)}the end`
+    write(['.claude', 'projects', '-work-demo', 'a7.jsonl'], jsonl(user('Do it'), reply(long, 100)))
+    const h = history()
+    h.bind('abcd1235', 'claude', 'a7')
+    await h.scan()
+    expect(h.closingMessage('abcd1235', 'claude-code')?.text.length).toBe(4001)
+    const whole = h.closingMessage('abcd1235', 'claude-code', 200_000)?.text
+    expect(whole).toBe(long)
+  })
+
   it('reads the newest reply of its own tool, masked; unknown stays null', async () => {
     write(
       ['.claude', 'projects', '-work-demo', 'a6.jsonl'],

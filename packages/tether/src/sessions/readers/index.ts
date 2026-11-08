@@ -10,8 +10,8 @@ import { piReader } from './pi'
 function masked<S>(reader: Reader<S>): Reader<S> {
   return {
     ...reader,
-    read(record, state, wantEvents) {
-      const reading = reader.read(record, state, wantEvents)
+    read(record, state, wantEvents, textMax) {
+      const reading = reader.read(record, state, wantEvents, textMax)
       if (!wantEvents) return reading
       return {
         ...reading,
@@ -36,6 +36,7 @@ export function readLine<S>(
   text: string,
   state: S,
   wantEvents: boolean,
+  textMax?: number,
 ): Reading | null {
   if (!text || reader.skip?.(text)) return null
   let record: unknown
@@ -45,5 +46,5 @@ export function readLine<S>(
     return null
   }
   if (!record || typeof record !== 'object' || Array.isArray(record)) return null
-  return reader.read(record as Record<string, unknown>, state, wantEvents)
+  return reader.read(record as Record<string, unknown>, state, wantEvents, textMax)
 }

@@ -75,7 +75,12 @@ beforeEach(async () => {
     launcherOf: (id) => launchers.get(id) ?? null,
     coordinatorOf: (id) => coordinators.get(id) ?? null,
     lost: (wakeId) => lost.has(wakeId),
-    nameOf: (id) => (id === '0123abcd' ? 'Disk merge' : null),
+    nameOf: (id) =>
+      id === '0123abcd'
+        ? 'Disk merge'
+        : id === 'feedbeef'
+          ? `Aico — ${'long name '.repeat(9)}`
+          : null,
     cancel: (id, why) => {
       cancelled.push(id)
       cancelReasons.push(why)
@@ -130,6 +135,13 @@ const ask = (body: Record<string, unknown>) => call('POST', '/v1/asks', body)
 const types = () => (events.replay(0) ?? []).map((event) => event.type)
 
 describe('POST /v1/asks', () => {
+  it('clips a long session name to fit who asked', async () => {
+    const created = await ask({ session: 'feedbeef', question: 'Long name?' })
+    expect(created.status).toBe(201)
+    expect(Array.from(created.body.requester as string)).toHaveLength(60)
+    expect(created.body.requester).toMatch(/^Aico — long name .*…$/)
+  })
+
   it('records an ask with choices and announces it', async () => {
     const created = await ask({
       session: '0123abcd',

@@ -996,8 +996,10 @@ export function registerAskRoutes(
       if (request.share && !shareExists(request.share))
         throw new HttpError(400, 'invalid_body', { field: 'share', detail: 'no such share' })
       // The session's name as it was, so the ask still says who asked once the session ends.
-      if (request.session && !request.requester)
-        request.requester = delivery?.nameOf?.(request.session) ?? null
+      if (request.session && !request.requester) {
+        const name = delivery?.nameOf?.(request.session)
+        request.requester = name ? clipText(name, ASK_LIMITS.requester) : null
+      }
       const at = now()
       asks.prune(at - options.show.retentionDays * 24 * 60 * 60 * 1000)
       let { ask, created } = asks.add(request, at)

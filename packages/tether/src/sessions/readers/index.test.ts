@@ -20,7 +20,7 @@ describe('readLine', () => {
     const reader = fakeReader()
     const state = { seen: 1 }
     expect(readLine(reader, '{"type":"message"}', state, true)).toBe(reading)
-    expect(reader.read).toHaveBeenCalledWith({ type: 'message' }, state, true)
+    expect(reader.read).toHaveBeenCalledWith({ type: 'message' }, state, true, undefined)
   })
 
   it.each([

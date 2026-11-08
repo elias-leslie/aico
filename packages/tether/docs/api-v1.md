@@ -220,7 +220,7 @@ Apps keep their own byte path: a PTY that runs `tmux attach` against the session
 | --- | --- | --- |
 | `GET /v1/sessions/:id/attach` | none | `{generation, argv: ["/usr/bin/tmux","-S","<socket>","attach-session","-t","$3"], env, unset}`. `argv` is the exact client argv. |
 | `GET /v1/sessions/:id/capture` | query `escapes=1` | `{generation, text}`: the visible screen |
-| `GET /v1/sessions/:id/report` | | `{id, text, at, contextTokens, contextWindow, contextPercent, model}`: the agent's last message (masked, at most 4000 characters) and context fill, from its transcript. Each is null while unknown; an ended session's stays readable *(33)* |
+| `GET /v1/sessions/:id/report` | | `{id, text, at, contextTokens, contextWindow, contextPercent, model}`: the agent's last message (masked, whole up to 200,000 characters) and context fill, from its transcript. Each is null while unknown; an ended session's stays readable *(33)* |
 | `GET /v1/sessions/:id/scrollback` | query `fromLine`, `count` (at most 5000, default 5000), `escapes=1` | `{generation, fromLine, totalLines, historySize, text}`. One bounded page of pane history (Aico `scrollback-page.ts`); line `historySize + r` is visible row `r`. Without `fromLine`, the last page. `400 invalid_query` for a non-integer. |
 | `POST /v1/sessions/:id/inject` | `{generation, text, mode: "type" \| "paste", submit?: bool, model?: string \| null, thinkingLevel?: string \| null}` | `{generation, delivered: true}`. `from` *(13)*, the sending session's id, records the send so a [wait](#waits) that session sets on this one counts turns from it |
 | `GET /v1/sessions/:id/pane-mode` *(post-cutover)* | none | `{generation, alternateScreen, mouseReporting, historySize, inMode, mode}`: whether the pane shows its alternate screen, whether the program asked for mouse reporting, the history line count, and whether tmux shows a mode over the pane (`mode` is its name, such as `copy-mode`, else null). Read-only `display-message`. `409 workload_unavailable` when tmux cannot answer. |
@@ -701,7 +701,7 @@ reply text. An undelivered line for the same lane and outcome is replaced by the
 - **finished**: the lane is `idle` with a `stateAgentAt` later than the last one reported, held `laneSettleSeconds`.
   It catches turns too short for the poll and turns during a Tether restart; the per-lane cursor is kept in the
   database, so a restart never repeats one. *(33)* An agent idle with `stateDetail` `background shells running` (a
-  Claude Code turn over with its own background shells going) is not finished either: the line waits for them, up to
+  Claude Code or Codex turn over with its own background shells going) is not finished either: the line waits for them, up to
   `laneBackgroundHoldSeconds`, then says `went idle; background shells still running` and does not count as a repeat.
   A lane whose `waitingOn` is set is not finished. *(schema 29)* Its
   still-queued ride-along `reply` deliveries ([Deliveries](#deliveries)) to its receivers then become wakes, since no

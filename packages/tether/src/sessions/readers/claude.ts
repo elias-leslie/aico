@@ -76,7 +76,12 @@ function resultText(content: unknown): string {
     .join('\n')
 }
 
-function read(record: Record<string, unknown>, state: State, wantEvents: boolean): Reading {
+function read(
+  record: Record<string, unknown>,
+  state: State,
+  wantEvents: boolean,
+  textMax?: number,
+): Reading {
   const fold: Fold = {}
   const events: EventDraft[] = []
   const type = str(record.type)
@@ -181,7 +186,7 @@ function read(record: Record<string, unknown>, state: State, wantEvents: boolean
           at: at ?? null,
           role: 'assistant' as EventRole,
           kind: block.type === 'thinking' ? 'thinking' : 'text',
-          text: clip(text),
+          text: clip(text, textMax),
           model,
         })
       }
@@ -225,5 +230,5 @@ export const claudeReader: Reader = {
   // The request dumps hold whole prompts and nothing a reader uses.
   skip: (line) => line.startsWith('{"type":"api-request'),
   initialState: () => ({ messageId: null, usage: NO_USAGE }),
-  read: (record, state, wantEvents) => read(record, state as State, wantEvents),
+  read: (record, state, wantEvents, textMax) => read(record, state as State, wantEvents, textMax),
 }

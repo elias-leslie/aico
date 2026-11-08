@@ -127,7 +127,7 @@ loss or deadline after sending, `outcome_uncertain`, blocked End cleanup,
 `close_uncertain`, or any unqualified reply. A failure receipt reports
 `status: "uncertain"` because it does not vouch for the workload's current state,
 plus a content-free `reason`. A create the owner refused outright (any `400` or
-`422`, `request_conflict`, `recovery_pending`) created
+`422`, `request_conflict`, `recovery_pending`, `conversation_open`) created
 nothing and reports `status: "refused"`, with the owner's words in `detail`. A
 refusal before anything is sent is one `error:` line, without the usage. With
 `--host`, create says the host may be powering on only after 3 s without an answer. No failed request is automatically retried. Exit
@@ -454,7 +454,9 @@ key, widget, and unique logical `ST_SESSION_ID` before launch. Matching retries
 reconcile the same widget; changed content returns 409 `request_conflict`.
 A new request whose resume UUID belongs to a session that crash recovery will
 resume, or holds, returns 409 `recovery_pending` with that `widgetId`
-([crash-recovery.md](../packages/tether/docs/crash-recovery.md)).
+([crash-recovery.md](../packages/tether/docs/crash-recovery.md)). One whose UUID a
+live, restoring or just-launched session is on returns 409 `conversation_open`; if
+Tether can't look, 503 `unavailable`.
 Retirement keeps the request tombstone, so retries cannot recreate ended work.
 No prompt or transcript is stored in the catalog. Before first allocation, an
 interrupted request needs the same create body to supply its transient prompt

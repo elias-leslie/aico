@@ -919,14 +919,18 @@ export class History {
   }
 
   /** What the agent in a session said last: its newest reply text, masked and cut as every event
-   * is. null: no conversation, transcript or reply to read. */
-  closingMessage(session: string, tool?: string): { text: string; at: number | null } | null {
+   * is, unless `textMax` says otherwise. null: no conversation, transcript or reply to read. */
+  closingMessage(
+    session: string,
+    tool?: string,
+    textMax?: number,
+  ): { text: string; at: number | null } | null {
     const row = this.currentOf(session, tool)
     if (!row) return null
     try {
       // The newest reply is nearly always close to the end: read no further back than it takes.
       for (const limit of CLOSING_READ_LIMITS) {
-        const page = this.events(row, { limit })
+        const page = this.events(row, { limit, textMax })
         if (page === 'gone') return null
         for (const event of [...page.items].reverse())
           if (event.role === 'assistant' && event.kind === 'text' && event.text.trim())
@@ -949,7 +953,7 @@ export class History {
    * the first `limit` from `from`. */
   events(
     row: Row,
-    options: { limit?: number; before?: number; from?: number },
+    options: { limit?: number; before?: number; from?: number; textMax?: number },
   ): EventPage | 'gone' {
     const limit = Math.min(Math.max(options.limit ?? 100, 1), 500)
     if (row.tool === PUSHED_TOOL) return turnEvents(row, limit, options)
@@ -959,7 +963,7 @@ export class History {
     const state = reader.initialState()
     const budget = 32 << 20
     const parse = (text: string, offset: number): SessionEvent[] => {
-      const reading = readLine(reader, text, state, true)
+      const reading = readLine(reader, text, state, true, options.textMax)
       return reading ? reading.events.map((event) => ({ ...event, offset })) : []
     }
     if (options.from !== undefined) {

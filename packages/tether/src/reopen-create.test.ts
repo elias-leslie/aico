@@ -8,7 +8,7 @@ import { holdResume, launchingResume, withRootPrompt } from '@aico/session-engin
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { callSocket } from './client'
 import { type RunningDaemon, startDaemon } from './daemon'
-import { conversationHolder } from './lifecycle-api'
+import { conversationHolder, rootOperations } from './lifecycle-api'
 
 // A valid create stops at linger_required: nothing is allocated, no tmux.
 vi.mock('@aico/session-engine/engine', async (importOriginal) => ({
@@ -83,6 +83,22 @@ describe('POST /v1/sessions resumeId', () => {
   })
 })
 
+describe('POST /v1/roots resumeSessionId', () => {
+  it('refuses a conversation it cannot place', async () => {
+    const answer = await callSocket(paths.socket, 'POST', '/v1/roots', {
+      requestId: 'resume-a-held-one',
+      tool: 'claude-code',
+      projectId: 'proj',
+      projectRoot: join(dir, 'proj'),
+      initialPrompt: 'carry on',
+      role: 'aico',
+      workRole: 'verification',
+      resumeSessionId: conversation,
+    })
+    expect(answer).toMatchObject({ status: 503, body: { error: 'unavailable' } })
+  })
+})
+
 describe('conversationHolder', () => {
   const free = '0b9a8f7e-1234-4cde-8abc-0123456789ac'
   const context = (over: {
@@ -103,6 +119,19 @@ describe('conversationHolder', () => {
       },
       recovery: { resumeOwner: () => over.owner ?? null },
     }) as unknown as Parameters<typeof conversationHolder>[0]
+
+  it('keeps a second root off a conversation someone is on', async () => {
+    const refuse = (ctx: Parameters<typeof conversationHolder>[0]) =>
+      rootOperations(ctx as never).refuse?.({ tool: 'claude-code', resumeSessionId: free } as never)
+    expect(
+      await refuse(context({ observed: [{ row: { id: 'run00001' }, resumeId: free }] })),
+    ).toMatchObject({ status: 409, error: 'conversation_open' })
+    expect(await refuse(context({}))).toBeNull()
+    expect(await refuse(context({ fails: true }))).toMatchObject({
+      status: 503,
+      error: 'unavailable',
+    })
+  })
 
   it('names a running, restoring or recovering holder, and refuses when it cannot look', async () => {
     expect(

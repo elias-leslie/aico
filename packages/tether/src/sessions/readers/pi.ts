@@ -30,7 +30,12 @@ function describe(args: Record<string, unknown> | undefined): string {
   return clip(first ?? JSON.stringify(args), 600)
 }
 
-function read(record: Record<string, unknown>, _state: State, wantEvents: boolean): Reading {
+function read(
+  record: Record<string, unknown>,
+  _state: State,
+  wantEvents: boolean,
+  textMax?: number,
+): Reading {
   const fold: Fold = {}
   const events: EventDraft[] = []
   const at = time(record.timestamp)
@@ -119,7 +124,7 @@ function read(record: Record<string, unknown>, _state: State, wantEvents: boolea
               at: at ?? null,
               role: 'assistant',
               kind: block.type === 'thinking' ? 'thinking' : 'text',
-              text: clip(text),
+              text: clip(text, textMax),
               model: fold.model,
             })
           }

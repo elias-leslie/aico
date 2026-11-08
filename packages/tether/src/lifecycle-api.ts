@@ -171,6 +171,8 @@ import {
 } from './wake-runtime'
 
 const RUNNING_SETTLE_MS = 3_000
+/** A session report carries its last message whole, up to this much. */
+const REPORT_TEXT_MAX = 200_000
 const RUNNING_POLL_MS = 100
 const GENERATION_RE = /^[0-9a-f]{64}$/
 const UUID_RE = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/
@@ -590,6 +592,21 @@ export function rootOperations(context: LifecycleApiContext): RootControlOperati
       return Boolean(getTui(request.tool)?.enabled && isDir(request.projectRoot))
     },
     refuse: async (request) => {
+      // Two agents must never resume one conversation, whoever already holds it.
+      if (request.resumeSessionId && !request.entry) {
+        try {
+          const holder = await holderOf(context, request.resumeSessionId)
+          if (holder)
+            return {
+              status: 409,
+              error: 'conversation_open',
+              reason: `session ${holder} is already on this conversation; end it first`,
+            }
+        } catch (error) {
+          if (!(error instanceof ConversationUnknown)) throw error
+          return { status: 503, error: 'unavailable', reason: error.message }
+        }
+      }
       const spec = getTui(request.tool)
       // An entry's agent runs elsewhere: this host's model list says nothing about it.
       if (!spec || !request.model || request.entry) return null
@@ -1267,7 +1284,7 @@ function registerTerminalReadRoutes(router: Router, context: LifecycleApiContext
       const id = params.id ?? ''
       if (!/^[0-9a-f]{8}$/.test(id)) throw new HttpError(404, 'not_found')
       const tool = getWidget(id)?.tool
-      const closing = context.history?.closingMessage(id, tool) ?? null
+      const closing = context.history?.closingMessage(id, tool, REPORT_TEXT_MAX) ?? null
       const { tokens, model } = context.history?.contextOf(id, tool) ?? {
         tokens: null,
         model: null,

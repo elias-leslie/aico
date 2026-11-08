@@ -310,6 +310,12 @@ def test_a_job_wait_on_an_aico_deploy_id_waits_on_aico_deploy_wait(monkeypatch, 
     code, calls, _ = run(monkeypatch, ["wait", "job", "aico-123394893697", "--until", "done", "--note", "deploy"],
                          [VERSION_18, (201, armed)])
     assert code == 0
-    assert calls[1][1] == {"kind": "cmd", "argv": ["/bin/aico", "deploy", "wait", "aico-123394893697"],
+    # The command is given this wait's whole span: its own 30-minute default reads as a failed deploy.
+    assert calls[1][1] == {"kind": "cmd", "argv": ["/bin/aico", "deploy", "wait", "aico-123394893697",
+                                                   "--timeout", "21600"],
                            "cwd": str(tmp_path), "until": "succeeded", "waiter": "0a1b2c3d",
                            "timeoutMinutes": 360, "note": "deploy"}
+    code, calls, _ = run(monkeypatch, ["wait", "job", "aico-123394893697", "--timeout", "2h"],
+                         [VERSION_18, (201, armed)])
+    assert code == 0
+    assert calls[1][1]["argv"][-2:] == ["--timeout", "7200"] and calls[1][1]["timeoutMinutes"] == 120
