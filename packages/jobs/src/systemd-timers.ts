@@ -175,6 +175,7 @@ export interface TimerStatus {
   /** The service is running right now. */
   running: boolean
   next: number | null
+  /** The later of the timer's last trigger and the service's last finish. */
   last: number | null
   /** The service's last result: success, exit-code, timeout, signal... */
   result: string
@@ -255,13 +256,17 @@ export async function readTimerStatus(file: TimersFile, ctx: TimerContext): Prom
         const service = records.get(def.unit.replace(/\.timer$/, '.service'))
         const listing = timers.get(def.unit)
         const exit = service?.ExecMainStatus
+        // A run started by hand (Run now) does not move the timer's last trigger, so the service's
+        // own last finish counts too.
+        const finished = /^@(\d+)$/.exec(service?.ExecMainExitTimestamp ?? '')
+        const triggered = micros(listing?.last)
         return {
           def,
           installed: timer?.LoadState === 'loaded',
           active: timer?.ActiveState === 'active',
           running: ['activating', 'active', 'reloading'].includes(service?.ActiveState ?? ''),
           next: micros(listing?.next),
-          last: micros(listing?.last),
+          last: finished ? Math.max(triggered ?? 0, Number(finished[1]) * 1000) : triggered,
           result:
             service?.ActiveState === 'failed' && (service?.Result ?? 'success') === 'success'
               ? 'failed'

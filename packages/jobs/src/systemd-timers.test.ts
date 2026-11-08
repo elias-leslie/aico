@@ -72,6 +72,9 @@ function fake(over: { failing?: string; down?: string } = {}) {
             `ActiveState=${service ? (bad ? 'failed' : 'inactive') : id === 'mine.timer' ? 'inactive' : 'active'}`,
             `Result=${bad ? 'exit-code' : 'success'}`,
             service ? `ExecMainStatus=${bad ? 3 : 0}` : '',
+            service && id === 'beat.service'
+              ? `ExecMainExitTimestamp=@${Math.floor(LAST / 1000) + 120}`
+              : '',
             '',
           ]
             .filter((line, i, all) => line !== '' || i === all.length - 1)
@@ -130,7 +133,8 @@ describe('systemd timers in Routines', () => {
       paused: false,
       running: false,
       nextRun: NEXT,
-      lastRun: LAST,
+      // The service finished after the timer last fired (a hand-started run): that is the last run.
+      lastRun: Math.floor(LAST / 1000) * 1000 + 120_000,
       lastState: 'ok',
       lastMeaning: 'Finished OK.',
       lastMachine: 'ws',
