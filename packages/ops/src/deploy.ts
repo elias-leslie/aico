@@ -584,45 +584,29 @@ function hookBin(env: NodeJS.ProcessEnv): string {
   return join(homedir(), '.local/bin/aico-hook')
 }
 
-/** Entry point: refusals print and exit non-zero; a detached request queues and returns. */
-export async function deploy(req: DeployRequest, root: string, deps: DeployDeps): Promise<number> {
-  const project = loadProject(root)
-  if (req.project && !project.names.includes(req.project)) {
-    if (deps.env.AICO_OPS_CALLER !== 'st')
-      deps.err(
-        `aico deploy runs ${project.id} only; ${req.project} deploys with st service rebuild`,
-      )
-    return NOT_HANDLED
-  }
-  const git = (args: string[]) => {
-    const result = deps.run('git', ['-C', root, ...args])
-    if (result.code !== 0) throw new Refusal(`git ${args.join(' ')} failed: ${tail(result, 3)}`)
-    return result.out.trim()
-  }
-  const sha = git(['rev-parse', '--verify', `${req.sha || 'HEAD'}^{commit}`])
-  const ack = req.withAck ? ['--with-ack', req.withAck] : []
-  /** Another agent's hold refuses the restart (null: none, or none known). */
-  const holdRefusal = () => {
-    const guard = deps.run(hookBin(deps.env), ['lease', '--guard', 'rebuild', ...ack], {
-      cwd: root,
-      env: deps.env,
-    })
-    if (guard.code === 1 && guard.out.trim()) return guard.out.trim()
-    if (guard.code !== 0)
-      deps.err(
-        `[deploy] WARNING other agents' holds are unknown (${tail(guard, 1)}); deploying anyway`,
-      )
-    return null
-  }
-  let job: Job | null = null
-  if (req.job) {
-    job = readJob(deps, req.job)
-    if (!job || job.sha !== sha || job.state !== 'queued')
-      throw new Refusal(`Deploy job ${req.job} is not queued for ${sha}`)
-  } else {
-    const refused = holdRefusal()
-    if (refused) throw new Refusal(refused, 2)
-  }
+/** Another agent's hold refuses the restart (null: none, or none known). */
+function holdRefusal(root: string, ack: string[], deps: DeployDeps): string | null {
+  const guard = deps.run(hookBin(deps.env), ['lease', '--guard', 'rebuild', ...ack], {
+    cwd: root,
+    env: deps.env,
+  })
+  if (guard.code === 1 && guard.out.trim()) return guard.out.trim()
+  if (guard.code !== 0)
+    deps.err(
+      `[deploy] WARNING other agents' holds are unknown (${tail(guard, 1)}); deploying anyway`,
+    )
+  return null
+}
+
+/** The commit against what runs here: what each unit runs, whether it changed, what may replace what. */
+function commitView(
+  git: (args: string[]) => string,
+  root: string,
+  sha: string,
+  req: DeployRequest,
+  project: Project,
+  deps: DeployDeps,
+) {
   const packages = readPackages(git, sha)
   const cfg = deployConfig(git, sha)
   const template = (unit: string) => {
@@ -684,71 +668,94 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
     }
     return behindCache.get(unit) as boolean
   }
-  // Refuse a bad combination before queueing anything.
-  selectUnits(project, req, { active, changed: () => false })
+  return {
+    packages,
+    cfg,
+    template,
+    live,
+    swappable,
+    changed,
+    servedFrom,
+    frontendChanged,
+    order,
+    active,
+    behind,
+  }
+}
+type CommitView = ReturnType<typeof commitView>
 
-  if (req.detach) {
-    const id = `aico-${randomBytes(6).toString('hex')}`
-    const argv = [req.project || project.id, '--sha', sha, '--job', id]
-    if (req.scope) argv.push('--scope', req.scope)
-    for (const worker of req.workers) argv.push('--worker', worker)
-    if (req.includeAllWorkers) argv.push('--include-all-workers')
-    if (req.rollback) argv.push('--rollback')
-    if (req.withAck) argv.push('--with-ack', req.withAck)
+/** A detached request: queue the job as a user unit and return. */
+function queueDeploy(
+  req: DeployRequest,
+  project: Project,
+  root: string,
+  sha: string,
+  deps: DeployDeps,
+): number {
+  const id = `aico-${randomBytes(6).toString('hex')}`
+  const argv = [req.project || project.id, '--sha', sha, '--job', id]
+  if (req.scope) argv.push('--scope', req.scope)
+  for (const worker of req.workers) argv.push('--worker', worker)
+  if (req.includeAllWorkers) argv.push('--include-all-workers')
+  if (req.rollback) argv.push('--rollback')
+  if (req.withAck) argv.push('--with-ack', req.withAck)
+  writeJob(deps, {
+    id,
+    project: project.id,
+    sha,
+    state: 'queued',
+    argv,
+    queued_at: new Date().toISOString(),
+  })
+  // The job runs as the caller (its identity holds the deploy hold the acceptance guard checks).
+  const setenv = ops.deploy.jobEnv
+    .filter((name) => deps.env[name])
+    .map((name) => `--setenv=${name}=${deps.env[name]}`)
+  const queued = deps.run(
+    'systemd-run',
+    [
+      '--user',
+      `--unit=aico-deploy-${id}`,
+      '--collect',
+      '--quiet',
+      '--nice=10',
+      `--working-directory=${root}`,
+      ...setenv,
+      process.execPath,
+      '--disable-warning=ExperimentalWarning',
+      deps.self,
+      'deploy',
+      ...argv,
+    ],
+    { env: deps.env },
+  )
+  if (queued.code !== 0) {
     writeJob(deps, {
-      id,
-      project: project.id,
-      sha,
-      state: 'queued',
-      argv,
-      queued_at: new Date().toISOString(),
+      ...(readJob(deps, id) as Job),
+      state: 'failed',
+      message: 'could not queue',
+      finished_at: new Date().toISOString(),
     })
-    // The job runs as the caller (its identity holds the deploy hold the acceptance guard checks).
-    const setenv = ops.deploy.jobEnv
-      .filter((name) => deps.env[name])
-      .map((name) => `--setenv=${name}=${deps.env[name]}`)
-    const queued = deps.run(
-      'systemd-run',
-      [
-        '--user',
-        `--unit=aico-deploy-${id}`,
-        '--collect',
-        '--quiet',
-        '--nice=10',
-        `--working-directory=${root}`,
-        ...setenv,
-        process.execPath,
-        '--disable-warning=ExperimentalWarning',
-        deps.self,
-        'deploy',
-        ...argv,
-      ],
-      { env: deps.env },
-    )
-    if (queued.code !== 0) {
-      writeJob(deps, {
-        ...(readJob(deps, id) as Job),
-        state: 'failed',
-        message: 'could not queue',
-        finished_at: new Date().toISOString(),
-      })
-      throw new Refusal(`Could not queue the deploy: ${tail(queued, 3)}`)
-    }
-    deps.out(`[deploy] queued ${id} for ${sha.slice(0, 12)}`)
-    deps.out(
-      `[deploy] result: aico deploy result ${id}   wait: aico deploy wait ${id}   log: aico logs aico-deploy-${id}`,
-    )
-    return 0
+    throw new Refusal(`Could not queue the deploy: ${tail(queued, 3)}`)
   }
+  deps.out(`[deploy] queued ${id} for ${sha.slice(0, 12)}`)
+  deps.out(
+    `[deploy] result: aico deploy result ${id}   wait: aico deploy wait ${id}   log: aico logs aico-deploy-${id}`,
+  )
+  return 0
+}
 
-  const started = Date.now()
-  if (job) {
-    job = { ...job, state: 'running' }
-    writeJob(deps, job)
-  }
-  let finished = false
-  let swapped: string[] = []
-  const finish = async (
+/** How one deploy ends: its job file and its Status row, once. */
+class DeployRun {
+  finished = false
+  swapped: string[] = []
+  constructor(
+    private readonly job: Job | null,
+    private readonly project: Project,
+    private readonly deps: DeployDeps,
+  ) {}
+
+  async finish(
     state: 'succeeded' | 'failed',
     message: string,
     units: string[] = [],
@@ -756,36 +763,37 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
     // A refusal changed nothing: the old release still serves and the deploying agent sees it.
     // warn keeps it on the Status screen without raising an owner ask the way failed does.
     refused = false,
-  ) => {
-    if (job)
-      writeJob(deps, {
-        ...job,
+  ) {
+    if (this.job)
+      writeJob(this.deps, {
+        ...this.job,
         state,
         message,
         units,
-        ...(swapped.length ? { frontends: swapped } : {}),
+        ...(this.swapped.length ? { frontends: this.swapped } : {}),
         exit_code: code,
         finished_at: new Date().toISOString(),
       })
-    await deps.report(
+    await this.deps.report(
       {
-        id: `deploy:${project.id}`,
-        what: `${project.id} deploy`,
+        id: `deploy:${this.project.id}`,
+        what: `${this.project.id} deploy`,
         kind: 'service',
         machine: machineId(),
-        project: project.id,
+        project: this.project.id,
         state: state === 'succeeded' ? 'ok' : refused ? 'warn' : 'failed',
         meaning: message.replace(/\n\s*/g, ' ').slice(0, 300),
         last_run: new Date().toISOString(),
       },
-      project.port,
+      this.project.port,
     )
-    finished = true
+    this.finished = true
   }
-  // Records the failed deploy's Status (message, the units it did restart), then throws `error`.
-  // Only a Refusal marked unchanged shows as a refusal: a failed swap recovery or build is a real failure.
-  const fail = async (message: string, error: Error, units: string[] = []): Promise<never> => {
-    await finish(
+
+  /** Records the failed deploy's Status (message, the units it did restart), then throws `error`.
+   * Only a Refusal marked unchanged shows as a refusal: a failed swap recovery or build is a real failure. */
+  async fail(message: string, error: Error, units: string[] = []): Promise<never> {
+    await this.finish(
       'failed',
       message,
       units,
@@ -794,6 +802,251 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
     )
     throw error
   }
+}
+
+/** One deploy past the queue: what it needs while it holds the deploy lock. */
+interface LockedDeploy {
+  req: DeployRequest
+  project: Project
+  root: string
+  sha: string
+  view: CommitView
+  run: DeployRun
+  started: number
+  deps: DeployDeps
+  holds: () => string | null
+  held: () => boolean
+}
+
+function reportSelection(selection: ReturnType<typeof selectUnits>, d: LockedDeploy) {
+  const { project, view, deps } = d
+  for (const unit of selection.auto)
+    deps.out(`[deploy] ${unit} restarts: ${manualReason(view.changed(unit), view.behind(unit))}`)
+  for (const unit of project.manualWorkers)
+    if (!selection.restart.includes(unit) && !selection.stale.includes(unit))
+      deps.out(`[deploy] ${unit} left running: nothing it runs changed`)
+  for (const unit of selection.stale)
+    if (!selection.restart.includes(unit))
+      deps.out(
+        `[deploy] ${unit} changed since its release and was left running; deploy it with: aico deploy ${project.id} --worker ${unit.replace(/\.service$/, '')}`,
+      )
+}
+
+/** Which units restart and which swap a frontend build, leaving anything already newer as it is. */
+async function chooseWork(selection: ReturnType<typeof selectUnits>, d: LockedDeploy) {
+  const { req, project, sha, view, run, deps } = d
+  // A frontend-only scope swaps the build of a server that serves it from its link.
+  const frontendOnly = req.scope === 'frontend' && view.swappable(project.backend)
+  const selected = selection.restart.filter((unit) => !(frontendOnly && unit === project.backend))
+  // Never put an older commit over a newer one another builder deployed meanwhile.
+  const placed = async (unit: string, from: string | null, what: string) => {
+    const verdict = view.order(from)
+    if (verdict === 'go') return true
+    if (verdict === 'newer')
+      deps.out(
+        `[deploy] ${unit} already ${what} ${from?.slice(0, 12)}, which contains ${sha.slice(0, 12)}; left as is`,
+      )
+    else {
+      await run.fail(
+        `Deploy of ${sha.slice(0, 10)} refused: ${unit} ${what} ${from?.slice(0, 10)}, not an ancestor`,
+        new Refusal(
+          `${unit} ${what} ${from?.slice(0, 12)}, which ${sha.slice(0, 12)} does not contain; deploy a newer commit or pass --rollback.`,
+          1,
+          true,
+        ),
+      )
+    }
+    return false
+  }
+  const restart: string[] = []
+  for (const unit of selected)
+    if (await placed(unit, runningSha(view.live(unit), deps.releasesDir), 'runs'))
+      restart.push(unit)
+  // A server left running whose frontend build changed gets the new build without a restart.
+  const manualDeploy = req.workers.some((unit) => project.manualWorkers.includes(canonical(unit)))
+  const swaps: string[] = []
+  if (!manualDeploy && (!req.scope || req.scope === 'full' || req.scope === 'frontend'))
+    for (const unit of [
+      project.backend,
+      ...project.defaultWorkers,
+      ...project.optionalWorkers.filter((unit) => req.includeAllWorkers || view.active(unit)),
+    ]) {
+      if (!unit || selected.includes(unit) || !view.swappable(unit)) continue
+      if (selection.restart.includes(unit) && !frontendOnly) continue
+      const from = view.servedFrom(unit)
+      if (from === sha || !(frontendOnly || view.frontendChanged(unit))) continue
+      if (await placed(unit, from, 'serves the page from')) swaps.push(unit)
+    }
+  return { restart, swaps }
+}
+
+/** Under the deploy lock: decide what changes, build it, swap it in, install the rest, report. */
+async function deployLocked(d: LockedDeploy): Promise<number> {
+  const { req, project, root, sha, view, run, deps } = d
+  const { packages, cfg, template } = view
+  if (existsSync(journalPath(deps))) {
+    const refused = d.holds()
+    if (refused) throw new Refusal(refused, 2, true)
+    recoverSwap(deps)
+  }
+  const selection = selectUnits(project, req, view)
+  reportSelection(selection, d)
+  const { restart, swaps } = await chooseWork(selection, d)
+  // The ops bundle `aico deploy` runs: installed from this commit when its sources changed.
+  const installOps =
+    packages.some((pkg) => pkg.dir === 'ops') &&
+    opsInstallWanted(
+      root,
+      sha,
+      [...cfg.rootSources, ...cone(packages, 'ops'), ...cfg.cliSources],
+      req.rollback,
+      deps,
+    )
+  const installRoot = rootInstallWanted(root, sha, cfg, req.rollback, deps)
+  const hookTree = hookInstallWanted(root, sha, cfg, req.rollback, deps)
+  if (!restart.length && !swaps.length && !installOps && !installRoot && !hookTree) {
+    const message = `Nothing to restart at ${sha.slice(0, 10)}: no unit's sources changed`
+    deps.out(`[deploy] ${message.toLowerCase()}`)
+    await run.finish('succeeded', message)
+    return 0
+  }
+  // What an install after the swap reports: the units are already live, so say so.
+  const installed = async (what: string, problem: string | null) => {
+    if (!problem) return
+    const done = restart.length ? `${restart.join(', ')} deployed; ` : ''
+    await run.fail(
+      `Deploy of ${sha.slice(0, 10)}: ${done}the ${what} failed (${problem})`,
+      new Refusal(`The ${what} failed: ${problem}`),
+      restart,
+    )
+  }
+  if (restart.length) deps.out(`[deploy] restarting ${restart.join(', ')}`)
+  if (swaps.length) deps.out(`[deploy] new page build for ${swaps.join(', ')}, which keep running`)
+  let release: string | null = null
+  if (restart.length || swaps.length || installOps)
+    try {
+      release = prepareRelease(
+        root,
+        sha,
+        [
+          ...new Set([
+            ...restart.flatMap((unit) => unitBuilds(unit, template(unit), cfg)),
+            ...swaps.map((unit) => (frontendSpec(cfg, unit) as FrontendSpec).package),
+            ...(installOps
+              ? ['ops', ...(packages.some((pkg) => pkg.dir === 'cli') ? ['cli'] : [])]
+              : []),
+          ]),
+        ],
+        deps,
+        {
+          packages: peerPackages(project, packages, cfg, template),
+          workspace: packages,
+          cfg,
+        },
+      )
+    } catch (error) {
+      await run.fail(
+        `Deploy of ${sha.slice(0, 10)} failed: ${(error as Error).message.split('\n')[0]}`,
+        error as Error,
+      )
+    }
+  if (restart.length || swaps.length || installRoot || hookTree) {
+    // A hold taken while this deploy waited (queued, or behind another deploy) still refuses it.
+    const refused = d.holds()
+    if (refused)
+      await run.fail(
+        `Deploy of ${sha.slice(0, 10)} refused: ${refused}`,
+        new Refusal(refused, 2, true),
+      )
+    if (!d.held())
+      await run.fail(
+        `Deploy of ${sha.slice(0, 10)} lost the deploy lock`,
+        new Refusal('Another deploy took the deploy lock; nothing was restarted.', 1, true),
+      )
+  }
+  if (restart.length && release) {
+    const failed = await swapUnits(project, restart, release, sha, deps, installOps, cfg)
+    if (failed) {
+      await run.fail(
+        `Deploy of ${sha.slice(0, 10)} failed (${failed.failure}); ${failed.outcome}`,
+        new Refusal(`Deploy failed: ${failed.failure}. ${capital(failed.outcome)}.`),
+        restart,
+      )
+    }
+  }
+  if (swaps.length && release) {
+    const failed = await swapFrontends(project, swaps, release, cfg, deps)
+    if (failed) {
+      await run.fail(
+        `Deploy of ${sha.slice(0, 10)} failed (${failed.failure}); ${failed.outcome}`,
+        new Refusal(`Deploy failed: ${failed.failure}. ${capital(failed.outcome)}.`),
+        restart,
+      )
+    }
+    run.swapped = swaps
+  }
+  if (installOps && !restart.length && release) installOpsBundle(deps, release)
+  if (installRoot)
+    await installed('host-steward root install', installRootSources(root, sha, cfg, deps))
+  if (release) {
+    // The newest accepted release: the one a peer is sent (scripts/peer-release.sh).
+    writeFileSync(join(deps.releasesDir, ACCEPTED), `${sha}\n`)
+    pruneReleases(deps, release, cfg)
+  }
+  // Last: the release is live and accepted whether or not this machine can build the hook.
+  if (hookTree) await installed('aico-hook install', installHook(root, sha, hookTree, cfg, deps))
+  const seconds = Math.round((Date.now() - d.started) / 1000)
+  const parts = [
+    ...restart.map((unit) => unit.replace(/\.service$/, '')),
+    ...swaps.map((unit) => `the ${unit.replace(/\.service$/, '')} page (no restart)`),
+    ...(installRoot ? ['the host-steward root install'] : []),
+    ...(hookTree ? ['aico-hook'] : []),
+  ]
+  const what = parts.length ? parts.join(', ') : 'the deploy code only'
+  const message = `Deployed ${sha.slice(0, 10)}: ${what} (${seconds} s)`
+  deps.out(`[deploy] ${message}`)
+  await run.finish('succeeded', message, restart)
+  return 0
+}
+
+/** Entry point: refusals print and exit non-zero; a detached request queues and returns. */
+export async function deploy(req: DeployRequest, root: string, deps: DeployDeps): Promise<number> {
+  const project = loadProject(root)
+  if (req.project && !project.names.includes(req.project)) {
+    if (deps.env.AICO_OPS_CALLER !== 'st')
+      deps.err(
+        `aico deploy runs ${project.id} only; ${req.project} deploys with st service rebuild`,
+      )
+    return NOT_HANDLED
+  }
+  const git = (args: string[]) => {
+    const result = deps.run('git', ['-C', root, ...args])
+    if (result.code !== 0) throw new Refusal(`git ${args.join(' ')} failed: ${tail(result, 3)}`)
+    return result.out.trim()
+  }
+  const sha = git(['rev-parse', '--verify', `${req.sha || 'HEAD'}^{commit}`])
+  const ack = req.withAck ? ['--with-ack', req.withAck] : []
+  const holds = () => holdRefusal(root, ack, deps)
+  let job: Job | null = null
+  if (req.job) {
+    job = readJob(deps, req.job)
+    if (!job || job.sha !== sha || job.state !== 'queued')
+      throw new Refusal(`Deploy job ${req.job} is not queued for ${sha}`)
+  } else {
+    const refused = holds()
+    if (refused) throw new Refusal(refused, 2)
+  }
+  const view = commitView(git, root, sha, req, project, deps)
+  // Refuse a bad combination before queueing anything.
+  selectUnits(project, req, { active: view.active, changed: () => false })
+  if (req.detach) return queueDeploy(req, project, root, sha, deps)
+
+  const started = Date.now()
+  if (job) {
+    job = { ...job, state: 'running' }
+    writeJob(deps, job)
+  }
+  const run = new DeployRun(job, project, deps)
   try {
     deps.out(`[deploy] ${project.id} at ${sha.slice(0, 12)}: accepting that commit`)
     const aico = deps.env.AICO_BIN || 'aico'
@@ -812,189 +1065,11 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
         true,
       )
     }
-    return await withLock(deps, async (held) => {
-      if (existsSync(journalPath(deps))) {
-        const refused = holdRefusal()
-        if (refused) throw new Refusal(refused, 2, true)
-        recoverSwap(deps)
-      }
-      const selection = selectUnits(project, req, { active, changed, behind })
-      for (const unit of selection.auto)
-        deps.out(`[deploy] ${unit} restarts: ${manualReason(changed(unit), behind(unit))}`)
-      for (const unit of project.manualWorkers)
-        if (!selection.restart.includes(unit) && !selection.stale.includes(unit))
-          deps.out(`[deploy] ${unit} left running: nothing it runs changed`)
-      for (const unit of selection.stale)
-        if (!selection.restart.includes(unit))
-          deps.out(
-            `[deploy] ${unit} changed since its release and was left running; deploy it with: aico deploy ${project.id} --worker ${unit.replace(/\.service$/, '')}`,
-          )
-      // A frontend-only scope swaps the build of a server that serves it from its link.
-      const frontendOnly = req.scope === 'frontend' && swappable(project.backend)
-      const selected = selection.restart.filter(
-        (unit) => !(frontendOnly && unit === project.backend),
-      )
-      // Never put an older commit over a newer one another builder deployed meanwhile.
-      const placed = async (unit: string, from: string | null, what: string) => {
-        const verdict = order(from)
-        if (verdict === 'go') return true
-        if (verdict === 'newer')
-          deps.out(
-            `[deploy] ${unit} already ${what} ${from?.slice(0, 12)}, which contains ${sha.slice(0, 12)}; left as is`,
-          )
-        else {
-          await fail(
-            `Deploy of ${sha.slice(0, 10)} refused: ${unit} ${what} ${from?.slice(0, 10)}, not an ancestor`,
-            new Refusal(
-              `${unit} ${what} ${from?.slice(0, 12)}, which ${sha.slice(0, 12)} does not contain; deploy a newer commit or pass --rollback.`,
-              1,
-              true,
-            ),
-          )
-        }
-        return false
-      }
-      const restart: string[] = []
-      for (const unit of selected)
-        if (await placed(unit, runningSha(live(unit), deps.releasesDir), 'runs')) restart.push(unit)
-      // A server left running whose frontend build changed gets the new build without a restart.
-      const manualDeploy = req.workers.some((unit) =>
-        project.manualWorkers.includes(canonical(unit)),
-      )
-      const swaps: string[] = []
-      if (!manualDeploy && (!req.scope || req.scope === 'full' || req.scope === 'frontend'))
-        for (const unit of [
-          project.backend,
-          ...project.defaultWorkers,
-          ...project.optionalWorkers.filter((unit) => req.includeAllWorkers || active(unit)),
-        ]) {
-          if (!unit || selected.includes(unit) || !swappable(unit)) continue
-          if (selection.restart.includes(unit) && !frontendOnly) continue
-          const from = servedFrom(unit)
-          if (from === sha || !(frontendOnly || frontendChanged(unit))) continue
-          if (await placed(unit, from, 'serves the page from')) swaps.push(unit)
-        }
-      // The ops bundle `aico deploy` runs: installed from this commit when its sources changed.
-      const installOps =
-        packages.some((pkg) => pkg.dir === 'ops') &&
-        opsInstallWanted(
-          root,
-          sha,
-          [...cfg.rootSources, ...cone(packages, 'ops'), ...cfg.cliSources],
-          req.rollback,
-          deps,
-        )
-      const installRoot = rootInstallWanted(root, sha, cfg, req.rollback, deps)
-      const hookTree = hookInstallWanted(root, sha, cfg, req.rollback, deps)
-      if (!restart.length && !swaps.length && !installOps && !installRoot && !hookTree) {
-        const message = `Nothing to restart at ${sha.slice(0, 10)}: no unit's sources changed`
-        deps.out(`[deploy] ${message.toLowerCase()}`)
-        await finish('succeeded', message)
-        return 0
-      }
-      // What an install after the swap reports: the units are already live, so say so.
-      const installed = async (what: string, problem: string | null) => {
-        if (!problem) return
-        const done = restart.length ? `${restart.join(', ')} deployed; ` : ''
-        await fail(
-          `Deploy of ${sha.slice(0, 10)}: ${done}the ${what} failed (${problem})`,
-          new Refusal(`The ${what} failed: ${problem}`),
-          restart,
-        )
-      }
-      if (restart.length) deps.out(`[deploy] restarting ${restart.join(', ')}`)
-      if (swaps.length)
-        deps.out(`[deploy] new page build for ${swaps.join(', ')}, which keep running`)
-      let release: string | null = null
-      if (restart.length || swaps.length || installOps)
-        try {
-          release = prepareRelease(
-            root,
-            sha,
-            [
-              ...new Set([
-                ...restart.flatMap((unit) => unitBuilds(unit, template(unit), cfg)),
-                ...swaps.map((unit) => (frontendSpec(cfg, unit) as FrontendSpec).package),
-                ...(installOps
-                  ? ['ops', ...(packages.some((pkg) => pkg.dir === 'cli') ? ['cli'] : [])]
-                  : []),
-              ]),
-            ],
-            deps,
-            {
-              packages: peerPackages(project, packages, cfg, template),
-              workspace: packages,
-              cfg,
-            },
-          )
-        } catch (error) {
-          await fail(
-            `Deploy of ${sha.slice(0, 10)} failed: ${(error as Error).message.split('\n')[0]}`,
-            error as Error,
-          )
-        }
-      if (restart.length || swaps.length || installRoot || hookTree) {
-        // A hold taken while this deploy waited (queued, or behind another deploy) still refuses it.
-        const refused = holdRefusal()
-        if (refused)
-          await fail(
-            `Deploy of ${sha.slice(0, 10)} refused: ${refused}`,
-            new Refusal(refused, 2, true),
-          )
-        if (!held())
-          await fail(
-            `Deploy of ${sha.slice(0, 10)} lost the deploy lock`,
-            new Refusal('Another deploy took the deploy lock; nothing was restarted.', 1, true),
-          )
-      }
-      if (restart.length && release) {
-        const failed = await swapUnits(project, restart, release, sha, deps, installOps, cfg)
-        if (failed) {
-          await fail(
-            `Deploy of ${sha.slice(0, 10)} failed (${failed.failure}); ${failed.outcome}`,
-            new Refusal(`Deploy failed: ${failed.failure}. ${capital(failed.outcome)}.`),
-            restart,
-          )
-        }
-      }
-      if (swaps.length && release) {
-        const failed = await swapFrontends(project, swaps, release, cfg, deps)
-        if (failed) {
-          await fail(
-            `Deploy of ${sha.slice(0, 10)} failed (${failed.failure}); ${failed.outcome}`,
-            new Refusal(`Deploy failed: ${failed.failure}. ${capital(failed.outcome)}.`),
-            restart,
-          )
-        }
-        swapped = swaps
-      }
-      if (installOps && !restart.length && release) installOpsBundle(deps, release)
-      if (installRoot)
-        await installed('host-steward root install', installRootSources(root, sha, cfg, deps))
-      if (release) {
-        // The newest accepted release: the one a peer is sent (scripts/peer-release.sh).
-        writeFileSync(join(deps.releasesDir, ACCEPTED), `${sha}\n`)
-        pruneReleases(deps, release, cfg)
-      }
-      // Last: the release is live and accepted whether or not this machine can build the hook.
-      if (hookTree)
-        await installed('aico-hook install', installHook(root, sha, hookTree, cfg, deps))
-      const seconds = Math.round((Date.now() - started) / 1000)
-      const parts = [
-        ...restart.map((unit) => unit.replace(/\.service$/, '')),
-        ...swaps.map((unit) => `the ${unit.replace(/\.service$/, '')} page (no restart)`),
-        ...(installRoot ? ['the host-steward root install'] : []),
-        ...(hookTree ? ['aico-hook'] : []),
-      ]
-      const what = parts.length ? parts.join(', ') : 'the deploy code only'
-      const message = `Deployed ${sha.slice(0, 10)}: ${what} (${seconds} s)`
-      deps.out(`[deploy] ${message}`)
-      await finish('succeeded', message, restart)
-      finished = true
-      return 0
-    })
+    return await withLock(deps, (held) =>
+      deployLocked({ req, project, root, sha, view, run, started, deps, holds, held }),
+    )
   } catch (error) {
-    if (!finished) await fail((error as Error).message, error as Error)
+    if (!run.finished) await run.fail((error as Error).message, error as Error)
     throw error
   }
 }
