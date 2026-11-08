@@ -20,7 +20,7 @@ import { requestExec } from '@aico/fleet/exec'
 import { fullPeers } from '@aico/fleet/peers'
 import { readSettings } from '@aico/fleet/settings'
 import { readPins } from '@aico/fleet/trust'
-import { writeFileDurable } from '@aico/shared/durable-file'
+import { withFileLock, writeFileDurable } from '@aico/shared/durable-file'
 import { postStatusRows, statusRowsUrl } from '@aico/status'
 import config from '../data/context-sync.json' with { type: 'json' }
 import { Refusal } from './deploy'
@@ -252,9 +252,9 @@ function unanswered(result: { ended: boolean }): boolean {
  * Aico answers has to know that key. Each peer merges what it is sent and answers with the result, so
  * a token the phone gave the standby while this machine was off comes back here.
  */
-function phonesReadable(path: string): boolean {
+function phonesReadable(contents: Buffer): boolean {
   try {
-    return Array.isArray(JSON.parse(readFileSync(path, 'utf8')))
+    return Array.isArray(JSON.parse(contents.toString('utf8')))
   } catch {
     return false
   }
@@ -270,10 +270,41 @@ export async function syncPhones(
     env.AICO_PHONE_DEVICES_FILE?.trim() ||
     join(env.AICO_DATA_DIR || expandHome(config.dataDir), 'phones.json')
   if (!existsSync(path)) return { lines: [], failed: false }
+  // One exchange at a time: merge-done must acknowledge this exchange's reply, not another one's.
+  // This is separate from the short phone writer lock: pairing and acks never wait on the link.
+  return withFileLock(`${path}.sync`, () => syncPhonePeers(path, peers, aico, exec))
+}
+
+async function syncPhonePeers(
+  path: string,
+  peers: { name: string; exec: string }[],
+  aico: (args: string) => string[],
+  exec: typeof requestExec,
+): Promise<{ lines: string[]; failed: boolean }> {
   const lines: string[] = []
   let failed = false
+  const read = () => {
+    try {
+      return readFileSync(path)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
+      throw error
+    }
+  }
+  const save = (sent: Buffer, phones: unknown[]) =>
+    withFileLock(path, () => {
+      // A removal, pairing, token rotation or ack during the exchange wins. Leaving the peer's
+      // merge unconfirmed preserves its new phones; the next ordinary sync reconciles both lists.
+      if (!read()?.equals(sent)) return false
+      writeFileDurable(path, JSON.stringify(phones), { mode: 0o600 })
+      return true
+    })
+  const changed = (peer: string) =>
+    lines.push(`${peer}: the phone list changed here; the next run catches it up`)
   for (const peer of peers) {
-    if (!phonesReadable(path)) {
+    const snapshot = await withFileLock(path, read)
+    if (snapshot === null) continue
+    if (!phonesReadable(snapshot)) {
       // Pairing and pushes refuse an unreadable list (never "no phones"): the peer's copy mends it.
       const copy = await exec(peer.exec, aico('phones dump'), Buffer.alloc(0))
       if (unanswered(copy)) continue
@@ -282,15 +313,18 @@ export async function syncPhones(
         phones = JSON.parse(lastLine(copy.stdout))
       } catch {}
       if (copy.code === 0 && Array.isArray(phones) && phones.length) {
-        writeFileDurable(path, JSON.stringify(phones), { mode: 0o600 })
-        lines.push(`${peer.name}: the phone list here could not be read; took its ${phones.length}`)
+        if (await save(snapshot, phones))
+          lines.push(
+            `${peer.name}: the phone list here could not be read; took its ${phones.length}`,
+          )
+        else changed(peer.name)
       } else {
         failed = true
         lines.push(`${peer.name}: the phone list here could not be read, and it has none to give`)
       }
       continue
     }
-    const sent = await exec(peer.exec, aico('phones merge'), readFileSync(path))
+    const sent = await exec(peer.exec, aico('phones merge'), snapshot)
     if (unanswered(sent)) continue
     let merged: unknown = null
     try {
@@ -303,7 +337,10 @@ export async function syncPhones(
       )
       continue
     }
-    writeFileDurable(path, JSON.stringify(merged), { mode: 0o600 })
+    if (!(await save(snapshot, merged))) {
+      changed(peer.name)
+      continue
+    }
     // Only now does the peer count the merge as done: a link that dropped before this keeps its new phones.
     await exec(peer.exec, aico('phones merge-done'), Buffer.alloc(0))
     lines.push(`${peer.name}: ${merged.length} phone${merged.length === 1 ? '' : 's'} in step`)

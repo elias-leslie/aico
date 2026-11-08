@@ -9,7 +9,7 @@
 import { createHash, createPublicKey, verify } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { dirname } from 'node:path'
-import { writeFileDurable } from '@aico/shared/durable-file'
+import { withFileLock, writeFileDurable } from '@aico/shared/durable-file'
 
 export const CLOCK_SKEW_S = 300
 /** Channels the app's state report may name (the app creates these). */
@@ -165,29 +165,33 @@ export class PhoneRegistry {
 
   /** Pairing replaces this installation's record, preserving every other phone. */
   register(phone: Phone): Promise<void> {
-    const run = this.tail.then(() => {
-      const current = this.all()
-      if (!current) throw new AppError(503, 'the phone file cannot be read')
-      const phones = current.filter(
-        (p) => p.id !== phone.id && !(phone.fcm_token && p.fcm_token === phone.fcm_token),
-      )
-      phones.push(phone)
-      mkdirSync(dirname(this.path), { recursive: true, mode: 0o700 })
-      writeFileDurable(this.path, JSON.stringify(phones), { mode: 0o600 })
-    })
+    const run = this.tail.then(() =>
+      withFileLock(this.path, () => {
+        const current = this.all()
+        if (!current) throw new AppError(503, 'the phone file cannot be read')
+        const phones = current.filter(
+          (p) => p.id !== phone.id && !(phone.fcm_token && p.fcm_token === phone.fcm_token),
+        )
+        phones.push(phone)
+        mkdirSync(dirname(this.path), { recursive: true, mode: 0o700 })
+        writeFileDurable(this.path, JSON.stringify(phones), { mode: 0o600 })
+      }),
+    )
     this.tail = run.catch(() => {})
     return run
   }
 
   remove(id: string): Promise<boolean> {
-    const run = this.tail.then(() => {
-      const phones = this.all()
-      if (!phones) throw new AppError(503, 'the phone file cannot be read')
-      const keep = phones.filter((phone) => phone.id !== id)
-      if (keep.length === phones.length) return false
-      writeFileDurable(this.path, JSON.stringify(keep), { mode: 0o600 })
-      return true
-    })
+    const run = this.tail.then(() =>
+      withFileLock(this.path, () => {
+        const phones = this.all()
+        if (!phones) throw new AppError(503, 'the phone file cannot be read')
+        const keep = phones.filter((phone) => phone.id !== id)
+        if (keep.length === phones.length) return false
+        writeFileDurable(this.path, JSON.stringify(keep), { mode: 0o600 })
+        return true
+      }),
+    )
     this.tail = run.catch(() => {})
     return run
   }
@@ -233,14 +237,16 @@ export class PhoneRegistry {
   }
 
   private change(id: string, update: (phone: Phone) => void): Promise<void> {
-    const run = this.tail.then(() => {
-      const phones = readPhones(this.path)
-      if (!phones) throw new AppError(503, 'the phone file cannot be read')
-      const phone = phones.find((p) => p.id === id)
-      if (!phone) return
-      update(phone)
-      writeFileDurable(this.path, JSON.stringify(phones), { mode: 0o600 })
-    })
+    const run = this.tail.then(() =>
+      withFileLock(this.path, () => {
+        const phones = readPhones(this.path)
+        if (!phones) throw new AppError(503, 'the phone file cannot be read')
+        const phone = phones.find((p) => p.id === id)
+        if (!phone) return
+        update(phone)
+        writeFileDurable(this.path, JSON.stringify(phones), { mode: 0o600 })
+      }),
+    )
     this.tail = run.catch(() => {})
     return run
   }
@@ -337,7 +343,12 @@ const newest = (a: number | null | undefined, b: number | null | undefined) =>
  * decides which phones exist, so one removed there goes, except a phone paired here since the last
  * sync. Each phone keeps the newer of what the two heard from it.
  */
-export function mergePhones(theirs: Phone[], ours: Phone[], lastSync: number): Phone[] {
+export function mergePhones(
+  theirs: Phone[],
+  ours: Phone[],
+  lastSync: number,
+  confirmedIds?: ReadonlySet<string>,
+): Phone[] {
   const mine = new Map(ours.map((phone) => [phone.id, phone]))
   const merged = theirs.map((sent) => {
     const here = mine.get(sent.id)
@@ -373,7 +384,12 @@ export function mergePhones(theirs: Phone[], ours: Phone[], lastSync: number): P
   const sentIds = new Set(theirs.map((phone) => phone.id))
   return [
     ...merged,
-    ...ours.filter((phone) => !sentIds.has(phone.id) && (phone.added_at ?? 0) > lastSync),
+    ...ours.filter(
+      (phone) =>
+        !sentIds.has(phone.id) &&
+        ((phone.added_at ?? 0) > lastSync ||
+          (confirmedIds !== undefined && !confirmedIds.has(phone.id))),
+    ),
   ]
 }
 
@@ -382,30 +398,64 @@ export function mergePhones(theirs: Phone[], ours: Phone[], lastSync: number): P
  * sync time only moves when the sender confirms it has the reply (`confirmPhonesMerge`): until then a
  * phone paired here since the last confirmed sync is still new, so a dropped link cannot lose it.
  */
-export function mergePhonesFile(path: string, sent: Phone[], now: number): Phone[] {
-  const syncFile = `${path}.sync.json`
-  const merged = mergePhones(sent, readPhones(path) ?? [], readSync(syncFile).at)
-  mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
-  writeFileDurable(path, JSON.stringify(merged), { mode: 0o600 })
-  writeFileDurable(syncFile, JSON.stringify({ ...readSync(syncFile), pending: now }), {
-    mode: 0o600,
+export async function mergePhonesFile(path: string, sent: Phone[], now: number): Promise<Phone[]> {
+  return withFileLock(path, () => {
+    const syncFile = `${path}.sync.json`
+    const cursor = readSync(syncFile)
+    const merged = mergePhones(
+      sent,
+      readPhones(path) ?? [],
+      cursor.at,
+      cursor.ids === undefined ? undefined : new Set(cursor.ids),
+    )
+    mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
+    writeFileDurable(path, JSON.stringify(merged), { mode: 0o600 })
+    writeFileDurable(
+      syncFile,
+      JSON.stringify({ ...cursor, pending: now, pending_ids: merged.map((phone) => phone.id) }),
+      {
+        mode: 0o600,
+      },
+    )
+    return merged
   })
-  return merged
 }
 
 /** The sender has the merged list: phones paired here before that merge are now part of it. */
-export function confirmPhonesMerge(path: string): void {
-  const syncFile = `${path}.sync.json`
-  const { at, pending } = readSync(syncFile)
-  if (pending === undefined || pending < at) return
-  writeFileDurable(syncFile, JSON.stringify({ at: pending }), { mode: 0o600 })
+export async function confirmPhonesMerge(path: string): Promise<void> {
+  return withFileLock(path, () => {
+    const syncFile = `${path}.sync.json`
+    const { at, pending, pending_ids } = readSync(syncFile)
+    if (pending === undefined || pending < at) return
+    // Confirm only phones in that reply. A pairing after the merge, even in the same second,
+    // stays new until a later reply actually carries it. Old cursors retain their time fallback.
+    writeFileDurable(
+      syncFile,
+      JSON.stringify({ at: pending, ...(pending_ids === undefined ? {} : { ids: pending_ids }) }),
+      { mode: 0o600 },
+    )
+  })
 }
 
-function readSync(file: string): { at: number; pending?: number } {
+interface PhoneSync {
+  at: number
+  ids?: string[]
+  pending?: number
+  pending_ids?: string[]
+}
+
+function readSync(file: string): PhoneSync {
   try {
-    const raw = JSON.parse(readFileSync(file, 'utf8')) as { at?: unknown; pending?: unknown }
+    const raw = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>
     const pending = Number(raw.pending)
-    return { at: Number(raw.at) || 0, ...(pending > 0 ? { pending } : {}) }
+    const ids = (value: unknown): value is string[] =>
+      Array.isArray(value) && value.every((id) => typeof id === 'string')
+    return {
+      at: Number(raw.at) || 0,
+      ...(pending > 0 ? { pending } : {}),
+      ...(ids(raw.ids) ? { ids: raw.ids } : {}),
+      ...(ids(raw.pending_ids) ? { pending_ids: raw.pending_ids } : {}),
+    }
   } catch {
     /* First sync: nothing has been paired here since. */
     return { at: 0 }

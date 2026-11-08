@@ -1,7 +1,9 @@
+import { spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { addMemory, listMemories, type Memory, openContext } from '@aico/context'
+import { withFileLock } from '@aico/shared/durable-file'
 import { afterEach, expect, it } from 'vitest'
 import {
   syncCanaryCursor,
@@ -32,6 +34,11 @@ it('takes a phone list far longer than 4 KB and tells the peer only after it is 
   const calls: string[] = []
   const exec = async (_s: string, argv: string[]): Promise<Answer> => {
     calls.push(argv.at(-1) as string)
+    const path = join(dir, 'phones.json')
+    // Exchanges serialize through their own lock, while the phone API can still write.
+    expect(spawnSync('flock', ['-n', '-E', '75', `${path}.sync.lock`, 'true']).status).toBe(75)
+    expect(spawnSync('flock', ['-n', '-E', '75', `${path}.lock`, 'true']).status).toBe(0)
+    if (calls.length === 2) expect(JSON.parse(readFileSync(path, 'utf8'))).toHaveLength(12)
     return calls.length === 1
       ? { code: 0, stdout: `${JSON.stringify(many)}\n`, output: '', ended: true }
       : { code: 0, stdout: '', output: '', ended: true }
@@ -76,6 +83,93 @@ it('does not confirm a merge whose reply never came', async () => {
   expect(await syncPhones(peers, aico, env, exec as never)).toEqual({ lines: [], failed: false })
   expect(calls).toHaveLength(1)
   expect(JSON.parse(readFileSync(join(dir, 'phones.json'), 'utf8'))).toEqual([{ id: 'a' }])
+})
+
+it('keeps local phone changes during a delayed reply, and leaves the peer unconfirmed until the next sync', async () => {
+  const { dir, env } = setup()
+  const path = join(dir, 'phones.json')
+  writeFileSync(path, JSON.stringify([{ id: 'removed' }, { id: 'kept', last_ack: 1 }]))
+  const calls: string[] = []
+  const exec = async (_s: string, argv: string[], input: Buffer): Promise<Answer> => {
+    calls.push(argv.at(-1) as string)
+    if (calls.length === 1) {
+      expect(JSON.parse(input.toString())).toEqual([{ id: 'removed' }, { id: 'kept', last_ack: 1 }])
+      // Phone API writers take this same lock; they remain free while the fleet link answers.
+      await withFileLock(path, () => {
+        writeFileSync(path, JSON.stringify([{ id: 'kept', last_ack: 3 }, { id: 'paired-here' }]))
+      })
+      return {
+        code: 0,
+        stdout: JSON.stringify([
+          { id: 'removed' },
+          { id: 'kept', last_ack: 2 },
+          { id: 'paired-there' },
+        ]),
+        output: '',
+        ended: true,
+      }
+    }
+    if (argv.at(-1)?.endsWith('phones merge')) {
+      expect(JSON.parse(input.toString())).toEqual([
+        { id: 'kept', last_ack: 3 },
+        { id: 'paired-here' },
+      ])
+      return {
+        code: 0,
+        stdout: JSON.stringify([
+          { id: 'kept', last_ack: 3 },
+          { id: 'paired-here' },
+          { id: 'paired-there' },
+        ]),
+        output: '',
+        ended: true,
+      }
+    }
+    return { code: 0, stdout: '', output: '', ended: true }
+  }
+  const changed = await syncPhones(peers, aico, env, exec as never)
+  expect(changed.failed).toBe(false)
+  expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual([
+    { id: 'kept', last_ack: 3 },
+    { id: 'paired-here' },
+  ])
+  expect(calls).toHaveLength(1)
+  await syncPhones(peers, aico, env, exec as never)
+  expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual([
+    { id: 'kept', last_ack: 3 },
+    { id: 'paired-here' },
+    { id: 'paired-there' },
+  ])
+  expect(calls[2]).toContain('phones merge-done')
+})
+
+it('does not overwrite a phone list repaired locally while it waits for a peer copy', async () => {
+  const { dir, env } = setup()
+  const path = join(dir, 'phones.json')
+  writeFileSync(path, '')
+  const exec = async (): Promise<Answer> => {
+    await withFileLock(path, () => writeFileSync(path, JSON.stringify([{ id: 'local-repair' }])))
+    return { code: 0, stdout: '[{"id":"old-copy"}]', output: '', ended: true }
+  }
+  expect((await syncPhones(peers, aico, env, exec as never)).failed).toBe(false)
+  expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual([{ id: 'local-repair' }])
+})
+
+it('releases both locks when the fleet request throws, so the next sync can finish', async () => {
+  const { dir, env } = setup()
+  writeFileSync(join(dir, 'phones.json'), '[{"id":"a"}]')
+  await expect(
+    syncPhones(peers, aico, env, (async () => {
+      throw new Error('link broke')
+    }) as never),
+  ).rejects.toThrow('link broke')
+  const answer = async (): Promise<Answer> => ({
+    code: 0,
+    stdout: '[{"id":"a"}]',
+    output: '',
+    ended: true,
+  })
+  expect((await syncPhones(peers, aico, env, answer as never)).failed).toBe(false)
 })
 
 it('sends the canary cursor and keeps the newer time per token from both sides', async () => {

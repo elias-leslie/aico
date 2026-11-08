@@ -26,7 +26,7 @@ async function mergeFromPeer(io: PhonesIo): Promise<number> {
     return 2
   }
   const now = Math.floor(Date.now() / 1000)
-  io.out(`${JSON.stringify(mergePhonesFile(devicesFile(io), sent, now))}\n`)
+  io.out(`${JSON.stringify(await mergePhonesFile(devicesFile(io), sent, now))}\n`)
   return 0
 }
 
@@ -62,7 +62,7 @@ export async function runPhonesCli(argv: string[], io: PhonesIo): Promise<number
   if (verb === 'merge') return mergeFromPeer(io)
   if (verb === 'dump') return dumpForPeer(io)
   if (verb === 'merge-done') {
-    confirmPhonesMerge(devicesFile(io))
+    await confirmPhonesMerge(devicesFile(io))
     return 0
   }
   if (verb === 'canary-merge') return mergeCanaryFromPeer(io)

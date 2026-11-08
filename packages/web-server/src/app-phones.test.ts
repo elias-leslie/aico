@@ -1,6 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { withFileLock } from '@aico/shared/durable-file'
 import { afterEach, expect, it } from 'vitest'
 import {
   confirmPhonesMerge,
@@ -51,6 +52,40 @@ const phone = (id: string, fields: Partial<Phone> = {}): Phone => ({
   auth: 'auth',
   ...fields,
 })
+
+it.each(['pair', 'remove', 'ack', 'merge', 'confirm'] as const)(
+  '%s waits for another process holding the phone writer lock',
+  async (operation) => {
+    const dir = mkdtempSync(join(tmpdir(), 'aico-phone-lock-'))
+    dirs.push(dir)
+    const path = join(dir, 'phones.json')
+    writeFileSync(path, JSON.stringify([phone('old')]))
+    writeFileSync(`${path}.sync.json`, JSON.stringify({ at: 1, pending: 2 }))
+    const registry = new PhoneRegistry(path)
+    const actions: Record<typeof operation, () => Promise<unknown>> = {
+      pair: () => registry.register(phone('new')),
+      remove: () => registry.remove('old'),
+      ack: () => registry.ack('old', {}, 100),
+      merge: () => mergePhonesFile(path, [phone('sent')], 200),
+      confirm: () => confirmPhonesMerge(path),
+    }
+    const before = readFileSync(path, 'utf8')
+    const cursor = readFileSync(`${path}.sync.json`, 'utf8')
+    let pending: Promise<unknown> | undefined
+    let finished = false
+    await withFileLock(path, async () => {
+      pending = actions[operation]().then(() => {
+        finished = true
+      })
+      await new Promise<void>((resolve) => setImmediate(resolve))
+      expect(finished).toBe(false)
+      expect(readFileSync(path, 'utf8')).toBe(before)
+      expect(readFileSync(`${path}.sync.json`, 'utf8')).toBe(cursor)
+    })
+    await pending
+    expect(finished).toBe(true)
+  },
+)
 
 it('merges phones: the sender decides who exists, each keeps the newer of what both heard', () => {
   const sent = [
@@ -106,7 +141,7 @@ it('merges phones: a read error a good ack cleared on one side stays cleared', a
   })
 })
 
-it('keeps a phone paired here when the reply to the merge never reached the sender', () => {
+it('keeps a phone paired here when the reply to the merge never reached the sender', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'aico-phone-sync-'))
   dirs.push(dir)
   const file = join(dir, 'phones.json')
@@ -117,12 +152,29 @@ it('keeps a phone paired here when the reply to the merge never reached the send
   writeFileSync(`${file}.sync.json`, JSON.stringify({ at: 100 }))
   const sender = [phone('old', { added_at: 1 })]
   // First sync: the phone paired here is kept and returned, but the reply is lost (no confirm).
-  expect(mergePhonesFile(file, sender, 200).map((p) => p.id)).toEqual(['old', 'new'])
+  expect((await mergePhonesFile(file, sender, 200)).map((p) => p.id)).toEqual(['old', 'new'])
   // The sender never got it, so its list still lacks the phone: it must survive again.
-  expect(mergePhonesFile(file, sender, 300).map((p) => p.id)).toEqual(['old', 'new'])
+  expect((await mergePhonesFile(file, sender, 300)).map((p) => p.id)).toEqual(['old', 'new'])
   // Once a reply is confirmed, the sender's list decides.
-  confirmPhonesMerge(file)
-  expect(mergePhonesFile(file, sender, 400).map((p) => p.id)).toEqual(['old'])
+  await confirmPhonesMerge(file)
+  expect((await mergePhonesFile(file, sender, 400)).map((p) => p.id)).toEqual(['old'])
+})
+
+it('keeps a phone paired after the merge in its same second, until a reply actually includes it', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'aico-phone-confirm-'))
+  dirs.push(dir)
+  const file = join(dir, 'phones.json')
+  const sender = [phone('old', { added_at: 1 })]
+  writeFileSync(file, JSON.stringify(sender))
+  writeFileSync(`${file}.sync.json`, JSON.stringify({ at: 100 }))
+  expect((await mergePhonesFile(file, sender, 200)).map((p) => p.id)).toEqual(['old'])
+  // The reply above contains only "old"; this pairing happened later in the same wall-clock second.
+  await new PhoneRegistry(file).register(phone('new', { added_at: 200 }))
+  await confirmPhonesMerge(file)
+  expect((await mergePhonesFile(file, sender, 300)).map((p) => p.id)).toEqual(['old', 'new'])
+  // Once a confirmed reply contains it, a removal on the sender is authoritative again.
+  await confirmPhonesMerge(file)
+  expect((await mergePhonesFile(file, sender, 400)).map((p) => p.id)).toEqual(['old'])
 })
 
 it('an empty or broken phone list refuses pairing and never reads as no phones', async () => {

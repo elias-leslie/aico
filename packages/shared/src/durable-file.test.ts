@@ -1,8 +1,9 @@
-import { mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { writeFileDurable } from './durable-file'
+import { withFileLock, writeFileDurable } from './durable-file'
 
 const calls = vi.hoisted(() => [] as string[])
 vi.mock('node:fs', async (original) => {
@@ -26,6 +27,49 @@ vi.mock('node:fs', async (original) => {
     },
   }
   return { ...mocked, default: mocked }
+})
+
+describe('withFileLock', () => {
+  it('holds a real kernel lock across awaits and releases it when the operation fails', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'durable-lock-'))
+    const path = join(dir, 'phones.json')
+    const probe = () => spawnSync('flock', ['-n', '-E', '75', `${path}.lock`, 'true']).status
+    try {
+      await expect(
+        withFileLock(path, async () => {
+          expect(probe()).toBe(75)
+          await Promise.resolve()
+          expect(probe()).toBe(75)
+          throw new Error('operation failed')
+        }),
+      ).rejects.toThrow('operation failed')
+      expect(probe()).toBe(0)
+      await withFileLock(path, () => expect(probe()).toBe(75))
+      expect(probe()).toBe(0)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('serializes independent callers around a whole read-modify-write', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'durable-lock-'))
+    const path = join(dir, 'counter')
+    writeFileSync(path, '0')
+    try {
+      await Promise.all(
+        Array.from({ length: 4 }, () =>
+          withFileLock(path, async () => {
+            const before = Number(readFileSync(path, 'utf8'))
+            await new Promise<void>((resolve) => setImmediate(resolve))
+            writeFileDurable(path, String(before + 1))
+          }),
+        ),
+      )
+      expect(readFileSync(path, 'utf8')).toBe('4')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
 })
 
 describe('writeFileDurable', () => {
