@@ -39,7 +39,10 @@ function useCountedMachines(): { list: Machines | null; loading: boolean } {
   return { list, loading }
 }
 
-/** Machines for the heading: "5 of 8 up", amber when one is starting or not answering; why, when it is not known. */
+const DOWN: readonly Machine['up'][] = ['late', 'unreachable', 'failed']
+
+/** Machines for the heading: "5 of 8 up", amber when one is starting or not answering; why, when it is not known.
+ * Only a machine that should be up and is not answering, unreachable or failed needs the owner. */
 export function useMachinesGlance(): GlanceHead {
   const { list, loading } = useCountedMachines()
   if (loading) return { value: 'Checking…', tone: null }
@@ -47,9 +50,13 @@ export function useMachinesGlance(): GlanceHead {
   const total = list.machines.length
   const up = list.machines.filter((machine) => machine.up === 'on').length
   const off = list.machines.filter((machine) => machine.up === 'off').length
+  const down = list.machines.filter((machine) =>
+    DOWN.includes(machine.up),
+  ).length
   return {
     value: `${up} of ${total} up`,
     tone: up + off < total ? 'warn' : null,
+    needs: down,
   }
 }
 

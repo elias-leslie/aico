@@ -3,8 +3,8 @@
 // a project's own checks never do.
 
 import { describe, expect, it } from 'vitest'
-import type { Sustained } from './major'
 import { parseRow, type StatusRow } from './row'
+import type { Sustained } from './show'
 import { StatusStore } from './store'
 
 const T0 = Date.parse('2026-11-07T12:00:00Z')

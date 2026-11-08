@@ -20,6 +20,7 @@
 
 import { byTier } from '@aico/shared/status-order'
 import { showsBack } from './intent'
+import { type Major, needsOwner } from './major'
 import type { Kind, StatusRow } from './row'
 
 /** A row as stored: what the writer posted and when the server took it. */
@@ -86,9 +87,19 @@ export interface Summary {
   counts: Record<Problem, number>
   /** Rows shown unknown but not counted: waiting after their machine's return. */
   quiet: number
+  /** Of the counted problems, those the owner must act on (major.ts needsOwner): the panel opens for these only. */
+  needs: number
   healthy: number
   /** The first three counted problems, worst first. */
   top: ShownRow[]
+}
+
+/** A row that has stayed failed or late past its class's window (major.ts). */
+export interface Sustained {
+  row: ShownRow
+  major: Major
+  /** Epoch ms since the row has been in this state. */
+  since: number
 }
 
 export interface StatusView {
@@ -286,6 +297,7 @@ export function summary(rows: readonly ShownRow[]): Summary {
     worst: (PROBLEMS as readonly Problem[]).find((state) => counts[state] > 0) ?? null,
     counts,
     quiet,
+    needs: problems.filter(needsOwner).length,
     healthy: rows.filter((row) => !PROBLEMS.includes(row.shown)).length,
     top: problems.slice(0, 3),
   }

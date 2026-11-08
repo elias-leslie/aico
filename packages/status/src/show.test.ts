@@ -30,6 +30,12 @@ const machine = (name: string) =>
     machine: name,
     next_run: '2026-11-03T13:00:00Z',
   })
+const machineRow = (name: string) => ({
+  id: `${name}/machine`,
+  what: name,
+  kind: 'machine',
+  machine: name,
+})
 const ALL = [...ROWS, machine('a'), machine('b')]
 
 const ids = (filter: Parameters<typeof view>[2]) =>
@@ -154,5 +160,34 @@ describe('view', () => {
       'a/check-sudo',
       'a/aico-web',
     ])
+  })
+  it('counts as needing the owner only a failed or late backup, a down machine, a failed service or an owner-only failure', () => {
+    const owner = [{ kind: 'run', ref: 'approve', owner_only: true }]
+    const rows = [
+      stored({ id: 'a/check-sudo', kind: 'check', what: 'Sudo use', state: 'warn' }),
+      stored({ id: 'a/check-build', kind: 'check', what: 'Build', state: 'failed' }),
+      stored({ id: 'a/job-late', what: 'Late job', next_run: '2026-11-03T11:00:00Z' }),
+      stored({ id: 'a/ask', what: 'Ask', state: 'failed', actions: owner }),
+      machine('a'),
+    ]
+    const result = view(rows, NOW).summary
+    expect(result.problems).toBe(4)
+    expect(result.needs).toBe(1)
+    const more = [
+      ...rows,
+      stored({ id: 'a/backup', kind: 'backup', what: 'Backup', state: 'failed' }),
+      stored({ id: 'a/web', kind: 'service', what: 'Web', state: 'failed' }),
+    ]
+    expect(view(more, NOW).summary.needs).toBe(3)
+    // A machine expected up that stopped reporting counts; one expected off (parked) does not.
+    const down = [machine('a'), stored({ ...machineRow('b'), next_run: '2026-11-03T11:00:00Z' })]
+    expect(view(down, NOW).summary.needs).toBe(1)
+    expect(view(down, NOW, {}, new Map([['b', NOW - 1000]])).summary.needs).toBe(0)
+    // A row off with its machine never needs anyone.
+    const off = [
+      stored({ ...machineRow('b'), next_run: '2026-11-03T11:00:00Z' }),
+      stored({ id: 'b/backup', machine: 'b', kind: 'backup', what: 'B backup', state: 'failed' }),
+    ]
+    expect(view(off, NOW, {}, new Map([['b', NOW - 1000]])).summary.needs).toBe(0)
   })
 })

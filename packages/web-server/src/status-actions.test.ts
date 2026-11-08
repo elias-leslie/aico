@@ -252,6 +252,7 @@ describe('statusNotice', () => {
       worst: 'failed',
       counts: { failed: rows.length, late: 0, unknown: 0, warn: 0 },
       quiet: 0,
+      needs: 0,
       healthy: 4,
       top: rows,
     },

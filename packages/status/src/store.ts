@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { type Database, type Migration, openDatabase, transaction } from '@aico/store'
 import { type AlertBatch, type AlertHook, transitions } from './alerts'
 import { expectedOffSince, type Intent, type MachineIntent, showsBack } from './intent'
-import { type Major, type MajorWindows, majorOf, type Sustained } from './major'
+import { type MajorWindows, majorOf } from './major'
 import { parseRow, type StatusRow } from './row'
 import {
   type Filter,
@@ -14,6 +14,7 @@ import {
   type ShownRow,
   type StatusView,
   type StoredRow,
+  type Sustained,
   show,
   summary,
   view,

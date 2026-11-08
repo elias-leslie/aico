@@ -11,15 +11,24 @@
 //   the Proxmox host, the hub), or a service row failed. Sustained for a shorter window.
 
 import type { Intent } from './intent'
-import type { ShownRow } from './show'
+import type { Action } from './row'
 
 export type Major = 'data-risk' | 'outage'
+
+/** The fields of a shown row that decide this (a ShownRow, which this file does not import: show.ts reads it). */
+export interface MajorRow {
+  kind: string
+  machine: string
+  shown: string
+  machine_off?: true
+  actions?: Action[]
+}
 
 /** How long a row must stay failed or late before it interrupts, per class (ms). Config, not code. */
 export type MajorWindows = Record<Major, number>
 
 /** The class a row belongs to while it is failed or late, or null when it never reaches the phone. */
-export function majorOf(row: ShownRow, intents: ReadonlyMap<string, Intent>): Major | null {
+export function majorOf(row: MajorRow, intents: ReadonlyMap<string, Intent>): Major | null {
   if (row.machine_off || (row.shown !== 'failed' && row.shown !== 'late')) return null
   if (row.kind === 'backup') return 'data-risk'
   if (row.kind === 'service' && row.shown === 'failed') return 'outage'
@@ -30,10 +39,14 @@ export function majorOf(row: ShownRow, intents: ReadonlyMap<string, Intent>): Ma
   return null
 }
 
-/** A row that has stayed failed or late past its class's window. */
-export interface Sustained {
-  row: ShownRow
-  major: Major
-  /** Epoch ms since the row has been in this state. */
-  since: number
+/**
+ * Whether a row is something the owner must act on, now, for the panel's System section to open by
+ * itself: a major row (as above, whatever the window) or a failed row with an owner-only action.
+ * Read where the machine intents are already folded into the shown state: an expected-off machine
+ * shows off, so a machine row that shows late or failed is one expected up.
+ */
+export function needsOwner(row: MajorRow): boolean {
+  if (row.machine_off) return false
+  if (majorOf(row, new Map()) !== null) return true
+  return row.shown === 'failed' && (row.actions?.some((a) => a.owner_only === true) ?? false)
 }

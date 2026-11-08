@@ -51,6 +51,7 @@ export function useBackupsGlance(): GlanceHead {
       .filter(Boolean)
       .join(' · '),
     tone: 'failed',
+    needs: failed + lateOnes,
   }
 }
 

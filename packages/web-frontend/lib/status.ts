@@ -54,6 +54,8 @@ export interface StatusSummary {
   worst: Shown | null
   counts: Record<Problem, number>
   quiet: number
+  /** Of the problems, those the owner must act on (packages/status major.ts needsOwner). */
+  needs?: number
   healthy: number
   top: StatusRow[]
 }

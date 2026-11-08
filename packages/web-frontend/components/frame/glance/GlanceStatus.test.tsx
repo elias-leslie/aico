@@ -191,6 +191,24 @@ describe('useStatusGlance', () => {
       </QueryClientProvider>,
     )
 
+  it('calls warnings alone notes in a muted chip, and carries what needs the owner', async () => {
+    const warn = (id: string) =>
+      row({ id, what: id, shown: 'warn', state: 'warn' })
+    const quiet = view([warn('a'), warn('b'), warn('c'), warn('d')])
+    quiet.summary.counts = { failed: 0, late: 0, unknown: 0, warn: 4 }
+    quiet.summary.problems = 4
+    quiet.summary.worst = 'warn'
+    api.view = quiet
+    const first = mount()
+    expect(await screen.findByText('4 notes|off')).toBeVisible()
+    first.unmount()
+    const loud = view([failing('a')])
+    loud.summary.needs = 1
+    api.view = loud
+    mount()
+    expect(await screen.findByText('1 problem|failed')).toBeVisible()
+  })
+
   it('wears the worst state as a chip, healthy as ok, and never a zero for unread', async () => {
     api.view = view([failing('a'), failing('b')])
     const first = mount()

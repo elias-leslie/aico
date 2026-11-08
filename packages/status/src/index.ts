@@ -18,7 +18,7 @@ export {
   type MachineIntent,
   showsBack,
 } from './intent'
-export { type Major, type MajorWindows, majorOf, type Sustained } from './major'
+export { type Major, type MajorWindows, majorOf, needsOwner } from './major'
 export { drainOutbox, type OutboxOptions, outboxDir, postOrKeep } from './outbox'
 export {
   ACTION_KINDS,
@@ -49,6 +49,7 @@ export {
   type StatusView,
   type StoredRow,
   type Summary,
+  type Sustained,
   summary,
   type UnknownWhy,
   view,

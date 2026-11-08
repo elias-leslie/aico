@@ -1,7 +1,8 @@
 'use client'
 
 import { ChevronDown, ChevronRight } from 'lucide-react'
-import { type ReactNode, useState } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
+import { useLocalStorageState } from '@/lib/hooks/use-local-storage-state'
 import { RoutinesBody, useRoutinesHead } from '../routines/Routines'
 import { Disclosure } from './glance/Disclosure'
 import styles from './glance/Glance.module.css'
@@ -29,7 +30,12 @@ export interface SystemState {
   pending: boolean
   /** "4 of 8 machines up": the one fact the line keeps when all is well. */
   machines: string | null
+  /** Notes (warnings alone) are a muted chip and count as neither warn nor failed. */
   worst: 'ok' | 'warn' | 'failed' | 'pending'
+  /** Some section could not be read: what needs the owner is not known, not gone. */
+  unread: boolean
+  /** What needs the owner to act, by section; the section opens by itself only for these. */
+  needs: Record<string, number>
   heads: Record<SystemRowId, GlanceHead>
 }
 
@@ -77,16 +83,24 @@ export function useSystemState(): SystemState {
     machines.value &&
     machines.value !== UNREADABLE &&
     machines.value !== PENDING
-  const worst = chips.some((chip) => chip.tone === 'failed')
+  const loud = chips.filter((chip) => chip.tone !== 'off')
+  const worst = loud.some((chip) => chip.tone === 'failed')
     ? 'failed'
-    : chips.length
+    : loud.length
       ? 'warn'
       : pending
         ? 'pending'
         : 'ok'
+  const needs: Record<string, number> = {}
+  const heads = { Status: status, Backups: backups, Machines: machines }
+  for (const [id, head] of Object.entries(heads))
+    if (head.value !== PENDING && head.value !== UNREADABLE && head.needs)
+      needs[id] = head.needs
   return {
     chips,
     pending,
+    unread: chips.some((chip) => /unreadable$/.test(chip.text)),
+    needs,
     machines: up ? machinesWords(machines.value) : null,
     worst,
     heads: {
@@ -173,38 +187,75 @@ function SystemRow({
   )
 }
 
-/** System: one line when all is well ("All OK · 4 of 8 machines up"), its problems as chips on that line
- * when not. It opens by itself while something needs attention, and on a click; its rows are Status,
- * Backups and Machines. A rail pop-out shows the rows. */
+/** Where the owner shut System while things needed them, by section and how many; it opens by itself
+ * again only when one of those grows, and the memory is dropped once nothing needs them. */
+const SEEN_KEY = 'aico-system-seen-needs'
+
+/** System: one line when all is well ("All OK · 4 of 8 machines up"), its problems and notes as chips on
+ * that line when not. It opens by itself only for what needs the owner (a failed or late row to act on,
+ * a backup out of date, a machine that should be up and is down), never for warnings, and not again
+ * after the owner shut it until something more needs them. It opens on a click; its rows are Status,
+ * Backups, Machines and Routines. A rail pop-out shows the rows. */
 export function SystemSection({ popout = false }: { popout?: boolean }) {
   const state = useSystemState()
-  // Until the owner clicks it follows what is there: shut when all is well, open when not.
+  const [seen, setSeen] = useLocalStorageState<Record<string, number>>(
+    SEEN_KEY,
+    {},
+  )
+  // A click on a shut section holds it open until the owner shuts it again.
   const [chosen, setChosen] = useState<boolean | null>(null)
-  const open = chosen ?? state.worst !== 'ok'
-  if (popout)
+  const wanting = Object.keys(state.needs).length > 0
+  const known = seen && typeof seen === 'object' ? seen : {}
+  const grew = Object.entries(state.needs).some(
+    ([id, n]) => n > (known[id] ?? 0),
+  )
+  const open = chosen ?? grew
+  // Once nothing needs the owner, the next need is a new one.
+  useEffect(() => {
+    if (
+      !wanting &&
+      !state.pending &&
+      !state.unread &&
+      Object.keys(known).length > 0
+    )
+      setSeen({})
+  }, [wanting, state.pending, state.unread, known, setSeen])
+  const toggle = () => {
+    if (open) {
+      setChosen(null)
+      setSeen({ ...state.needs })
+    } else setChosen(true)
+  }
+  if (popout) {
+    const loud = state.chips.filter((chip) => chip.tone !== 'off')
     return (
       <GlancePopover
         title="System"
         head={{
           value:
-            state.chips.length > 0
-              ? `${state.chips.length} to look at`
-              : state.pending
-                ? PENDING
-                : 'All OK',
+            loud.length > 0
+              ? `${loud.length} to look at`
+              : state.chips.length > 0
+                ? state.chips[0].text
+                : state.pending
+                  ? PENDING
+                  : 'All OK',
           tone:
             state.worst === 'failed'
               ? 'failed'
               : state.worst === 'warn'
                 ? 'warn'
-                : state.worst === 'ok'
-                  ? 'ok'
-                  : null,
+                : state.chips.length > 0
+                  ? 'off'
+                  : state.worst === 'ok'
+                    ? 'ok'
+                    : null,
         }}
       >
         <SystemRows />
       </GlancePopover>
     )
+  }
   const Chevron = open ? ChevronDown : ChevronRight
   return (
     <section
@@ -218,7 +269,7 @@ export function SystemSection({ popout = false }: { popout?: boolean }) {
           type="button"
           className={styles.row}
           aria-expanded={open}
-          onClick={() => setChosen(!open)}
+          onClick={toggle}
         >
           <Chevron
             className={styles.chevron}

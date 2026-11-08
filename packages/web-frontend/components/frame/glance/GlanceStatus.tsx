@@ -36,7 +36,8 @@ import { type Sheet, useStatusActions } from '../../status/use-status-actions'
 import styles from './GlanceStatus.module.css'
 import type { GlanceHead } from './glance-types'
 
-/** Status for the collapsed row: the problem count as a chip of the worst state, or why there is none to show. */
+/** Status for the collapsed row: the problem count as a chip of the worst state, or why there is none to
+ * show. Warnings alone are "notes" in a muted chip; `needs` counts what the owner must act on. */
 export function useStatusGlance(): GlanceHead & { problems: number | null } {
   const { view, loading } = useStatus()
   const problems = view?.summary.problems ?? null
@@ -47,9 +48,13 @@ export function useStatusGlance(): GlanceHead & { problems: number | null } {
       tone: loading ? null : 'failed',
     }
   if (problems === 0) return { problems, value: 'All healthy', tone: 'ok' }
+  const needs = view?.summary.needs ?? 0
+  if (view && view.summary.counts.warn === problems)
+    return { problems, value: plural(problems, 'note'), tone: 'off', needs }
   const worst = view?.summary.top[0]?.shown
   return {
     problems,
+    needs,
     value: plural(problems, 'problem'),
     tone: worst && isProblem(worst) ? worst : 'warn',
   }
