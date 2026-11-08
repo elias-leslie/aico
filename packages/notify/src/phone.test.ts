@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { parseNotice } from './notice'
 import { Notifier } from './notifier'
+import { popsUp } from './phone'
 import { NotifyStore } from './store'
 
 interface Replay {
@@ -14,6 +15,7 @@ interface Replay {
   wasPushed: boolean
   count: number
   expectPush: 'phone' | 'tray'
+  expectToast: boolean
 }
 const replay: { notices: Replay[] } = JSON.parse(
   readFileSync(fileURLToPath(new URL('./fixtures/phone-replay.json', import.meta.url)), 'utf8'),
@@ -117,5 +119,84 @@ describe('the rule', () => {
     expect(store.get(status.id)?.notice.push).toBe('tray')
     const spoofed = notifier.receive({ ...page, key: 'alerts:abc', title: 'From local' }, 'local')
     expect(store.get(spoofed.id)?.notice.push).toBe('tray')
+  })
+})
+
+describe('what pops up as a corner card', () => {
+  const popped = (item: Replay) => popsUp(parseNotice(item.notice))
+
+  it('is what the replay says, notice by notice', () => {
+    for (const item of replay.notices)
+      expect([popped(item), item.notice.title]).toEqual([item.expectToast, item.notice.title])
+  })
+
+  it('never pops an info or an ok, such as "nothing left to do"', () => {
+    const quiet = replay.notices.filter((item) =>
+      ['info', 'ok'].includes(String(item.notice.severity)),
+    )
+    expect(quiet.length).toBeGreaterThan(10)
+    for (const item of quiet)
+      expect([popped(item), item.notice.title]).toEqual([false, item.notice.title])
+  })
+
+  it('pops what asks the owner or fails, and not a late row or a report', () => {
+    const titles = (want: boolean) =>
+      replay.notices
+        .filter((item) => popped(item) === want)
+        .map((item) => item.notice.title as string)
+    expect(titles(true)).toEqual(
+      expect.arrayContaining(['Browser needs you', 'An agent is waiting on you']),
+    )
+    expect(titles(true).join('\n')).toContain('Open your main Chrome')
+    expect(titles(true).join('\n')).toMatch(/\d failed:/)
+    expect(titles(false).join('\n')).toMatch(/\d late:/)
+    expect(titles(false).join('\n')).toContain('The session was resumed; nothing left to do.')
+  })
+})
+
+describe('resolving a notice', () => {
+  const notifier = () => {
+    const store = new NotifyStore(':memory:')
+    const needsYou = { noticeAccepted: async () => {}, noticeResolved: async () => {} }
+    return {
+      store,
+      notifier: new Notifier({
+        store,
+        sender: { devices: () => [] } as never,
+        outbox: { kick: async () => 0 } as never,
+        needsYou: needsYou as never,
+        log: () => {},
+      }),
+    }
+  }
+  const handOff = {
+    v: 1,
+    source: 'browser-automation',
+    kind: 'todo',
+    severity: 'warning',
+    title: 'Browser needs you',
+    body: 'Log in.',
+    key: 'browser-hand-off:work',
+  }
+
+  it('ends an open notice with one ok that never pops up', async () => {
+    const { store, notifier: n } = notifier()
+    n.receive(handOff, 'local')
+    const done = await n.resolve('browser-automation', handOff.key, 'The session was resumed.')
+    expect(done.resolved).toBe(1)
+    const [newest] = store.forKey('browser-automation', handOff.key)
+    expect(newest?.notice).toMatchObject({ severity: 'ok', push: 'tray' })
+    expect(popsUp(newest?.notice as never)).toBe(false)
+  })
+
+  it('writes nothing when there is nothing open to end', async () => {
+    const { store, notifier: n } = notifier()
+    const none = await n.resolve('browser-automation', handOff.key, 'The session was closed.')
+    expect(none.resolved).toBe(0)
+    expect(store.forKey('browser-automation', handOff.key)).toEqual([])
+    n.receive(handOff, 'local')
+    await n.resolve('browser-automation', handOff.key, 'First.')
+    await n.resolve('browser-automation', handOff.key, 'Second.')
+    expect(store.forKey('browser-automation', handOff.key)).toHaveLength(2)
   })
 })

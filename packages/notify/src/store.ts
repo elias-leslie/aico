@@ -173,7 +173,9 @@ export class NotifyStore {
   /** Notices for one sender's standing condition, newest first. */
   forKey(source: string, key: string): StoredNotice[] {
     const rows = this.db
-      .prepare('SELECT * FROM notices WHERE source = ? AND key = ? ORDER BY received_at DESC, id')
+      .prepare(
+        'SELECT * FROM notices WHERE source = ? AND key = ? ORDER BY received_at DESC, rowid DESC',
+      )
       .all(source, key) as unknown as NoticeRow[]
     return rows.map((row) => this.present(row))
   }

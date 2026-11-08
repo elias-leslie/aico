@@ -239,7 +239,7 @@
      "id": "a00000000002",
      "ts": 1793792700,
      "kind": "manual",
-     "severity": "warning",
+     "severity": "critical",
      "title": "VPN down",
      "body": "x",
      "key": "vpn:down",
@@ -260,23 +260,6 @@
      "title": "Disk full",
      "body": "The root disk is full.",
      "key": "",
-     "result": "sent",
-     "refs": {}
-    }
-   },
-   {
-    "id": "a00000000000",
-    "ts": 1793793300,
-    "read_at": null,
-    "over_at": null,
-    "push": {
-     "id": "a00000000000",
-     "ts": 1793793300,
-     "kind": "manual",
-     "severity": "ok",
-     "title": "VPN back",
-     "body": "x",
-     "key": "vpn:down",
      "result": "sent",
      "refs": {}
     }

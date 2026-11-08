@@ -23,3 +23,22 @@ export const PHONE_REASONS: Record<Interrupt | 'digest', string> = {
 export function isDigest(source: string, kind: string, key: string | undefined): boolean {
   return source === 'aico' && kind === 'info' && key?.startsWith('digest:') === true
 }
+
+/**
+ * The one rule for what pops up on the desktop (owner 2026-11-07: "don't waste my time with
+ * unnecessary distractions"). A corner card is for something to look at now: a notice that names a
+ * reason to interrupt, asks the owner (a todo or a question, which are also in Needs you), or is a
+ * critical failure. Info and ok never pop up, whatever else they say: an ok is a recovery or a
+ * "nothing left to do", which ends the earlier notice and says nothing new. A warning with no
+ * reason (a late row, a report) waits in the tray's list. This file holds the rule; the tray door
+ * (web-server tray.ts) applies it to what it logs for the corner.
+ */
+export function popsUp(notice: {
+  kind: string
+  severity: string
+  interrupt?: Interrupt | undefined
+}): boolean {
+  if (notice.severity !== 'warning' && notice.severity !== 'critical') return false
+  if (notice.interrupt) return true
+  return notice.kind === 'todo' || notice.kind === 'question' || notice.severity === 'critical'
+}

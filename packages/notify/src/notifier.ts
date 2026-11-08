@@ -76,6 +76,13 @@ export class Notifier {
       await this.pendingAsks.get(stored.id)
       await this.options.needsYou.noticeResolved(stored.id)
     }
+    // Nothing open under the key (never sent, or already ended by an ok): there is nothing to end,
+    // so no notice is written at all.
+    const newest = notices[0]
+    if (!newest || newest.notice.severity === 'ok')
+      return { id: newest?.id ?? '', repeat: true, resolved: 0 }
+    // The ok that follows is what ends the earlier notices for the tray (the same key). It says
+    // nothing new, so the tray door never pops it up (popsUp in phone.ts).
     const accepted = this.receive(
       {
         v: 1,

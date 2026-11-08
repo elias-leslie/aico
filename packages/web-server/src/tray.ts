@@ -12,7 +12,7 @@
 // page. Needs you stays what the tray's Questions list shows: the open Tether asks, except the ones
 // that stand for a failing Status row (those are the row itself).
 
-import type { NotifyStore, StoredNotice } from '@aico/notify'
+import { type NotifyStore, popsUp, type StoredNotice } from '@aico/notify'
 import { counted, type ShownRow, type StatusStore, type StatusView } from '@aico/status'
 import type { Approval, Ask } from './asks'
 import { fromThisMachine } from './guard'
@@ -316,10 +316,13 @@ export function buildTray(input: TrayInput): Record<string, unknown> {
   const recent = input.notices.filter((stored) => stored.receivedAt >= now - LOOKBACK_MS)
   const log: Record<string, unknown>[] = []
   const ended = new Map<string, number | null>()
-  for (const [index, stored] of recent.entries()) {
+  for (const stored of recent) {
     const { notice } = stored
     ended.set(stored.id, expired(stored, now) ? now : endedAt(stored, recent))
-    if (index >= LOG_MAX) continue
+    // The log is what the corner cards and the unread count read, so it holds only what pops up
+    // (popsUp in packages/notify phone.ts). An info or ok notice, such as "nothing left to do",
+    // already did its job by ending the earlier notice above; it is not a new item.
+    if (!popsUp(notice) || log.length >= LOG_MAX) continue
     log.push({
       id: stored.id,
       ts: seconds(stored.receivedAt),

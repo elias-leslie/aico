@@ -1,5 +1,5 @@
 {
-  "description": "Notices aico-web took in the three days to 2026-11-07, one per distinct kind (titles and keys anonymised, bodies dropped, no secrets), with the push the sender asked for. interrupt is what the sender now declares for it (the in-repo senders are tested on their own). wasPushed: it reached the phone then. expectPush: where the one rule (packages/notify/src/phone.ts) sends it now.",
+  "description": "Notices aico-web took in the three days to 2026-11-07, one per distinct kind (titles and keys anonymised, bodies dropped, no secrets), with the push the sender asked for. interrupt is what the sender now declares for it (the in-repo senders are tested on their own). wasPushed: it reached the phone then. expectPush: where the one rule (packages/notify/src/phone.ts) sends it now. expectToast: whether it pops up as a corner card on the desktop (packages/notify/src/phone.ts popsUp): only something to look at now.",
   "notices": [
     {
       "notice": {
@@ -14,7 +14,8 @@
       },
       "wasPushed": false,
       "count": 3,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -29,7 +30,8 @@
       },
       "wasPushed": false,
       "count": 2,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -44,7 +46,8 @@
       },
       "wasPushed": false,
       "count": 3,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -59,7 +62,8 @@
       },
       "wasPushed": false,
       "count": 3,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -74,7 +78,8 @@
       },
       "wasPushed": false,
       "count": 2,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -89,7 +94,8 @@
       },
       "wasPushed": false,
       "count": 4,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -104,7 +110,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -119,7 +126,8 @@
       },
       "wasPushed": false,
       "count": 2,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -134,7 +142,8 @@
       },
       "wasPushed": true,
       "count": 11,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": false
     },
     {
       "notice": {
@@ -149,7 +158,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -164,7 +174,8 @@
       },
       "wasPushed": true,
       "count": 12,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": false
     },
     {
       "notice": {
@@ -179,7 +190,8 @@
       },
       "wasPushed": true,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": false
     },
     {
       "notice": {
@@ -194,7 +206,8 @@
       },
       "wasPushed": false,
       "count": 2,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -210,7 +223,8 @@
       },
       "wasPushed": true,
       "count": 5,
-      "expectPush": "phone"
+      "expectPush": "phone",
+      "expectToast": true
     },
     {
       "notice": {
@@ -225,7 +239,8 @@
       },
       "wasPushed": false,
       "count": 6,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -241,7 +256,8 @@
       },
       "wasPushed": true,
       "count": 1,
-      "expectPush": "phone"
+      "expectPush": "phone",
+      "expectToast": true
     },
     {
       "notice": {
@@ -257,7 +273,8 @@
       },
       "wasPushed": true,
       "count": 21,
-      "expectPush": "phone"
+      "expectPush": "phone",
+      "expectToast": true
     },
     {
       "notice": {
@@ -272,7 +289,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": false
     },
     {
       "notice": {
@@ -287,7 +305,8 @@
       },
       "wasPushed": true,
       "count": 4,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": false
     },
     {
       "notice": {
@@ -302,7 +321,8 @@
       },
       "wasPushed": false,
       "count": 2,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -317,7 +337,8 @@
       },
       "wasPushed": false,
       "count": 2,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -332,7 +353,8 @@
       },
       "wasPushed": true,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": false
     },
     {
       "notice": {
@@ -347,7 +369,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -362,7 +385,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -377,7 +401,8 @@
       },
       "wasPushed": true,
       "count": 2,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": false
     },
     {
       "notice": {
@@ -392,7 +417,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -407,7 +433,8 @@
       },
       "wasPushed": false,
       "count": 2,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -422,7 +449,8 @@
       },
       "wasPushed": false,
       "count": 2,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -437,7 +465,8 @@
       },
       "wasPushed": false,
       "count": 2,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -452,7 +481,8 @@
       },
       "wasPushed": false,
       "count": 3,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -467,7 +497,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -482,7 +513,8 @@
       },
       "wasPushed": false,
       "count": 2,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -497,7 +529,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -512,7 +545,8 @@
       },
       "wasPushed": false,
       "count": 2,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -527,7 +561,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -542,7 +577,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -557,7 +593,8 @@
       },
       "wasPushed": true,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": false
     },
     {
       "notice": {
@@ -572,7 +609,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -587,7 +625,8 @@
       },
       "wasPushed": true,
       "count": 2,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": false
     },
     {
       "notice": {
@@ -602,7 +641,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -617,7 +657,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -632,7 +673,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -647,7 +689,8 @@
       },
       "wasPushed": true,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -662,7 +705,8 @@
       },
       "wasPushed": true,
       "count": 2,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -677,7 +721,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": false
     },
     {
       "notice": {
@@ -692,7 +737,8 @@
       },
       "wasPushed": true,
       "count": 3,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": false
     },
     {
       "notice": {
@@ -707,7 +753,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -722,7 +769,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -737,7 +785,8 @@
       },
       "wasPushed": true,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -752,7 +801,8 @@
       },
       "wasPushed": true,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -767,7 +817,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -782,7 +833,8 @@
       },
       "wasPushed": true,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -797,7 +849,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -812,7 +865,8 @@
       },
       "wasPushed": true,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -828,7 +882,8 @@
       },
       "wasPushed": true,
       "count": 1,
-      "expectPush": "phone"
+      "expectPush": "phone",
+      "expectToast": true
     },
     {
       "notice": {
@@ -843,7 +898,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": false
     },
     {
       "notice": {
@@ -858,7 +914,8 @@
       },
       "wasPushed": true,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -873,7 +930,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -888,7 +946,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -903,7 +962,8 @@
       },
       "wasPushed": false,
       "count": 2,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -918,7 +978,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -933,7 +994,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": false
     },
     {
       "notice": {
@@ -948,7 +1010,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": false
     },
     {
       "notice": {
@@ -963,7 +1026,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -978,7 +1042,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -993,7 +1058,8 @@
       },
       "wasPushed": false,
       "count": 2,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -1008,7 +1074,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -1023,7 +1090,8 @@
       },
       "wasPushed": false,
       "count": 29,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": false
     },
     {
       "notice": {
@@ -1038,7 +1106,8 @@
       },
       "wasPushed": true,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": false
     },
     {
       "notice": {
@@ -1053,7 +1122,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": false
     },
     {
       "notice": {
@@ -1068,7 +1138,8 @@
       },
       "wasPushed": true,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": false
     },
     {
       "notice": {
@@ -1084,7 +1155,8 @@
       },
       "wasPushed": true,
       "count": 1,
-      "expectPush": "phone"
+      "expectPush": "phone",
+      "expectToast": true
     },
     {
       "notice": {
@@ -1100,7 +1172,8 @@
       },
       "wasPushed": true,
       "count": 1,
-      "expectPush": "phone"
+      "expectPush": "phone",
+      "expectToast": true
     },
     {
       "notice": {
@@ -1115,7 +1188,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -1130,7 +1204,8 @@
       },
       "wasPushed": false,
       "count": 2,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": false
     },
     {
       "notice": {
@@ -1145,7 +1220,8 @@
       },
       "wasPushed": false,
       "count": 2,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": false
     },
     {
       "notice": {
@@ -1160,7 +1236,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -1175,7 +1252,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -1190,7 +1268,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -1205,7 +1284,8 @@
       },
       "wasPushed": true,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": false
     },
     {
       "notice": {
@@ -1220,7 +1300,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -1235,7 +1316,8 @@
       },
       "wasPushed": true,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -1250,7 +1332,8 @@
       },
       "wasPushed": true,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": false
     },
     {
       "notice": {
@@ -1265,7 +1348,8 @@
       },
       "wasPushed": true,
       "count": 1,
-      "expectPush": "phone"
+      "expectPush": "phone",
+      "expectToast": false
     },
     {
       "notice": {
@@ -1280,7 +1364,8 @@
       },
       "wasPushed": true,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -1295,7 +1380,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -1310,7 +1396,8 @@
       },
       "wasPushed": true,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": false
     },
     {
       "notice": {
@@ -1325,7 +1412,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -1340,7 +1428,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -1355,7 +1444,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -1370,7 +1460,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": true
     },
     {
       "notice": {
@@ -1385,7 +1476,8 @@
       },
       "wasPushed": false,
       "count": 3,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": false
     },
     {
       "notice": {
@@ -1400,7 +1492,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": false
     },
     {
       "notice": {
@@ -1415,7 +1508,8 @@
       },
       "wasPushed": false,
       "count": 27,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": false
     },
     {
       "notice": {
@@ -1430,7 +1524,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": false
     },
     {
       "notice": {
@@ -1445,7 +1540,8 @@
       },
       "wasPushed": false,
       "count": 1,
-      "expectPush": "tray"
+      "expectPush": "tray",
+      "expectToast": false
     },
     {
       "notice": {
@@ -1464,7 +1560,25 @@
       "wasPushed": false,
       "count": 0,
       "expectPush": "phone",
-      "synthetic": true
+      "synthetic": true,
+      "expectToast": true
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "browser-automation",
+        "kind": "todo",
+        "severity": "warning",
+        "title": "Browser needs you",
+        "body": "(body not kept)",
+        "key": "browser-hand-off:work",
+        "actions": ["done"],
+        "primary": "done"
+      },
+      "wasPushed": false,
+      "count": 3,
+      "expectPush": "tray",
+      "expectToast": true
     }
   ]
 }
