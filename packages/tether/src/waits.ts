@@ -477,8 +477,8 @@ export function sessionVerdict(
 ): { outcome: WaitOutcome | null; recheckAt: number | null } {
   if (!target || exited)
     return { outcome: wait.until === 'ended' ? 'until' : 'gone', recheckAt: null }
-  const settle = (holdSeconds: number) => {
-    const at = target.stateAt + holdSeconds * 1000
+  const settle = (holdSeconds: number, from = target.stateAt) => {
+    const at = from + holdSeconds * 1000
     return at <= now
       ? { outcome: 'until' as const, recheckAt: null }
       : { outcome: null, recheckAt: at }
@@ -489,11 +489,13 @@ export function sessionVerdict(
     // nothing of its own: no wait, and no background shells (past their hold
     // the line says they still run).
     if (target.state === 'idle' && target.stateAgentAt > wait.since && !target.waitingOn)
-      return settle(
-        target.stateDetail === BACKGROUND_SHELLS
-          ? Math.max(policy.laneSettleSeconds, policy.laneBackgroundHoldSeconds)
-          : policy.laneSettleSeconds,
-      )
+      // The hold runs on the agent's own clock, so a Tether restart doesn't start it over.
+      return target.stateDetail === BACKGROUND_SHELLS
+        ? settle(
+            Math.max(policy.laneSettleSeconds, policy.laneBackgroundHoldSeconds),
+            target.stateAgentAt,
+          )
+        : settle(policy.laneSettleSeconds)
   } else if (wait.until === 'idle') {
     if (target.state === 'idle') return settle(policy.laneSettleSeconds)
   } else if (wait.until === 'blocked') {
@@ -555,7 +557,7 @@ export function waitLine(
   else {
     const state =
       cursor && cursor.state !== 'unknown'
-        ? `: it is ${cursor.state === 'blocked' ? `blocked (${detail})` : cursor.state}`
+        ? `: it is ${cursor.state === 'blocked' ? `blocked (${detail})` : cursor.state}${shells ? ' with background shells running' : ''}`
         : ''
     head = `[Wait timed out] session ${name} ${words.not} after ${spanLabel(now - wait.armedAt)}${state}`
   }

@@ -153,7 +153,9 @@ export class AgentStateTracker {
       stateSource: source,
       stateAt: now,
       stateDetail: detail,
-      statePrevious: before.state,
+      // Only the detail changing (a background shell starting or ending) is no new state:
+      // a turn that just ended still came from working, so it still reads as finished.
+      statePrevious: before.state === state ? before.statePrevious : before.state,
       // Without the agent's own time, a first sighting (Tether just started)
       // keeps the old time: it may be a turn that ended long ago.
       stateAgentAt:

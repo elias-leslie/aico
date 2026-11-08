@@ -90,6 +90,8 @@ function harness(
   if (!options.store) stores.push(store)
   bindCatalog(store.db)
   const delivered: { to: string; source: string; line: string }[] = []
+  /** Lines delivered as a repeat: `to|source`. */
+  const repeats: string[] = []
   /** `lane>receiver` -> when the lane told it with a wake-class message. */
   const toldAt = new Map<string, number>()
   /** The receivers' delivery queues: `to|source` while undelivered. */
@@ -112,8 +114,9 @@ function harness(
     receiver: (id) => receivers.has(id),
     sessions: () => sessions,
     closing: options.closing,
-    deliver: (to, source, line) => {
+    deliver: (to, source, line, repeat) => {
       delivered.push({ to, source, line })
+      if (repeat) repeats.push(`${to}|${source}`)
       queued.add(`${to}|${source}`)
     },
     told: (lane, to, since) => (toldAt.get(`${lane}>${to}`) ?? -Infinity) >= since,
@@ -143,6 +146,7 @@ function harness(
     store,
     reporter,
     delivered,
+    repeats,
     queued,
     withdrawn,
     handledCalls,
@@ -1128,31 +1132,49 @@ describe('a lane with background shells running', () => {
   it('is not finished: no line until they end, then one line that wakes', () => {
     const { reporter, delivered, logs } = harness()
     step(reporter, { state: 'working', stateAgentAt: 99 })
-    step(reporter, { stateAgentAt: 100, stateDetail: SHELLS }, HOLD - 1_000)
+    step(reporter, { stateAgentAt: Date.now(), stateDetail: SHELLS }, HOLD - 1_000)
     expect(delivered).toEqual([])
     expect(logs.some((l) => l.includes('idle with background shells running'))).toBe(true)
     // The shell ended; its notification started the turn that just finished.
-    step(reporter, { state: 'working', stateAgentAt: 199 })
-    step(reporter, { stateAgentAt: 200 }, SETTLE)
+    step(reporter, { state: 'working', stateAgentAt: Date.now() })
+    step(reporter, { stateAgentAt: Date.now() + 1 }, SETTLE)
     expect(delivered.map((d) => d.line)).toEqual([expect.stringContaining('finished its turn')])
   })
 
   it('past the hold the line says they still run, and the real finish still wakes', () => {
     const { reporter, delivered } = harness()
     step(reporter, { state: 'working', stateAgentAt: 99 })
-    step(reporter, { stateAgentAt: 100, stateDetail: SHELLS }, HOLD)
+    step(reporter, { stateAgentAt: Date.now(), stateDetail: SHELLS }, HOLD)
     expect(delivered.map((d) => d.line)).toEqual([
       expect.stringContaining('went idle; background shells still running'),
     ])
     // No repeat quiet for the finish that follows (the night's 80 minutes): only the settle and floor.
-    step(reporter, { state: 'working', stateAgentAt: 199 })
-    step(reporter, { stateAgentAt: 200 }, SETTLE + FLOOR)
+    step(reporter, { state: 'working', stateAgentAt: Date.now() })
+    step(reporter, { stateAgentAt: Date.now() + 1 }, SETTLE + FLOOR)
     expect(delivered).toHaveLength(2)
     expect(delivered[1].line).toContain('finished its turn')
+  })
+
+  it("a Tether restart doesn't start the hold over: it runs on the agent's clock", () => {
+    const first = harness()
+    const at = Date.now()
+    step(first.reporter, { state: 'working', stateAgentAt: at - 1 })
+    step(first.reporter, { stateAgentAt: at, stateDetail: SHELLS }, HOLD - 60_000)
+    expect(first.delivered).toEqual([])
+    first.reporter.stop()
+    const second = harness({ store: first.store })
+    step(second.reporter, { stateAgentAt: at, stateDetail: SHELLS }, 60_000)
+    expect(second.delivered.map((d) => d.line)).toEqual([
+      expect.stringContaining('background shells still running'),
+    ])
   })
 })
 
 describe("a finished lane's last message", () => {
+  it('drops a lone surrogate, which the paste would refuse, and keeps a whole emoji', () => {
+    expect(closingWords('done \ud83d here \u{1f389}', 100)).toBe('done here \u{1f389}')
+  })
+
   it('goes out with the line, one clean line, after the command to read it all', () => {
     const { reporter, delivered } = harness({
       closing: () => 'Done.\n\nCommits:\u0007 abc\u202e  and def',
@@ -1194,10 +1216,13 @@ describe('delivery classes of finished lines', () => {
   }
 
   it('the first finished line wakes; a repeat the receiver ignored wakes once its quiet has passed', () => {
-    const { reporter, delivered } = harness()
+    const { reporter, delivered, repeats } = harness()
     turn(reporter, 100, SETTLE)
+    expect(repeats).toEqual([])
     turn(reporter, 200, QUIET)
     expect(delivered).toHaveLength(2)
+    // It wakes, but as no news from outside: the receiver's own backoff stays.
+    expect(repeats).toEqual([`${ROOT}|lane:${LANE}:finished`])
   })
 
   it('a lane that told its launcher in the turn that just ended sends no finished line', () => {

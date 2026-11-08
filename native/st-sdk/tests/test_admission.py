@@ -10,6 +10,7 @@ import subprocess
 import sys
 import threading
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -209,6 +210,22 @@ def test_tools_run_takes_the_light_lane_only_when_the_host_has_room(lane, monkey
     monkeypatch.setattr(tools_run, 'heavy_work', watched)
     assert tools_run.main([*argv, '--', sys.executable, '-c', 'pass']) == 0
     assert held == [held_class]
+
+
+def test_tools_run_under_a_light_lane_stays_light_when_the_host_has_no_room(lane, monkeypatch):
+    tools_run = tools_run_module()
+    monkeypatch.setattr(tools_run, 'admission_state', lambda: guard.Admission(False, 'fixture'))
+    monkeypatch.setenv(guard._LEASE_ENV, 'light:fixture')
+    asked = []
+
+    @contextlib.contextmanager
+    def watched(_label, *, work_class='heavy', project=None):
+        asked.append(work_class)
+        yield SimpleNamespace(run=lambda *_a, **_k: SimpleNamespace(returncode=0))
+
+    monkeypatch.setattr(tools_run, 'heavy_work', watched)
+    assert tools_run.main(['--label', 'nested', '--class', 'light', '--', sys.executable, '-c', 'pass']) == 0
+    assert asked == ['light']
 
 
 def test_light_lane_runs_while_a_full_gate_holds_heavy(lane):

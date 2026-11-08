@@ -341,7 +341,8 @@ describe('--until finished and background shells', () => {
   it('an idle with them running is not finished until the hold runs out; --until idle does not wait', () => {
     const at = 1_000_000
     const hold = DEFAULT_WAKE_POLICY.laneBackgroundHoldSeconds * 1000
-    const running = lane({ stateAt: at, stateDetail: SHELLS })
+    // The agent's clock, not when Tether saw it: a restart resets stateAt.
+    const running = lane({ stateAt: at + 30_000, stateAgentAt: at, stateDetail: SHELLS })
     const verdict = (until: string, now: number) =>
       sessionVerdict({ until, since: 100 }, running, false, DEFAULT_WAKE_POLICY, now)
     expect(verdict('finished', at + 60_000)).toEqual({ outcome: null, recheckAt: at + hold })

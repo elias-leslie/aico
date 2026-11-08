@@ -67,6 +67,23 @@ describe('Claude status file', () => {
     expect(claudeSignal('{not json')).toBeNull()
   })
 
+  it('a turn ending with a background shell still came from working (the app keeps it finished)', () => {
+    const { t, tick } = tracker()
+    t.observe('a', claudeSignal(claudeFile('busy', 900)))
+    tick(10)
+    t.observe('a', claudeSignal(claudeFile('idle', 950)))
+    tick(10)
+    t.observe('a', claudeSignal(claudeFile('shell', 950)))
+    expect(t.get('a')).toMatchObject({
+      state: 'idle',
+      stateDetail: 'background shells running',
+      statePrevious: 'working',
+    })
+    tick(10)
+    t.observe('a', claudeSignal(claudeFile('idle', 950)))
+    expect(t.get('a')).toMatchObject({ stateDetail: null, statePrevious: 'working' })
+  })
+
   it('reads a session file holding JSON null as no signal', () => {
     expect(claudeSignal('null')).toBeNull()
   })

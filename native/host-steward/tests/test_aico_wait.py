@@ -140,7 +140,7 @@ def test_cancel_takes_several_ids_and_stale_notes(monkeypatch):
     assert output[0]["cancelled"] == ["aaaaaaaaaaaa"] and output[0]["applied"] is True
     code, calls, output = run(monkeypatch, ["wait", "cancel", "aaaaaaaaaaaa", "cccccccccccc"],
                               [(200, {"cancelled": True}), (409, {"error": "not_armed", "state": "fired"})])
-    assert code == 0 and output[0]["applied"] is False and output[0]["notCancelled"] == ["cccccccccccc"]
+    assert code == 1 and output[0]["applied"] is False and output[0]["notCancelled"] == ["cccccccccccc"]
     code, _, output = run(monkeypatch, ["wait", "cancel", "--note", "nothing has this"], [(200, {"items": [keep]})])
     assert code == 0 and "no armed wait" in output[0]["detail"]
 

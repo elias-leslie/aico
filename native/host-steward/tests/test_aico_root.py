@@ -430,6 +430,18 @@ def test_create_reports_the_started_agent_id_and_null_when_it_has_not_started(mo
     assert REAL_STARTED_AGENT_ID(instance, created) is None
 
 
+def test_create_stops_looking_for_the_agent_in_time_to_print_its_receipt(monkeypatch):
+    lane_receipts(monkeypatch, session={**REPORT_SESSION, "resumeId": None})
+    monkeypatch.setenv("TETHER_SOCKET", "/fixture/tether.sock")
+    reads = []
+    monkeypatch.setattr(admin, "session_view", lambda *_a: reads.append(1) or {})
+    monkeypatch.setattr(admin.time, "sleep", lambda _: pytest.fail("no time left to poll"))
+    deadline = admin.time.monotonic() + admin.CREATE_RECEIPT_RESERVE - .01
+    instance = admin.Collector("/fixture/tether.sock", "/fixture/tether.sock", "", deadline, threading.Event())
+    assert REAL_STARTED_AGENT_ID(instance, {"status": "running", "hostIdentity": "aabbcc01"}) is None
+    assert reads == [1]
+
+
 def test_an_agent_is_found_by_its_window_before_tether_knows_its_resume_id(monkeypatch):
     process = subprocess.Popen(["sleep", "30"], env={"AICO_WIDGET_ID": "aabbcc01"})
     try:

@@ -223,6 +223,8 @@ export function closingWords(text: string | null | undefined, max: number): stri
   const flat = text
     // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping them is the point
     .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069]+/g, ' ')
+    // A lone surrogate is refused by the paste and would block the receiver's queue.
+    .replace(/\p{Cs}/gu, '')
     .replace(/ {2,}/g, ' ')
     .trim()
   if (!flat) return null
@@ -564,7 +566,9 @@ export interface LaneReportOperations {
   sessions(): LocalLineage[]
   /** Queue one line on the receiver's delivery queue (coalescing by source).
    */
-  deliver(receiver: string, source: string, line: string): void
+  /** `repeat`: a line the receiver may have ignored already. It wakes, but it is no news from
+   * outside: the receiver's own next finished line stays a repeat, so backoff holds up a chain. */
+  deliver(receiver: string, source: string, line: string, repeat?: boolean): void
   /** A local lane's last message, as it wrote it; null when none can be read. */
   closing?(lane: string): string | null
   /** Whether the lane (a session here) told `receiver` with a wake-class
@@ -1052,7 +1056,12 @@ export class LaneReporter {
       // Not finished while its own background shells run; past the hold, it says they do.
       const shells = view.stateDetail === BACKGROUND_SHELLS
       const hold = shells ? policy.laneBackgroundHoldSeconds * 1000 : 0
-      const settle = Math.max(policy.laneSettleSeconds * 1000, quiet, hold) - held
+      // The hold runs on the agent's own clock, so a Tether restart doesn't start it over.
+      const heldShells = view.stateAgentAt > 0 ? Math.max(now - view.stateAgentAt, held) : held
+      const settle = Math.max(
+        Math.max(policy.laneSettleSeconds * 1000, quiet) - held,
+        hold - heldShells,
+      )
       const floor = cursor.finishedSentAt
         ? policy.laneFinishedFloorSeconds * 1000 - (now - cursor.finishedSentAt)
         : 0
@@ -1099,7 +1108,7 @@ export class LaneReporter {
                   : null,
             },
             null,
-            { toldSince },
+            { toldSince, repeat: streak > 0 },
           )
           cursor.finishedAt = view.stateAgentAt
           // A turn the lane reported itself is no finished line sent: it
@@ -1213,7 +1222,7 @@ export class LaneReporter {
     lane: LaneSnapshot,
     extra: Parameters<typeof laneLine>[2] = {},
     endedBy: string | null = null,
-    delivery: { toldSince?: number } = {},
+    delivery: { toldSince?: number; repeat?: boolean } = {},
   ): boolean {
     const { outcome } = event
     const all = this.receivers(lane)
@@ -1249,7 +1258,8 @@ export class LaneReporter {
       return toldAll
     }
     const line = laneLine(outcome, lane, extra)
-    for (const receiver of receivers) this.ops.deliver(receiver, `lane:${where}:${outcome}`, line)
+    for (const receiver of receivers)
+      this.ops.deliver(receiver, `lane:${where}:${outcome}`, line, delivery.repeat)
     this.ops.log(`lane=${where} ${outcome} -> ${receivers.join(',')}${skipped}`)
     return false
   }

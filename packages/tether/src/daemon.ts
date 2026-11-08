@@ -547,9 +547,15 @@ function startLaneReports(
             parentId: row.parentId,
             launched: row.launched,
           })),
-        deliver: (receiver, source, line) => {
+        deliver: (receiver, source, line, repeat) => {
           const now = Date.now()
-          wakes.store.addEvent({ sessionId: receiver, source, note: line, now })
+          wakes.store.addEvent({
+            sessionId: receiver,
+            source,
+            note: line,
+            now,
+            ...(repeat ? { reached: false } : {}),
+          })
           wakes.changed(receiver)
         },
         closing: (lane) =>

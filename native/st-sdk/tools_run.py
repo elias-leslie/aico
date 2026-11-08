@@ -5,10 +5,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from collections.abc import Sequence
 
-from st_sdk.admission import HeavyWorkError, admission_state, heavy_work
+from st_sdk.admission import _LEASE_ENV, HeavyWorkError, admission_state, heavy_work
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -23,7 +24,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not command:
         parser.error("an executable is required after --")
     try:
-        work_class = args.work_class if admission_state().admit else "heavy"
+        # Under a light lane already, it stays there: heavy couldn't start under it.
+        under_light = os.environ.get(_LEASE_ENV, "").startswith("light:")
+        work_class = args.work_class if admission_state().admit or under_light else "heavy"
         with heavy_work(args.label, work_class=work_class) as work:
             result = work.run(command, check=False)
     except HeavyWorkError as exc:

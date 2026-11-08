@@ -52,7 +52,10 @@ aico_checks() {
   if [ "${1:-}" = commit ]; then
     class=light
   elif [ "${1:-}" = check ]; then
-    for arg in "$@"; do [ "$arg" != --quick ] || class=light; done
+    for arg in "$@"; do
+      [ "$arg" != --acceptance ] || { class=heavy; break; } # the whole-tree gate, whatever else it is asked
+      [ "$arg" != --quick ] || class=light
+    done
   fi
   exec st tools run --label "aico ${1:-checks}" --class "$class" -- "$node" --disable-warning=ExperimentalWarning "$checks_bundle" "$@"
 }

@@ -961,8 +961,8 @@ Each line goes out once, whichever way.
   to a puller as above. A ride-along line never pastes and never wakes a puller on its own: it waits, and joins the
   next wake's paste or puller text (after the wake lines), or is taken at the session's next natural turn with
   `GET /v1/sessions/:id/due?ride=1`. SummitFlow uses it for a bare acknowledgement that needs nothing, and for
-  `st sessions send --fyi` notes. Tether's own went-idle line is a wake the first time and ride-along when it repeats
-  (the repeat backoff). A source's newer line replaces the text of one still queued; a wake line makes it a wake,
+  `st sessions send --fyi` notes. Tether's own finished line is a wake, also when it repeats: a repeat just waits for
+  a growing quiet (the repeat backoff) and doesn't reset the receiver's own backoff. A source's newer line replaces the text of one still queued; a wake line makes it a wake,
   and a ride-along line never turns a queued wake ride-along (only a withdraw takes a wake back). A ride-along line
   that never joins anything stays queued until it is taken, withdrawn or the session ends.
 - **Taking ride-along lines** *(25)*. A client that shows them at a natural turn peeks first:

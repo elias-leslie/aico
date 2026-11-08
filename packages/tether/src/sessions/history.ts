@@ -159,6 +159,7 @@ const DAY = 24 * 3600_000
 const SLICE = 4 << 20
 /** Bytes of old transcripts one pass starts reading for names. */
 const HARVEST_BUDGET = 32 << 20
+const CLOSING_READ_LIMITS = [20, 100, 500]
 
 interface Row {
   id: string
@@ -922,11 +923,19 @@ export class History {
   closingMessage(session: string, tool?: string): { text: string; at: number | null } | null {
     const row = this.currentOf(session, tool)
     if (!row) return null
-    const page = this.events(row, { limit: 500 })
-    if (page === 'gone') return null
-    for (const event of [...page.items].reverse())
-      if (event.role === 'assistant' && event.kind === 'text' && event.text.trim())
-        return { text: event.text, at: event.at ?? null }
+    try {
+      // The newest reply is nearly always close to the end: read no further back than it takes.
+      for (const limit of CLOSING_READ_LIMITS) {
+        const page = this.events(row, { limit })
+        if (page === 'gone') return null
+        for (const event of [...page.items].reverse())
+          if (event.role === 'assistant' && event.kind === 'text' && event.text.trim())
+            return { text: event.text, at: event.at ?? null }
+        if (page.items.length < limit) return null
+      }
+    } catch {
+      // A transcript that went away mid-read has nothing to say; this runs inside Tether's timers.
+    }
     return null
   }
 

@@ -216,6 +216,13 @@ describe('lifecycle API (no tmux started)', () => {
     ).toBe(400)
     expect((await call('POST', '/v1/sessions', { origin: 'cli', size, extra: 1 })).status).toBe(400)
     expect((await call('GET', '/v1/sessions/ffffffff')).status).toBe(404)
+    expect((await call('GET', '/v1/sessions/NOTANID/report')).status).toBe(404)
+    // No record of it is no message and unknown context, never zero.
+    expect((await call('GET', '/v1/sessions/ffffffff/report')).body).toMatchObject({
+      id: 'ffffffff',
+      text: null,
+      contextPercent: null,
+    })
     expect((await call('POST', '/v1/sessions/ffffffff/end', { generation: 'x' })).body).toEqual({
       error: 'invalid_generation',
     })

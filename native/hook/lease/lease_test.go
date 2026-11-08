@@ -443,6 +443,10 @@ func TestSendTargetRefusesWhatNoAgentAnswersTo(t *testing.T) {
 	if _, err := a.SendTarget("still-starting"); err == nil || !strings.Contains(err.Error(), "abcd1234") || !strings.Contains(err.Error(), "send again") {
 		t.Errorf("a window whose agent has not registered says so: %v", err)
 	}
+	fake.Sessions = append(fake.Sessions, map[string]any{"id": "ef567890", "rootRequestId": "over-there", "host": "agent-work"})
+	if _, err := a.SendTarget("over-there"); err == nil || !strings.Contains(err.Error(), "runs on agent-work") || !strings.Contains(err.Error(), "st aico root send over-there") {
+		t.Errorf("a session on another computer says how to reach it: %v", err)
+	}
 	if got, err := a.SendTarget("cc:333333@davion-gem"); err != nil || got != "cc:333333@davion-gem" {
 		t.Errorf("a remote name is its host's to judge: %q %v", got, err)
 	}

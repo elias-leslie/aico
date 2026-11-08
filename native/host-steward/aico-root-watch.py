@@ -56,6 +56,8 @@ ROOTS_STATE_WIDTH = 24
 STATUS_MESSAGE_CHARS = 1500
 # How long `st aico create` looks for the new agent's id: it exists once the agent has started.
 CREATE_AGENT_SECONDS = 6.0
+# What a create keeps past its answer for the agent-id reads (2 s each) and printing: the receipt comes first.
+CREATE_RECEIPT_RESERVE = 5
 ROOT_LIMIT = 128
 CONTROL = re.compile(
     r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|"
@@ -1480,7 +1482,7 @@ def started_agent_id(collector: Collector, created: dict) -> str | None:
     if created.get("status") != "running" or created.get("host", "local") != "local":
         return None
     socket_name = socket_path(tether_socket())
-    limit = time.monotonic() + CREATE_AGENT_SECONDS
+    limit = min(time.monotonic() + CREATE_AGENT_SECONDS, collector.deadline - CREATE_RECEIPT_RESERVE)
     while True:
         try:
             agent = agent_id_of(collector, socket_name, session_view(collector, socket_name, created["hostIdentity"]))
@@ -1623,7 +1625,7 @@ def create_main(argv: list[str]) -> int:
     except argparse.ArgumentTypeError as error:
         refuse(f"invalid owner transport configuration: {error}")
     receipt_seconds = HOST_CREATE_SECONDS if args.host else 10
-    collector = Collector(endpoint, "", "", time.monotonic() + receipt_seconds + 5, threading.Event())
+    collector = Collector(endpoint, "", "", time.monotonic() + receipt_seconds + CREATE_RECEIPT_RESERVE, threading.Event())
     output = {"owner": "aico", "requestId": args.request_id}
     if args.host:
         output["host"] = args.host
@@ -1779,8 +1781,9 @@ def create_main(argv: list[str]) -> int:
         output.update(workRole=args.work_role, workRoleDisplayName=args.work_role_name)
         if "launchedBy" in payload:
             output["launchedBy"] = payload["launchedBy"]
-        # Either name reaches it with `st sessions send`; the agent id exists once its agent has started.
-        output["sendTo"] = args.request_id
+        # Either name reaches a local one with `st sessions send`; the agent id exists once its agent has started.
+        if output.get("host", "local") == "local":
+            output["sendTo"] = args.request_id
         output["agentId"] = started_agent_id(collector, output)
         emit_json(collector, output)
         return 0
@@ -2490,7 +2493,7 @@ def session_report(collector: Collector, socket_name: str, widget: object) -> di
         return {}
     try:
         status, data = collector.receipt(socket_name, f"/v1/sessions/{widget}/report", timeout=2)
-    except Unavailable:
+    except (Unavailable, Stopped):
         return {}
     return data if status == 200 else {}
 
@@ -3204,13 +3207,19 @@ def wait_main(argv: list[str]) -> int:
                     raise Refused(data.get("error") if isinstance(data.get("error"), str) else "wait_unavailable")
                 output.update(applied=True, waitId=targets[0], detail="cancelled; no line will be sent")
             else:
-                outcomes = [(wait_id, collector.receipt(args.owner_socket, f"/v1/waits/{wait_id}", timeout=5,
-                                                        method="DELETE")[0]) for wait_id in targets]
-                cancelled = [wait_id for wait_id, status in outcomes if status == 200]
-                output.update(applied=len(cancelled) == len(targets), cancelled=cancelled,
-                              notCancelled=[wait_id for wait_id, status in outcomes if status != 200],
+                cancelled, not_cancelled = [], []
+                for wait_id in targets:
+                    try:
+                        status = collector.receipt(args.owner_socket, f"/v1/waits/{wait_id}", timeout=5, method="DELETE")[0]
+                    except Unavailable:
+                        status = None
+                    (cancelled if status == 200 else not_cancelled).append(wait_id)
+                output.update(applied=not not_cancelled, cancelled=cancelled, notCancelled=not_cancelled,
                               detail=(f"cancelled {len(cancelled)} of {len(targets)}; no line will be sent for those"
                                       if targets else "no armed wait of this session has that note"))
+                if not_cancelled:
+                    emit_json(collector, output)
+                    return 1
         else:
             route = f"/v1/sessions/{widget}/waits" + ("?recent=1" if args.recent else "")
             status, data = collector.receipt(args.owner_socket, route, timeout=5)

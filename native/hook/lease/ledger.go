@@ -305,7 +305,7 @@ func (h *Hook) ResolveTarget(to string) string {
 			return found
 		}
 	}
-	if widget := sessionWindow(to); widget != "" {
+	if widget, host, err := sessionWindow(to); err == nil && widget != "" && host == "" {
 		if agent := windowAgent(ids, widget); agent != "" {
 			return agent
 		}
@@ -313,20 +313,21 @@ func (h *Hook) ResolveTarget(to string) string {
 	return to
 }
 
-// sessionWindow: the Aico window of a running session named by its window id or its request id, or "".
-func sessionWindow(name string) string {
+// sessionWindow: the Aico window of a running session named by its window id or its request id, and its host when
+// it runs on another computer; "" when no session has that name.
+func sessionWindow(name string) (widget, host string, err error) {
 	var list struct {
 		Items []map[string]any `json:"items"`
 	}
 	if _, err := tetherCall("GET", "/v1/sessions", nil, &list); err != nil {
-		return ""
+		return "", "", err
 	}
 	for _, item := range list.Items {
 		if str(item["id"]) == name || str(item["rootRequestId"]) == name {
-			return str(item["id"])
+			return str(item["id"]), str(item["host"]), nil
 		}
 	}
-	return ""
+	return "", "", nil
 }
 
 // windowAgent: the newest live main-thread identity running in that window, or "".
@@ -355,7 +356,14 @@ func (h *Hook) SendTarget(to string) (string, error) {
 	if strings.Contains(resolved, "@") || h.KnownTarget(resolved) {
 		return resolved, nil
 	}
-	if widget := sessionWindow(to); widget != "" {
+	widget, host, err := sessionWindow(to)
+	if err != nil {
+		return "", err
+	}
+	if host != "" {
+		return "", fmt.Errorf("not sent: %s runs on %s, and its agent isn't known here. Use st aico root send %s", to, host, to)
+	}
+	if widget != "" {
 		return "", fmt.Errorf("not sent: %s (window %s) has no agent registered yet; it registers when its agent starts, so send again in a moment", to, widget)
 	}
 	live, more := h.LiveAgents(), ""
