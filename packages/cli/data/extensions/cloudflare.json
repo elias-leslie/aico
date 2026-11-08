@@ -1,0 +1,36 @@
+{
+  "id": "aico.cloudflare",
+  "owner": "aico",
+  "namespace": "cloudflare",
+  "version": "1.0.0",
+  "st_contract_versions": [1],
+  "summary": "Cloudflare tunnels, Access apps and DNS through Cloudflare's official MCP server, on demand (zero idle context).",
+  "effects": ["network", "read-remote", "write-remote", "credentials", "process"],
+  "help": {
+    "": "Usage: st cloudflare <login|finish|status|tunnels|access-apps|access-policies|zones|dns|api|tools|call> --help\nOne-time OAuth grant stored as the Aico login cloudflare-mcp-oauth. Reads: tunnels, access-apps, access-policies, zones, dns. Any other call: api METHOD PATH [--json BODY] or call TOOL --json ARGS.",
+    "login": "Usage: st cloudflare login [--account ID] [--scopes \"A B\"]\nPrints one approval URL, waits for the browser callback on 127.0.0.1, saves the grant as an Aico login. Not needed again.",
+    "finish": "Usage: st cloudflare finish <callback-url>\nCompletes a login when the browser could not reach the callback listener.",
+    "status": "Usage: st cloudflare status\nWho the grant is, its scopes and expiry. No secrets.",
+    "tunnels": "Usage: st cloudflare tunnels [--account ID] [--raw]\nRead-only tunnel list.",
+    "access-apps": "Usage: st cloudflare access-apps [--account ID] [--raw]\nRead-only Access apps with their policies.",
+    "dns": "Usage: st cloudflare dns [--zone summitflow.dev] [--type A] [--name host] [--raw]\nRead-only DNS records.",
+    "api": "Usage: st cloudflare api METHOD PATH [--json BODY] [--account ID]\nAny Cloudflare API call through the server's execute tool; limited to the granted scopes."
+  },
+  "usage": [
+    {
+      "surface": "st.cloudflare",
+      "cmd": "st cloudflare <tunnels|access-apps|access-policies|zones|dns|api|call|status>",
+      "when": "inspect or change Cloudflare tunnels, Access apps/policies and DNS without the dashboard or the owner's Chrome",
+      "precautions": [
+        "Reads are safe; api/call with POST, PUT, PATCH or DELETE changes live Cloudflare state.",
+        "Needs the one-time owner approval (st cloudflare login); never print the cloudflare-mcp-oauth login."
+      ],
+      "examples": [
+        "st cloudflare tunnels",
+        "st cloudflare access-apps",
+        "st cloudflare dns --zone summitflow.dev --type CNAME",
+        "st cloudflare api GET /accounts/ID/cfd_tunnel"
+      ]
+    }
+  ]
+}

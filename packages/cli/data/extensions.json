@@ -268,6 +268,20 @@
         ]
       },
       "environment": ["GH_TOKEN", "GITHUB_TOKEN", "GH_CONFIG_DIR", "GIT_SSH_COMMAND"]
+    },
+    {
+      "id": "aico.cloudflare",
+      "owner": "aico",
+      "namespace": "cloudflare",
+      "manifest": "extensions/cloudflare.json",
+      "executable": "native/cloudflare/st-cloudflare",
+      "execution_source": "checkout",
+      "arguments": [],
+      "grant": {
+        "enabled": true,
+        "effects": ["network", "read-remote", "write-remote", "credentials", "process"]
+      },
+      "environment": ["AICO_NODE", "AICO_BIN", "CLOUDFLARE_MCP_URL", "XDG_RUNTIME_DIR"]
     }
   ]
 }
