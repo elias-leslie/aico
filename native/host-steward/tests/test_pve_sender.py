@@ -397,10 +397,16 @@ def test_portfolio_can_send_again_after_its_window(cfg, monkeypatch):
     assert len(calls) == 2
 
 
-def test_installer_copies_only_and_preserves_config(tmp_path):
+def test_installer_preserves_config_and_upgrades_old_guard_publication_wiring(tmp_path):
     config = tmp_path / "config" / "sender.json"
     config.parent.mkdir()
     config.write_text('{"operator_setting":true}')
+    old_guard = json.loads((ROOT / "native/pve-sender/backup-guard.json").read_text())
+    old_guard.pop("machine")
+    old_guard.pop("sender_config")
+    old_guard["normal_cpu_percent"] = 37
+    guard_config = config.parent / "backup-guard.json"
+    guard_config.write_text(json.dumps(old_guard))
     env = {**os.environ, "PATH": "/usr/bin:/bin", "PVE_SENDER_PREFIX": str(tmp_path / "lib"),
            "PVE_SENDER_UNITS": str(tmp_path / "units"), "PVE_SENDER_SBIN": str(tmp_path / "sbin"),
            "PVE_SENDER_CONFIG": str(config), "PVE_SENDER_STEWARD": str(tmp_path / "steward"),
@@ -412,7 +418,9 @@ def test_installer_copies_only_and_preserves_config(tmp_path):
     assert (tmp_path / "sbin/pve-sender").resolve() == tmp_path / "lib/pve-sender"
     assert (tmp_path / "sbin/aico-backup-guard").resolve() == tmp_path / "lib/aico-backup-guard"
     assert (tmp_path / "units/aico-backup-guard.service").is_file()
-    assert json.loads((config.parent / "backup-guard.json").read_text())["normal_cpu_percent"] == 50
+    installed_guard = json.loads(guard_config.read_text())
+    assert installed_guard["normal_cpu_percent"] == 37
+    assert installed_guard["sender_config"] == str(config) and installed_guard["machine"]
     assert not (tmp_path / "sbin/aico-push").exists()  # live wrapper switch needs the runtime preflight
 
 

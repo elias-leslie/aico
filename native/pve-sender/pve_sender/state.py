@@ -20,6 +20,7 @@ def write(path: Path, value, mode: int = 0o600) -> None:
     tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, mode)
     try:
+        os.fchmod(fd, mode)  # Explicit public telemetry must survive a private service umask.
         with os.fdopen(fd, "w") as stream:
             json.dump(value, stream, separators=(",", ":"))
             stream.flush()

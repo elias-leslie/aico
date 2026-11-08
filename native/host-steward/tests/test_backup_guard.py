@@ -1,6 +1,7 @@
 """Synthetic local sensors and stubbed cgroups: no heat, network or live exports."""
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import sys
@@ -39,6 +40,22 @@ def test_policy_controls_below_hardware_maximum_and_is_modest(cfg):
     assert cfg["recover_c"] < cfg["hot_c"] < cfg["critical_c"] < 95
     assert cfg["normal_cpu_percent"] == 50
     assert cfg["sample_s"] == 15 and cfg["stale_s"] == 45
+
+
+def test_only_public_runtime_telemetry_is_readable_to_local_admission(cfg):
+    old_umask = os.umask(0o077)
+    try:
+        sample(cfg, {}, 60, 100, [], starting=True)
+    finally:
+        os.umask(old_umask)
+    status = Path(cfg["runtime_dir"]) / "status.json"
+    saved = Path(cfg["state_dir"]) / "state.json"
+    assert status.stat().st_mode & 0o777 == 0o644
+    assert saved.stat().st_mode & 0o777 == 0o600
+    assert "events" not in json.loads(status.read_text())
+    assert "event_seq" not in json.loads(status.read_text())
+    assert "sender_config" not in json.loads(status.read_text())
+    assert "sender_config" not in json.loads(status.read_text())["policy"]
 
 
 def test_hot_requires_two_samples_critical_is_immediate_and_recovery_has_hysteresis(cfg):
@@ -237,6 +254,7 @@ def test_guard_episode_uses_shared_validated_guard_row(cfg, tmp_path, monkeypatc
     policy = tmp_path / "policy.json"
     policy.write_text(json.dumps(cfg))
     monkeypatch.setattr(guard, "DEFAULT_CONFIG", policy)
+    monkeypatch.setattr(guard, "publish_row", lambda *_: True)
     monkeypatch.setattr(watch.core, "run_command", lambda *_a, **_k: watch.core.Result(
         0, "===NS hwmon\nT k10temp Tctl 92000 0 0\n===NS end\n", ""
     ))
@@ -302,17 +320,21 @@ def test_stale_fallback_after_recovery_opens_unique_id_and_recovers_after_restar
 def test_brief_critical_and_recovery_each_publish_without_waiting_for_periodic_watch(cfg):
     import aico_status
 
-    rows, quotas = [], []
+    events, quotas = [], []
     state = sample(cfg, {}, 60, 100, quotas, starting=True)
     for now, temperature in ((115, 90), (130, 89), (145, 60), (160, 65)):
-        state = sample(cfg, state, temperature, now, quotas, publish=rows.append)
+        state = sample(cfg, state, temperature, now, quotas, publish=events.append)
+    assert all(isinstance(event, str) for event in events)
+    assert not Path(cfg["state_dir"], "notice.lock").exists()
+    snapshots = [json.loads(event)["snapshot"] for event in events]
+    rows = [guard.status_row(cfg, value, value["observed_at"], historical=True) for value in snapshots]
     assert [row["guard"]["phase"] for row in rows] == ["critical", "recovered"]
     assert rows[0]["guard"]["episode_id"] == rows[1]["guard"]["episode_id"]
     assert quotas == ["normal", "critical", "normal"]
     assert all(aico_status.check_row(row) == row for row in rows)
 
 
-def test_slow_and_failed_publisher_never_blocks_enforcement_or_drops_next_phase(cfg, capsys):
+def test_slow_publisher_never_blocks_enforcement_or_drops_next_phase(cfg):
     entered, release = threading.Event(), threading.Event()
     attempted = []
 
@@ -321,7 +343,6 @@ def test_slow_and_failed_publisher_never_blocks_enforcement_or_drops_next_phase(
         if row["guard"]["phase"] == "critical":
             entered.set()
             assert release.wait(2)
-            raise OSError("transport offline")
         return True
 
     publisher = guard.Publisher(cfg, publish=post)
@@ -337,7 +358,6 @@ def test_slow_and_failed_publisher_never_blocks_enforcement_or_drops_next_phase(
         release.set()
         publisher.items.join()
         assert attempted == ["critical", "recovered"]
-        assert "status publication failed" in capsys.readouterr().err
     finally:
         release.set()
         publisher.items.put(None)
@@ -345,8 +365,10 @@ def test_slow_and_failed_publisher_never_blocks_enforcement_or_drops_next_phase(
 
 
 def test_publish_reuses_only_existing_status_command(cfg):
-    rows = []
-    state = sample(cfg, {}, 90, 100, [], starting=True, publish=rows.append)
+    events = []
+    state = sample(cfg, {}, 90, 100, [], starting=True, publish=events.append)
+    value = json.loads(events[0])["snapshot"]
+    rows = [guard.status_row(cfg, value, value["observed_at"], historical=True)]
     calls = []
 
     def run(argv, **kwargs):
@@ -359,12 +381,109 @@ def test_publish_reuses_only_existing_status_command(cfg):
     assert json.loads(calls[0][1]["input"]) == rows
 
 
+def test_old_config_defaults_preserve_owner_limits(cfg, tmp_path):
+    old = {key: value for key, value in cfg.items() if key not in ("machine", "sender_config")}
+    old["hot_cpu_percent"] = 17
+    path = tmp_path / "backup-guard.json"
+    path.write_text(json.dumps(old))
+    loaded = guard.config(path)
+    assert loaded["hot_cpu_percent"] == 17
+    assert loaded["machine"] and loaded["sender_config"] == str(tmp_path / "pve-sender.json")
+    assert json.loads(path.read_text()) == old
+
+
+def test_old_active_state_gets_one_durable_phase_on_first_upgraded_start(cfg):
+    legacy = {"mode": "critical", "limit_mode": "critical",
+              "episode": {"id": "legacy-incident", "started_at": 90, "peak_mode": "critical"}}
+    events = []
+    state = sample(cfg, legacy, 90, 100, [], starting=True, publish=events.append)
+    assert len(events) == 1 and json.loads(events[0])["snapshot"]["mode"] == "critical"
+    sample(cfg, guard.persistent(state), 90, 115, [], starting=True, publish=events.append)
+    assert len(events) == 1
+
+
+def test_held_notice_lock_cannot_stall_later_temperature_and_quota_tick(cfg, monkeypatch):
+    state = sample(cfg, {}, 60, 100, [], starting=True)
+    entered, finished = threading.Event(), threading.Event()
+    original = guard.status_row
+
+    def blocked(*args, **kwargs):
+        entered.set()
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(guard, "status_row", blocked)
+    publisher = guard.Publisher(cfg, publish=lambda *_: True)
+    publisher.items.join()
+    quotas = []
+    with Path(cfg["state_dir"], "notice.lock").open("a") as held:
+        fcntl.flock(held, fcntl.LOCK_EX)
+        try:
+            def recover():
+                hot = sample(cfg, state, 90, 115, quotas, publish=publisher)
+                sample(cfg, hot, 60, 130, quotas, publish=publisher)
+                finished.set()
+
+            loop = threading.Thread(target=recover)
+            loop.start()
+            assert entered.wait(2)
+            assert finished.wait(2), "Notice bookkeeping stalled the quota loop."
+            assert quotas == ["critical", "normal"]
+            assert snapshot(cfg)["admission_open"]
+        finally:
+            fcntl.flock(held, fcntl.LOCK_UN)
+            publisher.items.put(None)
+    loop.join(2)
+    publisher.thread.join(2)
+
+
+def test_failed_critical_head_survives_recovery_restart_and_ack_prevents_duplicate_replay(cfg):
+    state = sample(cfg, {}, 90, 100, [], starting=True)
+    attempted = []
+
+    def offline(_cfg, row):
+        attempted.append(row["guard"]["phase"])
+        return False
+
+    with pytest.raises(OSError):
+        guard.deliver_pending(cfg, publish=offline)
+    sample(cfg, state, 60, 115, [])
+    with pytest.raises(OSError):
+        guard.deliver_pending(cfg, publish=offline)
+    assert attempted == ["critical", "critical"]
+    delivery = guard.load(Path(cfg["state_dir"], "delivery.json"))
+    assert [event["row"]["guard"]["phase"] for event in delivery["pending"]] == ["critical", "recovered"]
+    # A fresh publisher only has files; its in-memory queue and mode history are gone.
+    Path(cfg["boot_id_path"]).write_text("next-boot")
+    replayed = []
+    publisher = guard.Publisher(dict(cfg), publish=lambda _cfg, row: replayed.append(row["guard"]["phase"]) or True)
+    publisher.items.join()
+    publisher.items.put(None)
+    publisher.thread.join(2)
+    assert replayed == ["critical", "recovered"]
+    assert guard.deliver_pending(dict(cfg), publish=lambda *_: pytest.fail("ACKed phase replayed.")) == 2
+    assert Path(cfg["state_dir"], "delivery.json").stat().st_mode & 0o777 == 0o600
+
+
+def test_periodic_reconcile_retains_failed_head_then_retries_phases_in_order(cfg, monkeypatch):
+    state = sample(cfg, {}, 90, 100, [], starting=True)
+    sample(cfg, state, 60, 115, [])
+    monkeypatch.setattr(guard, "publish_row", lambda *_: False)
+    failed = guard.reconcile_row(cfg, snapshot(cfg), 115, "davion-gem")
+    assert failed["guard"]["phase"] == "critical"
+    posted = []
+    monkeypatch.setattr(guard, "publish_row", lambda _cfg, row: posted.append(row["guard"]["phase"]) or True)
+    reconciled = guard.reconcile_row(cfg, snapshot(cfg), 115, "davion-gem")
+    assert posted == ["critical", "recovered"]
+    assert reconciled["guard"]["phase"] == "recovered"
+
+
 def test_fresh_cpu_guard_owns_cpu_notice_while_other_hot_sensors_and_cpu_fallback_remain(cfg, tmp_path, monkeypatch):
     from pve_sender import watch
 
     policy = tmp_path / "policy.json"
     policy.write_text(json.dumps(cfg))
     monkeypatch.setattr(guard, "DEFAULT_CONFIG", policy)
+    monkeypatch.setattr(guard, "publish_row", lambda *_: True)
     sensors = "T k10temp Tctl 95000 0 0\n"
     monkeypatch.setattr(watch.core, "run_command", lambda *_a, **_k: watch.core.Result(
         0, "===NS hwmon\n" + sensors + "===NS end\n", ""

@@ -20,6 +20,20 @@ ln -sfn "$prefix/aico-backup-guard" "$sbin/aico-backup-guard"
 if [ ! -f "$config" ]; then install -m 0644 "$here/config.json" "$config"; fi
 install -d -m 0755 "$(dirname "$guard_config")"
 if [ ! -f "$guard_config" ]; then install -m 0644 "$here/backup-guard.json" "$guard_config"; fi
+# Add publication wiring to older guard policies without replacing the owner's limits.
+python3 - "$guard_config" "$config" <<'PY'
+import json
+import socket
+import sys
+from pathlib import Path
+path = Path(sys.argv[1])
+cfg = json.loads(path.read_text())
+old = dict(cfg)
+cfg.setdefault("machine", socket.gethostname().split(".")[0].lower())
+cfg.setdefault("sender_config", sys.argv[2])
+if cfg != old:
+    path.write_text(json.dumps(cfg, indent=2) + "\n")
+PY
 # An installed config that still names the old credential and token paths is pointed at the Aico ones.
 python3 - "$config" <<'PY'
 import json

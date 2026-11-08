@@ -9,6 +9,7 @@ import math
 import os
 import queue
 import signal
+import socket
 import subprocess
 import sys
 import threading
@@ -36,6 +37,9 @@ def load(path: Path) -> dict:
 
 def config(path: Path) -> dict:
     cfg = json.loads(path.read_text())
+    # Older installed policy remains authoritative; these fields were added with publication.
+    cfg.setdefault("machine", socket.gethostname().split(".")[0].lower())
+    cfg.setdefault("sender_config", str(path.with_name("pve-sender.json")))
     if not (0 < cfg["sample_s"] < cfg["stale_s"]
             and 0 < cfg["recover_c"] < cfg["hot_c"] < cfg["critical_c"] <= 150
             and isinstance(cfg["hot_samples"], int) and cfg["hot_samples"] > 0
@@ -121,7 +125,7 @@ def decide(cfg: dict, state: dict, temperature: float | None, now: float) -> dic
 
 def persistent(state: dict) -> dict:
     """Consecutive observations are deliberately lost across restarts and downtime."""
-    return {key: state[key] for key in ("mode", "limit_mode", "episode") if key in state}
+    return {key: state[key] for key in ("mode", "limit_mode", "episode", "event_seq", "events") if key in state}
 
 
 def set_quota(cfg: dict, mode: str, *, run=subprocess.run) -> None:
@@ -140,8 +144,10 @@ def tick(cfg: dict, state: dict, *, now: float | None = None, temperature=None,
     result = decide(cfg, state, temperature, now)
     if starting or result["limit_mode"] != state.get("limit_mode"):
         enforce(cfg, result["limit_mode"])
+    changed = (result.get("episode"), result["mode"]) != (state.get("episode"), state.get("mode"))
     snapshot = {
-        **result, "observed_at": now, "boot_id": boot_id(cfg),
+        **{key: value for key, value in result.items() if key not in ("events", "event_seq")},
+        "observed_at": now, "boot_id": boot_id(cfg),
         "temperature_c": temperature, "cpu_quota_percent": quota(cfg, result["limit_mode"]),
         "admission_open": result["mode"] == "normal",
         "delivery_machine": cfg["delivery_machine"],
@@ -150,13 +156,26 @@ def tick(cfg: dict, state: dict, *, now: float | None = None, temperature=None,
             "normal_cpu_percent", "hot_cpu_percent", "critical_cpu_percent",
         )},
     }
+    event = None
+    legacy_active = (starting and "event_seq" not in state and result.get("episode")
+                     and "ended_at" not in result["episode"])
+    if result.get("episode") and (changed or legacy_active):
+        sequence = state.get("event_seq", 0) + 1
+        event = json.dumps({"seq": sequence, "snapshot": snapshot}, separators=(",", ":"))
+        acknowledged = getattr(publish, "acknowledged", 0)
+        result["event_seq"] = sequence
+        result["events"] = [value for value in state.get("events", [])
+                            if json.loads(value)["seq"] > acknowledged] + [event]
     if persistent(state) != persistent(result):
         write(Path(cfg["state_dir"]) / "state.json", persistent(result))
     # Heartbeat lives in tmpfs, never the journal or persistent storage.
-    write(Path(cfg["runtime_dir"]) / "status.json", snapshot)
-    if publish is not None and (result.get("episode"), result["mode"]) != (state.get("episode"), state.get("mode")):
+    # Public CPU/admission telemetry is shared read-only with the agent container.
+    # Persistent state and root lock files stay private.
+    write(Path(cfg["runtime_dir"]) / "status.json", snapshot, mode=0o644)
+    if publish is not None and event is not None:
         try:
-            publish(status_row(cfg, snapshot, now))
+            # Immutable data only: no notice locks, row construction, or delivery I/O here.
+            publish(event)
         except Exception:  # noqa: BLE001 -- failed status delivery never stops local protection
             print("aico-backup-guard: status publication failed; periodic checks will reconcile.", file=sys.stderr)
     return result
@@ -217,13 +236,16 @@ def budget(cfg: dict, *, now=None) -> dict:
     return {"quotaPercent": value, "admit": allowed, "sampleSeconds": cfg["sample_s"]}
 
 
-def _notice_payload(cfg: dict, snapshot: dict, now: float, previous: dict) -> tuple[dict | None, dict]:
+def _notice_payload(cfg: dict, snapshot: dict, now: float, previous: dict,
+                    historical=False) -> tuple[dict | None, dict]:
     current = True
     try:
         admission(cfg, snapshot, now)
     except Deferred:
         current = False
-    current_sample = fresh(cfg, snapshot, now)
+    current_sample = historical or fresh(cfg, snapshot, now)
+    if historical:
+        current = bool(snapshot.get("admission_open"))
     episode = snapshot.get("episode", {})
     phase = snapshot.get("mode") if current_sample else "unavailable"
     if phase == "normal":
@@ -249,7 +271,7 @@ def _notice_payload(cfg: dict, snapshot: dict, now: float, previous: dict) -> tu
     }, metadata
 
 
-def notice_payload(cfg: dict, snapshot: dict, now: float) -> dict | None:
+def notice_payload(cfg: dict, snapshot: dict, now: float, *, historical=False) -> dict | None:
     """Persist identity only on incident phase changes, shared by both local producers."""
     directory = Path(cfg["state_dir"])
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -257,16 +279,17 @@ def notice_payload(cfg: dict, snapshot: dict, now: float) -> dict | None:
         fcntl.flock(stream, fcntl.LOCK_EX)
         path = directory / "notice.json"
         previous = load(path)
-        payload, metadata = _notice_payload(cfg, snapshot, now, previous)
+        payload, metadata = _notice_payload(cfg, snapshot, now, previous, historical)
         if metadata != previous:
             write(path, metadata)
         return payload
 
 
-def status_row(cfg: dict, snapshot: dict, now: float, machine: str | None = None) -> dict:
+def status_row(cfg: dict, snapshot: dict, now: float, machine: str | None = None,
+               *, historical=False) -> dict:
     """One guard row for immediate transitions and the existing periodic reconciliation."""
     machine = machine or cfg["machine"]
-    payload = notice_payload(cfg, snapshot, now)
+    payload = notice_payload(cfg, snapshot, now, historical=historical)
     phase = payload["phase"] if payload else "normal"
     temperature = snapshot.get("temperature_c") if phase != "unavailable" else None
     cpu = payload["cpu_quota_percent"] if payload else snapshot["cpu_quota_percent"]
@@ -294,27 +317,77 @@ def publish_row(cfg: dict, row: dict, *, run=subprocess.run) -> bool:
     return result.returncode == 0
 
 
+@contextlib.contextmanager
+def delivery_state(cfg: dict):
+    """Publisher and periodic retry share one ordered cursor; the sensor loop never takes it."""
+    directory = Path(cfg["state_dir"])
+    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with (directory / "delivery.lock").open("a") as stream:
+        fcntl.flock(stream, fcntl.LOCK_EX)
+        path = directory / "delivery.json"
+        yield path, load(path)
+
+
+def deliver_pending(cfg: dict, *, publish=None) -> int:
+    """Retain a failed head and ACK only accepted rows, using existing transition state."""
+    publish = publish or publish_row
+    with delivery_state(cfg) as (path, delivery):
+        pending = delivery.setdefault("pending", [])
+        staged = delivery.get("staged", 0)
+        state = load(Path(cfg["state_dir"]) / "state.json")
+        events = [json.loads(value) for value in state.get("events", [])]
+        for event in events:
+            if event["seq"] <= staged:
+                continue
+            snapshot = event["snapshot"]
+            row = status_row(cfg, snapshot, snapshot["observed_at"], historical=True)
+            pending.append({"seq": event["seq"], "row": row})
+            delivery["staged"] = staged = event["seq"]
+            # Each staged phase is durable before transport or the next phase is built.
+            write(path, delivery)
+        while pending:
+            if not publish(cfg, pending[0]["row"]):
+                raise OSError("Status transport refused the row.")
+            item = pending.pop(0)
+            delivery["acked"] = item["seq"]
+            write(path, delivery)
+        return delivery.get("acked", 0)
+
+
+def reconcile_row(cfg: dict, snapshot: dict, now: float, machine: str) -> dict:
+    """The existing periodic sender retries the outbox before announcing a newer phase."""
+    try:
+        deliver_pending(cfg)
+    except Exception:  # noqa: BLE001 -- watchdog checks can retain their evidence when transport fails
+        print("aico-backup-guard: status publication failed; pending phases retained.", file=sys.stderr)
+    with delivery_state(cfg) as (_path, delivery):
+        if delivery.get("pending"):
+            return delivery["pending"][0]["row"]
+    return status_row(cfg, snapshot, now, machine)
+
+
 class Publisher:
     """A phase queue keeps both critical and recovery while the sensor loop stays local."""
 
-    def __init__(self, cfg: dict, publish=publish_row):
+    def __init__(self, cfg: dict, publish=None):
         self.items = queue.Queue()
-        self.cfg, self.publish = cfg, publish
+        self.cfg, self.publish = cfg, publish or publish_row
+        self.acknowledged = 0
         self.thread = threading.Thread(target=self.work, daemon=True, name="backup-guard-status")
         self.thread.start()
+        self.items.put("")  # Replay durable unacknowledged phases once at startup.
 
-    def __call__(self, row: dict) -> None:
-        self.items.put(row)
+    def __call__(self, event: str) -> None:
+        self.items.put(event)
 
     def work(self) -> None:
         while True:
-            row = self.items.get()
+            event = self.items.get()
             try:
-                if row is None:
+                if event is None:
                     return
                 try:
-                    if not self.publish(self.cfg, row):
-                        raise OSError("Status transport refused the row.")
+                    self.acknowledged = deliver_pending(self.cfg, publish=self.publish)
                 except Exception:  # noqa: BLE001 -- delivery is independent of enforcement
                     print("aico-backup-guard: status publication failed; periodic checks will reconcile.", file=sys.stderr)
             finally:
