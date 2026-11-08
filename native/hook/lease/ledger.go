@@ -217,7 +217,7 @@ func (h *Hook) Confirm(id string, withdraw bool) (map[string]any, error) {
 			return rows, false, err
 		}
 		if !mine[str(r["from"])] {
-			return rows, false, fmt.Errorf("request %s was sent by %s, and only its sender can close it (you are %s)", id, str(r["from"]), h.ID.AgentID)
+			return rows, false, fmt.Errorf("request %s was sent by %s, and only its sender can close it (you are %s); it clears itself within 24 hours", id, str(r["from"]), h.ID.AgentID)
 		}
 		state := str(r["state"])
 		if state == "closed" && truthy(r["auto_closed"]) && !withdraw {

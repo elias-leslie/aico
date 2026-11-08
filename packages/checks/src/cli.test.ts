@@ -218,6 +218,14 @@ it('checks commit arguments alone when the launcher asks, before it queues for t
   })
   const env = { AICO_CHECKS_ARGS_ONLY: '1' }
   expect(await runCli('commit', ['--dry-run', '-m', 'x', '--paths', 'a'], io(env))).toBe(2)
+  expect(errors[0]).toBe('st commit: unsupported --dry-run')
+  // An error names the command as it was typed.
+  errors.length = 0
+  await runCli(
+    'commit',
+    ['--dry-run', '-m', 'x', '--paths', 'a'],
+    io({ ...env, AICO_CLI_NAME: 'aico' }),
+  )
   expect(errors[0]).toBe('aico commit: unsupported --dry-run')
   // Valid arguments stop before loading the repo gate (this fixture has none).
   expect(await runCli('commit', ['-m', 'x', '--paths', 'a'], io(env))).toBe(0)

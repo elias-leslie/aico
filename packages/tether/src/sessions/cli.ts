@@ -280,7 +280,7 @@ export async function runHistory(
     io.out(`model: ${item.model ?? '-'}   outcome: ${item.outcome ?? 'no final answer yet'}`)
     io.out(`started: ${when(item.startedAt)}   last activity: ${when(item.endedAt)}`)
     io.out(`tokens: ${formatTokens(item.tokens)}`)
-    io.out(`tool calls: ${item.toolCalls}   files written: ${item.files.length}`)
+    io.out(`tool calls: ${item.toolCalls}   files written by edit tools: ${item.files.length}`)
     for (const file of item.files.slice(0, 20))
       io.out(`  ${file.path}${file.writes > 1 ? ` (x${file.writes})` : ''}`)
     if (item.files.length > 20) io.out(`  and ${item.files.length - 20} more`)

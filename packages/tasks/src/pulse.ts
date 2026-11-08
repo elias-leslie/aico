@@ -177,7 +177,11 @@ export function render(p: Pulse): string[] {
     out.push('Handshakes: Tether did not answer; open requests are unknown.')
   else if (p.handshakes.length === 0) out.push('Handshakes: none open.')
   else {
-    out.push(`Handshakes: ${p.handshakes.length} open`)
+    const acked = p.handshakes.filter((h) => h.state === 'acked').length
+    const open = p.handshakes.length - acked
+    out.push(
+      `Handshakes: ${[open ? `${open} open` : '', acked ? `${acked} acked, waiting on their sender` : ''].filter(Boolean).join(', ')}`,
+    )
     for (const h of p.handshakes)
       out.push(`  ${h.id} ${h.state} ${h.from}->${h.to} ${age(h.ageMinutes)}`)
   }

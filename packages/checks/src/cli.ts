@@ -85,7 +85,7 @@ async function checkCli(argv: string[], io: CliIo): Promise<number> {
   if (native || (LEGACY as readonly string[]).includes(tool)) {
     const { root, config } = load(io)
     if ('unsupported' in config) {
-      io.err(`aico check: ${config.unsupported}`)
+      io.err(usage(`aico check: ${config.unsupported}`, io))
       return 2
     }
     let selected: Planned[]
@@ -175,7 +175,7 @@ async function checkCli(argv: string[], io: CliIo): Promise<number> {
   const known = ['--quick', '--changed-only', '--acceptance', '--fix', '--no-reuse', '--check']
   const unknown = [...args.flags].filter((flag) => !known.includes(flag))
   if (unknown.length || args.extra.length) {
-    io.err(`aico check: unsupported ${[...unknown, ...args.extra].join(' ')}`)
+    io.err(usage(`aico check: unsupported ${[...unknown, ...args.extra].join(' ')}`, io))
     io.err(usage(CHECK_USAGE, io))
     return 2
   }
@@ -236,9 +236,12 @@ async function commitCli(argv: string[], io: CliIo): Promise<number> {
   const message = args.values.get('-m') ?? args.values.get('--message') ?? args.values.get('--msg')
   if (unknown.length || args.extra.length || !message || !args.paths.length) {
     io.err(
-      unknown.length || args.extra.length
-        ? `aico commit: unsupported ${[...unknown, ...args.extra].join(' ')}`
-        : 'aico commit: -m MSG and --paths are required',
+      usage(
+        unknown.length || args.extra.length
+          ? `aico commit: unsupported ${[...unknown, ...args.extra].join(' ')}`
+          : 'aico commit: -m MSG and --paths are required',
+        io,
+      ),
     )
     io.err(usage(COMMIT_USAGE, io))
     return 2
@@ -291,7 +294,7 @@ export async function runCli(verb: 'check' | 'commit', argv: string[], io: CliIo
       error instanceof CoordinationError ||
       error instanceof GitError
     ) {
-      io.err(`${verb === 'commit' ? 'ERROR: ' : 'aico check: '}${error.message}`)
+      io.err(`${verb === 'commit' ? 'ERROR: ' : usage('aico check: ', io)}${error.message}`)
       return 1
     }
     throw error

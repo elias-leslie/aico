@@ -643,7 +643,7 @@ describe('routes and command', () => {
     expect(list.out).toContain('claude-test-1')
     const show = await run('show', 's1')
     expect(show.out).toContain('tokens: in 12, cache read 220, cache write 20, out 34')
-    expect(show.out).toContain('tool calls: 1   files written: 1')
+    expect(show.out).toContain('tool calls: 1   files written by edit tools: 1')
     const events = await run('events', 's1', '--limit', '2')
     expect(events.out).toMatch(/assistant +all done/)
     expect(events.out).not.toMatch(/\[\d+\]/)

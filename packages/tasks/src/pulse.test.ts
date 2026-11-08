@@ -10,6 +10,7 @@ import {
   brief,
   collect,
   type Finding,
+  type Pulse,
   type PulseSources,
   render,
   roleOf,
@@ -124,6 +125,23 @@ describe('aico pulse', () => {
     expect(lines).toContain('  abc123 open cc:111111->cc:222222 7m')
     expect(lines).toContain('Status: 1 problem')
     expect(lines).toContain('  failed gem: Thin pool: pve/data 65% full')
+  })
+
+  it('counts an acked handshake apart from an open one', () => {
+    const row = (id: string, state: string) => ({ id, from: 'a', to: 'b', state, ageMinutes: 1 })
+    const base = {
+      children: null,
+      generatedAt: 0,
+      sessions: null,
+      leases: null,
+      findings: null,
+    } as unknown as Pulse
+    expect(render({ ...base, handshakes: [row('x', 'open'), row('y', 'acked')] })).toContain(
+      'Handshakes: 1 open, 1 acked, waiting on their sender',
+    )
+    expect(render({ ...base, handshakes: [row('y', 'acked')] })).toContain(
+      'Handshakes: 1 acked, waiting on their sender',
+    )
   })
 
   it('says unknown, not zero, when a source does not answer', async () => {
