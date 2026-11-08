@@ -85,6 +85,7 @@
     {"argv": ["killall"], "why": "it stops processes this agent doesn't own."},
     {"argv": ["fuser"], "why": "it can stop processes this agent doesn't own."},
     {"argv": ["tether"], "why": "only tether ask and tether share are open to this agent."},
+    {"argv": ["st", "commit"], "option": "--skip-checks", "why": "a failed check stays failed: say so in your report, with what it said."},
     {"argv": ["st", "aico"], "why": "starting or ending sessions is the coordinator's job."},
     {"argv": ["aico", "tether"], "why": "starting or ending sessions is the coordinator's job."},
     {"argv": ["st", "service"], "why": "deploys and restarts are the coordinator's job."},

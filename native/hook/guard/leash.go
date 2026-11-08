@@ -54,8 +54,9 @@ type leashText struct {
 }
 
 type leashCommand struct {
-	Argv []string `json:"argv"`
-	Why  string   `json:"why"`
+	Argv   []string `json:"argv"`
+	Option string   `json:"option"` // only with this option
+	Why    string   `json:"why"`
 }
 
 // Leash is data/leash.json, compiled.
@@ -436,7 +437,7 @@ func (l *Leash) commandWhy(args []string) string {
 			}
 			continue
 		}
-		if hasPrefix(exe, words, rule.Argv) {
+		if hasPrefix(exe, words, rule.Argv) && (rule.Option == "" || toSet(args).has(rule.Option)) {
 			return rule.Why
 		}
 	}
