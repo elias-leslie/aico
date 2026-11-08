@@ -259,6 +259,7 @@ describe('deploy', () => {
   function setup(
     options: {
       accept?: (root: string, args: string[]) => number
+      acceptOut?: string
       guard?: (args: string[]) => { code: number; out: string }
       workers?: string[]
       ops?: boolean
@@ -405,7 +406,11 @@ describe('deploy', () => {
         if (cmd === 'aico-hook')
           return { ...(options.guard?.(args) ?? { code: 0, out: '' }), err: '' }
         if (cmd === 'aico')
-          return { code: options.accept ? options.accept(root, args) : 0, out: '', err: '' }
+          return {
+            code: options.accept ? options.accept(root, args) : 0,
+            out: options.acceptOut ?? '',
+            err: '',
+          }
         if (cmd === 'nice' && args.join(' ') === '-n 10 npm run build -w packages/web-server') {
           mkdirSync(join(opts?.cwd as string, 'packages/web-server/dist'), { recursive: true })
           writeFileSync(join(opts?.cwd as string, 'packages/web-server/dist/x.mjs'), '// web\n')
@@ -551,9 +556,16 @@ describe('deploy', () => {
   })
 
   it('refuses on failed acceptance or another agent hold, and answers NOT_HANDLED for other projects', async () => {
-    const failing = setup({ accept: () => 1 })
-    await expect(deploy(request(), failing.root, failing.deps)).rejects.toThrow(
-      /Acceptance .* failed/,
+    const failing = setup({
+      accept: () => 1,
+      acceptOut:
+        'CHECK:acceptance:abc\nCHECK:OK:biome|1s\nCHECK:FAIL:vitest|2s|hint:× a test\n  AssertionError: x\nCHECK:FAIL acceptance 3s',
+    })
+    const refused = deploy(request(), failing.root, failing.deps)
+    await expect(refused).rejects.toThrow(/Acceptance .* failed/)
+    // The reason is in the refusal, so nobody has to go through the log for it.
+    await expect(refused).rejects.toThrow(
+      /CHECK:FAIL:vitest\|2s\|hint:× a test\n {2}AssertionError: x$/,
     )
     expect(existsSync(join(failing.deps.systemdDir, 'demo-web.service'))).toBe(false)
     expect(failing.rows.at(-1)?.state).toBe('warn') // nothing deployed: on the Status screen, no owner ask
@@ -1239,3 +1251,11 @@ describe('deploy', () => {
 })
 
 export type { Project }
+
+describe('run with tee', () => {
+  it('returns what it streamed, with the command exit code', () => {
+    const shown = run('bash', ['-c', 'echo out; echo err >&2; exit 3'], { tee: true })
+    expect(shown.code).toBe(3)
+    expect(shown.out).toBe('out\nerr\n')
+  })
+})

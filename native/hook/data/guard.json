@@ -220,6 +220,7 @@
     "proxmox_volume": "BLOCKED:{name}:This {proxmox_advice}",
     "pvesm_free": "BLOCKED:pvesm free:This {proxmox_advice}",
     "pvesh_delete": "BLOCKED:pvesh delete:This API call {proxmox_advice}",
+    "pkill_self": "BLOCKED:pkill -f:The pattern matches this command's own shell, so it would kill the shell and skip every later step. Use fuser -k PORT/tcp, or bracket a letter and keep the plain text out of the command: pkill -f '[d]adbot.web'.",
     "durable_state": "BLOCKED:delete {target}:This is Aico durable state (backups, secrets, blobs, archive, or a database or key file) and has no undo; agents never delete it by hand. Scratch under the same roots (logs, captures, deliveries) stays deletable by its own path."
   }
 }

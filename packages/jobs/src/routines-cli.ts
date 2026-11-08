@@ -23,7 +23,7 @@ import {
 } from './systemd-timers'
 
 const ROUTINES_USAGE = `Usage: aico routines <command>
-  list [--json]      every routine: project, schedule, next run, how it last went
+  list [KIND] [--json]  every routine (or those matching KIND): project, schedule, next run, how it last went
   add --project P --kind K --what "..." (--at HH:MM [--on DAY] | --every MINUTES)
       (--post /aico/path | --command ARGV...) [--cwd DIR] [--hosts either|this] [--scope user|system] [--lease SECONDS]
                      register a routine; --command takes the rest of the line, so it goes last
@@ -340,7 +340,11 @@ export async function routinesCommand(
       Promise.all(ctx.jobs.map((job) => viewOf(job, ctx))),
       ctx.timers ? readTimerStatus(ctx.timers, timerCtx(ctx)) : [],
     ])
-    const views = [...jobViews, ...timerStatuses.map((status) => timerView(status, ctx.timers))]
+    const wanted = args.find((word) => !word.startsWith('-'))
+    const views = [
+      ...jobViews,
+      ...timerStatuses.map((status) => timerView(status, ctx.timers)),
+    ].filter((view) => !wanted || view.kind.includes(wanted))
     if (args.includes('--json')) out(JSON.stringify(views))
     else
       for (const view of views) {

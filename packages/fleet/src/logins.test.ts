@@ -851,9 +851,20 @@ it('CLI allow and edit print what changed; list shows unusable logins to agents'
     probe,
   }
   expect(await runLogins(['list'], env, io)).toBe(0)
-  expect(JSON.parse(out.mock.calls[0][0])[0]).toMatchObject({
-    fix: 'aico logins allow canvas-pcsb',
-  })
+  expect(out.mock.calls[0][0]).toContain('  lab login  aico logins allow canvas-pcsb\n')
+  out.mockClear()
+  for (const args of [
+    ['list', '--json'],
+    ['list', 'CANVAS'],
+  ]) {
+    expect(await runLogins(args, env, io)).toBe(0)
+    expect(JSON.parse(out.mock.calls.at(-1)?.[0])[0]).toMatchObject({
+      fix: 'aico logins allow canvas-pcsb',
+    })
+  }
+  expect(await runLogins(['list', 'nothing-like-it'], env, io)).toBe(0)
+  expect(JSON.parse(out.mock.calls.at(-1)?.[0])).toEqual([])
+  out.mockClear()
   expect(await runLogins(['allow', 'canvas-pcsb'], env, io)).toBe(0)
   expect(err.mock.calls.at(-1)?.[0]).toBe(
     'Allowed session a1b2c3d4, role school-check for canvas-pcsb; logged in its activity. Say so in your report.\n',

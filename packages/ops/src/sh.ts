@@ -1,7 +1,8 @@
 // One way to run a command: captured output (or the caller's terminal) and an exit code, never a throw.
 
 import { spawnSync } from 'node:child_process'
-import { homedir } from 'node:os'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 export interface RunResult {
@@ -16,11 +17,27 @@ export interface RunOptions {
   input?: string
   /** Stream to the caller's stdout/stderr instead of capturing. */
   inherit?: boolean
+  /** Stream like inherit and also return the output in `out` (stderr included). */
+  tee?: boolean
 }
 
 export type Runner = (cmd: string, args: string[], options?: RunOptions) => RunResult
 
 export const run: Runner = (cmd, args, options = {}) => {
+  if (options.tee) {
+    const dir = mkdtempSync(join(tmpdir(), 'aico-tee-'))
+    const copy = join(dir, 'output')
+    try {
+      const { code, err } = run(
+        'bash',
+        ['-c', 'set -o pipefail; "${@:2}" 2>&1 | tee "$1"', 'tee', copy, cmd, ...args],
+        { ...options, tee: false, inherit: true },
+      )
+      return { code, out: readFileSync(copy, 'utf8'), err }
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  }
   const result = spawnSync(cmd, args, {
     cwd: options.cwd,
     env: options.env,

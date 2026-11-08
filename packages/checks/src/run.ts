@@ -36,6 +36,8 @@ export interface StepResult {
   reused?: boolean
   reason?: string
   hint?: string
+  /** On failure, the lines past the hint worth printing with the result. */
+  failures?: string[]
   details?: string
 }
 
@@ -105,18 +107,48 @@ function executable(config: Config, command: string): string {
   return command
 }
 
+const FAILURE_LINE =
+  /\berror\b|\bFAIL(ED)?\b|Error:|✗|×|Found \d+ errors?|^--> |━━|^[A-Z]+\d+ |^[\w./@-]+\.\w+[:(]\d+/
+/** Enough for most failures to be read here, without a second turn for the details file. */
+const FAILURE_LINES = 8
+const LINE_CHARS = 200
+const FIXABLE = /\bFIXABLE\b|\[\*\]|Formatter would have/
+
+function outputLines(output: string): string[] {
+  return (
+    output
+      .split('\n')
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI colour codes
+      .map((line) => line.replace(/\x1b\[[0-9;]*m/g, '').trim())
+      .filter(Boolean)
+  )
+}
+
 /** The line a reader needs first: an error line on failure, else the last line. */
 function hint(output: string, failed: boolean): string {
-  const lines = output
-    .split('\n')
-    // biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI colour codes
-    .map((line) => line.replace(/\x1b\[[0-9;]*m/g, '').trim())
-    .filter(Boolean)
+  const lines = outputLines(output)
   const pick = failed
     ? (lines.find((line) => /\berror\b|\bFAIL(ED)?\b|Error:|✗|×|Found \d+ errors?/.test(line)) ??
       lines.at(-1))
     : (lines.findLast((line) => /\b(passed|no fixes|checked|ok)\b/i.test(line)) ?? lines.at(-1))
-  return (pick ?? '-').slice(0, 200)
+  return (pick ?? '-').slice(0, LINE_CHARS)
+}
+
+/** What failed, past the hint: the failing lines, or the output's end if none look like one. */
+export function failureLines(output: string, shown: string): string[] {
+  const lines = outputLines(output).filter((line) => !line.startsWith('$ '))
+  const failing = lines.filter((line) => FAILURE_LINE.test(line))
+  const unique = [
+    ...new Set(
+      (failing.length ? failing : lines.slice(-FAILURE_LINES)).map((line) =>
+        line.replace(/\s*━+$/, '').slice(0, LINE_CHARS),
+      ),
+    ),
+  ].filter((line) => line !== shown)
+  const kept = unique.slice(0, FAILURE_LINES)
+  if (unique.length > kept.length) kept.push(`${unique.length - kept.length} more in the details`)
+  if (FIXABLE.test(output)) kept.push('Biome and ruff can fix your own files: st check --fix')
+  return kept
 }
 
 const pyRegExp = (pattern: string) => new RegExp(pattern.replace(/\(\?P</g, '(?<'), 'gm')
@@ -269,7 +301,7 @@ export function resultLine(result: StepResult): string {
   if (result.reason) parts.push(result.reason)
   if (result.details) parts.push(`details:${result.details}`)
   if (result.hint) parts.push(`hint:${result.hint}`)
-  return parts.join('|')
+  return [parts.join('|'), ...(result.failures ?? []).map((line) => `  ${line}`)].join('\n')
 }
 
 /** Runs the planned steps; skipped ones come back as skip results in plan order. */
@@ -430,6 +462,7 @@ export async function runSteps(
       writeFileSync(marker, JSON.stringify({ at: new Date().toISOString(), ms: Math.round(ms) }))
     }
     rmSync(scratch, { recursive: true, force: true })
+    const firstLine = hint(run.output, state !== 'pass')
     return {
       id: step.id,
       state,
@@ -438,7 +471,8 @@ export async function runSteps(
       inputs,
       reason: state === 'timeout' ? `timed out after ${step.timeoutS}s` : because,
       details: `.dev-tools/${step.id}-${process.pid}-details.txt`,
-      hint: hint(run.output, state !== 'pass'),
+      hint: firstLine,
+      ...(state === 'pass' ? {} : { failures: failureLines(run.output, firstLine) }),
     }
   }
 

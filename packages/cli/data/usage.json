@@ -118,7 +118,8 @@
     "precautions": [
       "explicit project, not cwd; resolve blockers its preflight reports",
       "no ask needed: deploys committed HEAD only; preflight refuses when unsafe",
-      "full scope for shared or uncertain changes; worker scope includes backend consumers"
+      "full scope for shared or uncertain changes; worker scope includes backend consumers",
+      "then st aico wait job ID and end the turn: its result names any failed check"
     ],
     "examples": ["st service rebuild aico --detach"],
     "task_types": ["devops", "config", "frontend", "backend"]

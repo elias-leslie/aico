@@ -204,6 +204,9 @@ describe('aico routines', () => {
     )
     expect(h.lines.join('\n')).toContain('the third Sunday of each month at 08:00')
     h.lines.length = 0
+    await h.run('list', 'school')
+    expect(h.lines.filter((l) => !l.startsWith('  '))).toHaveLength(1)
+    h.lines.length = 0
     await h.run('list', '--json')
     const views = JSON.parse(h.lines[0] as string) as RoutineView[]
     expect(views.find((v) => v.kind === 'school-check')).toMatchObject({

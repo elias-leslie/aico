@@ -17,10 +17,21 @@ import {
 import { LoginClient } from './logins-client'
 import { privateFile } from './secret-files'
 
+type LoginLine = { name: string; kind?: string; available?: boolean; fix?: string }
+
+/** The list an agent scans for a name; the rest is one `aico logins list NAME` away. */
+function loginLines(logins: LoginLine[]): string {
+  const lines = logins.map(
+    ({ name, kind, available, fix }) =>
+      `${name}  ${kind ?? 'login'}  ${available === false ? (fix ?? 'not usable') : 'usable'}`,
+  )
+  return `${lines.join('\n')}\n`
+}
+
 export const LOGINS_USAGE = `Usage: aico logins <command> (also st logins)
 Logins live in Aico's private secrets folder. Values enter through hidden input or stdin.
-  list                                every login: usable ones in full; the rest with what is
-                                      missing and the command that fixes it
+  list [TEXT] [--json]                every login, one line each; with TEXT or --json, the
+                                      matching ones in full, with what is missing and its fix
   show NAME                           metadata only (NAME or an account login's site name)
   allow NAME [--role ROLE | --session ID] [--machine NAME]
                                       give yourself (or ROLE; a coordinator: session ID) what is missing
@@ -261,8 +272,19 @@ export async function runLogins(
       if (checked.warning) io.err(`${checked.warning}\n`)
     }
     if (command === 'list') {
-      if (rest.length) throw new LoginError('list takes no values')
-      output(io.caller.owner ? await store.list(io.caller) : await store.catalog(io.caller))
+      const words = rest.filter((word) => word !== '--json')
+      if (words.length > 1 || words[0]?.startsWith('-'))
+        throw new LoginError('list takes at most one text to look for, and --json')
+      const logins = (await (io.caller.owner
+        ? store.list(io.caller)
+        : store.catalog(io.caller))) as LoginLine[]
+      const text = words[0]?.toLowerCase()
+      const found = text ? logins.filter((l) => l.name.toLowerCase().includes(text)) : logins
+      if (text || rest.includes('--json')) output(found)
+      else {
+        io.out(loginLines(found))
+        if (store.warning) io.err(`${store.warning}\n`)
+      }
       return 0
     }
     if (command === 'allow') {

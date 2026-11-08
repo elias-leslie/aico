@@ -462,7 +462,7 @@ var requiredMessages = []string{
 	"git_stash_drop", "git_stash", "rm_protected_root", "format_device", "wipefs", "dd_device",
 	"parted", "sgdisk", "partitioner", "cryptsetup", "btrfs_subvolume_delete", "restic",
 	"rclone_mirror", "rclone_delete", "btrbk", "dmsetup", "find_delete", "proxmox_guest",
-	"proxmox_volume", "pvesm_free", "pvesh_delete", "durable_state",
+	"proxmox_volume", "pvesm_free", "pvesh_delete", "durable_state", "pkill_self",
 }
 
 // message renders messages[key], filling {name}, {action} and {target}.

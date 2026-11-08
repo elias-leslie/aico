@@ -2,6 +2,7 @@ package guard
 
 import (
 	"os"
+	"regexp"
 	"strings"
 )
 
@@ -70,6 +71,11 @@ func (r *Rules) evaluateIrreversible(command, cwd string, depth int) (decision, 
 			}
 			continue
 		}
+		if depth == 0 {
+			if d, ok := r.selfKillDecision(args, command); ok {
+				return d, nil
+			}
+		}
 		if d, ok := r.scriptDecision(args, dataBodies); ok {
 			return d, nil
 		}
@@ -125,6 +131,33 @@ func (r *Rules) durableOperands(operands []string, cwd string) (decision, bool) 
 		}
 	}
 	return decision{}, false
+}
+
+// selfKillDecision blocks pkill -f whose pattern matches the command it runs in: the agent's shell
+// has that text on its command line, so it dies (exit 144) and every later step, a commit included,
+// is lost. A bare pkill on a remote host can be exec'd without a shell, so only the local command counts.
+func (r *Rules) selfKillDecision(args []string, command string) (decision, bool) {
+	if exeName(args[0]) != "pkill" {
+		return decision{}, false
+	}
+	full := false
+	pattern := ""
+	for _, arg := range args[1:] {
+		switch {
+		case arg == "--full" || (strings.HasPrefix(arg, "-") && !strings.HasPrefix(arg, "--") && strings.Contains(arg, "f")):
+			full = true
+		case !strings.HasPrefix(arg, "-"):
+			pattern = arg
+		}
+	}
+	if !full || pattern == "" {
+		return decision{}, false
+	}
+	matcher, err := regexp.Compile(pattern)
+	if err != nil || !matcher.MatchString(command) {
+		return decision{}, false
+	}
+	return blocked(r.message("pkill_self"))
 }
 
 // scriptDecision blocks an interpreter one-liner (python -c, node -e, or a script on stdin from a heredoc)

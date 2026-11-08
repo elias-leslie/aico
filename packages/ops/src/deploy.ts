@@ -462,6 +462,18 @@ export const readJob = (deps: DeployDeps, id: string): Job | null => {
     return null
   }
 }
+/** Which stages failed, and their failing lines, so the refusal needs no trip to the log. */
+export function acceptanceFailures(output: string, max = 16): string[] {
+  const kept: string[] = []
+  let inFailure = false
+  for (const line of output.split('\n')) {
+    if (line.startsWith('CHECK:FAIL:')) inFailure = true
+    else if (!line.startsWith('  ')) inFailure = false
+    if (inFailure) kept.push(line)
+  }
+  return kept.length > max ? [...kept.slice(0, max), `${kept.length - max} more in the log`] : kept
+}
+
 const writeJob = (deps: DeployDeps, job: Job) => {
   mkdirSync(deps.jobsDir, { recursive: true })
   const path = jobPath(deps, job.id)
@@ -781,7 +793,7 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
         machine: machineId(),
         project: project.id,
         state: state === 'succeeded' ? 'ok' : refused ? 'warn' : 'failed',
-        meaning: message.slice(0, 300),
+        meaning: message.replace(/\n\s*/g, ' ').slice(0, 300),
         last_run: new Date().toISOString(),
       },
       project.port,
@@ -806,11 +818,14 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
     const accepted = deps.run(aico, ['check', '--acceptance', '--sha', sha, ...ack], {
       cwd: root,
       env: deps.env,
-      inherit: true,
+      tee: true,
     })
     if (accepted.code !== 0) {
       throw new Refusal(
-        `Acceptance of ${sha.slice(0, 12)} failed; nothing was deployed.`,
+        [
+          `Acceptance of ${sha.slice(0, 12)} failed; nothing was deployed.`,
+          ...acceptanceFailures(accepted.out),
+        ].join('\n'),
         accepted.code,
         true,
       )

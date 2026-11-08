@@ -1,0 +1,36 @@
+{
+  "description": "pkill -f whose pattern matches its own shell's command line kills the agent's shell (exit 144) and loses the later steps. Observed Nov 8: 8 of 10 calls, once a chained st commit.",
+  "version": 1,
+  "source": "aico-pkill-self",
+  "cwd": "/tmp",
+  "env": {
+    "HOME": "/home/guard-fixture"
+  },
+  "cases": [
+    {
+      "note": "own command line matches",
+      "command": "pkill -f 'dadbot.web --config'; sleep 1; pgrep -af dadbot",
+      "expect": "BLOCKED:pkill -f:The pattern matches this command's own shell, so it would kill the shell and skip every later step. Use fuser -k PORT/tcp, or bracket a letter and keep the plain text out of the command: pkill -f '[d]adbot.web'."
+    },
+    {
+      "note": "combined short flags",
+      "command": "pkill -9f fixture-server",
+      "expect": "BLOCKED:pkill -f:The pattern matches this command's own shell, so it would kill the shell and skip every later step. Use fuser -k PORT/tcp, or bracket a letter and keep the plain text out of the command: pkill -f '[d]adbot.web'."
+    },
+    {
+      "note": "a bracketed letter doesn't match itself",
+      "command": "pkill -f '[d]adbot.web'; echo gone",
+      "expect": "allow"
+    },
+    {
+      "note": "without -f it reads process names, not command lines",
+      "command": "pkill dadbot",
+      "expect": "allow"
+    },
+    {
+      "note": "a remote pkill runs in another shell",
+      "command": "ssh host pkill -f dadbot",
+      "expect": "allow"
+    }
+  ]
+}

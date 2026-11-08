@@ -356,6 +356,10 @@ describe('the runner', () => {
       expect(code).toBe(1)
       expect(lines[0]).toContain('lease holder davion-sidarli is not reachable')
       lines.length = 0
+      await main(['list', 'notes-export', '--machine', 'gem'], env)
+      expect(lines.length).toBeGreaterThan(0)
+      expect(lines.every((line) => line.startsWith('notes-export'))).toBe(true)
+      lines.length = 0
       await main(['list', '--machine', 'gem'], env)
       expect(lines).toHaveLength(
         readJobs(new URL('../data/jobs.json', import.meta.url).pathname).length,

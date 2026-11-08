@@ -24,7 +24,7 @@ import { jobRow, type LeaseAuthority, Runner } from './runner'
 import { readTimers } from './systemd-timers'
 
 const USAGE = `Usage: aico jobs <command>   (routines: aico routines --help)
-  list           each job: its home machine and lease holder, when it runs next, who holds it, how it last went
+  list [KIND]    each job: its home machine and lease holder, when it runs next, who holds it, how it last went
   run KIND       make KIND due at its lease holder; an eligible worker runs it
   serve          run the scheduler (aico-jobs.service): eligible jobs, using their configured lease holders
   routines ...   the owner-facing routines: list, add, remove, pause, resume, run, log (aico routines --help)
@@ -142,9 +142,11 @@ export async function main(argv: string[], env = process.env): Promise<number> {
     return code
   }
   if (command === 'list') {
+    const wanted = rest.find((word, i) => !word.startsWith('-') && rest[i - 1] !== '--machine')
+    const shown = jobs.filter((job) => !wanted || job.kind.includes(wanted))
     if (rest.includes('--json')) {
       const result = []
-      for (const job of jobs) {
+      for (const job of shown) {
         try {
           result.push({ kind: job.kind, home: job.home, state: await authority(job).get(job.kind) })
         } catch {
@@ -152,7 +154,7 @@ export async function main(argv: string[], env = process.env): Promise<number> {
         }
       }
       console.log(JSON.stringify(result))
-    } else await list(jobs, authority)
+    } else await list(shown, authority)
     store.close()
     return 0
   }
