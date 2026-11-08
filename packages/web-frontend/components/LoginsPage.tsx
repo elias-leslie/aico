@@ -714,6 +714,8 @@ function LoginRow({
     }
   }, [value, revealSeconds])
   const path = `/api/logins/${encodeURIComponent(entry.name)}`
+  // The name the row shows: a lab login's site, else the login's own name.
+  const shownName = entry.lab ? entry.lab.target : entry.name
   async function run(fn: () => Promise<void>) {
     setBusy(true)
     setError('')
@@ -744,7 +746,7 @@ function LoginRow({
   }
   return (
     <Row
-      name={entry.lab ? entry.lab.target : entry.name}
+      name={shownName}
       meta={meta(entry)}
       chip={chipOf(entry.state)}
       chipText={entry.state}
@@ -944,16 +946,22 @@ function LoginRow({
         <Form
           onSubmit={(event) => {
             event.preventDefault()
-            const confirm = new FormData(event.currentTarget).get('confirm')
+            const typed = String(
+              new FormData(event.currentTarget).get('confirm') ?? '',
+            ).trim()
             void run(async () => {
-              const result = await api(`${path}/remove`, { confirm })
+              if (typed !== shownName && typed !== entry.name)
+                throw new Error(`Type ${shownName} exactly to remove it.`)
+              const result = await api(`${path}/remove`, {
+                confirm: entry.name,
+              })
               setPanel(null)
               await onChanged(result.warning || 'Login removed.')
             })
           }}
         >
           <label>
-            Type {entry.name} to remove it
+            Type {shownName} to remove it
             <input name="confirm" required autoComplete="off" />
           </label>
           <Actions>

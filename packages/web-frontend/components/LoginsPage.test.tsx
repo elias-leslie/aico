@@ -646,3 +646,31 @@ it('replaces an account login with a username and password, not a JSON bundle', 
     set: { username: 'me@example.test', password: 'fixture-only' },
   })
 })
+it('removes a lab login by the site name its row shows, not its stored name', async () => {
+  const fetcher = schoolApi({
+    '/api/logins/_lab_school--default/remove': { removed: true },
+  })
+  vi.stubGlobal('fetch', fetcher)
+  render(<LoginsPage />)
+  await screen.findByRole('button', { name: /school/ })
+  fireEvent.click(screen.getByRole('button', { name: /school/ }))
+  fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
+  const confirm = screen.getByLabelText(
+    `Type ${school.lab.target} to remove it`,
+  )
+  fireEvent.change(confirm, { target: { value: 'not it' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Remove login' }))
+  expect(
+    await screen.findByText(`Type ${school.lab.target} exactly to remove it.`),
+  ).toBeInTheDocument()
+  expect(fetcher.mock.calls.some(([p]) => p.endsWith('/remove'))).toBe(false)
+  fireEvent.change(confirm, { target: { value: school.lab.target } })
+  fireEvent.click(screen.getByRole('button', { name: 'Remove login' }))
+  await waitFor(() =>
+    expect(fetcher.mock.calls.some(([p]) => p.endsWith('/remove'))).toBe(true),
+  )
+  const remove = fetcher.mock.calls.find(([p]) => p.endsWith('/remove'))
+  expect(JSON.parse(String(remove?.[1]?.body))).toEqual({
+    confirm: '_lab_school--default',
+  })
+})
