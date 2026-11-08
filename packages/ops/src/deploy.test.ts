@@ -1005,16 +1005,35 @@ describe('deploy', () => {
     const tree = () => git('rev-parse', '--short=12', 'HEAD:native/hook').out.trim()
     const installed = () => readlinkSync(join(hookDir, 'current'))
     expect(await deploy(request(), root, deps)).toBe(0)
+    const first = git('rev-parse', 'HEAD').out.trim()
     expect(installed()).toBe(`releases/${tree()}`)
     expect(rows.at(-1)?.meaning).toContain('aico-hook')
     // The same hook tree: nothing to install.
     lines.length = 0
     expect(await deploy(request(), root, deps)).toBe(0)
     expect(lines.join('\n')).not.toContain('installing aico-hook')
-    // A hook change installs again; a failed install fails the deploy.
-    commit('native/hook/install.sh', script(3))
+    // A newer commit's build stays when an older commit is deployed.
+    commit('native/hook/main.go', 'v2\n')
+    expect(await deploy(request(), root, deps)).toBe(0)
+    const newer = installed()
+    await deploy(request({ sha: first }), root, deps).catch(() => {})
+    expect(installed()).toBe(newer)
+    // A failed install fails the deploy, after the release was accepted.
+    commit('packages/web-server/main.ts', 'v2\n')
+    const failing = commit('native/hook/install.sh', script(3))
     await expect(deploy(request(), root, deps)).rejects.toThrow(/aico-hook install failed/)
     expect(rows.at(-1)?.state).toBe('failed')
+    expect(readFileSync(join(deps.releasesDir, ACCEPTED), 'utf8').trim()).toBe(failing)
+  })
+
+  it('leaves aico-hook alone for a commit whose own deploy data has no hook install', async () => {
+    const { root, git, deps, lines } = setup()
+    mkdirSync(join(root, 'native/hook'), { recursive: true })
+    writeFileSync(join(root, 'native/hook/install.sh'), 'exit 1\n')
+    git('add', '-A')
+    git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'hook')
+    expect(await deploy(request(), root, deps)).toBe(0)
+    expect(lines.join('\n')).not.toContain('aico-hook')
   })
 
   it('skips the root install on a machine without the signed installer', async () => {

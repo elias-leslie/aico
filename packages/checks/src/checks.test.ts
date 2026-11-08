@@ -6,6 +6,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -491,6 +492,9 @@ describe('commit', () => {
     await run(['src/old.ts', 'src/new.ts'])
     await run(['src/dir'])
     expect(git(root, 'show', '--name-status', '--format=', 'HEAD')).toBe('D\tsrc/dir/a.ts')
+    symlinkSync('missing.ts', join(root, 'src/link.ts'))
+    await run(['src/link.ts'])
+    expect(git(root, 'show', '--name-status', '--format=', 'HEAD')).toBe('A\tsrc/link.ts')
     expect(git(root, 'status', '--porcelain')).toBe('')
   })
 

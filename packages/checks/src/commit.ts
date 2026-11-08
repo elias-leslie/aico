@@ -4,7 +4,7 @@
 // agent wrote (an explicit file only when a named agent wrote it; a file swept in by a directory
 // or glob when anyone else did) and yields to another agent's hold or a live deploy.
 
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { type CheckReport, runCheck } from './check'
 import { blobIds, changedFiles, commonDir, git, gitOk } from './git'
@@ -14,6 +14,16 @@ import type { Config } from './plan'
 import { sourceKey } from './run'
 
 export class CommitError extends Error {}
+
+/** On disk, a dangling symlink included. */
+function present(path: string): boolean {
+  try {
+    lstatSync(path)
+    return true
+  } catch {
+    return false
+  }
+}
 
 export interface CommitOptions {
   message: string
@@ -177,7 +187,7 @@ export async function commit(config: Config, options: CommitOptions): Promise<Co
         .split('\0')
         .filter(Boolean),
     )
-    const stage = files.filter((file) => indexed.has(file) || existsSync(join(root, file)))
+    const stage = files.filter((file) => indexed.has(file) || present(join(root, file)))
     if (stage.length) git(root, ['add', '-A', '--', ...stage.map((file) => `:(literal)${file}`)])
     git(
       root,

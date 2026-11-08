@@ -678,7 +678,7 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
           return api(io, paths, json, 'GET', `/v1/roots/${encodeURIComponent(rest[0])}`)
         break
       case 'ask':
-        if (sub === undefined || sub === '--help' || sub === 'help') {
+        if (sub === undefined || sub === '--help' || sub === '-h' || sub === 'help') {
           io.out(ASK_USAGE)
           return sub === undefined ? 2 : 0
         }

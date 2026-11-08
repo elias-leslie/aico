@@ -40,6 +40,12 @@ aico_checks() {
   # takes shared admission only while it scans, not while GitHub is answering.
   [ "${1:-}" != publish ] || exec "$node" --disable-warning=ExperimentalWarning "$checks_bundle" "$@"
   # A mistyped commit fails now, not after waiting its turn for the heavy-work lane.
+  # Help anywhere in a commit's arguments is answered at once.
+  if [ "${1:-}" = commit ]; then
+    for arg in "$@"; do
+      case "$arg" in --help | -h) exec "$node" --disable-warning=ExperimentalWarning "$checks_bundle" "$@" ;; esac
+    done
+  fi
   [ "${1:-}" != commit ] || AICO_CHECKS_ARGS_ONLY=1 "$node" --disable-warning=ExperimentalWarning "$checks_bundle" "$@" || exit $?
   exec st tools run --label "aico ${1:-checks}" -- "$node" --disable-warning=ExperimentalWarning "$checks_bundle" "$@"
 }

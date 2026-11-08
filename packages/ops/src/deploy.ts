@@ -895,7 +895,7 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
               )
             })()))
       const installRoot = rootInstallWanted(root, sha, cfg, req.rollback, deps)
-      const hookTree = hookInstallWanted(root, sha, cfg, deps)
+      const hookTree = hookInstallWanted(root, sha, cfg, req.rollback, deps)
       if (!restart.length && !swaps.length && !installOps && !installRoot && !hookTree) {
         const message = `Nothing to restart at ${sha.slice(0, 10)}: no unit's sources changed`
         deps.out(`[deploy] ${message.toLowerCase()}`)
@@ -934,7 +934,7 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
           )
           throw error
         }
-      if (restart.length || swaps.length || installRoot) {
+      if (restart.length || swaps.length || installRoot || hookTree) {
         // A hold taken while this deploy waited (queued, or behind another deploy) still refuses it.
         const refused = holdRefusal()
         if (refused) {
@@ -982,6 +982,12 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
           throw new Refusal(`The host-steward root install failed: ${problem}`)
         }
       }
+      if (release) {
+        // The newest accepted release: the one a peer is sent (scripts/peer-release.sh).
+        writeFileSync(join(deps.releasesDir, ACCEPTED), `${sha}\n`)
+        pruneReleases(deps, release, cfg)
+      }
+      // Last: the release is live and accepted whether or not this machine can build the hook.
       if (hookTree) {
         const problem = installHook(root, sha, hookTree, cfg, deps)
         if (problem) {
@@ -995,11 +1001,6 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
         }
       }
       const seconds = Math.round((Date.now() - started) / 1000)
-      if (release) {
-        // The newest accepted release: the one a peer is sent (scripts/peer-release.sh).
-        writeFileSync(join(deps.releasesDir, ACCEPTED), `${sha}\n`)
-        pruneReleases(deps, release, cfg)
-      }
       const parts = [
         ...restart.map((unit) => unit.replace(/\.service$/, '')),
         ...swaps.map((unit) => `the ${unit.replace(/\.service$/, '')} page (no restart)`),
@@ -1749,23 +1750,46 @@ export function installRootSources(
 
 /**
  * The commit's aico-hook tree id when the installed hook (the `current` link install.sh keeps) is
- * another build; null when the commit has no hook sources or the hook already matches.
+ * another build; null when the commit does not declare the hook install itself (an older
+ * install.sh cannot run from an archive), the hook already matches, or the installed build is a
+ * newer commit's (left alone unless this is a rollback, as units are).
  */
 export function hookInstallWanted(
   root: string,
   sha: string,
   cfg: DeployConfig,
+  rollback: boolean,
   deps: DeployDeps,
 ): string | null {
   const spec = cfg.hookInstall
   if (!spec?.source) return null
-  const tree = deps.run('git', ['-C', root, 'rev-parse', '--short=12', `${sha}:${spec.source}`])
-  if (tree.code !== 0 || !tree.out.trim()) return null
+  const own = deps.run('git', ['-C', root, 'show', `${sha}:packages/ops/data/ops.json`])
+  try {
+    if (own.code !== 0 || !JSON.parse(own.out).deploy?.hookInstall) return null
+  } catch {
+    return null
+  }
+  const git = (...args: string[]) => deps.run('git', ['-C', root, ...args])
+  const tree = git('rev-parse', '--short=12', `${sha}:${spec.source}`).out.trim()
+  if (!tree) return null
   let current = ''
   try {
     current = basename(readlinkSync(join(expandHome(spec.dir), 'current')))
   } catch {}
-  return current === tree.out.trim() ? null : tree.out.trim()
+  if (current === tree) return null
+  if (!rollback && current) {
+    const newer = git('rev-list', `${sha}..HEAD`, '--', spec.source).out.split('\n').filter(Boolean)
+    if (
+      newer.some(
+        (commit) =>
+          git('rev-parse', '--short=12', `${commit}:${spec.source}`).out.trim() === current,
+      )
+    ) {
+      deps.out(`[deploy] aico-hook install skipped: it runs ${current}, a newer commit's build`)
+      return null
+    }
+  }
+  return tree
 }
 
 /** Build and install the commit's aico-hook with its own install.sh. Null on success, else the problem. */
