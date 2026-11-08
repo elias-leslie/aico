@@ -296,9 +296,11 @@ async function runShareList(io: Io, json: boolean, socket: string, all = false):
   const shown = all ? items : items.slice(-SHARES_SHOWN)
   const clip = (text: string, max: number) =>
     text.length > max ? `${text.slice(0, max - 1)}…` : text
-  // Newest first. A link's query can hold a sign-in code, and whole ones are --json.
+  // Newest first. A link's query can hold a sign-in code; whole links are --json.
   for (const { id, title, paths, url } of [...shown].reverse()) {
-    const where = url ? url.split('?')[0] : (paths?.join(', ') ?? '')
+    const where = url
+      ? (url.split(/[?#]/)[0] ?? '').replace(/\/\/[^/@]*@/, '//')
+      : (paths?.join(', ') ?? '')
     io.out(`${id}  ${title ? `${clip(title, SHARE_TITLE_CHARS)}  ` : ''}${where}`)
   }
   if (shown.length < items.length)

@@ -548,8 +548,10 @@ export class LoginStore {
           : {
               at: event.at,
               action: event.action,
-              // A link's query can hold a code; the rest says what changed.
-              ...(event.detail ? { detail: event.detail.replace(/\?\S*/g, '') } : {}),
+              // A link's query, fragment or user part can hold a code; the rest says what changed.
+              ...(event.detail
+                ? { detail: event.detail.replace(/[?#]\S*/g, '').replace(/\/\/[^/\s@]*@/g, '//') }
+                : {}),
             },
       )
     return { ...structuredClone(entry), state: this.state(entry), activity }

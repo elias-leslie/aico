@@ -300,7 +300,8 @@ export async function runHistory(
   const page = response.body as EventPage
   if (!page.items.length) io.out('No events in this range.')
   for (const event of page.items) io.out(formatEvent(event, rest.includes('--full')))
-  if (page.items.length) io.out('Longer text is cut; --json gives the whole records.')
+  if (page.items.length && !rest.includes('--full'))
+    io.out('Longer text is cut; --full keeps it, --json gives the whole records.')
   if (page.older !== null) io.out(`older: --before ${page.older}`)
   if (page.newer !== null) io.out(`newer: --from ${page.newer}`)
   return 0

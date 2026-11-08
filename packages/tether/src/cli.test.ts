@@ -241,6 +241,14 @@ describe('main', () => {
     const listing = capture()
     expect(await main(['-i', 'clitest', 'share', 'list'], listing.io)).toBe(0)
     expect(listing.out.join('\n')).toContain(`${a.id}  https://example.com/a`)
+    const coded = await link('https://u:p@example.com/signin?code=abc#frag')
+    const withCode = capture()
+    expect(await main(['-i', 'clitest', 'share', 'list', '--all'], withCode.io)).toBe(0)
+    expect(withCode.out[0]).toBe(`${(coded.body as { id: string }).id}  https://example.com/signin`)
+    await main(
+      ['-i', 'clitest', 'share', 'remove', (coded.body as { id: string }).id],
+      capture().io,
+    )
 
     const none = capture()
     expect(await main(['-i', 'clitest', 'share', 'remove'], none.io)).toBe(2)

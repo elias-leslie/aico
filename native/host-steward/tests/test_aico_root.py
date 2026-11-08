@@ -306,6 +306,17 @@ def test_send_inject_refusal_is_not_applied_but_unqualified_reply_is_uncertain(m
     assert "Private" not in json.dumps(output)
 
 
+def test_status_says_starting_while_idle_with_nothing_said_or_any_model(monkeypatch):
+    monkeypatch.setattr(admin, "session_view", lambda *_: {"id": "aabbcc01", "state": "idle"})
+    monkeypatch.setattr(admin, "agent_id_of", lambda *_: None)
+    monkeypatch.setattr(admin, "session_report", lambda *_: {"text": None, "model": None, "id": "aabbcc01"})
+    assert admin.lane_view(None, "sock", "aabbcc01")["state"] == "starting"
+    monkeypatch.setattr(admin, "session_report", lambda *_: {"text": "391", "model": "m"})
+    assert admin.lane_view(None, "sock", "aabbcc01")["state"] == "idle"
+    monkeypatch.setattr(admin, "session_report", lambda *_: {})  # no report is not a start
+    assert admin.lane_view(None, "sock", "aabbcc01")["state"] == "idle"
+
+
 def test_send_without_a_generation_uses_the_root_s_current_one(monkeypatch):
     code, calls, _ = invoke(monkeypatch, ["send", ROOT, FOLLOWUP], [
         (200, PI_BLANK_SLATE), (200, SESSION), (200, {"generation": GENERATION, "delivered": True})])

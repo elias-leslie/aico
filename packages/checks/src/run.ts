@@ -139,6 +139,14 @@ function hint(output: string, failed: boolean): string {
 /** What failed, past the hint: the failing lines, or the output's end if none look like one. */
 /** Past this many skipped checks the line gives a count. */
 const SKIP_NAMES_SHOWN = 8
+/** Skip reasons that only mean this change or repo gives the check no work; others may be a gap. */
+const NOTHING_TO_DO = new Set([
+  'no changed paths',
+  'no relevant changed paths',
+  'no candidate files',
+  'no tsconfig',
+  'no declared biome configuration',
+])
 
 export function failureLines(output: string, shown: string): string[] {
   const lines = outputLines(output).filter((line) => !line.startsWith('$ '))
@@ -358,9 +366,7 @@ export async function runSteps(
       result.id,
     ])
   // Nothing to do here is the common case: one line, and past a few names only how many.
-  const idle = [...skipped].filter(
-    ([reason]) => reason.startsWith('no_') || reason.startsWith('no '),
-  )
+  const idle = [...skipped].filter(([reason]) => NOTHING_TO_DO.has(reason.replaceAll('_', ' ')))
   const idleIds = idle.flatMap(([, ids]) => ids)
   if (idleIds.length)
     out(

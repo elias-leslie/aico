@@ -101,7 +101,7 @@ describe('stage selection', () => {
     expect(ids('full', null)).toEqual(['lint:run', 'suite:run', 'android:no SDK here'])
   })
 
-  it('gathers checks with nothing to do into one line', async () => {
+  it('gathers checks with nothing to do into one line and names any other skip', async () => {
     const cfg = config(repo(stages))
     const lines: string[] = []
     await runSteps(
@@ -112,7 +112,10 @@ describe('stage selection', () => {
         out: (line) => lines.push(line),
       },
     )
-    expect(lines).toEqual(['CHECK:SKIP:nothing to do here: lint, android'])
+    expect(lines).toEqual([
+      'CHECK:SKIP:nothing to do here: lint',
+      'CHECK:SKIP:no SDK here: android',
+    ])
   })
 
   it('hands a declared stage the changed files of a scoped run, and none to a whole-tree run', async () => {
