@@ -14,6 +14,16 @@ function sharedWhen(createdAt: string, now = new Date()): string {
     : at.toLocaleDateString([], { month: 'short', day: 'numeric' })
 }
 
+/** The full moment it was shared, for the tooltip. */
+function sharedAt(createdAt: string): string {
+  return new Date(createdAt).toLocaleString([], {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
 /** A path's folder, for the line under its name. */
 function folderOf(path: string): string {
   const trimmed = path.replace(/(?<=.)\/$/, '')
@@ -69,6 +79,9 @@ export function SharedFiles({
     <ul className="m-0 min-h-0 flex-1 list-none overflow-auto overscroll-contain px-2 pb-3">
       {items.map((share) => {
         const from = share.session ? sessionName?.(share.session) : null
+        const name =
+          share.title ??
+          (share.kind === 'url' ? 'link' : baseName(share.paths[0]))
         return (
           <li
             key={share.id}
@@ -84,6 +97,7 @@ export function SharedFiles({
               <p
                 className="m-0 min-w-0 flex-1 px-2.5 pt-2.5 pb-1 text-xs"
                 style={{ color: 'var(--mist)' }}
+                title={`Shared by ${from ? `session “${from}”` : 'an agent whose session has ended'}, ${sharedAt(share.createdAt)}`}
               >
                 <span style={{ color: 'var(--bone)' }} dir="auto">
                   {share.title ??
@@ -98,16 +112,13 @@ export function SharedFiles({
               {share.host ? null : (
                 <button
                   type="button"
-                  className="lantern-btn small flex-none"
-                  aria-label={`Remove ${
-                    share.title ??
-                    (share.kind === 'url' ? 'link' : baseName(share.paths[0]))
-                  } from Shared`}
+                  className="lantern-icon-btn compact flex-none"
+                  aria-label={`Remove ${name} from Shared`}
+                  title="Remove from Shared (the file stays where it is)"
                   disabled={remove.isPending && remove.variables === share.id}
                   onClick={() => remove.mutate(share.id)}
                 >
-                  <X className="h-3.5 w-3.5" strokeWidth={1.7} />
-                  Remove
+                  <X className="h-4 w-4" strokeWidth={1.7} />
                 </button>
               )}
             </div>

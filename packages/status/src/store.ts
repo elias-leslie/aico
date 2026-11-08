@@ -30,15 +30,18 @@ function seenState(row: ShownRow): Shown | null {
 }
 
 function readRows(db: Database): StoredRow[] {
-  const all = db.prepare('SELECT doc, updated_at, back_at FROM status_rows').all() as {
+  // Every column: an early migration reads rows before off_at exists.
+  const all = db.prepare('SELECT * FROM status_rows').all() as {
     doc: string
     updated_at: number
     back_at: number | null
+    off_at?: number | null
   }[]
-  return all.map(({ doc, updated_at, back_at }) => ({
+  return all.map(({ doc, updated_at, back_at, off_at }) => ({
     row: JSON.parse(doc) as StatusRow,
     updatedAt: updated_at,
     ...(back_at === null ? {} : { backAt: back_at }),
+    ...(off_at == null ? {} : { offAt: off_at }),
   }))
 }
 
@@ -92,6 +95,14 @@ function migrations(now: () => number): Migration[] {
       db.exec('ALTER TABLE status_seen ADD COLUMN escalated INTEGER NOT NULL DEFAULT 0')
       db.prepare('UPDATE status_seen SET since = ?').run(now())
     },
+    // When a row started saying off (show.ts: "off since"); rows already off count from their
+    // last report, the best moment known.
+    (db) => {
+      db.exec('ALTER TABLE status_rows ADD COLUMN off_at INTEGER')
+      db.exec(
+        `UPDATE status_rows SET off_at = updated_at WHERE json_extract(doc, '$.state') = 'off'`,
+      )
+    },
   ]
 }
 
@@ -129,26 +140,31 @@ export class StatusStore {
   upsert(rows: readonly StatusRow[]): void {
     const checked = rows.map(parseRow)
     const at = this.now()
-    const before = this.db.prepare('SELECT doc, back_at FROM status_rows WHERE id = ?')
+    const before = this.db.prepare('SELECT doc, back_at, off_at FROM status_rows WHERE id = ?')
     const ended = this.db.prepare('DELETE FROM planned_outage WHERE machine = ? AND at < ?')
     const put = this.db.prepare(
-      `INSERT INTO status_rows (id, doc, updated_at, back_at) VALUES (?, ?, ?, ?)
+      `INSERT INTO status_rows (id, doc, updated_at, back_at, off_at) VALUES (?, ?, ?, ?, ?)
        ON CONFLICT (id) DO UPDATE SET
-         doc = excluded.doc, updated_at = excluded.updated_at, back_at = excluded.back_at`,
+         doc = excluded.doc, updated_at = excluded.updated_at, back_at = excluded.back_at,
+         off_at = excluded.off_at`,
     )
     transaction(this.db, () => {
       for (const row of checked) {
+        const old = before.get(row.id) as
+          | { doc: string; back_at: number | null; off_at: number | null }
+          | undefined
+        const was = old ? (JSON.parse(old.doc) as StatusRow) : null
+        // A row that keeps saying off stays off since the first report that said so.
+        const offAt = row.state !== 'off' ? null : was?.state === 'off' ? (old?.off_at ?? at) : at
         let backAt: number | null = null
         if (row.kind === 'machine') {
-          const old = before.get(row.id) as { doc: string; back_at: number | null } | undefined
-          const was = old ? (JSON.parse(old.doc) as StatusRow) : null
           const away =
             !was ||
             was.state === 'off' ||
             (was.next_run !== undefined && Date.parse(was.next_run) + LATE_GRACE_MS < at)
           backAt = row.state === 'off' ? null : away ? at : (old?.back_at ?? null)
         }
-        put.run(row.id, JSON.stringify(row), at, backAt)
+        put.run(row.id, JSON.stringify(row), at, backAt, offAt)
         // A planned outage ends when the machine reports again after it was due to be gone.
         if (showsBack(row)) ended.run(row.machine, at)
       }

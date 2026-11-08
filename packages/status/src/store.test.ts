@@ -38,6 +38,34 @@ describe('StatusStore', () => {
     expect(store.remove('a/web')).toBe(false)
     store.close()
   })
+
+  it('shows a machine off since the first report that said so, not its latest', () => {
+    let now = Date.parse('2026-11-08T05:00:00Z')
+    const store = new StatusStore(':memory:', () => now)
+    const link = (state: string) =>
+      row({
+        id: 'a/link',
+        what: 'Link to b',
+        kind: 'machine',
+        machine: 'b',
+        state,
+        next_run: new Date(now + 10 * 60_000).toISOString(),
+      })
+    const job = row({ id: 'b/job', what: 'Job', kind: 'job', machine: 'b' })
+    store.upsert([link('ok'), job])
+    now += 60_000
+    store.upsert([link('off')])
+    const offAt = new Date(now).toISOString()
+    now += 5 * 60_000
+    store.upsert([link('off')])
+    const shown = (id: string) => store.read().rows.find((item) => item.id === id)
+    expect(shown('a/link')).toMatchObject({ shown: 'off', shown_since: offAt })
+    expect(shown('b/job')).toMatchObject({ shown: 'off', machine_off: true, shown_since: offAt })
+    now += 60_000
+    store.upsert([link('ok')])
+    expect(shown('a/link')).toMatchObject({ shown: 'ok', shown_since: null })
+    store.close()
+  })
 })
 
 describe('machineId', () => {

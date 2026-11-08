@@ -536,7 +536,7 @@
         {
           "id": "a/vm",
           "shown": "off",
-          "shown_since": null
+          "shown_since": "2026-11-01T00:00:00.000Z"
         }
       ],
       "rollup": {
@@ -582,7 +582,7 @@
         {
           "id": "d/machine",
           "shown": "off",
-          "shown_since": null
+          "shown_since": "2026-11-03T10:00:00.000Z"
         }
       ],
       "rollup": {

@@ -283,9 +283,9 @@ export function when(row: StatusRow, now: number): When {
     }
   if (row.shown === 'off')
     return {
-      lead: `Off since ${at(updated, now)}`,
+      lead: `Off since ${at(since ?? updated, now)}`,
       sub: null,
-      short: `since ${atShort(updated, now)}`,
+      short: `since ${atShort(since ?? updated, now)}`,
       tone: 'plain',
     }
   return {

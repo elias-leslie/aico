@@ -30,6 +30,8 @@ export interface StoredRow {
   updatedAt: number
   /** Machine rows: when the machine reported again after being off or late (epoch ms). */
   backAt?: number
+  /** Rows saying off: since when they have said so (epoch ms). */
+  offAt?: number
 }
 
 /** What a reader sees: the writer's state, or late / unknown. */
@@ -49,7 +51,7 @@ export type UnknownWhy = 'late' | 'missing' | 'back'
 export interface ShownRow extends StatusRow {
   updated_at: string
   shown: Shown
-  /** For late and unknown, and for rows off with their machine: since when (RFC 3339 UTC). */
+  /** For late, unknown and off rows: since when (RFC 3339 UTC). */
   shown_since: string | null
   /** Shown off because its machine is off on purpose (not because the row itself says off). */
   machine_off?: true
@@ -153,7 +155,7 @@ export function show(
   for (const stored of rows) {
     if (stored.row.kind !== 'machine') continue
     const off = stored.row.state === 'off'
-    const since = off ? stored.updatedAt : lateSince(stored, now)
+    const since = off ? (stored.offAt ?? stored.updatedAt) : lateSince(stored, now)
     silent.set(stored.row.machine, since === null ? null : { since, why: off ? 'off' : 'late' })
     if (stored.backAt !== undefined) back.set(stored.row.machine, stored.backAt)
   }
@@ -190,6 +192,8 @@ export function show(
           unknown_why: machine.why as UnknownWhy,
         }
     }
+    if (stored.row.state === 'off')
+      return { ...base, shown: 'off', shown_since: iso(stored.offAt ?? stored.updatedAt) }
     const due = lateSince(stored, now)
     if (due === null) return { ...base, shown: stored.row.state, shown_since: null }
     // Due while its machine was away and silent since it came back: unknown until it reports,
