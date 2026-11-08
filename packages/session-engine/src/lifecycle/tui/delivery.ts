@@ -4,8 +4,9 @@
 // recent sessions, under the tool's byte budget), writes it to the session's
 // delivery folder and hands it to the tool the way its adapter declares
 // (`contextDelivery`): Claude Code reads a CLAUDE.md in a directory it adds,
-// Antigravity an AGENTS.md in one, Codex a developer_instructions override, Pi a
-// system-prompt file. The content never travels through tmux, only the paths.
+// Antigravity a file its session-start hook reads (aico-hook agy), Codex a
+// developer_instructions override, Pi a system-prompt file. The content never
+// travels through tmux, only the paths.
 //
 // AICO_CONTEXT_DELIVERED=<hash> tells aico-hook to stand down, but only in the
 // process the launch started: launchLine also exports AICO_CONTEXT_PID, the
@@ -68,14 +69,13 @@ export function deliveryLaunch(
     bytes: Buffer.byteLength(text),
   })
   if (!text) return { files: {}, delivered: delivered([]) }
+  if (how.kind === 'hook') return { files: { [how.file]: text }, delivered: delivered([]) }
   const flags = how.arguments.map(shellQuote)
   if (how.kind === 'claude-md')
     return {
       files: { 'CLAUDE.md': text },
       delivered: delivered([...flags, shellQuote(dir)], how.env),
     }
-  if (how.kind === 'agents-md')
-    return { files: { 'AGENTS.md': text }, delivered: delivered([...flags, shellQuote(dir)]) }
   if (how.kind === 'config') {
     // A JSON string is a TOML basic string; `$(cat)` keeps its bytes as one word.
     const file = join(dir, 'config.toml')
@@ -157,7 +157,30 @@ function projectActivity(
 /** The spec to launch with this launch's context delivery, when Aico delivers to
  * the tool; else the spec as it was. Writes the session's delivery folder and
  * keeps the delivery's inventory in context.db. */
+/** The spec with what needs the tool's hook taken off when the hook isn't there. */
+function hookOrAsk<T extends TuiSpec>(spec: T, how: ContextDelivery, env: NodeJS.ProcessEnv): T {
+  if (how.kind !== 'hook') return spec
+  let body = ''
+  try {
+    body = readFileSync(join(env.HOME || homedir(), how.hooks), 'utf8')
+  } catch {}
+  if (body.includes(how.marker)) return spec
+  return { ...spec, command: spec.command.filter((word) => !how.needsHook.includes(word)) }
+}
+
 export async function withContextDelivery<T extends TuiSpec | undefined>(
+  given: T,
+  widgetId: string,
+  deps: DeliveryDeps,
+): Promise<T> {
+  const spec =
+    given?.contextDelivery && given.command.length
+      ? hookOrAsk(given as TuiSpec, given.contextDelivery, deps.env)
+      : given
+  return deliverInto(spec as T, widgetId, deps)
+}
+
+async function deliverInto<T extends TuiSpec | undefined>(
   spec: T,
   widgetId: string,
   deps: DeliveryDeps,

@@ -3,8 +3,10 @@
 // is read from the steps' status and the executor runs. A root resumes with
 // `--conversation <id>`, the id read from the conversation the process holds
 // open; the launch prompt goes in with `-i` (agy takes no positional prompt).
-// It has no hooks of Tether's and no transcript Tether follows: those are
-// capabilities set to false below. Tether delivers to it by the gated paste.
+// Aico's limits and rules reach it through agy's own hooks (`aico-hook agy`,
+// installed in ~/.gemini/config/hooks.json), which report nothing to Tether, and
+// it has no transcript Tether follows: capabilities set to false below. Tether
+// delivers to it by the gated paste.
 
 import { DatabaseSync } from 'node:sqlite'
 import type { AgentSignal } from '../../../agent-signal'
@@ -277,8 +279,8 @@ export class AgyConversation {
 
 // --- context ---------------------------------------------------------------------
 
-/** Aico delivers agy's context at launch (delivery.ts, an AGENTS.md in an added
- * directory); a launch that got none has none, and the native agent continues. */
+/** Aico delivers agy's context at launch (delivery.ts, a file its session-start
+ * hook hands over); a launch that got none has none, and the native agent continues. */
 function agyContext(): Promise<ContextStatus> {
   return Promise.resolve({
     state: 'missing',
@@ -349,15 +351,24 @@ export const agy: TuiAdapter = {
     contextHook: 'canonical-retrieval:antigravity',
   },
   launch: { ensureArgs: [] },
-  // agy reads an AGENTS.md in a directory it adds like a workspace's own (checked
-  // live with agy 1.5.0 in print mode: the added folder's AGENTS.md was in context).
+  // Not --add-dir: agy sorts its folders and works in the first, so a delivery folder
+  // under /home took the place of a project under /srv (seen live, agy 1.5.3).
   spec: {
     resume: {
       sessionIdPattern: UUID_RE,
       arguments: ['--conversation'],
       promptArguments: ['-i'],
     },
-    contextDelivery: { kind: 'agents-md', arguments: ['--add-dir'] },
+    // No hook, no limits (agy runs a tool when its hook is missing), so such a session
+    // loses the skip-permissions flag and asks before it does anything.
+    contextDelivery: {
+      kind: 'hook',
+      file: 'AGENTS.md',
+      hooks: '.gemini/config/hooks.json',
+      marker: 'aico-hook agy PreToolUse',
+      needsHook: ['--dangerously-skip-permissions'],
+    },
+    modelSelection: { model: ['--model'], reasoningEffort: { arguments: ['--effort'] } },
   },
   capabilities: {
     root: true,
@@ -395,7 +406,9 @@ export const agy: TuiAdapter = {
     provider: null,
     rideAlong: [],
     stateReports: [],
-    installs: [],
+    installs: [
+      { what: 'Aico limits, rules and coordination', path: '~/.gemini/config/hooks.json' },
+    ],
   },
   login: {
     signIn: "echo 'agy asks you to sign in when it starts.'; agy",

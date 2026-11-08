@@ -4,6 +4,8 @@
 //	aico-hook claude|codex|pi   a hook event on stdin (Claude-style JSON; the event is hook_event_name)
 //	aico-hook guard             the guard only: {} or a PreToolUse deny (Aico's agent harness)
 //	aico-hook codex-trust       mark this config's Codex hooks trusted through Codex's own /hooks flow
+//	aico-hook agy EVENT         Antigravity's hooks: its own payload and answers, with the leash on top (agy.go)
+//	aico-hook agy-install       put those hooks in agy's shared hooks.json
 //	aico-hook lease|sessions|inbox|import-legacy   the agent's coordination verbs and inbox hook (coord.go)
 //
 // Output is the Claude Code hook JSON on stdout (Codex reads the same; the Pi extension maps it), exit 0.
@@ -156,6 +158,12 @@ func main() {
 	}
 	if mode == "codex-trust" {
 		os.Exit(codexTrust(os.Args[2:]))
+	}
+	if mode == "agy" {
+		os.Exit(agyMain(os.Args[2:]))
+	}
+	if mode == "agy-install" {
+		os.Exit(agyInstall())
 	}
 	if mode != "guard" && mode != "claude" && mode != "codex" && mode != "pi" {
 		fmt.Fprintln(os.Stderr, "aico-hook: unknown mode "+mode)

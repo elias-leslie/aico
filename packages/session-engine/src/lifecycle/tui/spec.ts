@@ -83,13 +83,22 @@ export interface TuiSpec {
   /** How the tool takes Aico's context delivery (delivery.ts): `claude-md`, a
    * CLAUDE.md in a directory added with `arguments` (and `env`); `config`,
    * `arguments` then `key=<TOML string>`; `file`, `arguments` then a file whose
-   * text the tool appends to its system prompt; `agents-md`, an AGENTS.md in a
-   * directory added with `arguments` (Antigravity reads it like a workspace's own). */
+   * text the tool appends to its system prompt; `hook`, a file the tool's own
+   * session-start hook hands over (Antigravity: an added folder would become its
+   * working folder, since it works in the first of its folders, sorted). */
   contextDelivery?:
     | { kind: 'claude-md'; arguments: string[]; env: Record<string, string> }
     | { kind: 'config'; arguments: string[]; key: string }
     | { kind: 'file'; arguments: string[] }
-    | { kind: 'agents-md'; arguments: string[] }
+    | {
+        kind: 'hook'
+        file: string
+        /** The tool's hook file, under home, and what shows Aico's hook is in it. */
+        hooks: string
+        marker: string
+        /** Without that hook the session has no limits: these words come off its command. */
+        needsHook: string[]
+      }
   /** Set per launch by `withContextDelivery`: the shell words and environment
    * that hand this launch's delivery to the tool. `instructions`: the chosen
    * instructions are in the delivery, so the launch adds no second copy. */

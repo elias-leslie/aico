@@ -54,10 +54,12 @@ func sessionStart(cfg *Config, tool, event string, payload map[string]any) Out {
 		})
 		run(1, func() []string { return startupBrief(cfg, payload) })
 	}
-	if tool != "pi" { // Pi has no command hooks to verify (as before: SummitFlow's startup check ran for Claude and Codex)
+	if tool != "pi" && tool != "agy" { // no command hooks of theirs to verify (as before: SummitFlow's startup check ran for Claude and Codex)
 		run(2, func() []string { return publicationStatus(cfg, payload) })
 	}
-	run(3, func() []string { return deliverContext(cfg, tool, event, payload) })
+	if tool != "agy" { // agy's context is the launch's own delivery, handed over by agyStart
+		run(3, func() []string { return deliverContext(cfg, tool, event, payload) })
+	}
 	wg.Wait()
 	out := Out{Event: event}
 	for _, p := range parts {

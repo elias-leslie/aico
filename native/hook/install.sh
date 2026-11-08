@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build and install aico-hook for this user (native/hook): the binary, its data/*.json and the Pi extension under
 # ~/.local/lib/aico/hook/releases/<tree id>, `current` pointing at it, and ~/.local/bin/aico-hook. It does not touch
-# any tool's hook config (that is the swap: claude-config, codex-config, ~/.pi/agent/extensions). Roll back the
+# other tool's hook config (that is the swap: claude-config, codex-config, ~/.pi/agent/extensions). Roll back the
 # binary with `ln -sfn "$(readlink ~/.local/lib/aico/hook/previous)" ~/.local/lib/aico/hook/current`.
 set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -35,4 +35,6 @@ for d in "$base"/releases/*/; do # keep this release and the one before it
 done
 install -d "$HOME/.local/bin"
 ln -sfn "$base/current/aico-hook" "$HOME/.local/bin/aico-hook.tmp" && mv -T "$HOME/.local/bin/aico-hook.tmp" "$HOME/.local/bin/aico-hook"
+# Antigravity reads its hooks from one shared file; it is how an agy session gets its limits and its rules.
+"$base/current/aico-hook" agy-install
 echo "aico-hook $rel installed: $HOME/.local/bin/aico-hook -> $base/current/aico-hook"

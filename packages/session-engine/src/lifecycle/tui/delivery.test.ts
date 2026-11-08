@@ -8,7 +8,7 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { contextDbPath, DELIVERY, deliver, openContext, setDeliveryTool } from '@aico/context'
 import { DELIVERY_FIXTURE, fixtureDb, fixtureRequest } from '@aico/context/delivery-fixture'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -72,17 +72,22 @@ function tomlValue(assignment: string, key: string): string {
 }
 
 /** What each kind of tool reads from the way it was started. */
-function read(how: NonNullable<TuiSpec['contextDelivery']>, started: Started): string[] {
+function read(how: NonNullable<TuiSpec['contextDelivery']>, started: Started, dir = ''): string[] {
   if (how.kind === 'claude-md') {
     const dirs = after(started.argv, how.arguments[0] as string)
     if (dirs.length)
       for (const [key, value] of Object.entries(how.env)) expect(started.env[key]).toBe(value)
     return dirs.map((dir) => readFileSync(join(dir, 'CLAUDE.md'), 'utf8'))
   }
-  if (how.kind === 'agents-md')
-    return after(started.argv, how.arguments[0] as string).map((dir) =>
-      readFileSync(join(dir, 'AGENTS.md'), 'utf8'),
-    )
+  if (how.kind === 'hook') {
+    // Nothing goes on the command line: agy would work in an added folder. The hook reads the file.
+    expect(started.argv).not.toContain('--add-dir')
+    return started.env.AICO_CONTEXT_DELIVERED
+      ? [dir]
+          .filter((d) => existsSync(join(d, how.file)))
+          .map((d) => readFileSync(join(d, how.file), 'utf8'))
+      : []
+  }
   if (how.kind === 'config')
     return after(started.argv, how.arguments[0] as string)
       .filter((value) => value.startsWith(`${how.key}=`))
@@ -116,7 +121,7 @@ describe.each(delivering.map((adapter) => [adapter.id, adapter] as const))('%s',
       expect(started.env.AICO_CONTEXT_DELIVERED).toBe(delivery.hash)
       // The marker names the started agent itself, so a session it starts is not covered.
       expect(started.env.AICO_CONTEXT_PID).toBe(String(started.pid))
-      expect(read(how, started)).toEqual(delivery.text ? [delivery.text] : [])
+      expect(read(how, started, dir)).toEqual(delivery.text ? [delivery.text] : [])
     })
 
   // agy takes no chosen instructions.
@@ -143,11 +148,11 @@ describe.each(delivering.map((adapter) => [adapter.id, adapter] as const))('%s',
       const flag = spec.instructions?.arguments[0] as string
       const values = after(started.argv, flag)
       if (merged) {
-        expect(read(how, started)).toEqual([text])
+        expect(read(how, started, dir)).toEqual([text])
         expect(values).toHaveLength(1)
       } else {
         // Pi reads both from its one flag; Claude Code the delivery from its CLAUDE.md.
-        const seen = [...read(how, started), ...(how.kind === 'file' ? [] : values)]
+        const seen = [...read(how, started, dir), ...(how.kind === 'file' ? [] : values)]
         expect(seen.sort()).toEqual([delivery.text, chosen].sort())
       }
     },
@@ -167,6 +172,41 @@ it('a launch with no delivery adds nothing', () => {
     expect(started.env.AICO_CONTEXT_DELIVERED).toBeUndefined()
     expect(started.argv).toEqual([])
   }
+})
+
+describe('a tool whose limits are its hook', () => {
+  const adapter = ADAPTERS.find((a) => a.spec.contextDelivery?.kind === 'hook')
+  const how = adapter?.spec.contextDelivery as Extract<
+    NonNullable<TuiSpec['contextDelivery']>,
+    { kind: 'hook' }
+  >
+  const spec = { command: ['agy', ...how.needsHook], slug: 'agy', contextDelivery: how } as TuiSpec
+  const home = join(root, 'hook-home')
+  const deps = {
+    env: { HOME: home, AICO_DATA_DIR: join(home, 'none') },
+    now: () => new Date(),
+    toolUsage: async () => ({ ok: false }),
+    catalog: {
+      widget: () => undefined,
+      hasEntry: () => false,
+      workRole: () => null,
+      sessions: () => [],
+    },
+  } as unknown as Parameters<typeof withContextDelivery>[2]
+
+  it('without the hook, loses the skip-permissions flag and asks', async () => {
+    rmSync(home, { recursive: true, force: true })
+    expect((await withContextDelivery(spec, 'abcd1234', deps)).command).toEqual(['agy'])
+    mkdirSync(dirname(join(home, how.hooks)), { recursive: true })
+    writeFileSync(join(home, how.hooks), '{"mine":{}}')
+    expect((await withContextDelivery(spec, 'abcd1234', deps)).command).toEqual(['agy'])
+  })
+
+  it('with the hook, keeps it', async () => {
+    mkdirSync(dirname(join(home, how.hooks)), { recursive: true })
+    writeFileSync(join(home, how.hooks), `{"aico":{"PreToolUse":"${how.marker}"}}`)
+    expect((await withContextDelivery(spec, 'abcd1234', deps)).command).toEqual(spec.command)
+  })
 })
 
 describe('withContextDelivery', () => {
