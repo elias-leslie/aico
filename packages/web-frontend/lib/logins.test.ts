@@ -76,7 +76,7 @@ describe('an activity line', () => {
       true,
       [{ id: 's1', label: 'Backups lane' }],
     )
-    expect(line).toContain('changed · school.example · second · Backups lane')
+    expect(line).toContain('replaced · school.example · second · Backups lane')
     expect(
       eventLine({
         at,

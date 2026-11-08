@@ -172,7 +172,7 @@ const shownEventName = (name: string) => {
 }
 const ACTION_WORDS: Record<string, string> = {
   set: 'added',
-  rotate: 'changed',
+  rotate: 'replaced',
 }
 /** One activity line: when, what, which login, who, and what changed when it says. */
 export const eventLine = (e: Event, named = true, who: Who = []) =>

@@ -388,7 +388,10 @@ function AccessPanel({
       }}
     >
       <small>
-        Created: {when(entry.created)} · Replaced: {when(entry.rotated)}
+        Created: {when(entry.created)} ·{' '}
+        {entry.rotated
+          ? `Replaced: ${when(entry.rotated)}`
+          : 'Not replaced yet'}
       </small>
       <AccessChecklist
         choices={choices}

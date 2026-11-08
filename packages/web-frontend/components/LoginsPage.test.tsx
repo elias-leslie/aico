@@ -547,7 +547,7 @@ it('lists roles and sessions together under Used by, with All roles for an accou
   )
   expect(
     screen.getByRole('list', { name: "This login's activity" }),
-  ).toHaveTextContent('changed · Dadbot')
+  ).toHaveTextContent('replaced · Dadbot')
 })
 it('recent activity names a login as its row does, and an account beside its site', async () => {
   vi.stubGlobal(
@@ -572,7 +572,7 @@ it('recent activity names a login as its row does, and an account beside its sit
     await screen.findByRole('button', { name: /Recent activity/ }),
   )
   await screen.findByText(/added · school · owner/)
-  expect(screen.getByText(/changed · school · dadbot · owner/)).toBeTruthy()
+  expect(screen.getByText(/replaced · school · dadbot · owner/)).toBeTruthy()
 })
 it('a lab login that is not an account shows no All roles and ticks only named roles', async () => {
   const lab = {

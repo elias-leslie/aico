@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { type Routine, soonIn } from './routines'
+import { type Routine, scheduleText, soonIn } from './routines'
 
 const routine = {} as Routine
 const at = (day: number, hour: number, minute = 0) =>
@@ -19,5 +19,36 @@ describe('soonIn', () => {
 
   it('gives a later run its date', () => {
     expect(soonIn(routine, at(10, 1, 0), now)).toMatch(/^Nov 10/)
+  })
+})
+
+describe('scheduleText', () => {
+  // Kiritimati is +14 and no viewer's test zone: 05:15 there is 15:15 UTC the day before.
+  const schedule = {
+    schedule: 'sundays at 05:15',
+    tz: 'Pacific/Kiritimati',
+  } as Routine
+  const here = (utc: string) =>
+    new Date(utc).toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+    })
+
+  it('gives the scheduled time here, not the next run a random delay moved', () => {
+    const delayed = Date.parse('2026-11-14T15:38:00Z')
+    expect(scheduleText({ ...schedule, nextRun: delayed })).toContain(
+      `(${here('2026-11-14T15:15:00Z')} here)`,
+    )
+  })
+
+  it('counts a delay across midnight the short way', () => {
+    const delayed = Date.parse('2026-11-14T10:10:00Z') // 00:10 there
+    expect(
+      scheduleText({
+        ...schedule,
+        schedule: 'daily at 23:50',
+        nextRun: delayed,
+      }),
+    ).toContain(`(${here('2026-11-14T09:50:00Z')} here)`)
   })
 })
