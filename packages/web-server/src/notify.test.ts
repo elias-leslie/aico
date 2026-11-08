@@ -178,6 +178,19 @@ describe('POST /api/ominull/push', () => {
     meaning: 'Up.',
   }
 
+  it('tells the hub about the fleet in its reply, and a failed reading does not fail the push', async () => {
+    const headers = { 'x-api-key': KEY }
+    hub.hubFleet = () => [{ machine: 'here', intent: 'always', up: true, reports: true }]
+    const told = await call('POST', '/api/ominull/push', { body: { rows: [row] }, headers })
+    expect(told.body).toMatchObject({ machines: [{ machine: 'here', up: true }] })
+    hub.hubFleet = () => {
+      throw new Error('no reading')
+    }
+    const failed = await call('POST', '/api/ominull/push', { body: { rows: [row] }, headers })
+    expect(failed.status).toBe(200)
+    expect(failed.body).not.toHaveProperty('machines')
+  })
+
   it('takes notices and rows with a listed key, and files the "That was me" ask', async () => {
     const answer = await call('POST', '/api/ominull/push', {
       body: { notices: [alert], rows: [row] },

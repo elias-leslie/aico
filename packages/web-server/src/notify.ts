@@ -33,6 +33,7 @@ import { type TetherClient, TetherError } from '@aico/tether-client'
 import type { NotifyConfig } from './config'
 import { fromThisMachine } from './guard'
 import { type RequestContext, Router } from './http'
+import type { HubMachine } from './hub-machines'
 import { relaySender } from './phone-relay'
 import { HttpError } from './tether'
 
@@ -216,6 +217,8 @@ export class NotifyHub {
   readonly notifier: Notifier
   private timer: NodeJS.Timeout | null = null
   private door: Server | null = null
+  /** Set once the machines service exists (it starts after this hub). */
+  hubFleet: (() => HubMachine[]) | null = null
 
   constructor(private readonly deps: NotifyDeps) {
     const { config } = deps
@@ -358,6 +361,16 @@ export class NotifyHub {
     }
   }
 
+  /** What the reply tells the hub about the fleet; a failed reading must not fail its push. */
+  private fleet(): HubMachine[] | undefined {
+    try {
+      return this.hubFleet?.()
+    } catch (error) {
+      console.error('The fleet view for the OmniNull hub failed:', error)
+      return undefined
+    }
+  }
+
   /** `{notices?: [...], rows?: [...]}` from the hub: all checked first, then all taken. */
   private async hubPush(ctx: RequestContext, door: (req: IncomingMessage) => boolean) {
     if (!door(ctx.req))
@@ -393,7 +406,7 @@ export class NotifyHub {
     })
     if (rows.length) this.writeRows(rows)
     const taken = notices.map((notice) => this.notifier.receive(notice, 'ominull'))
-    return { notices: taken, rows: rows.length }
+    return { notices: taken, rows: rows.length, machines: this.fleet() }
   }
 
   stop(): void {

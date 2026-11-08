@@ -32,6 +32,7 @@ import { WebStore } from './db'
 import { registerDigestRoutes } from './digest'
 import { ExtractWorker } from './extract-worker'
 import { registerGrantRoutes } from './grants'
+import { hubMachines } from './hub-machines'
 import { registerLoginRoutes } from './logins'
 import { MachinesService, registerMachineRoutes } from './machines'
 import { registerMemoryRoutes } from './memory-routes'
@@ -236,6 +237,7 @@ function serve(): void {
     }),
   )
   const machines = new MachinesService(places, registry, tether)
+  notify.hubFleet = () => hubMachines(machines.guests().items, status)
   registerMachineRoutes(api, machines)
   registerAwayRoutes(api, {
     status,

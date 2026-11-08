@@ -1,0 +1,51 @@
+// What the OmniNull hub is told about the fleet, in its push reply: which machines Aico knows, what
+// each is meant to do and whether it is up. The hub cannot reach /api/status (loopback), and Aico
+// owns inventory, intent and liveness, so the hub keeps no list of its own (OmniNull M5).
+
+import type { Intent, StatusStore } from '@aico/status'
+import type { MachineGuest } from './machines'
+
+export interface HubMachine {
+  machine: string
+  intent: Intent | null
+  /** null: Aico cannot tell right now. */
+  up: boolean | null
+  /** It sends Aico its own machine row, so it counts as a fleet machine that should have an agent. */
+  reports: boolean
+}
+
+export function hubMachines(guests: readonly MachineGuest[], status: StatusStore): HubMachine[] {
+  const intents = new Map(status.intents().map((m) => [m.machine, m.intent]))
+  const out = new Map<string, HubMachine>()
+  for (const row of status.read({ kind: ['machine'] }).rows) {
+    // The hub's own row says nothing about a machine it should be watching.
+    if (row.id.startsWith('ominull')) continue
+    const up =
+      row.shown === 'ok' || row.shown === 'warn' ? true : row.shown === 'off' ? false : null
+    const seen = out.get(row.machine)
+    // Several rows for one machine: up if any says so, off only if all do.
+    const merged = !seen ? up : seen.up === true || up === true ? true : seen.up === up ? up : null
+    out.set(row.machine, {
+      machine: row.machine,
+      intent: intents.get(row.machine) ?? null,
+      up: merged,
+      reports: true,
+    })
+  }
+  // The hypervisor's reading beats a machine's own reports.
+  for (const guest of guests) {
+    const up =
+      guest.state === 'running'
+        ? true
+        : guest.state === 'stopped' || guest.state === 'down'
+          ? false
+          : null
+    out.set(guest.machine, {
+      machine: guest.machine,
+      intent: guest.intent ?? intents.get(guest.machine) ?? null,
+      up,
+      reports: out.get(guest.machine)?.reports ?? false,
+    })
+  }
+  return [...out.values()].sort((a, b) => a.machine.localeCompare(b.machine))
+}
