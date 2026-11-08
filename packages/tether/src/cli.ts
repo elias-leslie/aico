@@ -476,6 +476,8 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
     io.err((error as Error).message)
     return 2
   }
+  // `tether list` is what agents try first: it means the live sessions.
+  if (parsed.args[0] === 'list') parsed.args.unshift('sessions')
   const [command, sub, ...rest] = parsed.args
   if (!command || command === 'help' || command === '--help' || command === '-h') {
     io.out(OVERVIEW)

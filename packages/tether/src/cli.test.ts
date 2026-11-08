@@ -374,6 +374,9 @@ describe('main', () => {
   it('says so when there are no sessions or hosts', async () => {
     const list = capture()
     expect(await main(['-i', 'clitest', 'sessions', 'list'], list.io)).toBe(0)
+    const short = capture()
+    expect(await main(['-i', 'clitest', 'list'], short.io)).toBe(0)
+    expect(short.out).toEqual(list.out)
     expect(list.out).toEqual(['No live sessions. Start one: tether sessions create'])
     const hosts = capture()
     expect(await main(['-i', 'clitest', 'hosts'], hosts.io)).toBe(0)

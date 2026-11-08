@@ -98,7 +98,7 @@ export async function main(argv: string[], env = process.env): Promise<number> {
     }
     if (verb === 'deploy') {
       const deps = defaultDeps(env)
-      if (rest[0] === 'result' || rest[0] === 'wait') {
+      if (rest[0] === 'result' || rest[0] === 'status' || rest[0] === 'wait') {
         if (!rest[1]) throw new Refusal(`aico deploy ${rest[0]} needs a job id`, 2)
         const at = rest.indexOf('--timeout')
         const timeout = at > 0 ? Number(rest[at + 1]) : undefined
