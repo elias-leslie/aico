@@ -19,6 +19,10 @@
           "model": "local/qwen3-vl:8b-instruct",
           "prompts": ["household-receipt-vision-system-prompt"]
         },
+        "household-shelf-tag-vision": {
+          "model": "local/qwen3-vl:8b-instruct",
+          "prompts": []
+        },
         "credit-card-offer-reviewer": {
           "model": "codex/gpt-6.1-sol",
           "prompts": ["credit-card-offer-reviewer-system-prompt"]
