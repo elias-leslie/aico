@@ -329,3 +329,64 @@ export class PhoneRegistry {
     })
   }
 }
+
+const newest = (a: number | null | undefined, b: number | null | undefined) =>
+  Math.max(a ?? 0, b ?? 0) || undefined
+
+/**
+ * The phones two Aico machines should both hold (`aico context-sync` sends the workstation's list to
+ * the standby), so the phone app can talk to either. `ours` is the machine that answers: the sender
+ * decides which phones exist, so one removed there goes, except a phone paired here since the last
+ * sync. Each phone keeps the newer of what the two heard from it.
+ */
+export function mergePhones(theirs: Phone[], ours: Phone[], lastSync: number): Phone[] {
+  const mine = new Map(ours.map((phone) => [phone.id, phone]))
+  const merged = theirs.map((sent) => {
+    const here = mine.get(sent.id)
+    if (!here) return sent
+    const keep: Phone = { ...sent }
+    if ((here.token_at ?? 0) > (sent.token_at ?? 0)) {
+      if (here.fcm_token) keep.fcm_token = here.fcm_token
+      keep.token_at = here.token_at as number
+      keep.token_gone = here.token_gone ?? null
+    }
+    const lastAck = newest(sent.last_ack, here.last_ack)
+    if (lastAck) keep.last_ack = lastAck
+    const probe = newest(sent.last_probe, here.last_probe)
+    if (probe) keep.last_probe = probe
+    if ((here.last_message_ack?.received_at ?? 0) > (sent.last_message_ack?.received_at ?? 0))
+      keep.last_message_ack = here.last_message_ack as NonNullable<Phone['last_message_ack']>
+    if ((here.state_at ?? 0) > (sent.state_at ?? 0) && here.state) {
+      keep.state = here.state
+      keep.state_at = here.state_at as number
+    }
+    if ((here.read_error_at ?? 0) > (sent.read_error_at ?? 0) && here.read_error) {
+      keep.read_error = here.read_error
+      keep.read_error_at = here.read_error_at as number
+    }
+    return keep
+  })
+  const sentIds = new Set(theirs.map((phone) => phone.id))
+  return [
+    ...merged,
+    ...ours.filter((phone) => !sentIds.has(phone.id) && (phone.added_at ?? 0) > lastSync),
+  ]
+}
+
+/** One side of that sync, on the file: writes the merged list here and returns it to the sender. */
+export function mergePhonesFile(path: string, sent: Phone[], now: number): Phone[] {
+  const syncFile = `${path}.sync.json`
+  let lastSync = 0
+  try {
+    lastSync = Number((JSON.parse(readFileSync(syncFile, 'utf8')) as { at?: unknown }).at) || 0
+  } catch {
+    /* First sync: nothing has been paired here since. */
+  }
+  const merged = mergePhones(sent, readPhones(path) ?? [], lastSync)
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
+  const tmp = `${path}.${process.pid}.tmp`
+  writeFileSync(tmp, JSON.stringify(merged), { mode: 0o600 })
+  renameSync(tmp, path)
+  writeFileSync(syncFile, JSON.stringify({ at: now }), { mode: 0o600 })
+  return merged
+}

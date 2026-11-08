@@ -1,4 +1,8 @@
 // Metadata-only phone management through aico-web. Pairing keys stay in the owning server.
+import { text } from 'node:stream/consumers'
+import { mergePhonesFile, type Phone } from './app-phones'
+import { loadConfig } from './config'
+
 export interface PhonesIo {
   out(text: string): void
   err(text: string): void
@@ -8,8 +12,21 @@ export interface PhonesIo {
 
 const USAGE = 'Usage: aico phones list [--json] | remove PHONE_ID\n'
 
+/** The answering side of `aico context-sync`: the sender's phones on stdin, the result on stdout. */
+async function mergeFromPeer(io: PhonesIo): Promise<number> {
+  const sent = JSON.parse(await text(process.stdin)) as Phone[]
+  if (!Array.isArray(sent)) {
+    io.err('phones merge reads a JSON list on stdin\n')
+    return 2
+  }
+  const now = Math.floor(Date.now() / 1000)
+  io.out(`${JSON.stringify(mergePhonesFile(loadConfig().notify.devicesFile, sent, now))}\n`)
+  return 0
+}
+
 export async function runPhonesCli(argv: string[], io: PhonesIo): Promise<number> {
   const [verb, id, ...extra] = argv
+  if (verb === 'merge') return mergeFromPeer(io)
   if (verb === '--help' || verb === '-h') {
     io.out(USAGE)
     return 0

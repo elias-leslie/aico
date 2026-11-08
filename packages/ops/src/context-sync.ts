@@ -1,9 +1,10 @@
 // `aico context-sync run`: the memories, prompts, roles and launch policy in this machine's context database, copied to
 // the other full Aico machines (the standby) over the fleet link (`tether fleet exec`, like the repo copies in
 // wip-mirror.ts). This machine is the writer; a copy is replaced as a whole, and anything the copy wrote itself
-// is kept aside by the receiver (packages/context/src/replica.ts). The interval is the job in packages/jobs.
+// is kept aside by the receiver (packages/context/src/replica.ts). The paired phones travel with it (merged,
+// not replaced). The interval is the job in packages/jobs.
 
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -94,6 +95,46 @@ export async function contextSync(argv: string[], env = process.env): Promise<nu
     )
   }
   if (dir) rmSync(dir, { recursive: true, force: true })
+  const phones = await syncPhones(peers, aico, env)
+  if (phones.failed) failed = true
+  lines.push(...phones.lines)
   console.log(lines.join('; '))
   return failed ? 1 : 0
+}
+
+/**
+ * The paired phones go with the context: the phone app signs its calls with its own key, and whichever
+ * Aico answers has to know that key. Each peer merges what it is sent and answers with the result, so
+ * a token the phone gave the standby while this machine was off comes back here.
+ */
+async function syncPhones(
+  peers: { name: string; exec: string }[],
+  aico: (args: string) => string[],
+  env: NodeJS.ProcessEnv,
+): Promise<{ lines: string[]; failed: boolean }> {
+  const path =
+    env.AICO_PHONE_DEVICES_FILE?.trim() ||
+    join(env.AICO_DATA_DIR || expandHome(config.dataDir), 'phones.json')
+  if (!existsSync(path)) return { lines: [], failed: false }
+  const lines: string[] = []
+  let failed = false
+  for (const peer of peers) {
+    const sent = await requestExec(peer.exec, aico('phones merge'), readFileSync(path))
+    let merged: unknown = null
+    try {
+      merged = JSON.parse(lastLine(sent.stdout))
+    } catch {}
+    if (sent.code !== 0 || !Array.isArray(merged)) {
+      failed = true
+      lines.push(
+        `${peer.name}: could not take the phones (${lastLine(sent.output) || `exit ${sent.code}`})`,
+      )
+      continue
+    }
+    const tmp = `${path}.${process.pid}.tmp`
+    writeFileSync(tmp, JSON.stringify(merged), { mode: 0o600 })
+    renameSync(tmp, path)
+    lines.push(`${peer.name}: ${merged.length} phone${merged.length === 1 ? '' : 's'} in step`)
+  }
+  return { lines, failed }
 }
