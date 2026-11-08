@@ -1,6 +1,11 @@
 import { createHash } from 'node:crypto'
 import { mkdtempSync, rmSync } from 'node:fs'
-import type { IncomingMessage, Server } from 'node:http'
+import {
+  createServer as createHttpServer,
+  type IncomingMessage,
+  type Server,
+  type ServerResponse,
+} from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -10,7 +15,7 @@ import { NeedsYou, Notifier, NotifyStore, Outbox, parseNotice } from '@aico/noti
 import { StatusStore } from '@aico/status'
 import type { TetherClient } from '@aico/tether-client'
 import { fetchPage, openCounter, type searchWeb, today } from '@aico/webtools'
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createServiceAppsServer, SERVICE_APPS, serviceTokenApp } from './service-apps'
 
 const token = 'p'.repeat(43)
@@ -421,4 +426,114 @@ it('routes migrated Portfolio defaults through models the subscription CLI serve
         })
       ).status,
     ).toBe(200)
+})
+
+describe('standby in front of the workstation', () => {
+  let primary: Server
+  let standby: Server
+  let standbyBase: string
+  const primaryUp = vi.fn()
+  const rowsWritten = vi.fn()
+
+  const startStandby = async (primaryUrl: string) => {
+    standby = createServiceAppsServer({
+      status,
+      notify: { notifier: { receive } as never, store: notices, rowsWritten },
+      tether: { request: tether } as Pick<TetherClient, 'request'>,
+      env,
+      primary: primaryUrl,
+      apps,
+      ask: run,
+      prompt: () => 'Review carefully.',
+    })
+    await new Promise<void>((done) => standby.listen(0, '127.0.0.1', done))
+    standbyBase = `http://127.0.0.1:${(standby.address() as AddressInfo).port}`
+  }
+  const ask = () =>
+    fetch(`${standbyBase}/v1/ask`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ agent_slug: 'review', question: 'Hello' }),
+    })
+
+  beforeEach(async () => {
+    rowsWritten.mockClear()
+    primaryUp.mockReset()
+    primaryUp.mockImplementation((req: IncomingMessage, res: ServerResponse) => {
+      req.resume()
+      req.on('end', () => {
+        res.writeHead(req.url === '/v1/asks/0123456789ab' ? 404 : 200, {
+          'content-type': 'application/json',
+        })
+        res.end(JSON.stringify({ from: 'workstation' }))
+      })
+    })
+    primary = createHttpServer((req, res) => primaryUp(req, res))
+    await new Promise<void>((done) => primary.listen(0, '127.0.0.1', done))
+    await startStandby(`http://127.0.0.1:${(primary.address() as AddressInfo).port}`)
+  })
+  afterEach(async () => {
+    standby.closeAllConnections()
+    await new Promise<void>((done) => standby.close(() => done()))
+    primary.closeAllConnections()
+    await new Promise<void>((done) => primary.close(() => done()))
+  })
+
+  it('passes a request to the workstation while it answers, and leaves the model call to it', async () => {
+    const res = await ask()
+    expect(await res.json()).toEqual({ from: 'workstation' })
+    expect(run).not.toHaveBeenCalled()
+  })
+
+  it('answers here when the workstation does not, and does not ask it again right away', async () => {
+    primary.closeAllConnections()
+    await new Promise<void>((done) => primary.close(() => done()))
+    const first = await ask()
+    expect(first.status).toBe(200)
+    expect(run).toHaveBeenCalledTimes(1)
+    await ask()
+    expect(run).toHaveBeenCalledTimes(2)
+    expect(primaryUp).not.toHaveBeenCalled()
+    await new Promise<void>((done) => primary.listen(0, '127.0.0.1', done))
+  })
+
+  it('refuses a token it does not know without passing it on', async () => {
+    const res = await fetch(`${standbyBase}/v1/ask/config`, {
+      headers: { authorization: `Bearer ${'x'.repeat(43)}` },
+    })
+    expect(res.status).toBe(401)
+    expect(primaryUp).not.toHaveBeenCalled()
+  })
+
+  it('keeps a copy of rows the workstation took, without acting on them here', async () => {
+    const row = {
+      id: 'portfolio-ai/job',
+      what: 'Job',
+      kind: 'job',
+      machine: apps['portfolio-ai']?.machine,
+      project: 'portfolio-ai',
+      state: 'ok',
+      meaning: 'Fine.',
+    }
+    const res = await fetch(`${standbyBase}/v1/status/rows`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify(row),
+    })
+    expect(res.status).toBe(200)
+    await vi.waitFor(() =>
+      expect(status.read({ project: ['portfolio-ai'] }).rows.map((r) => r.id)).toContain(
+        'portfolio-ai/job',
+      ),
+    )
+    expect(rowsWritten).not.toHaveBeenCalled()
+  })
+
+  it('looks here for an ask the workstation has never heard of', async () => {
+    const res = await fetch(`${standbyBase}/v1/asks/0123456789ab`, {
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ requester: 'portfolio-ai' })
+  })
 })

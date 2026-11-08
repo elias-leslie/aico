@@ -52,6 +52,7 @@ import { ProjectsService, registerProjectRoutes } from './projects'
 import { registerRoutineRoutes } from './routines'
 import { createWebServer } from './server'
 import { createServiceAppsServer } from './service-apps'
+import { primaryUrl } from './service-primary'
 import { registerSharedPageRoutes } from './shared-pages'
 import { Shows } from './shows'
 import { createStaticSite } from './static'
@@ -325,7 +326,12 @@ function serve(): void {
   )
 
   const serviceApps = config.serviceApps.listen
-    ? createServiceAppsServer({ status, notify, tether })
+    ? createServiceAppsServer({
+        status,
+        notify,
+        tether,
+        primary: primaryUrl(process.env, config.serviceApps.listen.port),
+      })
     : null
   if (serviceApps && config.serviceApps.listen) {
     const { host, port } = config.serviceApps.listen
@@ -340,7 +346,12 @@ function serve(): void {
   background.start()
   const canaryListen = process.env.AICO_CANARY_LISTEN
   const canary = canaryListen
-    ? createCanaryServer(notify.notifier, canaryFolder, canaryEvents)
+    ? createCanaryServer(
+        notify.notifier,
+        canaryFolder,
+        canaryEvents,
+        primaryUrl(process.env, canaryListen.split(':')[1] as string),
+      )
     : null
   if (canary && canaryListen) {
     const [host, port] = canaryListen.split(':')

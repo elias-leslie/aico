@@ -11,6 +11,7 @@ import { join } from 'node:path'
 import { type Notifier, parseNotice } from '@aico/notify'
 import { fromThisMachine } from './guard'
 import { objectBody, Router, sendJson } from './http'
+import { frontedBy } from './service-primary'
 import { HttpError } from './tether'
 
 interface CanaryEntry {
@@ -277,15 +278,18 @@ export function createCanaryServer(
   notifier: Pick<Notifier, 'receive'>,
   folder: string,
   events?: CanaryEvents,
+  primary: string | null = null,
 ) {
   const hooks = new Router(64 * 1024)
   registerCanaryRoutes(hooks, notifier, folder, events)
-  return createServer((req, res) => {
-    const url = new URL(req.url ?? '/', 'http://localhost')
-    if (req.method !== 'POST' || !/^\/hooks\/canary\/[A-Za-z0-9_-]{32,128}$/.test(url.pathname)) {
-      sendJson(res, 404, { error: 'Not found' })
-      return
-    }
-    void hooks.handle(req, res, url)
-  })
+  return createServer(
+    frontedBy(primary, (req, res) => {
+      const url = new URL(req.url ?? '/', 'http://localhost')
+      if (req.method !== 'POST' || !/^\/hooks\/canary\/[A-Za-z0-9_-]{32,128}$/.test(url.pathname)) {
+        sendJson(res, 404, { error: 'Not found' })
+        return
+      }
+      void hooks.handle(req, res, url)
+    }),
+  )
 }

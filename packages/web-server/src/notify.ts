@@ -36,6 +36,7 @@ import { fromThisMachine } from './guard'
 import { type RequestContext, Router } from './http'
 import type { HubMachine } from './hub-machines'
 import { relaySender } from './phone-relay'
+import { frontedBy, primaryUrl } from './service-primary'
 import { HttpError } from './tether'
 
 /** The one Tether call notify makes. */
@@ -278,11 +279,17 @@ export class NotifyHub {
     if (listen) {
       const router = new Router()
       router.on('POST', '/api/ominull/push', (ctx) => this.hubPush(ctx, fromLan))
-      this.door = createServer((req, res) => {
-        router.handle(req, res, new URL(req.url ?? '/', 'http://door')).then((handled) => {
-          if (!handled) res.writeHead(404).end()
-        })
-      })
+      this.door = createServer(
+        frontedBy(
+          primaryUrl(process.env, listen.port),
+          (req, res) => {
+            router.handle(req, res, new URL(req.url ?? '/', 'http://door')).then((handled) => {
+              if (!handled) res.writeHead(404).end()
+            })
+          },
+          { taken: (_req, body) => this.keepHubRows(body) },
+        ),
+      )
       // A door that can't open (address gone, port taken) is logged; aico-web keeps running.
       this.door.on('error', (error) => {
         console.error(
@@ -293,6 +300,20 @@ export class NotifyHub {
       this.door.listen(listen.port, listen.host, () =>
         console.log(`[notify] OmniNull door on ${listen.host}:${listen.port}`),
       )
+    }
+  }
+
+  /** The hub's rows the workstation took (this machine is the standby): kept here too, so this
+   * Status has them from the moment the workstation is off. Bad rows are the workstation's to refuse. */
+  private keepHubRows(body: Buffer): void {
+    try {
+      const parsed = JSON.parse(body.toString('utf8')) as { rows?: unknown }
+      const rows = list(parsed.rows, 'rows')
+        .map((item) => parseRow(item))
+        .filter((row) => row.id.startsWith('ominull'))
+      if (rows.length) this.deps.status.upsert(rows)
+    } catch {
+      /* A row this machine can't keep comes again with the hub's next report. */
     }
   }
 

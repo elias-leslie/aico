@@ -2,7 +2,7 @@
 // the browser server: a service token cannot open sessions, run commands or read
 // another app's rows, prompts or asks.
 import { createHash, timingSafeEqual } from 'node:crypto'
-import { createServer, type IncomingMessage, type Server } from 'node:http'
+import { createServer, type IncomingMessage, type RequestListener, type Server } from 'node:http'
 import { join } from 'node:path'
 import { ask, dataDir } from '@aico/agent'
 import { Catalog, contextDbPath, getPrompt, openContext } from '@aico/context'
@@ -14,6 +14,7 @@ import { count, counterRow, fetchPage, openCounter, searchWeb, today } from '@ai
 import settings from '../data/service-apps.json' with { type: 'json' }
 import { objectBody, RAW, type RequestContext, Router, requiredString, sendJson } from './http'
 import { fromLan, type NotifyHub, tetherAsks } from './notify'
+import { frontedBy } from './service-primary'
 import { HttpError } from './tether'
 
 type Profile = { model: string; prompts: string[] }
@@ -26,6 +27,8 @@ export interface ServiceAppsDeps {
   notify: Pick<NotifyHub, 'notifier' | 'store' | 'rowsWritten'>
   tether: Pick<TetherClient, 'request'>
   env?: NodeJS.ProcessEnv
+  /** The workstation's own listener, on the standby: it gets each request first. */
+  primary?: string | null
   apps?: Apps
   ask?: typeof ask
   prompt?: (slug: string) => string | null
@@ -79,6 +82,16 @@ function ownRow(value: unknown, app: string, machine: string) {
     if (error instanceof RowError) throw new HttpError(422, `${error.field}: ${error.message}`)
     throw error
   }
+}
+
+/** A local model lives on the workstation's GPU: its failure here says that, not "fetch failed". */
+function localModelOff<T extends { outcome: { kind: string; detail?: unknown } }>(
+  provider: string,
+  result: T,
+): T {
+  if (provider !== 'local' || result.outcome.kind !== 'error') return result
+  const detail = `This model runs on the workstation's GPU, and it isn't reachable: ${String(result.outcome.detail ?? 'no answer')}`
+  return { ...result, outcome: { ...result.outcome, detail } }
 }
 
 function serviceAppsRouter(deps: ServiceAppsDeps): Router {
@@ -213,7 +226,7 @@ function serviceAppsRouter(deps: ServiceAppsDeps): Router {
     sendJson(
       ctx.res,
       result.outcome.kind === 'done' ? 200 : result.outcome.kind === 'bad_input' ? 422 : 502,
-      result,
+      localModelOff(model.provider, result),
     )
     return RAW
   })
@@ -277,12 +290,25 @@ function serviceAppsRouter(deps: ServiceAppsDeps): Router {
   return router
 }
 
+/** The rows an app reported through to the workstation: this machine keeps them too, so its Status
+ * has them from the moment the workstation is off. Bad rows are the workstation's to refuse. */
+function keepRows(req: IncomingMessage, body: Buffer, deps: ServiceAppsDeps, apps: Apps): void {
+  if (req.method !== 'POST' || !req.url?.startsWith('/v1/status/rows')) return
+  const app = serviceTokenApp(req, apps, deps.env)
+  if (!app) return
+  try {
+    const parsed: unknown = JSON.parse(body.toString('utf8'))
+    const items = Array.isArray(parsed) ? parsed : [parsed]
+    deps.status.upsert(items.map((item) => ownRow(item, app, (apps[app] as App).machine)))
+  } catch {
+    /* The workstation's answer stands; a row this machine can't keep comes again next report. */
+  }
+}
+
 export function createServiceAppsServer(deps: ServiceAppsDeps): Server {
   const router = serviceAppsRouter(deps)
-  return createServer((req, res) => {
-    // Even unknown routes authenticate at the boundary; no browser API is present here.
-    if (!serviceTokenApp(req, deps.apps ?? SERVICE_APPS, deps.env))
-      return sendJson(res, 401, { detail: 'A LAN app service token is required' })
+  const apps = deps.apps ?? SERVICE_APPS
+  const here: RequestListener = (req, res) => {
     router
       .handle(req, res, new URL(req.url ?? '/', 'http://apps'))
       .then((handled) => {
@@ -291,5 +317,17 @@ export function createServiceAppsServer(deps: ServiceAppsDeps): Server {
       .catch(() => {
         if (!res.headersSent) sendJson(res, 500, { detail: 'Unexpected error' })
       })
+  }
+  const fronted = frontedBy(deps.primary ?? null, here, {
+    maxBodyBytes: settings.max_body_bytes,
+    taken: (req, body) => keepRows(req, body, deps, apps),
+    // An ask opened here while the workstation was off is still here when it is back.
+    askHere: (req, status) => status === 404 && !!req.url?.startsWith('/v1/asks/'),
+  })
+  return createServer((req, res) => {
+    // Even unknown routes authenticate at the boundary; no browser API is present here.
+    if (!serviceTokenApp(req, apps, deps.env))
+      return sendJson(res, 401, { detail: 'A LAN app service token is required' })
+    fronted(req, res)
   })
 }
