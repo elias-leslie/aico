@@ -537,6 +537,10 @@ export function summary(report: WipReport, machine: string, peers: number): stri
 }
 
 function problemRow(problem: Problem, machine: string, at: Date): StatusRow {
+  // The row names its project already: its meaning drops the "project: " the summary line needs.
+  const own = problem.project ? `${problem.project}: ` : null
+  const reason =
+    own && problem.reason.startsWith(own) ? problem.reason.slice(own.length) : problem.reason
   return {
     id: `${machine}/wip-mirror/${problem.key}`,
     what: problem.what,
@@ -544,7 +548,7 @@ function problemRow(problem: Problem, machine: string, at: Date): StatusRow {
     machine,
     ...(problem.project ? { project: problem.project } : {}),
     state: problem.state,
-    meaning: problem.reason.length > 700 ? `${problem.reason.slice(0, 699)}…` : problem.reason,
+    meaning: reason.length > 700 ? `${reason.slice(0, 699)}…` : reason,
     last_run: at.toISOString(),
     actions: [{ kind: 'run', ref: `aico jobs run wip-mirror-${machine}` }],
   }
@@ -590,7 +594,7 @@ async function keepStandby(
       continue
     }
     const said = last.slice('standby: '.length)
-    if (said.startsWith('left ')) problems.push(`${peer.name}: ${root} ${said}`)
+    if (said.startsWith('left ')) problems.push(`${root} on ${peer.name} ${said}`)
     entry.standby = { ...entry.standby, [peer.name]: print }
   }
   if (ran) {

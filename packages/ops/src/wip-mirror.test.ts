@@ -342,7 +342,7 @@ describe('wip mirror', () => {
         [
           'app-standby',
           'warn',
-          `app: gem: ${checkout('app')} left as it is: it has its own changes`,
+          `app: ${checkout('app')} on gem left as it is: it has its own changes`,
         ],
       ])
       expect(readFileSync(join(checkout('app'), 'a.txt'), 'utf8')).toBe('standby edit\n')
