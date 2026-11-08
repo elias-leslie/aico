@@ -207,6 +207,15 @@
       "lease_s": 300
     },
     {
+      "kind": "standby-address",
+      "what": "The standby answers the Aico address only while the workstation does not",
+      "project": "aico",
+      "home": "aico",
+      "every_min": 1,
+      "run": { "command": ["../../../scripts/standby-address.sh"] },
+      "lease_s": 60
+    },
+    {
       "kind": "backups-drive-aico",
       "what": "Standby databases, its guests and the Ominull hub to Google Drive",
       "project": "aico",
