@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-labelledby="t d">
+  <title id="t">Aico icon option 4: Core, monochrome</title>
+  <desc id="d">White on transparent: the Android notification small icon and the themed launcher layer.</desc>
+  <g transform="translate(2 2) scale(.2)"><path d="M50 13L87 50L50 87L13 50Z" fill="none" stroke="#fff" stroke-width="13" stroke-linejoin="round"/><path d="M50 36L64 50L50 64L36 50Z" fill="#fff" stroke="#fff" stroke-width="5" stroke-linejoin="round"/></g>
+</svg>

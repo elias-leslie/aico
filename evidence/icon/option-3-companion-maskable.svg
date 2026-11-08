@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="t d">
+  <title id="t">Aico icon option 3: Companion, maskable</title>
+  <desc id="d">No lantern: one large light with a small one that stays at its side, the agent and you. Full-bleed background; the mark sits inside the central 60% safe zone.</desc>
+  <rect width="512" height="512" fill="#0B0D11"/>
+  <g transform="translate(106 106) scale(3)"><path fill="#E5A647" d="M54.06 75.55A36 36 0 1 1 74.93 54.02A20 20 0 0 0 54.06 75.55Z"/><circle cx="74" cy="74" r="15" fill="#FFE3A3"/></g>
+</svg>

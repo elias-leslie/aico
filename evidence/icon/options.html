@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aico icon options</title>
+<link rel="stylesheet" href="../../packages/ui-kit/src/tokens.css">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ink); color: var(--bone); font: 14px/1.45 system-ui, sans-serif; padding: 24px 24px 48px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 0; }
+  p { margin: 0; }
+  .sub { color: rgb(var(--bone-rgb) / .62); max-width: 78ch; margin-bottom: 20px; }
+  .lab { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: rgb(var(--bone-rgb) / .55); margin: 14px 0 6px; }
+  .lineup { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; max-width: 1000px; }
+  .lineup figure { margin: 0; text-align: center; background: var(--rim); border-radius: 12px; padding: 16px 8px 10px; }
+  .lineup figcaption { margin-top: 8px; font-size: 13px; }
+  .opt { background: var(--rim); border-radius: 14px; padding: 18px 20px 22px; margin-bottom: 22px; }
+  .opt header { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; margin-bottom: 4px; }
+  .num { color: var(--lantern); font-weight: 600; }
+  .idea { color: rgb(var(--bone-rgb) / .75); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 20px; }
+  .strip { display: flex; align-items: flex-end; gap: 14px; padding: 14px 16px; border-radius: 10px; }
+  .strip.dk { background: #262a32; }
+  .strip.lt { background: #EEF0F3; }
+  .strip span { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; font-size: 10px; }
+  .strip.dk span { color: #8a8f98; }
+  .strip.lt span { color: #596069; }
+  img { display: block; }
+  /* phone home screen rows */
+  .home { display: flex; gap: 18px; padding: 14px 16px 10px; border-radius: 10px; }
+  .home.dk { background: linear-gradient(160deg, #2b3446, #1a1f2b); }
+  .home.lt { background: linear-gradient(160deg, #e9eef6, #cdd7e6); }
+  .app { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 56px; font-size: 10px; }
+  .home.dk .app { color: #dfe3ea; }
+  .home.lt .app { color: #1c2330; }
+  .ic { width: 56px; height: 56px; overflow: hidden; display: grid; place-items: center; }
+  .dk .ic { border-radius: 50%; }
+  .lt .ic { border-radius: 32%; }
+  .ic img { width: 100%; height: 100%; }
+  .gen i { display: block; }
+  /* favicon mock */
+  .tabs { border-radius: 10px 10px 0 0; padding: 8px 10px 0; display: flex; gap: 4px; }
+  .tabs.dk { background: #20232a; } .tabs.lt { background: #dde1e8; }
+  .tab { display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 8px 8px 0 0; font-size: 12px; min-width: 150px; }
+  .dk .tab.on { background: #3a3e47; color: #e6e8ec; } .dk .tab { color: #8a8f98; }
+  .lt .tab.on { background: #fff; color: #1c2330; } .lt .tab { color: #596069; }
+  .tab img { width: 16px; height: 16px; }
+  .urlbar { padding: 6px 10px 8px; font-size: 12px; border-radius: 0 0 10px 10px; }
+  .urlbar.dk { background: #3a3e47; color: #aab0bb; } .urlbar.lt { background: #fff; color: #596069; }
+  /* notification */
+  .status { display: flex; align-items: center; gap: 12px; padding: 8px 14px; border-radius: 10px; font-size: 11px; }
+  .status.dk { background: #14161b; color: #fff; } .status.lt { background: #EEF0F3; color: #1c2330; }
+  .status.lt img { filter: invert(1); }
+  .push { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 16px; margin-top: 8px; font-size: 12px; }
+  .push.dk { background: #1f2229; color: #e6e8ec; } .push.lt { background: #fff; color: #1c2330; }
+  .push .dot { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--lantern-deep); }
+  .push .dot img { width: 16px; height: 16px; }
+  .push.lt .dot { background: #9a6a22; }
+  .push small { display: block; opacity: .7; }
+  /* maskable */
+  .mask { position: relative; width: 192px; height: 192px; }
+  .mask img { width: 100%; height: 100%; }
+  .mask .safe { position: absolute; inset: 0; border-radius: 50%; border: 1px dashed rgb(255 255 255 / .6); transform: scale(.6); mix-blend-mode: difference; }
+  .masks { display: flex; gap: 14px; align-items: flex-end; padding: 14px 16px; border-radius: 10px; background: #262a32; flex-wrap: wrap; }
+  .masks span { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 10px; color: #8a8f98; }
+  .masks .m { overflow: hidden; }
+  .glyphs { display: flex; gap: 14px; align-items: center; padding: 14px 16px; border-radius: 10px; background: #262a32; }
+</style>
+</head>
+<body>
+<h1>Aico icon options</h1>
+<p class="sub">Four marks, each with a full-colour icon, a maskable/adaptive icon (mark inside the central 60%) and a monochrome glyph (notification small icon and themed launcher layer). Nothing is replaced yet. Pick one and the next step swaps it in everywhere.</p>
+<div id="lineup" class="lineup"></div>
+<div id="opts"></div>
+
+<script>
+const OPTS = [
+  { n: 1, slug: 'lantern',   name: 'Lantern, quieter', idea: 'The lantern boiled down to a ring, a cap, a dome with its light cut out, and a base.' },
+  { n: 2, slug: 'doorway',   name: 'Doorway',          idea: 'No lantern: an open arch with a light standing in it, a place the sessions come home to.' },
+  { n: 3, slug: 'companion', name: 'Companion',        idea: 'No lantern: one large light with a small one that stays at its side, the agent and you.' },
+  { n: 4, slug: 'core',      name: 'Core',             idea: 'No lantern: a bright core held inside a frame, a rounded diamond within a diamond.' },
+]
+const src = (o, kind) => `option-${o.n}-${o.slug}-${kind}.svg`
+const img = (o, kind, px, extra = '') => `<img src="${src(o, kind)}" width="${px}" height="${px}" alt="" ${extra}>`
+const SIZES = [16, 32, 48, 96, 192]
+const strip = (o, tone) => `<div class="strip ${tone}">${SIZES.map(s => `<span>${img(o, 'color', s)}${s}</span>`).join('')}</div>`
+
+// Generic neighbours: plain coloured tiles with a simple shape, so the Aico icon is judged beside others.
+const GEN = [
+  { bg: 'linear-gradient(#4fb36a,#2f8a4a)', label: 'Phone',    g: '<circle cx="28" cy="28" r="11" fill="#fff"/>' },
+  { bg: 'linear-gradient(#5b8def,#3a63c9)', label: 'Messages', g: '<rect x="15" y="17" width="26" height="20" rx="6" fill="#fff"/>' },
+  { bg: 'linear-gradient(#f2f3f5,#cfd3da)', label: 'Camera',   g: '<circle cx="28" cy="28" r="12" fill="none" stroke="#2c3038" stroke-width="5"/>' },
+  { bg: 'linear-gradient(#e8604f,#c13b2c)', label: 'Mail',     g: '<path d="M14 20l14 11 14-11v16H14z" fill="#fff"/>' },
+  { bg: 'linear-gradient(#f6c744,#e09b1a)', label: 'Notes',    g: '<rect x="17" y="14" width="22" height="28" rx="4" fill="#fff"/>' },
+]
+const generic = (g) => `<div class="app gen"><div class="ic" style="background:${g.bg}"><svg viewBox="0 0 56 56" width="56" height="56">${g.g}</svg></div>${g.label}</div>`
+const home = (o, tone) => {
+  const aico = `<div class="app"><div class="ic" style="background:#0B0D11">${img(o, 'maskable', 56)}</div>Aico</div>`
+  const items = [generic(GEN[0]), generic(GEN[1]), aico, generic(GEN[2]), generic(GEN[3])]
+  return `<div class="home ${tone}">${items.join('')}</div>`
+}
+const tabs = (o, tone) => `<div class="tabs ${tone}"><div class="tab"><svg width="16" height="16"><circle cx="8" cy="8" r="6" fill="#888"/></svg>Inbox</div><div class="tab on">${img(o, 'color', 16)}Aico</div><div class="tab"><svg width="16" height="16"><rect x="2" y="2" width="12" height="12" rx="3" fill="#888"/></svg>Docs</div></div><div class="urlbar ${tone}">aico.example</div>`
+const status = (o, tone) => `<div class="status ${tone}">${img(o, 'mono', 16)}${img(o, 'mono', 24)}<span>16 / 24 px status bar</span></div><div class="push ${tone}"><div class="dot">${img(o, 'mono', 16)}</div><div>Needs you<small>Session waiting on your answer</small></div></div>`
+
+document.getElementById('lineup').innerHTML = OPTS.map(o => `<figure>${img(o, 'color', 96, 'style="margin:0 auto"')}<figcaption><span class="num">${o.n}</span> ${o.name}</figcaption></figure>`).join('')
+document.getElementById('opts').innerHTML = OPTS.map(o => `
+<section class="opt">
+  <header><h2><span class="num">${o.n}</span> ${o.name}</h2><p class="idea">${o.idea}</p></header>
+  <div class="grid">
+    <div>
+      <div class="lab">Full colour on dark</div>${strip(o, 'dk')}
+      <div class="lab">Full colour on light</div>${strip(o, 'lt')}
+      <div class="lab">Home screen row, dark wallpaper (circle masks)</div>${home(o, 'dk')}
+      <div class="lab">Home screen row, light wallpaper (squircle masks)</div>${home(o, 'lt')}
+    </div>
+    <div>
+      <div class="lab">Maskable / adaptive: bare (dashed ring is the safe zone), then circle, squircle and square masks</div>
+      <div class="masks">
+        <span><div class="mask">${img(o, 'maskable', 192)}<div class="safe"></div></div>192 bare</span>
+        <span><div class="m" style="border-radius:50%;width:96px;height:96px">${img(o, 'maskable', 96)}</div>circle</span>
+        <span><div class="m" style="border-radius:32%;width:96px;height:96px">${img(o, 'maskable', 96)}</div>squircle</span>
+        <span><div class="m" style="border-radius:12%;width:48px;height:48px">${img(o, 'maskable', 48)}</div>square</span>
+      </div>
+      <div class="lab">Browser tab favicon, 16 px, dark and light</div>${tabs(o, 'dk')}<div style="height:10px"></div>${tabs(o, 'lt')}
+      <div class="lab">Monochrome notification glyph, dark and light status bar</div>${status(o, 'dk')}${status(o, 'lt')}
+      <div class="lab">Monochrome glyph at 24, 48, 96</div><div class="glyphs">${[24, 48, 96].map(s => img(o, 'mono', s)).join('')}</div>
+    </div>
+  </div>
+</section>`).join('')
+</script>
+</body>
+</html>

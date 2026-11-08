@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="t d">
+  <title id="t">Aico icon option 4: Core, maskable</title>
+  <desc id="d">No lantern: a bright core held inside a frame, a rounded diamond within a diamond. Full-bleed background; the mark sits inside the central 60% safe zone.</desc>
+  <rect width="512" height="512" fill="#0B0D11"/>
+  <g transform="translate(106 106) scale(3)"><path d="M50 13L87 50L50 87L13 50Z" fill="none" stroke="#E5A647" stroke-width="13" stroke-linejoin="round"/><path d="M50 36L64 50L50 64L36 50Z" fill="#FFE3A3" stroke="#FFE3A3" stroke-width="5" stroke-linejoin="round"/></g>
+</svg>

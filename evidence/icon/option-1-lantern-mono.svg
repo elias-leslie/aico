@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-labelledby="t d">
+  <title id="t">Aico icon option 1: Lantern, quieter, monochrome</title>
+  <desc id="d">White on transparent: the Android notification small icon and the themed launcher layer.</desc>
+  <g transform="translate(2 2) scale(.2)"><circle cx="50" cy="12" r="7" fill="none" stroke="#fff" stroke-width="6"/><rect x="31" y="24" width="38" height="7" rx="3.5" fill="#fff"/><path fill-rule="evenodd" fill="#fff" d="M20 80V64a30 30 0 0 1 60 0V80a7 7 0 0 1-7 7H27a7 7 0 0 1-7-7ZM50 50a12 12 0 1 0 0 24a12 12 0 1 0 0-24Z"/><rect x="34" y="90" width="32" height="6" rx="3" fill="#fff"/></g>
+</svg>
