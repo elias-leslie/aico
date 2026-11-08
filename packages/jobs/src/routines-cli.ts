@@ -63,7 +63,8 @@ export interface RoutinesContext {
   /** The lease link to another machine (tests give their own). */
   peer?: (
     name: string,
-  ) => Pick<ReturnType<typeof remoteAuthority>, 'register' | 'unregister' | 'log'>
+  ) => Pick<ReturnType<typeof remoteAuthority>, 'register' | 'unregister' | 'log'> &
+    Partial<Pick<ReturnType<typeof remoteAuthority>, 'get'>>
   /** Sends Status rows to aico-web; failures are the caller's to ignore. */
   postRows: (rows: StatusRow[]) => Promise<void>
   removeRow: (id: string) => Promise<void>
@@ -129,6 +130,14 @@ function controlOf(job: JobDef, ctx: RoutinesContext): Control {
 
 const peerOf = (name: string, ctx: RoutinesContext) =>
   ctx.peer?.(name) ?? remoteAuthority(join(peerDir(ctx.env, process.getuid?.(), name), 'jobs.sock'))
+
+/** The lease holder's state of a job (this machine's own store when it holds the lease). */
+async function stateOf(job: JobDef, ctx: RoutinesContext): Promise<JobState | null> {
+  const holder = job.lease_host ?? job.home
+  if (holder === ctx.machine) return ctx.store.get(job.kind)
+  const peer = ctx.peer?.(holder)
+  return peer?.get ? peer.get(job.kind) : controlOf(job, ctx).get(job.kind)
+}
 
 async function viewOf(job: JobDef, ctx: RoutinesContext): Promise<RoutineView> {
   const now = (ctx.now ?? Date.now)()
@@ -433,9 +442,41 @@ export async function routinesCommand(
     return 0
   }
   if (verb === 'log') {
-    // A job another machine holds keeps its output there: ask that machine.
+    // A run's output stays on the machine that ran it, which is not always the lease holder.
+    const file = join(ctx.dataDir, 'job-runs', `${job.kind}.last.log`)
+    const here = existsSync(file)
     const holder = job.lease_host ?? job.home
-    if (holder !== ctx.machine) {
+    let ranOn: string | null = null
+    try {
+      ranOn = (await stateOf(job, ctx))?.lastMachine ?? null
+    } catch {
+      // The holder does not answer: a file kept here is still readable below.
+    }
+    if (ranOn !== null && ranOn !== ctx.machine) {
+      let note: string
+      try {
+        const text = await peerOf(ranOn, ctx).log(job.kind)
+        if (text) {
+          out(text)
+          return 0
+        }
+        note = `${ranOn} has no saved output of ${job.kind}; this is what ${ctx.machine} kept:`
+      } catch (error) {
+        note = `${ranOn} ran it last and is not reachable (${(error as Error).message}); this is what ${ctx.machine} kept:`
+        if (!here) {
+          err(
+            `aico routines log: ${ranOn} is not reachable (${(error as Error).message}); its output is kept there`,
+          )
+          return 1
+        }
+      }
+      if (!here) {
+        out(`${job.kind} has no saved output on ${ranOn} yet.`)
+        return 0
+      }
+      out(note)
+    } else if (!here && holder !== ctx.machine) {
+      // Never run, or the holder did not answer: it may still keep the output.
       try {
         const text = await peerOf(holder, ctx).log(job.kind)
         out(text || `${job.kind} has no saved output on ${holder} yet.`)
@@ -447,8 +488,7 @@ export async function routinesCommand(
         return 1
       }
     }
-    const file = join(ctx.dataDir, 'job-runs', `${job.kind}.last.log`)
-    if (!existsSync(file)) {
+    if (!here) {
       // No saved output (it has not run since output was kept): what the scheduler logged about it.
       try {
         out(

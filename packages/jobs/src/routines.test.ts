@@ -475,6 +475,7 @@ describe('a routine that runs on either host', () => {
           peer: () => ({
             register: async (routine) => void call('ws')('register', routine.kind, { routine }),
             unregister: async (kind) => call('ws')('unregister', kind) as boolean,
+            get: async (kind) => gem.get(kind),
             log: async (kind) => `last output of ${kind} on gem`,
           }),
           postRows: async () => {},
@@ -649,5 +650,95 @@ describe('a routine that runs on either host', () => {
     expect(() => newRoutine({ ...base, hosts: 'either' }, 'other', new Set(), 0, EITHER)).toThrow(
       'run this on ws',
     )
+  })
+})
+
+describe('routines log for a job the other machine holds the lease for', () => {
+  const job: JobDef = {
+    kind: 'note-reminders',
+    what: 'Note reminders',
+    project: 'aico',
+    home: 'ws',
+    lease_host: 'gem',
+    workers: ['ws', 'gem'],
+    every_min: 5,
+    lease_s: 60,
+    run: { command: ['true'] },
+  }
+  const setup = (opts: {
+    ranOn: string | null
+    holderUp: boolean
+    peerLog: string | null | Error
+  }) => {
+    const dir = scratch()
+    mkdirSync(join(dir, 'job-runs'))
+    const lines: string[] = []
+    const errors: string[] = []
+    const asked: string[] = []
+    const run = () =>
+      routinesCommand(
+        ['log', job.kind],
+        {
+          jobs: [job],
+          store: new JobStore(':memory:'),
+          machine: 'ws',
+          env: {},
+          dataDir: dir,
+          peer: (name) => {
+            asked.push(name)
+            return {
+              register: async () => {},
+              unregister: async () => true,
+              get: async () => {
+                if (!opts.holderUp) throw new Error('connect ECONNREFUSED')
+                return { lastMachine: opts.ranOn } as never
+              },
+              log: async () => {
+                if (opts.peerLog instanceof Error) throw opts.peerLog
+                return opts.peerLog
+              },
+            }
+          },
+          postRows: async () => {},
+          removeRow: async () => {},
+        },
+        (l) => lines.push(l),
+        (l) => errors.push(l),
+      )
+    const keep = (text: string) =>
+      writeFileSync(join(dir, 'job-runs', `${job.kind}.last.log`), text)
+    return { run, keep, lines, errors, asked }
+  }
+
+  it('reads the file here when this machine ran it last, without asking the lease holder for it', async () => {
+    const t = setup({ ranOn: 'ws', holderUp: true, peerLog: 'wrong' })
+    t.keep('sent 2 reminders\n')
+    expect(await t.run()).toBe(0)
+    expect(t.lines).toEqual(['sent 2 reminders'])
+  })
+
+  it('asks the machine that ran it, not the lease holder', async () => {
+    const t = setup({ ranOn: 'other', holderUp: true, peerLog: 'output on other' })
+    expect(await t.run()).toBe(0)
+    expect(t.lines).toEqual(['output on other'])
+    expect(t.asked.at(-1)).toBe('other')
+  })
+
+  it('still shows the local file when the holder or the machine that ran it does not answer', async () => {
+    const down = setup({ ranOn: null, holderUp: false, peerLog: new Error('refused') })
+    down.keep('kept here\n')
+    expect(await down.run()).toBe(0)
+    expect(down.lines).toEqual(['kept here'])
+    const away = setup({ ranOn: 'other', holderUp: true, peerLog: new Error('refused') })
+    away.keep('kept here\n')
+    expect(await away.run()).toBe(0)
+    expect(away.lines.join('\n')).toContain('kept here')
+    expect(away.lines.join('\n')).toContain('other ran it last and is not reachable')
+  })
+
+  it('fails with the unreachable machine when nothing is kept here', async () => {
+    const t = setup({ ranOn: 'other', holderUp: true, peerLog: new Error('refused') })
+    expect(await t.run()).toBe(1)
+    expect(t.errors.join('')).toContain('other is not reachable')
   })
 })

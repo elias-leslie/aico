@@ -146,8 +146,9 @@ function validResult(call: LeaseCall): JobResult {
 /** Lines of a run's output `aico routines log` shows. */
 export const LOG_LINES = 200
 
-/** The last run's output of a job this machine holds (`runsDir`/KIND.last.log), or null when none
- * is kept: read only, for `aico routines log` on another machine. */
+/** The last run's output of a job this machine holds the lease for or works (`runsDir`/KIND.last.log),
+ * or null when none is kept: read only, for `aico routines log` on another machine. A job's output
+ * stays on the machine that ran it, which need not be the lease holder. */
 export function lastRunLog(
   runsDir: string,
   jobs: readonly JobDef[],
@@ -155,9 +156,12 @@ export function lastRunLog(
   kind: string,
 ): string | null {
   const job = jobs.find(
-    (entry) => entry.kind === kind && (entry.lease_host ?? entry.home) === authority,
+    (entry) =>
+      entry.kind === kind &&
+      ((entry.lease_host ?? entry.home) === authority ||
+        (entry.workers ?? [entry.home]).includes(authority)),
   )
-  if (!job) throw new Error('Unknown job at this lease authority')
+  if (!job) throw new Error('Unknown job at this machine')
   const file = join(runsDir, `${job.kind}.last.log`)
   if (!existsSync(file)) return null
   return readFileSync(file, 'utf8').trimEnd().split('\n').slice(-LOG_LINES).join('\n')

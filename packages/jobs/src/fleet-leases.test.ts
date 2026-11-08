@@ -206,7 +206,9 @@ it('gives another machine the last run output only for a job this machine holds'
     const text = lastRunLog(dir, [job], 'holder', 'job')
     expect(text?.split('\n')).toHaveLength(200)
     expect(text?.endsWith('l249')).toBe(true)
-    expect(() => lastRunLog(dir, [job], 'home', 'job')).toThrow('Unknown job')
+    // The machine that works the job keeps its output too, though the lease is held elsewhere.
+    expect(lastRunLog(dir, [job], 'home', 'job')?.endsWith('l249')).toBe(true)
+    expect(() => lastRunLog(dir, [job], 'other', 'job')).toThrow('Unknown job')
     expect(() => lastRunLog(dir, [job], 'holder', '../job')).toThrow('Unknown job')
   } finally {
     rmSync(dir, { recursive: true, force: true })
