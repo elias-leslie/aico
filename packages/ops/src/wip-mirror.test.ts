@@ -363,6 +363,19 @@ describe('wip mirror', () => {
       expect(readFileSync(join(checkout('app'), 'b.txt'), 'utf8')).toBe('b\n')
     })
 
+    it("follows a commit amended here: it came from here, so it is not the peer's own", async () => {
+      const root = repo('app')
+      const d = standbyDeps([{ id: 'app', root }])
+      writeFileSync(join(root, 'b.txt'), 'b\n')
+      git(root, 'add', '-A')
+      git(root, 'commit', '-qm', 'second')
+      await mirror(d)
+      git(root, 'commit', '-q', '--amend', '-m', 'second, amended')
+      const report = await mirror(d)
+      expect(report.problems).toEqual([])
+      expect(git(checkout('app'), 'rev-parse', 'HEAD')).toBe(git(root, 'rev-parse', 'HEAD'))
+    })
+
     it('keeps commits made on the peer', async () => {
       const root = repo('app')
       const d = standbyDeps([{ id: 'app', root }])

@@ -613,7 +613,7 @@ async function keepStandby(
 
 /**
  * The peer side of a standby checkout: BRANCH at ROOT, listed in the peer's projects. It only
- * moves forward to this machine's heads; a checkout with its own changes or commits, a remote of
+ * moves forward to this machine's heads (an amended one too); a checkout with its own changes or commits, a remote of
  * the same name pointing elsewhere, or a folder that is not a Git checkout is left as it is.
  * The last line says what happened.
  */
@@ -648,7 +648,11 @@ else
   git -C "$root" fetch -q "$remote" || { say "could not fetch"; exit 1; }
   if [ -n "$(git -C "$root" status --porcelain --untracked-files=no)" ]; then say "left as it is: it has its own changes"; exit 0; fi
   if git -C "$root" rev-parse -q --verify "refs/heads/$branch" >/dev/null && ! git -C "$root" merge-base --is-ancestor "refs/heads/$branch" "$track"; then
-    say "left as it is: its $branch has commits that ${machine}'s does not"; exit 0
+    # A head this copy once had from ${machine}, since amended there, is not the standby's own work.
+    head=$(git -C "$root" rev-parse "refs/heads/$branch")
+    if ! git -C "$root" log -g --format=%H "$track" | grep -qx "$head"; then
+      say "left as it is: its $branch has commits that ${machine}'s does not"; exit 0
+    fi
   fi
   now=$(git -C "$root" symbolic-ref -q --short HEAD)
   if [ "$now" != "$branch" ] && [ -z "$(git -C "$root" branch -r --contains HEAD --list "$remote/*")" ]; then
