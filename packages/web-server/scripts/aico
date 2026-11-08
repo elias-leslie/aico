@@ -47,7 +47,14 @@ aico_checks() {
     done
   fi
   [ "${1:-}" != commit ] || AICO_CHECKS_ARGS_ONLY=1 "$node" --disable-warning=ExperimentalWarning "$checks_bundle" "$@" || exit $?
-  exec st tools run --label "aico ${1:-checks}" -- "$node" --disable-warning=ExperimentalWarning "$checks_bundle" "$@"
+  # A commit and a quick check take seconds (p99 about a minute): they don't queue behind others' full gates.
+  local class=heavy arg
+  if [ "${1:-}" = commit ]; then
+    class=light
+  elif [ "${1:-}" = check ]; then
+    for arg in "$@"; do [ "$arg" != --quick ] || class=light; done
+  fi
+  exec st tools run --label "aico ${1:-checks}" --class "$class" -- "$node" --disable-warning=ExperimentalWarning "$checks_bundle" "$@"
 }
 
 

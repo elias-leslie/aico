@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import importlib.util
 import json
 import os
 import subprocess
@@ -178,3 +180,41 @@ def test_wait_reason_stays_readable_and_wait_lines_back_off(monkeypatch, tmp_pat
     clock = iter([0.0, 3.0, 20.0, 500.0])
     monkeypatch.setattr(guard.time, 'monotonic', lambda: next(clock))
     assert [guard._next_status(0.0) for _ in range(4)] == [5.0, 8.0, 40.0, 560.0]
+
+
+def tools_run_module():
+    spec = importlib.util.spec_from_file_location('tools_run_under_test', ROOT / 'tools_run.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.parametrize(('argv', 'admit', 'held_class'), [
+    (['--label', 'quick', '--class', 'light'], True, 'light'),
+    (['--label', 'quick', '--class', 'light'], False, 'heavy'),
+    (['--label', 'gate'], True, 'heavy'),
+])
+def test_tools_run_takes_the_light_lane_only_when_the_host_has_room(lane, monkeypatch, argv, admit, held_class):
+    tools_run = tools_run_module()
+    monkeypatch.setattr(tools_run, 'admission_state', lambda: guard.Admission(admit, 'fixture'))
+    held = []
+    real = tools_run.heavy_work
+
+    @contextlib.contextmanager
+    def watched(label, *, work_class='heavy', project=None):
+        with real(label, work_class=work_class, project=project) as work:
+            held.append(work.work_class)
+            yield work
+
+    monkeypatch.setattr(tools_run, 'heavy_work', watched)
+    assert tools_run.main([*argv, '--', sys.executable, '-c', 'pass']) == 0
+    assert held == [held_class]
+
+
+def test_light_lane_runs_while_a_full_gate_holds_heavy(lane):
+    with guard.heavy_work('full gate'):
+        result = subprocess.run(
+            [sys.executable, '-c', bootstrap(lane) + "\nwith guard.heavy_work('quick', work_class='light') as w: print(w.work_class)"],
+            capture_output=True, text=True, timeout=30,
+            env={k: v for k, v in os.environ.items() if k != 'ST_HEAVY_LEASE'})
+    assert result.stdout.strip() == 'light', result.stderr
