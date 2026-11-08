@@ -171,6 +171,24 @@ export class Store {
     return row.version ?? 0
   }
 
+  private recordVersion(version: number, now: number): void {
+    this.db
+      .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
+      .run(version, now)
+  }
+
+  /** Adds each column its table lacks: a table made by a later step already has it. */
+  private addMissingColumns(
+    columns: readonly { table: string; column: string; sql: string }[],
+  ): void {
+    for (const { table, column, sql } of columns) {
+      const has = this.db
+        .prepare('SELECT 1 FROM pragma_table_info(?) WHERE name = ?')
+        .get(table, column)
+      if (!has) this.db.exec(sql)
+    }
+  }
+
   private migrate(now: number): void {
     this.db.exec(
       'CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)',
@@ -191,43 +209,31 @@ export class Store {
         this.db.exec(AGENT_TOOLS_TABLE_SQL)
         this.db.exec(INDEXES_SQL)
         for (const seed of DEFAULT_TOOLS) this.insertTool(seed, now)
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(1, now)
+        this.recordVersion(1, now)
       }
       if (current < 2) {
         // v2: retired session IDs are never reallocated.
         this.db.exec(RETIRED_SESSION_IDS_SQL)
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(2, now)
+        this.recordVersion(2, now)
       }
       if (current < 3) {
         // v3: the requesting app of each root (tombstones keep it).
         this.db.exec(ROOT_ORIGIN_SQL)
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(3, now)
+        this.recordVersion(3, now)
       }
       if (current < 4) {
         // v4: coordinators, their lanes and colours.
         this.db.exec(COORDINATOR_SQL)
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(4, now)
+        this.recordVersion(4, now)
       }
       if (current < 5) {
         // v5: owner settings (memory policy).
         this.db.exec(SETTINGS_SQL)
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(5, now)
+        this.recordVersion(5, now)
       }
       if (current < 6) {
         this.db.exec(ROOT_WORK_ROLE_SQL)
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(6, now)
+        this.recordVersion(6, now)
       }
       if (current < 7) {
         // Rebuild with the current context-hook CHECK, retaining every
@@ -243,15 +249,11 @@ export class Store {
           DROP TABLE agent_tools;
           ALTER TABLE agent_tools_next RENAME TO agent_tools;
           CREATE UNIQUE INDEX agent_tools_one_default ON agent_tools(is_default) WHERE is_default = 1;`)
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(7, now)
+        this.recordVersion(7, now)
       }
       if (current < 8) {
         // v8 once folded OpenCode's model-specific rows into one; OpenCode is retired.
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(8, now)
+        this.recordVersion(8, now)
       }
       if (current < 9) {
         // v9: OpenCode leaves the platform (no session used it). Pi 1.4 names its
@@ -277,23 +279,17 @@ export class Store {
           const next = enabled.find((tool) => tool.slug === seeded) ?? enabled[0]
           if (next) this.applyToolPatch(next, { isDefault: true }, now)
         }
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(9, now)
+        this.recordVersion(9, now)
       }
       if (current < 10) {
         // v10: session wakes (scheduled check-ins).
         this.db.exec(WAKES_SQL)
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(10, now)
+        this.recordVersion(10, now)
       }
       if (current < 11) {
         // v11: agent shares, as references to files where they are.
         this.db.exec(SHARES_SQL)
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(11, now)
+        this.recordVersion(11, now)
       }
       if (current < 12) {
         // v12: the backend column and the chat backend's tables (dropped in v36).
@@ -302,9 +298,7 @@ export class Store {
           .get()
         if (!hasBackend) this.db.exec(LEGACY_BACKEND_SQL)
         this.db.exec(LEGACY_CHAT_TABLES_SQL)
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(12, now)
+        this.recordVersion(12, now)
       }
       if (current < 13) {
         // v13: a queued follow-up keeps the model it was sent with.
@@ -312,9 +306,7 @@ export class Store {
           .prepare("SELECT 1 FROM pragma_table_info('agent_hub_queue') WHERE name = 'model'")
           .get()
         if (!hasModel) this.db.exec(LEGACY_QUEUE_MODEL_SQL)
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(13, now)
+        this.recordVersion(13, now)
       }
       if (current < 14) {
         // v14: a queued follow-up keeps the thinking level it was sent with.
@@ -324,15 +316,11 @@ export class Store {
           )
           .get()
         if (!hasLevel) this.db.exec(LEGACY_QUEUE_THINKING_SQL)
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(14, now)
+        this.recordVersion(14, now)
       }
       if (current < 15) {
         // v15: the chat backend's tool-registry row (never seeded now; v36 removes it).
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(15, now)
+        this.recordVersion(15, now)
       }
       if (current < 16) {
         // v16: the direct launcher, so lists nest lanes under the lane that launched them.
@@ -340,177 +328,96 @@ export class Store {
           .prepare("SELECT 1 FROM pragma_table_info('sessions') WHERE name = 'parent_id'")
           .get()
         if (!hasParent) this.db.exec(PARENT_SQL)
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(16, now)
+        this.recordVersion(16, now)
       }
       if (current < 17) {
         // v17: owner asks.
         this.db.exec(ASKS_SQL)
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(17, now)
+        this.recordVersion(17, now)
       }
       if (current < 18) {
         // v18: lane reports (launched flag, delivery kinds, cursor, watches, outbox).
-        for (const { table, column, sql } of LANE_REPORTS_COLUMNS) {
-          const has = this.db
-            .prepare('SELECT 1 FROM pragma_table_info(?) WHERE name = ?')
-            .get(table, column)
-          if (!has) this.db.exec(sql)
-        }
+        this.addMissingColumns(LANE_REPORTS_COLUMNS)
         this.db.exec(LANE_REPORTS_SQL)
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(18, now)
+        this.recordVersion(18, now)
       }
       if (current < 19) {
         // v19: general waits and the follow-up sends their default since reads.
         this.db.exec(WAITS_SQL)
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(19, now)
+        this.recordVersion(19, now)
       }
       if (current < 20) {
         // v20: per-session entries (a root's agent runs through a host program).
         this.db.exec(SESSION_ENTRIES_SQL)
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(20, now)
+        this.recordVersion(20, now)
       }
       if (current < 21) {
         // v21: deliveries (lines other owners queue on a session).
         this.db.exec(DELIVERIES_SQL)
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(21, now)
+        this.recordVersion(21, now)
       }
       if (current < 22) {
         // v22: an ask's launcher and where its answer went (asks from ended lanes).
-        for (const { table, column, sql } of ASK_HANDOFF_COLUMNS) {
-          const has = this.db
-            .prepare('SELECT 1 FROM pragma_table_info(?) WHERE name = ?')
-            .get(table, column)
-          if (!has) this.db.exec(sql)
-        }
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(22, now)
+        this.addMissingColumns(ASK_HANDOFF_COLUMNS)
+        this.recordVersion(22, now)
       }
       if (current < 23) {
         // v23: a root's explicit launch options, kept for every relaunch.
         this.db.exec(SESSION_LAUNCH_OPTIONS_SQL)
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(23, now)
+        this.recordVersion(23, now)
       }
       if (current < 24) {
         // v24: who ended a lane (no `ended` line for the session that asked).
-        for (const { table, column, sql } of LANE_ENDED_BY_COLUMNS) {
-          const has = this.db
-            .prepare('SELECT 1 FROM pragma_table_info(?) WHERE name = ?')
-            .get(table, column)
-          if (!has) this.db.exec(sql)
-        }
+        this.addMissingColumns(LANE_ENDED_BY_COLUMNS)
         this.db.exec(LANE_ENDED_BY_SQL)
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(24, now)
+        this.recordVersion(24, now)
       }
       if (current < 25) {
         // v25: repeat went-idle lines back off (the per-lane streak).
-        for (const { table, column, sql } of LANE_STREAK_COLUMNS) {
-          const has = this.db
-            .prepare('SELECT 1 FROM pragma_table_info(?) WHERE name = ?')
-            .get(table, column)
-          if (!has) this.db.exec(sql)
-        }
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(25, now)
+        this.addMissingColumns(LANE_STREAK_COLUMNS)
+        this.recordVersion(25, now)
       }
       if (current < 26) {
         // v26: the last model switch told per lane.
-        for (const { table, column, sql } of LANE_MODEL_COLUMNS) {
-          const has = this.db
-            .prepare('SELECT 1 FROM pragma_table_info(?) WHERE name = ?')
-            .get(table, column)
-          if (!has) this.db.exec(sql)
-        }
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(26, now)
+        this.addMissingColumns(LANE_MODEL_COLUMNS)
+        this.recordVersion(26, now)
       }
       if (current < 27) {
         // v27: the session a `--block` client's wait was armed from.
-        for (const { table, column, sql } of WAITS_ARMED_BY_COLUMNS) {
-          const has = this.db
-            .prepare('SELECT 1 FROM pragma_table_info(?) WHERE name = ?')
-            .get(table, column)
-          if (!has) this.db.exec(sql)
-        }
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(27, now)
+        this.addMissingColumns(WAITS_ARMED_BY_COLUMNS)
+        this.recordVersion(27, now)
       }
       if (current < 28) {
         // v28: delivery classes (wake or ride-along) on event lines.
-        for (const { table, column, sql } of WAKES_RIDE_COLUMNS) {
-          const has = this.db
-            .prepare('SELECT 1 FROM pragma_table_info(?) WHERE name = ?')
-            .get(table, column)
-          if (!has) this.db.exec(sql)
-        }
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(28, now)
+        this.addMissingColumns(WAKES_RIDE_COLUMNS)
+        this.recordVersion(28, now)
       }
       if (current < 29) {
         // v29: what reaches a lane (a line from outside, a lane's ride-along reply).
-        for (const { table, column, sql } of REACH_COLUMNS) {
-          const has = this.db
-            .prepare('SELECT 1 FROM pragma_table_info(?) WHERE name = ?')
-            .get(table, column)
-          if (!has) this.db.exec(sql)
-        }
+        this.addMissingColumns(REACH_COLUMNS)
         this.db.exec(REACH_BACKFILL_SQL)
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(29, now)
+        this.recordVersion(29, now)
       }
       if (current < 30) {
         // v30: asks that want files, and the files that answered.
-        for (const { table, column, sql } of ASK_FILES_COLUMNS) {
-          const has = this.db
-            .prepare('SELECT 1 FROM pragma_table_info(?) WHERE name = ?')
-            .get(table, column)
-          if (!has) this.db.exec(sql)
-        }
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(30, now)
+        this.addMissingColumns(ASK_FILES_COLUMNS)
+        this.recordVersion(30, now)
       }
       if (current < 31) {
         // v31: the session history (transcript rows read by src/sessions/).
         this.db.exec(TRANSCRIPTS_SQL)
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(31, now)
+        this.recordVersion(31, now)
       }
       if (current < 32) {
         // v32: Aico's own agent harness joins the tool registry, unless its slug is
         // already taken.
         const agent = DEFAULT_TOOLS.find((tool) => tool.slug === 'aico-agent')
         if (agent && !this.getTool(agent.slug)) this.insertTool(agent, now)
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(32, now)
+        this.recordVersion(32, now)
       }
       if (current < 33) {
         this.db.exec(TRANSCRIPT_OWNERS_SQL)
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(33, now)
+        this.recordVersion(33, now)
       }
       if (current < 34) {
         // v34: the context fill (transcripts.context_tokens); a v31 table made now has it.
@@ -518,28 +425,17 @@ export class Store {
           .prepare("SELECT 1 FROM pragma_table_info('transcripts') WHERE name = 'context_tokens'")
           .get()
         if (!has) this.db.exec(TRANSCRIPT_CONTEXT_SQL)
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(34, now)
+        this.recordVersion(34, now)
       }
       if (current < 35) {
         // v35: asks an app files (asks.open_url, asks.origin).
-        for (const { table, column, sql } of ASK_ORIGIN_COLUMNS) {
-          const has = this.db
-            .prepare('SELECT 1 FROM pragma_table_info(?) WHERE name = ?')
-            .get(table, column)
-          if (!has) this.db.exec(sql)
-        }
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(35, now)
+        this.addMissingColumns(ASK_ORIGIN_COLUMNS)
+        this.recordVersion(35, now)
       }
       if (current < 36) {
         // v36: the retired Agent Hub chat backend's rows, tables and tool entry go.
         this.db.exec(DROP_LEGACY_CHAT_SQL)
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(36, now)
+        this.recordVersion(36, now)
       }
       if (current < 37) {
         // v37: conversation names and the "doing now" line (transcripts.title and friends).
@@ -549,9 +445,7 @@ export class Store {
             .get(column)
           if (!has) this.db.exec(sql)
         }
-        this.db
-          .prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)')
-          .run(37, now)
+        this.recordVersion(37, now)
       }
     })
   }
