@@ -117,6 +117,18 @@ def test_usage_errors_are_plain_lines_naming_the_st_command(monkeypatch, capsys)
     assert exc.value.code == 3
 
 
+def test_output_closed_early_exits_quietly():
+    code = ("import typer; from st_sdk.runtime import run_app; a = typer.Typer(); "
+            "a.command()(lambda: [print('x' * 100) for _ in range(5000)]); run_app(a, 't', [])")
+    proc = subprocess.Popen([sys.executable, '-c', code], cwd=ROOT, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, text=True)
+    assert proc.stdout.readline() == 'x' * 100 + '\n'
+    proc.stdout.close()
+    err = proc.stderr.read()
+    assert proc.wait(timeout=30) == 1
+    assert err == ''
+
+
 @pytest.mark.parametrize('change', [
     {'contract_version': True}, {'contract_version': 2}, {'extra': 1}, {'cwd': 'relative'},
     {'project_root': 'relative'}, {'project_id': ''}, {'api_base': ''},

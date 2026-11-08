@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import importlib
 import json
 import os
@@ -154,6 +155,14 @@ def run_app(
             raise typer.Abort() from exc
         except KeyboardInterrupt as exc:
             raise typer.Exit(130) from exc
+        except OSError as exc:
+            if exc.errno != errno.EPIPE:
+                raise
+            # Output piped into head and closed early: exit quietly as Typer's own main does.
+            pacify = _click_utils().PacifyFlushWrapper
+            sys.stdout = pacify(sys.stdout)
+            sys.stderr = pacify(sys.stderr)
+            sys.exit(1)
     except typer.Exit as exc:
         sys.exit(exc.exit_code)
     except typer.Abort:
@@ -176,6 +185,11 @@ def _click_exceptions() -> Any:
     if vendored is not None:
         return vendored.exceptions
     return importlib.import_module("click.exceptions")
+
+
+def _click_utils() -> Any:
+    vendored = getattr(typer.core, "_click", None)
+    return vendored.utils if vendored is not None else importlib.import_module("click.utils")
 
 
 def _plain_error(exc: Any, errors: Any) -> str:

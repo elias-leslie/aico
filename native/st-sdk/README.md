@@ -33,5 +33,5 @@ st check --native --stage python-st-sdk --no-reuse
 st tools run --label 'Build SDK wheel' -- uv build --wheel --directory native/st-sdk
 ```
 
-Consumers install `dist/summitflow_st_sdk-0.2.8-py3-none-any.whl` in their existing
+Consumers install `dist/summitflow_st_sdk-0.2.9-py3-none-any.whl` in their existing
 environment. The check stage runs Ruff, ty, and every test in `tests/`.
