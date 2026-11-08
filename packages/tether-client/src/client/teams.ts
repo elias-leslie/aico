@@ -1,9 +1,8 @@
 // Coordinator teams in a session list (the web list).
 // Top level holds coordinators and standalone sessions; a coordinator's lanes
-// fold under it. Rows keep the order they arrive in (oldest first); only Needs
-// you moves a row, to the top, so working and idle changes never reshuffle the
-// list. A team sits in Needs you when it or a lane waits on the owner. Every
-// session appears exactly once: a lane folds under the lane that launched it
+// fold under it. Rows keep the order they arrive in (oldest first) whatever
+// their state, so a state change never moves one. A team reads Needs you when
+// it or a lane waits on the owner. Every session appears exactly once: a lane folds under the lane that launched it
 // (`parentId`) while that one is listed, else under its coordinator; a lane
 // whose coordinator has ended too returns to the top level, marked `orphaned`.
 //
@@ -21,37 +20,18 @@ export interface TeamMember {
   parentId?: string | null
   /** The session's own attention group. */
   group: TeamGroup
-  /** When its state began (ms), or null. */
-  at: number | null
 }
 
 export interface TeamRow<T extends TeamMember> {
   item: T
   /** Needs you when a lane waits on the owner, else its own group. */
   group: TeamGroup
-  /** Folded lanes, Needs you first, then in arrival order. */
+  /** Folded lanes, in arrival order. */
   children: TeamRow<T>[]
   /** `6 working, 1 needs you` over every lane below it; null for a row without lanes. */
   summary: string | null
   /** A lane whose coordinator has ended. */
   orphaned: boolean
-}
-
-/** Needs you first, waiting longest first; the rest keep their order. */
-function compareRows<T extends TeamMember>(a: TeamRow<T>, b: TeamRow<T>): number {
-  const aw = a.group === 'needs-you'
-  const bw = b.group === 'needs-you'
-  if (aw !== bw) return aw ? -1 : 1
-  return aw ? sortAt(a) - sortAt(b) : 0
-}
-
-/** A team in Needs you because of a lane sorts by that lane's wait. */
-function sortAt<T extends TeamMember>(row: TeamRow<T>): number {
-  if (row.group === 'needs-you' && row.item.group !== 'needs-you') {
-    const waits = row.children.filter((c) => c.group === 'needs-you').map(sortAt)
-    if (waits.length) return Math.min(...waits)
-  }
-  return row.item.at ?? 0
 }
 
 /** One line for a coordinator row: `6 working, 1 needs you, 2 idle`. No
@@ -70,7 +50,7 @@ export function teamSummary(children: readonly { group: TeamGroup }[]): string {
   return children.length === 1 ? '1 session' : `${children.length} sessions`
 }
 
-/** Fold sessions into teams. Input order is kept outside Needs you. */
+/** Fold sessions into teams. Input order is kept. */
 export function foldTeams<T extends TeamMember>(items: readonly T[]): TeamRow<T>[] {
   const byId = new Map(items.map((item) => [item.id, item]))
   // The listed session it folds under: its launcher, else its coordinator.
@@ -100,7 +80,7 @@ export function foldTeams<T extends TeamMember>(items: readonly T[]): TeamRow<T>
     else top.push(item)
   }
   const build = (item: T): TeamRow<T> => {
-    const children = (lanes.get(item.id) ?? []).map(build).sort(compareRows)
+    const children = (lanes.get(item.id) ?? []).map(build)
     const waiting = children.some((c) => c.group === 'needs-you')
     return {
       item,
@@ -110,7 +90,7 @@ export function foldTeams<T extends TeamMember>(items: readonly T[]): TeamRow<T>
       orphaned: !!item.coordinatorId && !byId.has(item.coordinatorId) && !parentOf(item),
     }
   }
-  return top.map(build).sort(compareRows)
+  return top.map(build)
 }
 
 /** Every session in a row and its folded lanes. */

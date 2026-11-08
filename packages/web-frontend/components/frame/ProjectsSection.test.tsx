@@ -1,7 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Attention } from '@/lib/attention'
-import type { HistorySession } from '@/lib/history'
 import type { ProjectSummary } from '@/lib/projects'
 import type { AdHocSlot } from '@/lib/utils/slot'
 import { SLOT_BASE } from '@/test-stubs/session-fixtures'
@@ -12,7 +11,6 @@ const NOW = Date.now()
 const hooks = vi.hoisted(() => ({
   attention: {} as Record<string, unknown>,
   overview: {} as Record<string, unknown>,
-  history: {} as Record<string, unknown>,
   requestNew: vi.fn(),
 }))
 vi.mock('@/lib/hooks/use-session-attention', () => ({
@@ -20,12 +18,6 @@ vi.mock('@/lib/hooks/use-session-attention', () => ({
 }))
 vi.mock('@/lib/hooks/use-projects', () => ({
   useProjectOverview: () => hooks.overview,
-}))
-vi.mock('@/lib/hooks/use-history', () => ({
-  useHistory: () => hooks.history,
-}))
-vi.mock('@/lib/hooks/use-session-labels', () => ({
-  useSessionLabels: () => (session: { id: string }) => `Chat ${session.id}`,
 }))
 vi.mock('@/lib/frame/new-session-request', () => ({
   requestNewSession: hooks.requestNew,
@@ -83,21 +75,6 @@ const summary = (id: string, name: string): ProjectSummary => ({
   agents: 0,
   lastActivity: null,
 })
-const ended = (id: string, project: string): HistorySession => ({
-  id,
-  tool: 'codex',
-  parentId: null,
-  project,
-  cwd: null,
-  model: null,
-  startedAt: NOW - 1000,
-  endedAt: NOW - 500,
-  outcome: 'completed',
-  tokens: { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 },
-  toolCalls: 0,
-  filesWritten: 0,
-})
-
 function setAttention(states: Record<string, Attention>) {
   hooks.attention = {
     forSlot: (s: unknown) => states[(s as AdHocSlot).sessionId] ?? null,
@@ -124,7 +101,6 @@ beforeEach(() => {
     summary('docs', 'Docs'),
     summary('jobs', 'Jobs'),
   ])
-  hooks.history = { items: [], failed: false }
   setAttention({})
 })
 
@@ -139,7 +115,7 @@ describe('ProjectsSection', () => {
     expect(row.textContent).toContain('Working')
   })
 
-  it('heads a project with several sessions, with state chips, working first', () => {
+  it('heads a project with several sessions, with state chips, oldest first', () => {
     setAttention({
       a: state('idle'),
       b: state('working'),
@@ -156,7 +132,7 @@ describe('ProjectsSection', () => {
     const rows = within(block)
       .getAllByTestId('project-session')
       .map((row) => row.querySelector('.name')?.textContent)
-    expect(rows).toEqual(['Stuck one', 'Busy one', 'Idle one'])
+    expect(rows).toEqual(['Idle one', 'Busy one', 'Stuck one'])
     fireEvent.click(within(block).getByRole('button', { name: /Aico/ }))
     expect(within(block).queryByTestId('project-session')).toBeNull()
   })
@@ -176,15 +152,60 @@ describe('ProjectsSection', () => {
     expect(screen.queryByText(/Scanner/)).toBeNull()
   })
 
-  it('folds finished sessions into one line that opens them', () => {
-    setAttention({ a: state('working'), b: state('finished') })
-    hooks.history = { items: [ended('h1', 'aico')], failed: false }
-    view([slot('a', 'Live', 'aico'), slot('b', 'Done', 'aico')])
-    const fold = screen.getByRole('button', { name: '2 finished today' })
-    expect(screen.queryByText('Done')).toBeNull()
-    fireEvent.click(fold)
-    expect(screen.getByText('Done')).toBeVisible()
-    expect(screen.getByRole('link', { name: /Chat h1/ })).toBeVisible()
+  it('shows a finished session that is still open as an ordinary row in its place', () => {
+    setAttention({ a: state('finished'), b: state('working') })
+    view([slot('a', 'Done', 'aico'), slot('b', 'Live', 'aico')])
+    const block = screen.getByRole('region', { name: 'Aico' })
+    const rows = within(block).getAllByTestId('project-session')
+    expect(rows.map((row) => row.querySelector('.name')?.textContent)).toEqual([
+      'Done',
+      'Live',
+    ])
+    expect(rows[0]?.textContent).toContain('Finished')
+    expect(screen.queryByText(/finished/)).toBeNull()
+  })
+
+  it('shows Needs you in place: the session and its project keep their positions', () => {
+    const slots = [
+      slot('a', 'Older', 'aico'),
+      slot('b', 'Newer', 'aico'),
+      slot('c', 'Solo', 'neri'),
+      slot('d', 'Other', 'docs'),
+    ]
+    const order = (container: HTMLElement) =>
+      [
+        ...container.querySelectorAll('[data-testid="project-session"] .name'),
+      ].map((name) => name.textContent)
+    setAttention({
+      a: state('working'),
+      b: state('working'),
+      c: state('idle'),
+      d: state('working'),
+    })
+    const { container, rerender } = view(slots)
+    const before = order(container)
+    expect(before).toEqual(['Older', 'Newer', 'Docs · Other', 'Neri · Solo'])
+    setAttention({
+      a: state('working'),
+      b: state('needs-you'),
+      c: state('needs-you'),
+      d: state('working'),
+    })
+    rerender(<ProjectsSection slots={slots} onSelect={vi.fn()} />)
+    expect(order(container)).toEqual(before)
+    const block = screen.getByRole('region', { name: 'Aico' })
+    expect(within(block).getByText('1 waiting')).toBeVisible()
+    expect(within(block).getByText('Waiting for you')).toBeVisible()
+    expect(screen.getAllByTestId('project-session')[3]?.textContent).toContain(
+      'Waiting for you',
+    )
+  })
+
+  it('never lists a session that ended', () => {
+    setAttention({ a: state('working') })
+    view([slot('a', 'Live', 'aico')])
+    expect(screen.queryByRole('link')).toBeNull()
+    expect(screen.queryByRole('button', { name: /finished/ })).toBeNull()
   })
 
   it('folds quiet projects into one line, each with New session here', () => {
@@ -224,12 +245,6 @@ describe('ProjectsSection', () => {
     expect(screen.getByRole('status').textContent).toContain(
       'Checking projects',
     )
-  })
-
-  it('says finished sessions could not be read', () => {
-    hooks.history = { items: [], failed: true }
-    view([])
-    expect(screen.getByText(/Finished sessions couldn’t be read/)).toBeVisible()
   })
 
   it('selects a session when its row is clicked', () => {

@@ -92,7 +92,7 @@ function rowNames(root: HTMLElement): string[] {
 describe('SessionList teams', () => {
   beforeEach(() => localStorage.clear())
 
-  it('folds lanes on a phone: the team heads the list in Needs you with its summary and earliest check-in', () => {
+  it('folds lanes on a phone: the team keeps its place with its summary and earliest check-in', () => {
     const { container } = render(
       <SessionList
         slots={slots}
@@ -102,15 +102,13 @@ describe('SessionList teams', () => {
       />,
     )
     expect(
-      [
-        ...container.querySelectorAll('[data-testid="session-group-header"]'),
-      ].map((el) => el.textContent),
-    ).toEqual(['Needs you1', 'Working1', 'Idle1'])
-    // Grouped by state: the waiting team first, then working, then idle.
+      container.querySelector('[data-testid="session-group-header"]'),
+    ).toBeNull()
+    // Oldest first, whatever each one's state.
     expect(rowNames(container)).toEqual([
       'Neri — Daybreak lead',
-      'Aico — Tray',
       'Docs — Notes',
+      'Aico — Tray',
     ])
     const team = container.querySelector('.lantern-row.lead') as HTMLElement
     expect(team.className).toContain('needs')
@@ -126,7 +124,7 @@ describe('SessionList teams', () => {
     ).toContain('coordinator ended')
   })
 
-  it('opens a team: lanes sorted, prefix dropped, the waiting lane highlighted', () => {
+  it('opens a team: lanes in place, prefix dropped, the waiting lane highlighted', () => {
     const onSelect = vi.fn()
     const { container } = render(
       <SessionList
@@ -159,11 +157,7 @@ describe('SessionList teams', () => {
     expect(onSelect).toHaveBeenCalledWith(busy)
   })
 
-  it('groups by state with a heading and count each, and moves a row when its state changes', () => {
-    const quiet: Record<string, Attention> = {
-      ...states,
-      ask: state('working', 2),
-    }
+  it('shows each state on its row and moves nothing when one changes', () => {
     const view = (map: Record<string, Attention>) => (
       <SessionList
         slots={slots}
@@ -177,30 +171,16 @@ describe('SessionList teams', () => {
         phone
       />
     )
-    const headers = (root: HTMLElement) =>
-      [...root.querySelectorAll('[data-testid="session-group-header"]')].map(
-        (el) => el.textContent,
-      )
+    const quiet = { ...states, ask: state('working', 2) }
+    const order = ['Neri — Daybreak lead', 'Docs — Notes', 'Aico — Tray']
+    const tray = () => screen.getByRole('button', { name: /Aico — Tray/ })
     const { container, rerender } = render(view(quiet))
-    expect(headers(container)).toEqual(['Working2', 'Idle1'])
-    expect(rowNames(container)).toEqual([
-      'Neri — Daybreak lead',
-      'Aico — Tray',
-      'Docs — Notes',
-    ])
-    rerender(
-      view({ ...quiet, left: state('working', 7), solo: state('idle', 8) }),
-    )
-    // Same state, same order: Docs now works beside the lead; Tray went idle.
-    expect(rowNames(container)).toEqual([
-      'Neri — Daybreak lead',
-      'Docs — Notes',
-      'Aico — Tray',
-    ])
-    // Under the Idle heading the row doesn't repeat the state word.
-    expect(
-      screen.getByRole('button', { name: /Aico — Tray/ }).textContent,
-    ).not.toContain('idle')
+    expect(rowNames(container)).toEqual(order)
+    expect(tray().textContent).toContain('working')
+    rerender(view({ ...quiet, solo: state('needs-you', 8) }))
+    expect(rowNames(container)).toEqual(order)
+    expect(tray().className).toContain('needs')
+    expect(tray().textContent).toContain('waiting for you')
   })
 
   it('remembers a folded team per coordinator on a desktop', () => {
@@ -253,7 +233,7 @@ describe('SessionList launch tree', () => {
     const team = (name: string) => screen.getByRole('group', { name })
     // Only the coordinator is at the top; each level holds its own lanes.
     expect(
-      container.querySelectorAll(':scope > div > div > .lantern-row'),
+      container.querySelectorAll(':scope > div > .lantern-row'),
     ).toHaveLength(1)
     expect(
       [...team('Neri — Coordinator team').children].map(

@@ -1,8 +1,8 @@
 // Which sessions need the owner, from Tether's per-session agent state
 // (`activity` on each session; tether docs/agent-state.md): Needs you,
 // Finished, Working, Idle, or No status (Tether reads no state for the
-// session, e.g. a shell). Only Needs you moves a
-// session in the list (components/SessionList.tsx).
+// session, e.g. a shell). A state shows on the session's row and never moves
+// it (components/SessionList.tsx).
 //
 // "Seen" is when the owner last had each session open: this browser's own
 // record (localStorage, at once) or any device's (the server's `seen_at`,

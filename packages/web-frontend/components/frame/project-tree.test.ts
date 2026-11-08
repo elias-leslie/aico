@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import type { Attention } from '@/lib/attention'
-import type { HistorySession } from '@/lib/history'
 import type { ProjectSummary } from '@/lib/projects'
 import type { AdHocSlot } from '@/lib/utils/slot'
 import { SLOT_BASE } from '@/test-stubs/session-fixtures'
@@ -64,64 +63,82 @@ const project = (
   lastActivity,
 })
 
-const ended = (
-  id: string,
-  projectId: string,
-  over: Partial<HistorySession> = {},
-): HistorySession => ({
-  id,
-  tool: 'claude-code',
-  parentId: null,
-  project: projectId,
-  cwd: null,
-  model: null,
-  startedAt: NOW - 3 * HOUR,
-  endedAt: NOW - 2 * HOUR,
-  outcome: 'completed',
-  tokens: { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 },
-  toolCalls: 0,
-  filesWritten: 0,
-  ...over,
-})
-
-const OWNED: ReadonlySet<string> = new Set()
-
 describe('buildProjectTree', () => {
-  it('puts sessions under their project, the most recently active project first', () => {
+  it('lists projects by name, whichever was active last', () => {
     const tree = buildProjectTree({
       teams: teams(
-        [slot('aa', 'Fix quota', 'portfolio'), slot('bbb', 'Cleanup', 'aico')],
+        [
+          slot('aa', 'Fix quota', 'portfolio'),
+          slot('bbb', 'Cleanup', 'aico'),
+          slot('cccc', 'New one', 'dadbot'),
+        ],
         {
           aa: group('working', NOW - 5 * HOUR),
           bbb: group('working', NOW - HOUR),
+          cccc: group('working', NOW),
         },
       ),
       projects: [
-        project('portfolio', 'Portfolio', null),
+        project('portfolio', 'Portfolio', '2026-11-07T14:00:00Z'),
         project('aico', 'Aico', null),
+        project('dadbot', 'Dadbot', null),
       ],
-      history: [],
-      owned: OWNED,
-      now: NOW,
     })
-    expect(tree.groups.map((g) => g.name)).toEqual(['Aico', 'Portfolio'])
+    expect(tree.groups.map((g) => g.name)).toEqual([
+      'Aico',
+      'Dadbot',
+      'Portfolio',
+    ])
   })
 
-  it('lists working sessions before idle ones inside a project', () => {
+  it('keeps sessions oldest first inside a project, whatever their state', () => {
     const tree = buildProjectTree({
       teams: teams(
         [slot('aa', 'Idle one', 'aico'), slot('bbb', 'Busy one', 'aico')],
         { aa: group('idle', NOW), bbb: group('working', NOW) },
       ),
       projects: null,
-      history: [],
-      owned: OWNED,
-      now: NOW,
     })
     expect(tree.groups[0]?.teams.map((team) => team.item.entry.label)).toEqual([
-      'Busy one',
       'Idle one',
+      'Busy one',
     ])
+  })
+
+  it('keeps a session in place when it starts needing the owner', () => {
+    const slots = [
+      slot('aa', 'First', 'aico'),
+      slot('bbb', 'Second', 'aico'),
+      slot('cccc', 'Third', 'aico'),
+    ]
+    const labels = (third: Attention['group']) =>
+      buildProjectTree({
+        teams: teams(slots, {
+          aa: group('working', NOW),
+          bbb: group('idle', NOW),
+          cccc: group(third, NOW),
+        }),
+        projects: null,
+      }).groups[0]?.teams.map((team) => team.item.entry.label)
+    expect(labels('working')).toEqual(['First', 'Second', 'Third'])
+    expect(labels('needs-you')).toEqual(['First', 'Second', 'Third'])
+  })
+
+  it('keeps a project in place when it gains a waiting session', () => {
+    const slots = [slot('aa', 'One', 'aico'), slot('bbb', 'Two', 'neri')]
+    const names = (neri: Attention['group']) =>
+      buildProjectTree({
+        teams: teams(slots, {
+          aa: group('working', NOW),
+          bbb: group(neri, NOW),
+        }),
+        projects: [
+          project('aico', 'Aico', null),
+          project('neri', 'Neri', null),
+        ],
+      }).groups.map((g) => g.name)
+    expect(names('idle')).toEqual(['Aico', 'Neri'])
+    expect(names('needs-you')).toEqual(['Aico', 'Neri'])
   })
 
   it('nests a lane under its coordinator and does not list it under its own project', () => {
@@ -134,9 +151,6 @@ describe('buildProjectTree', () => {
         { lead: group('working', NOW), lane: group('working', NOW) },
       ),
       projects: [project('neri', 'Neri', null), project('docs', 'Docs', null)],
-      history: [],
-      owned: OWNED,
-      now: NOW,
     })
     expect(tree.groups.map((g) => g.name)).toEqual(['Neri'])
     expect(tree.groups[0]?.teams[0]?.children).toHaveLength(1)
@@ -144,28 +158,25 @@ describe('buildProjectTree', () => {
     expect(tree.quiet?.map((q) => q.name)).toEqual(['Docs'])
   })
 
-  it('keeps finished sessions and today’s ended conversations with their project', () => {
+  it('keeps a finished session that is still open as an ordinary row in its place', () => {
     const tree = buildProjectTree({
-      teams: teams([slot('aa', 'Live', 'aico'), slot('bbb', 'Done', 'aico')], {
-        aa: group('working', NOW),
-        bbb: group('finished', NOW),
-      }),
+      teams: teams(
+        [
+          slot('aa', 'Done', 'aico'),
+          slot('bbb', 'Live', 'aico'),
+          slot('cccc', 'Done too', 'docs'),
+        ],
+        {
+          aa: group('finished', NOW),
+          bbb: group('working', NOW),
+          cccc: group('finished', NOW),
+        },
+      ),
       projects: null,
-      history: [
-        ended('h1', 'aico'),
-        // Not shown: a test run, one a running session owns, yesterday's, and one with no final reply.
-        ended('h2', 'aico', { test: true }),
-        ended('h3', 'aico'),
-        ended('h4', 'aico', { endedAt: NOW - 30 * HOUR }),
-        ended('h5', 'aico', { outcome: null }),
-      ],
-      owned: new Set(['h3']),
-      now: NOW,
     })
-    const [aico] = tree.groups
-    expect(aico?.teams.map((t) => t.item.entry.label)).toEqual(['Live'])
-    expect(aico?.finished.map((t) => t.item.entry.label)).toEqual(['Done'])
-    expect(aico?.ended.map((s) => s.id)).toEqual(['h1'])
+    expect(
+      tree.groups.map((g) => g.teams.map((t) => t.item.entry.label)),
+    ).toEqual([['Done', 'Live'], ['Done too']])
   })
 
   it('folds projects with nothing running into the quiet list, archived ones left out', () => {
@@ -175,27 +186,18 @@ describe('buildProjectTree', () => {
       }),
       projects: [
         project('aico', 'Aico', null),
-        project('old', 'Old', '2026-11-01T00:00:00Z'),
-        project('new', 'New', '2026-11-07T10:00:00Z'),
+        project('old', 'Old', '2026-11-07T10:00:00Z'),
+        project('new', 'New', '2026-11-01T00:00:00Z'),
         project('gone', 'Gone', null, true),
       ],
-      history: [ended('h1', 'new')],
-      owned: OWNED,
-      now: NOW,
     })
-    expect(tree.quiet?.map((q) => [q.name, q.endedToday])).toEqual([
-      ['New', 1],
-      ['Old', 0],
-    ])
+    expect(tree.quiet?.map((q) => q.name)).toEqual(['New', 'Old'])
   })
 
   it('does not know who is quiet until the project list is read', () => {
     const tree = buildProjectTree({
       teams: teams([slot('aa', 'Live', 'aico')], { aa: group('idle', NOW) }),
       projects: null,
-      history: null,
-      owned: OWNED,
-      now: NOW,
     })
     expect(tree.quiet).toBeNull()
     expect(tree.groups[0]?.name).toBe('aico')
@@ -205,9 +207,6 @@ describe('buildProjectTree', () => {
     const tree = buildProjectTree({
       teams: teams([slot('aa', 'Loose', null)], { aa: group('idle', NOW) }),
       projects: [],
-      history: [],
-      owned: OWNED,
-      now: NOW,
     })
     expect(tree.groups[0]?.name).toBe(NO_PROJECT_NAME)
   })

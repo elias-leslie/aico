@@ -33,14 +33,33 @@ const project = (over: Partial<ProjectSummary>): ProjectSummary => ({
 const NOW = Date.parse('2026-11-06T12:00:00')
 
 describe('orderProjects', () => {
-  it('puts waiting first, then problems, then the most recent', () => {
+  it('sorts by name, whatever is waiting, broken or recent', () => {
     const ordered = orderProjects([
-      project({ id: 'old', lastActivity: '2026-11-01T00:00:00Z' }),
-      project({ id: 'fresh', lastActivity: '2026-11-06T11:00:00Z' }),
-      project({ id: 'broken', problems: [{ kind: 'fail', count: 1 }] }),
-      project({ id: 'asks', waiting: { askId: 'a', title: 'x' } }),
+      project({ id: 'z', name: 'Zed', lastActivity: '2026-11-06T11:00:00Z' }),
+      project({
+        id: 'b',
+        name: 'beta',
+        problems: [{ kind: 'fail', count: 1 }],
+      }),
+      project({
+        id: 'd',
+        name: 'Dadbot',
+        lastActivity: '2026-11-01T00:00:00Z',
+      }),
+      project({ id: 'n', name: 'Neri', waiting: { askId: 'a', title: 'x' } }),
     ])
-    expect(ordered.map((p) => p.id)).toEqual(['asks', 'broken', 'fresh', 'old'])
+    expect(ordered.map((p) => p.id)).toEqual(['b', 'd', 'n', 'z'])
+  })
+
+  it('keeps a project in place when it gains a waiting session', () => {
+    const list = [
+      project({ id: 'a', name: 'Aico' }),
+      project({ id: 'n', name: 'Neri' }),
+    ]
+    const after = list.map((p) =>
+      p.id === 'n' ? { ...p, waiting: { askId: 'a', title: 'x' } } : p,
+    )
+    expect(orderProjects(after).map((p) => p.id)).toEqual(['a', 'n'])
   })
 
   it('keeps archived apart and searches name and top line', () => {

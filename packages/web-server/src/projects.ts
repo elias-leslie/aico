@@ -86,29 +86,11 @@ export interface OverviewRow {
   lastActivity: string | null
 }
 
-const problemWeight = (row: OverviewRow) =>
-  row.problems.reduce((sum, problem) => sum + problem.count, 0)
-const failedFirst = (row: OverviewRow) =>
-  row.problems.some((problem) => problem.worst === 'failed' || problem.worst === 'late') ? 1 : 0
-
-/**
- * Waiting on the owner first, then projects with problems (failed or late before warnings, then
- * more rows), then the most recent activity, then by name. Archived projects follow, by name.
- */
+/** By name, so a project never moves when its state changes. Archived projects follow, by name. */
 export function sortOverview(rows: readonly OverviewRow[]): OverviewRow[] {
-  const byName = (a: OverviewRow, b: OverviewRow) => a.name.localeCompare(b.name)
-  const when = (row: OverviewRow) => (row.lastActivity ? Date.parse(row.lastActivity) : 0)
-  const live = rows
-    .filter((row) => !row.archived)
-    .sort(
-      (a, b) =>
-        Number(b.waiting !== null) - Number(a.waiting !== null) ||
-        failedFirst(b) - failedFirst(a) ||
-        problemWeight(b) - problemWeight(a) ||
-        when(b) - when(a) ||
-        byName(a, b),
-    )
-  return [...live, ...rows.filter((row) => row.archived).sort(byName)]
+  const named = (archived: boolean) =>
+    rows.filter((row) => row.archived === archived).sort((a, b) => a.name.localeCompare(b.name))
+  return [...named(false), ...named(true)]
 }
 
 // -- Git ----------------------------------------------------------------------------------

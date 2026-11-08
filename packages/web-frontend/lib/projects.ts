@@ -162,24 +162,9 @@ export const postPower = (id: string, index: number, action: PowerAction) =>
 
 // --- Order and search -------------------------------------------------------
 
-const problemTotal = (project: ProjectSummary) =>
-  project.problems.reduce((sum, problem) => sum + problem.count, 0)
-
-const time = (iso: string | null) => {
-  const ms = iso ? Date.parse(iso) : Number.NaN
-  return Number.isNaN(ms) ? 0 : ms
-}
-
-/** Waiting on the owner first, then problems, then recent activity. The server sorts the same way; this keeps the page right when it doesn't. */
+/** By name, so a project never moves when its state changes. The server sorts the same way; this keeps the page right when it doesn't. */
 export function orderProjects(projects: ProjectSummary[]): ProjectSummary[] {
-  const rank = (p: ProjectSummary) =>
-    p.waiting ? 0 : problemTotal(p) > 0 ? 1 : 2
-  return [...projects].sort(
-    (a, b) =>
-      rank(a) - rank(b) ||
-      time(b.lastActivity) - time(a.lastActivity) ||
-      a.name.localeCompare(b.name),
-  )
+  return [...projects].sort((a, b) => a.name.localeCompare(b.name))
 }
 
 export function splitProjects(projects: ProjectSummary[], search: string) {

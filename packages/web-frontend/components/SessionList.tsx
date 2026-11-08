@@ -3,7 +3,6 @@
 import { clsx } from 'clsx'
 import { ChevronRight } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
-import type { Attention } from '@/lib/attention'
 import { CHAT_STATE } from '@/lib/chat'
 import { useLiveSessions } from '@/lib/frame/live'
 import {
@@ -40,21 +39,6 @@ import {
 } from './frame/session-entries'
 import { HostBadge } from './HostBadge'
 import { KeptCheckIns } from './KeptCheckIns'
-
-/** The state word on a row, only where its group heading doesn't say it
- * already (Needs you, Working, Finished and Idle carry their own words and the
- * age sits at the right). A working session quiet for a while still says how
- * long; a lane in another state than the team above it, or a session with no
- * state to read, says its own. */
-function stateInGroup(
-  state: RowState,
-  group: Attention['group'] | undefined,
-  under: Attention['group'],
-): string | null {
-  if (group === undefined || group === 'no-status' || group !== under)
-    return state.text
-  return state.quiet === null ? null : `quiet ${state.quiet} min`
-}
 
 function rowFacts(item: TeamEntry) {
   return {
@@ -158,8 +142,8 @@ interface SessionListProps {
   phone?: boolean
 }
 
-/** Every session oldest first, with Needs you on top, and each coordinator's
- * lanes folded under it. */
+/** Every session oldest first, each showing its state in place, and each
+ * coordinator's lanes folded under it. */
 export function SessionList({
   slots,
   currentId,
@@ -197,7 +181,6 @@ export function SessionList({
   const renderRow = (
     row: TeamRow<TeamEntry>,
     lead: SessionListEntry | null,
-    under: Attention['group'],
   ): React.ReactNode => {
     const { id } = row.item
     const { label, mode, state, slot } = rowFacts(row.item)
@@ -224,12 +207,11 @@ export function SessionList({
       shown.state.tone === 'work' || shown.state.tone === 'quiet'
         ? slot?.doing
         : null
-    const stateWord = stateInGroup(shown.state, group, under)
     const meta = chat
       ? `${chat.role} · ${chat.model ?? '—'} · ${CHAT_STATE[chat.state] ?? chat.state} · ${chat.cwd.split('/').pop()}`
       : [
           agentName(mode),
-          stateWord,
+          shown.state.text,
           shown.asks,
           alsoRunningText(slot, agentTools),
           slot?.projectLabel,
@@ -307,50 +289,16 @@ export function SessionList({
             // A lane's own helpers nest a step further, kept narrow for phone width.
             style={lead ? { marginLeft: 10 } : undefined}
           >
-            {row.children.map((child) =>
-              renderRow(child, row.item.entry, under),
-            )}
+            {row.children.map((child) => renderRow(child, row.item.entry))}
           </div>
         )}
       </div>
     )
   }
 
-  const labels = {
-    'needs-you': 'Needs you',
-    working: 'Working',
-    idle: 'Idle',
-    finished: 'Finished',
-    'no-status': 'Idle',
-  }
-  // The group each row sits in; no-status sessions read as idle.
-  const groupOf = (row: TeamRow<TeamEntry>) => labels[row.group]
-
   return (
     <>
-      {teams.map((row, index) => {
-        const header =
-          index === 0 ||
-          groupOf(teams[index - 1] as TeamRow<TeamEntry>) !== groupOf(row)
-            ? groupOf(row)
-            : null
-        return (
-          <div key={row.item.id}>
-            {header && (
-              <h3
-                data-testid="session-group-header"
-                className="lantern-sec mx-2.5 mt-3.5 mb-1.5"
-              >
-                {header}
-                <span className="n">
-                  {teams.filter((item) => groupOf(item) === header).length}
-                </span>
-              </h3>
-            )}
-            {renderRow(row, null, row.group)}
-          </div>
-        )
-      })}
+      {teams.map((row) => renderRow(row, null))}
       <KeptCheckIns />
     </>
   )

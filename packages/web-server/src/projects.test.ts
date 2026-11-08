@@ -36,10 +36,10 @@ const overviewRow = (fields: Partial<OverviewRow>): OverviewRow => ({
 })
 
 describe('sortOverview', () => {
-  it('puts waiting first, then problems, then recent activity, archived last', () => {
+  it('sorts by name whatever is waiting, broken or recent, archived last', () => {
     const sorted = sortOverview([
-      overviewRow({ id: 'quiet-old', name: 'B', lastActivity: '2026-11-01T00:00:00Z' }),
-      overviewRow({ id: 'quiet-new', name: 'A', lastActivity: '2026-11-06T00:00:00Z' }),
+      overviewRow({ id: 'old', name: 'B', lastActivity: '2026-11-01T00:00:00Z' }),
+      overviewRow({ id: 'new', name: 'E', lastActivity: '2026-11-06T00:00:00Z' }),
       overviewRow({
         id: 'warn',
         name: 'C',
@@ -50,17 +50,18 @@ describe('sortOverview', () => {
         name: 'D',
         problems: [{ kind: 'fail', count: 1, worst: 'failed' }],
       }),
-      overviewRow({ id: 'waiting', name: 'E', waiting: { askId: 'a', title: 'Q' } }),
+      overviewRow({ id: 'waiting', name: 'A', waiting: { askId: 'a', title: 'Q' } }),
       overviewRow({ id: 'gone', name: 'A0', archived: true, waiting: { askId: 'b', title: 'Q' } }),
     ])
-    expect(sorted.map((row) => row.id)).toEqual([
-      'waiting',
-      'failed',
-      'warn',
-      'quiet-new',
-      'quiet-old',
-      'gone',
-    ])
+    expect(sorted.map((row) => row.id)).toEqual(['waiting', 'old', 'warn', 'failed', 'new', 'gone'])
+  })
+
+  it('keeps a project in place when it gains a waiting session', () => {
+    const rows = [overviewRow({ id: 'a', name: 'Aico' }), overviewRow({ id: 'n', name: 'Neri' })]
+    const after = rows.map((row) =>
+      row.id === 'n' ? { ...row, waiting: { askId: 'x', title: 'Q' } } : row,
+    )
+    expect(sortOverview(after).map((row) => row.id)).toEqual(['a', 'n'])
   })
 })
 

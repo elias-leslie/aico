@@ -156,7 +156,7 @@ function show(selected = '', onSelect = vi.fn()) {
 }
 
 describe('list', () => {
-  it('shows a skeleton, then waiting first, with Archived collapsed', async () => {
+  it('shows a skeleton, then projects by name, with Archived collapsed', async () => {
     show()
     expect(
       screen.getByRole('status', { name: 'Loading projects' }),
@@ -167,7 +167,8 @@ describe('list', () => {
       .filter((b) => b.className.includes('pick'))
       .map((b) => b.textContent)
     expect(names[0]).toContain('Cinderwake')
-    expect(names[1]).toContain('Portfolio AI')
+    expect(names[1]).toContain('OmniNull')
+    expect(names[2]).toContain('Portfolio AI')
     expect(screen.getByLabelText('Waiting on you')).toBeInTheDocument()
     expect(
       screen.getByText('Waiting on you: playtest the slice'),

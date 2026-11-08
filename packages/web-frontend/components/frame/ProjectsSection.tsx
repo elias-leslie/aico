@@ -1,19 +1,14 @@
 'use client'
 
 import { ChevronDown, ChevronRight, Plus } from 'lucide-react'
-import Link from 'next/link'
 import { useMemo } from 'react'
-import { useLiveSessions } from '@/lib/frame/live'
 import { requestNewSession } from '@/lib/frame/new-session-request'
-import { agoAt, sessionHref, toolName } from '@/lib/history'
+import { agoAt } from '@/lib/history'
 import { useClock } from '@/lib/hooks/use-clock'
-import { useHistory } from '@/lib/hooks/use-history'
 import { useProjectOverview } from '@/lib/hooks/use-projects'
 import { useSessionAttention } from '@/lib/hooks/use-session-attention'
-import { useSessionLabels } from '@/lib/hooks/use-session-labels'
 import { plural } from '@/lib/status'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
-import { AgentIcon } from '../AgentIcon'
 import { KeptCheckIns } from '../KeptCheckIns'
 import styles from './ProjectsSection.module.css'
 import { usePanelFold } from './panel-folds'
@@ -21,7 +16,6 @@ import {
   buildProjectTree,
   type ProjectGroup,
   type QuietProject,
-  startOfDay,
 } from './project-tree'
 import { usePopoverClose } from './RailPopover'
 import { type RowsContext, SessionRow } from './SessionRows'
@@ -52,88 +46,18 @@ function countIn(
     .filter((member) => member.entry.state?.group === group).length
 }
 
-/** "2 finished today" when every one ended today, else "2 finished". */
-function finishedLabel(group: ProjectGroup, now: number): string {
-  const day = startOfDay(now)
-  const total = group.finished.length + group.ended.length
-  const today =
-    group.ended.length +
-    group.finished.filter((row) => (row.item.entry.state?.at ?? 0) >= day)
-      .length
-  return `${total} finished${today === total ? ' today' : ''}`
-}
-
-/** A project's finished sessions folded into one line: the ones still listed open the session, the
- * ones that ended today open their transcript. */
-function Finished({
-  group,
-  ctx,
-  now,
-}: {
-  group: ProjectGroup
-  ctx: RowsContext
-  now: number
-}) {
-  const [open, setOpen] = usePanelFold(`finished:${group.id}`, false)
-  const labelOf = useSessionLabels()
-  const close = usePopoverClose()
-  return (
-    <>
-      <button
-        type="button"
-        className={styles.fold}
-        aria-expanded={open}
-        onClick={() => setOpen(!open)}
-      >
-        <Chevron open={open} />
-        <span>{finishedLabel(group, now)}</span>
-      </button>
-      {open && (
-        <div className={styles.rows}>
-          {group.finished.map((row) => (
-            <SessionRow key={row.item.id} row={row} ctx={ctx} />
-          ))}
-          {group.ended.map((session) => (
-            <Link
-              key={session.id}
-              href={sessionHref(session.id)}
-              className={`lantern-row ${styles.link}`}
-              onClick={() => close?.()}
-            >
-              <AgentIcon slug={session.tool} size={16} />
-              <span className="name">{labelOf(session)}</span>
-              <span className="when">{agoAt(session.endedAt, now)}</span>
-              <span className="meta">
-                <span className="status-chip ok">Finished</span>
-                <span className="truncate">{toolName(session.tool)}</span>
-              </span>
-            </Link>
-          ))}
-        </div>
-      )}
-    </>
-  )
-}
-
 /** One project with a live session: its name and counts, its sessions under it. A project with a
  * single session and nothing else is that one row. */
 function ProjectBlock({
   group,
   ctx,
-  now,
 }: {
   group: ProjectGroup
   ctx: RowsContext
-  now: number
 }) {
   const [open, setOpen] = usePanelFold(`project:${group.id}`, true)
   const only = group.teams[0]
-  if (
-    group.teams.length === 1 &&
-    only &&
-    only.children.length === 0 &&
-    group.finished.length + group.ended.length === 0
-  )
+  if (group.teams.length === 1 && only && only.children.length === 0)
     return (
       <div className={styles.block} data-testid="project-block">
         <SessionRow row={only} ctx={ctx} prefix={group.name} />
@@ -171,9 +95,6 @@ function ProjectBlock({
           {group.teams.map((team) => (
             <SessionRow key={team.item.id} row={team} ctx={ctx} />
           ))}
-          {group.finished.length + group.ended.length > 0 && (
-            <Finished group={group} ctx={ctx} now={now} />
-          )}
         </div>
       )}
     </section>
@@ -204,16 +125,9 @@ function Quiet({ projects, now }: { projects: QuietProject[]; now: number }) {
                   {project.name}
                 </span>
                 <span className={styles.quietLine}>
-                  {[
-                    project.endedToday > 0
-                      ? `${project.endedToday} finished today`
-                      : null,
-                    project.at
-                      ? `active ${agoAt(project.at, now).replace(' ago', '')}`
-                      : 'no activity yet',
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
+                  {project.at
+                    ? `active ${agoAt(project.at, now).replace(' ago', '')}`
+                    : 'no activity yet'}
                 </span>
               </span>
               <button
@@ -244,29 +158,20 @@ function Quiet({ projects, now }: { projects: QuietProject[]; now: number }) {
 export function useProjectTree(slots: Slot[]) {
   const attention = useSessionAttention()
   const overview = useProjectOverview()
-  const history = useHistory('')
-  const live = useLiveSessions()
   const now = useClock(30_000)
   const teams = useMemo(
     () => foldSessionEntries(sortSessionEntries(slots, attention)),
     [slots, attention],
   )
   const tree = useMemo(
-    () =>
-      buildProjectTree({
-        teams,
-        projects: overview.data ?? null,
-        history: history.items,
-        owned: live.conversations,
-        now,
-      }),
-    [teams, overview.data, history.items, live.conversations, now],
+    () => buildProjectTree({ teams, projects: overview.data ?? null }),
+    [teams, overview.data],
   )
-  return { tree, overview, history, now }
+  return { tree, overview, now }
 }
 
-/** The side's Projects: projects with a running session each hold their sessions, working first and
- * most recently active first; the rest close the list as one line. */
+/** The side's Projects: projects with a running session each hold their sessions, oldest first,
+ * the projects by name; the rest close the list as one line. A state change never moves a row. */
 export function ProjectsSection({
   slots,
   currentId,
@@ -279,7 +184,7 @@ export function ProjectsSection({
   /** Without its heading: a pop-out names it already. */
   bare?: boolean
 }) {
-  const { tree, overview, history, now } = useProjectTree(slots)
+  const { tree, overview, now } = useProjectTree(slots)
   const ctx: RowsContext = {
     currentId,
     onSelect,
@@ -308,7 +213,7 @@ export function ProjectsSection({
       )}
       <nav aria-label="Sessions" data-testid="session-list">
         {tree.groups.map((group) => (
-          <ProjectBlock key={group.id} group={group} ctx={ctx} now={now} />
+          <ProjectBlock key={group.id} group={group} ctx={ctx} />
         ))}
       </nav>
       {overview.isError && !overview.data && (
@@ -338,11 +243,6 @@ export function ProjectsSection({
           >
             Retry
           </button>
-        </p>
-      )}
-      {history.failed && (
-        <p className={styles.note} role="status">
-          Finished sessions couldn’t be read.
         </p>
       )}
       {tree.quiet && <Quiet projects={tree.quiet} now={now} />}

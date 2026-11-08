@@ -35,8 +35,8 @@ export interface SessionListEntry {
   asks: AskCounts
 }
 
-/** Sessions oldest first, so a state change never moves one (foldSessionEntries
- * lifts Needs you to the top); the same name with the same agent is numbered. */
+/** Sessions oldest first, so a state change never moves one; the same name
+ * with the same agent is numbered. */
 export function sortSessionEntries(
   slots: Array<TerminalSlot | PaneSlot>,
   attention?: SessionAttention,
@@ -74,7 +74,6 @@ export interface TeamEntry {
   coordinatorId: string | null
   parentId: string | null
   group: Attention['group']
-  at: number | null
   entry: SessionListEntry
 }
 
@@ -102,26 +101,10 @@ export function foldSessionEntries(
       // An unlisted launcher leaves the lane under its coordinator.
       parentId: parent ? (rowOf.get(parent) ?? null) : null,
       group: entry.state?.group ?? 'no-status',
-      at: entry.state?.at ?? null,
       entry,
     }
   })
-  const teams = foldTeams(sessions)
-  const order = {
-    'needs-you': 0,
-    working: 1,
-    idle: 2,
-    'no-status': 2,
-    finished: 3,
-  }
-  // Grouped by state; inside a group the order is stable (oldest first), so
-  // a session only moves when its own state changes.
-  return teams
-    .map((row, index) => ({ row, index }))
-    .sort(
-      (a, b) => order[a.row.group] - order[b.row.group] || a.index - b.index,
-    )
-    .map(({ row }) => row)
+  return foldTeams(sessions)
 }
 
 /** A session on its own as a team row, for lists that show sessions flat. */
@@ -134,7 +117,6 @@ export function asTeamRow(entry: SessionListEntry): TeamRow<TeamEntry> {
       coordinatorId: null,
       parentId: null,
       group,
-      at: entry.state?.at ?? null,
       entry,
     },
     group,

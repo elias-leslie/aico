@@ -10,7 +10,7 @@ const state = vi.hoisted(() => ({
     text: string
     tone: string
   }[],
-  groups: [{ teams: [1, 2], finished: [3] }] as unknown[],
+  groups: [{ teams: [1, 2, 3] }] as unknown[],
 }))
 vi.mock('./FrameContext', () => ({
   useFrame: () => ({
@@ -55,7 +55,7 @@ beforeEach(() => {
   state.setTier.mockClear()
   state.worst = 'failed'
   state.chips = [{ text: '3 problems', tone: 'failed' }]
-  state.groups = [{ teams: [1, 2], finished: [3] }]
+  state.groups = [{ teams: [1, 2, 3] }]
 })
 
 describe('Rail', () => {

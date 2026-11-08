@@ -45,7 +45,7 @@ export function Rail({
   const system = useSystemState()
   const { tree } = useProjectTree(slots)
   const sessions = tree.groups.reduce(
-    (total, group) => total + group.teams.length + group.finished.length,
+    (total, group) => total + group.teams.length,
     0,
   )
   const systemLabel = system.chips.length
