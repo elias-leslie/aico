@@ -7,6 +7,7 @@ import { MACHINE_LABEL, WORKSTATION_LABEL } from './machine-name'
 import {
   ago,
   at,
+  isProblem,
   plural,
   reason,
   type StatusRow,
@@ -23,13 +24,48 @@ const SESSION_HOST_MACHINE: Record<string, string> = {}
 const PURPOSE: Record<string, string> = {
   'davion-sidarli': 'Runs Aico, your agents and their projects.',
   'davion-gem': 'Runs the VMs and containers. Its watchdog reports to Aico.',
-  aico: 'A second Aico on its own container (CT 190), always on. It follows the workstation’s release.',
+  aico: 'The standby: a second Aico on its own container (CT 190) that keeps working while the workstation is down.',
   'neri-hunters': 'The security hunt.',
   'ominull-hub': 'Detection and paging (OmniNull).',
   apps: 'Portfolio and other apps.',
   jobinator: 'Job scans and screening (Jobinator).',
 }
 const SESSION_HOST_PURPOSE = 'Runs sessions away from the workstation.'
+
+/** The standby machine and the Status rows that keep it ready: its link, its release, the copy of
+ * the owner's context, and the repo copies and checkouts sent to it. */
+const STANDBY = {
+  machine: 'aico',
+  rows: [
+    /^fleet\/[^/]+\/aico$/,
+    /^jobs\/peer-release$/,
+    /^jobs\/context-sync$/,
+    /^jobs\/wip-mirror-/,
+    /\/wip-mirror\//,
+  ],
+}
+
+/** What the standby badge's tooltip says it does. */
+export const STANDBY_TIP =
+  'Standby: keeps working while the workstation is down. It runs the same release, gets copies of your memories, prompts and projects, and runs note reminders and the morning digest.'
+
+/** Whether the standby is ready to take over: every row that keeps it ready is fine; `behind` names
+ * the ones that are not. */
+export interface Standby {
+  ready: boolean
+  behind: string[]
+}
+
+function standbyOf(rows: readonly StatusRow[]): Standby {
+  const behind = rows
+    .filter(
+      (row) =>
+        STANDBY.rows.some((pattern) => pattern.test(row.id)) &&
+        isProblem(row.shown),
+    )
+    .map((row) => `${row.what}: ${row.meaning}`)
+  return { ready: behind.length === 0, behind }
+}
 
 /** What a session host is called in lists of places to start a session. */
 export function sessionHostLabel(name: string | null): string {
@@ -103,6 +139,8 @@ export interface Machine {
   guest: MachineGuest | null
   /** Up since, size and projects, from Proxmox and the project registry; empty when not known. */
   facts: string
+  /** The standby's readiness; null for every other machine, and while Status can't be read. */
+  standby: Standby | null
 }
 
 const GUEST_FREE = new Set(['davion-gem'])
@@ -161,6 +199,14 @@ export const INTENT_TAG: Record<NonNullable<MachineGuest['intent']>, string> = {
   always: 'Always on',
   'on-demand': 'On demand',
   off: 'Parked',
+}
+
+/** What each registry tag means, for its tooltip. */
+export const INTENT_TIP: Record<NonNullable<MachineGuest['intent']>, string> = {
+  always:
+    'Always on: meant to run all the time. Aico tells you when it stays down.',
+  'on-demand': 'On demand: started when something needs it. Being off is fine.',
+  off: 'Parked: meant to stay off.',
 }
 
 export interface Machines {
@@ -341,6 +387,7 @@ export function buildMachines(
       isWorkstation,
       guest,
       facts: guest ? guestFacts(guest, now) : '',
+      standby: key === STANDBY.machine && view ? standbyOf(view.rows) : null,
     }
   })
   const rank = (m: Machine) =>

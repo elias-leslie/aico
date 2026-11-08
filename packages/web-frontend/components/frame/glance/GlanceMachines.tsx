@@ -8,6 +8,7 @@ import {
   PowerConfirm,
   useMachineControls,
 } from '@/components/machines/machine-controls'
+import { StandbyTag } from '@/components/machines/StandbyTag'
 import { useClock } from '@/lib/hooks/use-clock'
 import { useHosts } from '@/lib/hooks/use-hosts'
 import { useMachineList } from '@/lib/hooks/use-machine-list'
@@ -16,6 +17,7 @@ import {
   autostartHint,
   buildMachines,
   INTENT_TAG,
+  INTENT_TIP,
   type Machine,
   type Machines,
   UP_CHIP,
@@ -70,7 +72,6 @@ function Row({
   const controls = useMachineControls(machine, onChanged)
   const [open, setOpen] = useState(false)
   const guest = machine.guest
-  const tag = guest?.intent ? INTENT_TAG[guest.intent] : null
   const hint = guest ? autostartHint(guest) : ''
   const more = [machine.facts, hint].filter(Boolean)
   const sessionsText =
@@ -112,13 +113,13 @@ function Row({
             Runs sessions
           </span>
         )}
-        {tag && (
-          <span
-            className={styles.tag}
-            title="Where the project registry says this machine should be"
-          >
-            {tag}
+        {guest?.intent && (
+          <span className={styles.tag} title={INTENT_TIP[guest.intent]}>
+            {INTENT_TAG[guest.intent]}
           </span>
+        )}
+        {machine.standby && (
+          <StandbyTag standby={machine.standby} className={styles.tag} />
         )}
       </div>
       {machine.purpose && <p className={styles.line}>{machine.purpose}</p>}

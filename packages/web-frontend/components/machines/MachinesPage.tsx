@@ -9,6 +9,7 @@ import { useMachineList } from '@/lib/hooks/use-machine-list'
 import {
   autostartHint,
   INTENT_TAG,
+  INTENT_TIP,
   MACHINES_LEGEND,
   type Machine,
   machinesLine,
@@ -24,6 +25,7 @@ import {
   PowerConfirm,
   useMachineControls,
 } from './machine-controls'
+import { StandbyTag } from './StandbyTag'
 
 /** Machines: every machine once, whether it is up, what it is for, and power where it applies. */
 export function MachinesPage() {
@@ -262,7 +264,6 @@ function MachineRow({
       : machine.sessions === 0
         ? 'No sessions running'
         : `${plural(machine.sessions, 'session')} running`
-  const tag = guest?.intent ? INTENT_TAG[guest.intent] : null
   const hint = guest ? autostartHint(guest) : ''
 
   return (
@@ -283,13 +284,13 @@ function MachineRow({
               Runs sessions
             </span>
           )}
-          {tag && (
-            <span
-              className={mine.plainTag}
-              title="Where the project registry says this machine should be: Always on, On demand or Parked"
-            >
-              {tag}
+          {guest?.intent && (
+            <span className={mine.plainTag} title={INTENT_TIP[guest.intent]}>
+              {INTENT_TAG[guest.intent]}
             </span>
+          )}
+          {machine.standby && (
+            <StandbyTag standby={machine.standby} className={mine.plainTag} />
           )}
         </div>
         {machine.purpose && <p className={styles.line}>{machine.purpose}</p>}

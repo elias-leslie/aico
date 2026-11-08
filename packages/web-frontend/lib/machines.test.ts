@@ -54,6 +54,62 @@ const HOSTS: HostChoice[] = [
 ]
 
 describe('buildMachines', () => {
+  it('says whether the standby is ready, naming the copies that are behind', () => {
+    const ready = buildMachines(
+      view([
+        ...ROWS,
+        row({
+          id: 'jobs/context-sync',
+          kind: 'job',
+          machine: 'davion-sidarli',
+        }),
+      ]),
+      HOSTS,
+      NOW,
+    )
+    const standby = (list: typeof ready) =>
+      list.machines.map((m) => [m.key, m.standby])
+    expect(standby(ready)).toContainEqual(['aico', { ready: true, behind: [] }])
+    expect(
+      ready.machines.filter((m) => m.key !== 'aico').map((m) => m.standby),
+    ).toEqual(ready.machines.slice(1).map(() => null))
+    const behind = buildMachines(
+      view([
+        ...ROWS,
+        row({
+          id: 'davion-sidarli/wip-mirror/dadbot-standby',
+          what: 'Standby checkout: dadbot',
+          kind: 'job',
+          machine: 'davion-sidarli',
+          state: 'warn',
+          shown: 'warn',
+          meaning: 'left as it is: it has its own changes',
+        }),
+        row({
+          id: 'davion-sidarli/disk',
+          kind: 'check',
+          machine: 'davion-sidarli',
+          shown: 'failed',
+        }),
+      ]),
+      HOSTS,
+      NOW,
+    )
+    expect(standby(behind)).toContainEqual([
+      'aico',
+      {
+        ready: false,
+        behind: [
+          'Standby checkout: dadbot: left as it is: it has its own changes',
+        ],
+      },
+    ])
+    expect(
+      buildMachines(null, HOSTS, NOW).machines.find((m) => m.key === 'aico')
+        ?.standby,
+    ).toBeNull()
+  })
+
   it('lists every machine once, aico (CT 190) with its own session link', () => {
     const list = buildMachines(view(ROWS), HOSTS, NOW)
     expect(list.machines.map((m) => m.name)).toEqual([
