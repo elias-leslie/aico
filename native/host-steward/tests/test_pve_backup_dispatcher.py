@@ -569,7 +569,7 @@ def _running_snapshot(failure=None, *, current="running", cached="running"):
             return json.dumps([{"vmid": 100, "type": "qemu", "node": "davion-gem", "status": cached}])
         if argv[2] == "/nodes/davion-gem/qemu/100/status/current":
             assert state["lock"] == "ours"
-            return json.dumps({"status": state["power"]})
+            return json.dumps({"status": state["power"], "qmpstatus": state.get("qmpstatus")})
         if failure == "locked":
             return json.dumps({"lock": "backup", "scsi0": "local-lvm:vm-100-disk-0"})
         return original(argv)
@@ -590,7 +590,8 @@ def _running_snapshot(failure=None, *, current="running", cached="running"):
                 state["lock"] = "migration"
             if state["lock"] != "ours":
                 return (1, "", "found lock migration trying to remove backup lock")
-            assert not state.get("thaw_attempted") or state["freeze"] == "thawed"
+            assert (not state.get("thaw_attempted") or state["freeze"] == "thawed" or state["power"] == "stopped"
+                    or (state["power"] == "running" and state.get("qmpstatus") == "shutdown"))
             state["lock"] = None
             if failure == "signal-unlock":
                 signal.raise_signal(signal.SIGTERM)
@@ -763,6 +764,106 @@ def test_an_already_frozen_guest_is_not_thawed_by_this_capture(dispatcher, tmp_p
     assert dispatcher.main(f"capture vm {digest}", run=runs, out=io.BytesIO()) == 2
     assert not any(call[-1] in ("fsfreeze-freeze", "fsfreeze-thaw") or call[0] in ("lvcreate", "mount", "tar") for call in runs.calls)
     assert state["lock"] is None and state["freeze"] == "frozen"
+
+
+def _poweroff_snapshot(phase, terminal, *, failure=None, stop=None):
+    answers, state = _running_snapshot(failure)
+    original = answers["qm"]
+
+    def qm(argv):
+        verb = argv[-1]
+        off = ((phase == "before-freeze" and verb == "fsfreeze-status" and not state.get("thaw_attempted"))
+               or (phase == "freeze" and verb == "fsfreeze-freeze")
+               or (phase in {"thaw", "thaw-exception"} and verb == "fsfreeze-thaw")
+               or (phase == "confirm" and verb == "fsfreeze-status" and state.get("thaw_attempted")))
+        if off:
+            state.update(terminal)
+            if stop:
+                signal.raise_signal(stop)
+        if state["power"] == "stopped" or state.get("qmpstatus") == "shutdown":
+            if verb == "fsfreeze-thaw":
+                state["thaw_attempted"] = True
+                if phase == "thaw-exception":
+                    raise OSError("synthetic QGA process failure after guest shutdown")
+            return (1, "", "guest agent is not running")
+        return original(argv)
+
+    answers["qm"] = qm
+    return answers, state
+
+
+@pytest.mark.parametrize("phase", ["before-freeze", "freeze", "thaw", "thaw-exception", "confirm"])
+@pytest.mark.parametrize("terminal", [{"power": "stopped"}, {"power": "running", "qmpstatus": "shutdown"}])
+def test_poweroff_in_the_short_snapshot_transaction_releases_only_our_flag_and_defers(dispatcher, tmp_path, monkeypatch, phase, terminal):
+    monkeypatch.setattr(dispatcher, "MOUNT_PARENT", str(tmp_path))
+    digest = _install(dispatcher, {"vm": VM})["vm"]
+    answers, state = _poweroff_snapshot(phase, terminal)
+    runs = Runs(answers)
+    assert dispatcher.main(f"capture vm {digest}", run=runs, out=io.BytesIO()) == 75
+    assert state["lock"] is None
+    assert not any(call[0] in ("mount", "tar") for call in runs.calls)
+    if phase in {"before-freeze", "freeze"}:
+        assert not any(call[-1] == "fsfreeze-thaw" for call in runs.calls)
+    if phase == "before-freeze":
+        assert not any(call[-1] == "fsfreeze-freeze" for call in runs.calls)
+    current = [i for i, call in enumerate(runs.calls) if call[:3] == ["pvesh", "get", "/nodes/davion-gem/qemu/100/status/current"]]
+    unlock = next(i for i, call in enumerate(runs.calls) if call[0] == "/usr/bin/perl" and "->remove_lock" in call[3])
+    assert len(current) == 2 and current[-1] < unlock
+
+
+def test_an_already_terminal_qmp_shutdown_is_deferred_without_any_qga_action(dispatcher, tmp_path, monkeypatch):
+    monkeypatch.setattr(dispatcher, "MOUNT_PARENT", str(tmp_path))
+    digest = _install(dispatcher, {"vm": VM})["vm"]
+    answers, state = _running_snapshot()
+    state["qmpstatus"] = "shutdown"
+    runs = Runs(answers)
+    assert dispatcher.main(f"capture vm {digest}", run=runs, out=io.BytesIO()) == 75
+    assert state["lock"] is None
+    assert not any(call[0] in ("qm", "lvcreate", "mount", "tar") for call in runs.calls)
+
+
+@pytest.mark.parametrize("result", [json.dumps({"status": "running", "qmpstatus": "paused"}),
+                                   json.dumps({"status": "running", "qmpstatus": "suspended"}),
+                                   json.dumps({"status": "unknown", "qmpstatus": "shutdown"}),
+                                   "{}", "not json", (1, "", "status unavailable")])
+def test_unconfirmed_poweroff_retains_the_unconfirmed_thaw_safety_flag(dispatcher, tmp_path, monkeypatch, capsys, result):
+    monkeypatch.setattr(dispatcher, "MOUNT_PARENT", str(tmp_path))
+    digest = _install(dispatcher, {"vm": VM})["vm"]
+    answers, state = _running_snapshot("thaw")
+    original = answers["pvesh"]
+
+    def pvesh(argv):
+        if argv[2].endswith("/status/current") and state.get("thaw_attempted"):
+            return result
+        return original(argv)
+
+    answers["pvesh"] = pvesh
+    runs = Runs(answers)
+    assert dispatcher.main(f"capture vm {digest}", run=runs, out=io.BytesIO()) == 2
+    assert state["lock"] == "ours" and state["freeze"] == "frozen"
+    assert "Proxmox backup lock retained" in capsys.readouterr().err
+    assert not any(call[0] in ("mount", "tar") or (call[0] == "/usr/bin/perl" and "->remove_lock" in call[3]) for call in runs.calls)
+
+
+def test_poweroff_cleanup_cannot_clear_a_foreign_flag(dispatcher, tmp_path, monkeypatch):
+    monkeypatch.setattr(dispatcher, "MOUNT_PARENT", str(tmp_path))
+    digest = _install(dispatcher, {"vm": VM})["vm"]
+    answers, state = _poweroff_snapshot("thaw", {"power": "stopped"}, failure="foreign-lock")
+    runs = Runs(answers)
+    assert dispatcher.main(f"capture vm {digest}", run=runs, out=io.BytesIO()) == 2
+    assert state["lock"] == "migration"
+
+
+@pytest.mark.parametrize("number", [signal.SIGTERM, signal.SIGHUP, signal.SIGINT])
+def test_first_cancellation_during_poweroff_cleanup_releases_our_flag_before_deferred_result(dispatcher, tmp_path, monkeypatch, number):
+    monkeypatch.setattr(dispatcher, "MOUNT_PARENT", str(tmp_path))
+    digest = _install(dispatcher, {"vm": VM})["vm"]
+    answers, state = _poweroff_snapshot("thaw", {"power": "stopped"}, stop=number)
+    runs = Runs(answers)
+    with dispatcher.capture_signals():
+        assert dispatcher.main(f"capture vm {digest}", run=runs, out=io.BytesIO()) == 75
+    assert state["lock"] is None
+    assert not any(call[0] in ("mount", "tar") for call in runs.calls)
 
 
 def test_host_capture_reenters_only_under_the_independent_guard(dispatcher, monkeypatch):
