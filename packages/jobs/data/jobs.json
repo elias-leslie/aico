@@ -1,6 +1,7 @@
 {
   "description": "Aico jobs. either names the machines a routine registered with --hosts either runs on (home first, the always-on lease_host holds the lease). home prefers a machine; lease_host (default home) is the single durable lease authority; workers (default home only) lists machines that may take over after lease_s. at is a daily local time, every_min repeats after completion. run is a local POST or command argv. Relative command executables resolve from this file's directory, so they stay in the scheduler's deployed release.",
   "either": {
+    "tz": "America/New_York",
     "home": "davion-sidarli",
     "lease_host": "aico",
     "workers": ["davion-sidarli", "aico"]

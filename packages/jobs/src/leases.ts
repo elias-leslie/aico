@@ -42,6 +42,8 @@ const MIGRATIONS = [
   // Runs on either host: the lease authority and the machines that may take it over.
   `ALTER TABLE routines ADD COLUMN lease_host TEXT;
    ALTER TABLE routines ADD COLUMN workers TEXT`,
+  // The zone a routine's `at` is read in (the registering machine's).
+  `ALTER TABLE routines ADD COLUMN tz TEXT`,
 ]
 
 export function jobsDbPath(dataDir: string): string {
@@ -99,6 +101,8 @@ export interface Routine {
   lease_host?: string
   /** Machines that may run it, host first; the others take over after lease_s (default: host only). */
   workers?: string[]
+  /** IANA zone `at` is read in; absent on routines registered before zones were stored. */
+  tz?: string
   /** user: a systemd user unit; system: a system unit (root). */
   scope: 'user' | 'system'
   lease_s: number
@@ -295,8 +299,8 @@ export class JobStore {
   addRoutine(routine: Routine): void {
     this.db
       .prepare(
-        `INSERT OR REPLACE INTO routines (kind, project, what, host, at, every_min, command, post, cwd, scope, lease_s, created_at, lease_host, workers)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT OR REPLACE INTO routines (kind, project, what, host, at, every_min, command, post, cwd, scope, lease_s, created_at, lease_host, workers, tz)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         routine.kind,
@@ -313,6 +317,7 @@ export class JobStore {
         routine.created_at,
         routine.lease_host ?? null,
         routine.workers ? JSON.stringify(routine.workers) : null,
+        routine.tz ?? null,
       )
   }
 
@@ -336,6 +341,7 @@ export class JobStore {
       ...(row.cwd !== null ? { cwd: row.cwd as string } : {}),
       ...(row.lease_host !== null ? { lease_host: row.lease_host as string } : {}),
       ...(row.workers !== null ? { workers: JSON.parse(row.workers as string) as string[] } : {}),
+      ...(row.tz !== null ? { tz: row.tz as string } : {}),
       scope: row.scope as Routine['scope'],
       lease_s: row.lease_s as number,
       created_at: row.created_at as number,

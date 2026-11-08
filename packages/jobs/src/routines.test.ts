@@ -5,7 +5,7 @@ import type { StatusRow } from '@aico/status'
 import { describe, expect, it } from 'vitest'
 import { whereOf } from './act'
 import { leaseCall } from './fleet-leases'
-import type { JobDef } from './jobs'
+import { type JobDef, nextRun } from './jobs'
 import { JobStore } from './leases'
 import { loadJobs, newRoutine, readEither } from './routines'
 import { parseAdd, type RoutineView, routinesCommand } from './routines-cli'
@@ -392,6 +392,34 @@ describe('a routine that runs on either host', () => {
     // Removing it from ws removes it from gem too.
     expect(await run('remove', 'school-check')).toBe(0)
     expect(gem.routines()).toEqual([])
+  })
+
+  it('reads --at in the zone of the pair, not the clock of the lease host', () => {
+    const zoned = { ...EITHER, tz: 'America/New_York' }
+    const routine = newRoutine(
+      {
+        kind: 'school-check',
+        project: 'school-check',
+        what: 'W',
+        at: '16:30',
+        hosts: 'either',
+        command: ['/bin/true'],
+      },
+      'ws',
+      new Set(),
+      0,
+      zoned,
+    )
+    expect(routine.tz).toBe('America/New_York')
+    const store = new JobStore(':memory:')
+    store.addRoutine(routine)
+    const file = join(scratch(), 'jobs.json')
+    writeFileSync(file, JSON.stringify({ either: zoned, jobs: [] }))
+    expect(readEither(file)).toEqual(zoned)
+    const [job] = loadJobs(file, store)
+    // 11:00 UTC on 8 Nov is 06:00 EST: the next 16:30 is 21:30 UTC, whatever zone the process is in.
+    expect(nextRun(job as JobDef, Date.UTC(2026, 10, 8, 11, 0))).toBe(Date.UTC(2026, 10, 8, 21, 30))
+    expect(store.routines()[0]?.tz).toBe('America/New_York')
   })
 
   it('needs the either entry, and refuses --host with it', () => {

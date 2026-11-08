@@ -24,6 +24,8 @@ export interface JobDef {
   scope?: 'user' | 'system'
   /** Where a command runs (registered routines). */
   cwd?: string
+  /** IANA zone `at` is read in (registered routines: the registering machine's); default the process's. */
+  tz?: string
 }
 
 export const KIND = /^[a-z0-9][a-z0-9-]{0,63}$/
@@ -122,23 +124,60 @@ export function readJobs(path: string): JobDef[] {
   })
 }
 
-/** The first local `at` (HH:MM) strictly after `after`. */
-export function nextAt(at: string, after: number): number {
+/** Milliseconds `tz` is ahead of UTC at instant `t`. */
+function zoneOffset(tz: string, t: number): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+    second: 'numeric',
+  }).formatToParts(new Date(t))
+  const get = (type: string) => Number(parts.find((part) => part.type === type)?.value)
+  return (
+    Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second')) -
+    Math.floor(t / 1000) * 1000
+  )
+}
+
+/** The instant the wall clock in `tz` reads year-month-day hours:minutes. */
+function zonedTime(tz: string, y: number, mo: number, d: number, h: number, mi: number): number {
+  const wall = Date.UTC(y, mo, d, h, mi)
+  let t = wall - zoneOffset(tz, wall)
+  t = wall - zoneOffset(tz, t)
+  return t
+}
+
+/** The first `at` (HH:MM, in `tz`, default the process's local zone) strictly after `after`. */
+export function nextAt(at: string, after: number, tz?: string): number {
   const [hours, minutes] = at.split(':').map(Number) as [number, number]
-  const next = new Date(after)
-  next.setHours(hours, minutes, 0, 0)
-  if (next.getTime() <= after) {
-    next.setDate(next.getDate() + 1)
+  if (tz === undefined) {
+    const next = new Date(after)
     next.setHours(hours, minutes, 0, 0)
+    if (next.getTime() <= after) {
+      next.setDate(next.getDate() + 1)
+      next.setHours(hours, minutes, 0, 0)
+    }
+    return next.getTime()
   }
-  return next.getTime()
+  const wallNow = new Date(after + zoneOffset(tz, after))
+  const [y, mo, d] = [
+    wallNow.getUTCFullYear(),
+    wallNow.getUTCMonth(),
+    wallNow.getUTCDate(),
+  ] as const
+  const today = zonedTime(tz, y, mo, d, hours, minutes)
+  return today > after ? today : zonedTime(tz, y, mo, d + 1, hours, minutes)
 }
 
 /** The first run strictly after `after`: the next `at` time, or `every_min` minutes on. */
-export function nextRun(job: Pick<JobDef, 'at' | 'every_min'>, after: number): number {
+export function nextRun(job: Pick<JobDef, 'at' | 'every_min' | 'tz'>, after: number): number {
   return job.every_min !== undefined
     ? after + job.every_min * 60_000
-    : nextAt(job.at as string, after)
+    : nextAt(job.at as string, after, job.tz)
 }
 
 /** When a job runs, in words for its Status row. */
@@ -149,6 +188,6 @@ export function schedule(job: Pick<JobDef, 'at' | 'every_min'>): string {
 }
 
 /** When a resumed job is first due: an interval job at once, a daily job at its next time. */
-export function resumeAt(job: Pick<JobDef, 'at' | 'every_min'>, now: number): number {
-  return job.every_min !== undefined ? now : nextAt(job.at as string, now)
+export function resumeAt(job: Pick<JobDef, 'at' | 'every_min' | 'tz'>, now: number): number {
+  return job.every_min !== undefined ? now : nextAt(job.at as string, now, job.tz)
 }

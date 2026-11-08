@@ -64,6 +64,19 @@ describe('the schedule', () => {
     expect(nextAt('03:30', at)).toBe(new Date(2026, 10, 4, 3, 30).getTime())
   })
 
+  it('reads HH:MM in the zone given, across a daylight-saving change', () => {
+    const ny = 'America/New_York'
+    const after = Date.UTC(2026, 10, 7, 21, 0) // 16:00 EST
+    expect(nextAt('16:30', after, ny)).toBe(Date.UTC(2026, 10, 7, 21, 30))
+    expect(nextAt('16:30', Date.UTC(2026, 10, 7, 21, 30), ny)).toBe(Date.UTC(2026, 10, 8, 21, 30))
+    // Clocks went forward on 8 March: 16:30 is 20:30 UTC afterwards, 21:30 UTC before.
+    expect(nextAt('16:30', Date.UTC(2026, 2, 7, 22, 0), ny)).toBe(Date.UTC(2026, 2, 8, 20, 30))
+    expect(nextAt('16:30', Date.UTC(2026, 2, 7, 21, 0), ny)).toBe(Date.UTC(2026, 2, 7, 21, 30))
+    expect(nextRun({ at: '16:30', tz: 'UTC' }, Date.UTC(2026, 10, 7, 10, 0))).toBe(
+      Date.UTC(2026, 10, 7, 16, 30),
+    )
+  })
+
   it('repeats every_min minutes, and a job has one of at or every_min', () => {
     const base = { kind: 'sync', what: 'Sync', project: 'aico', home: 'a', lease_s: 60 }
     const run = { command: ['true'] }

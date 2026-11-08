@@ -21,6 +21,7 @@ function routineJob(routine: Routine): JobDef {
     ...(routine.lease_host !== undefined ? { lease_host: routine.lease_host } : {}),
     ...(routine.workers !== undefined ? { workers: routine.workers } : {}),
     ...(routine.at !== undefined ? { at: routine.at } : {}),
+    ...(routine.tz !== undefined ? { tz: routine.tz } : {}),
     ...(routine.every_min !== undefined ? { every_min: routine.every_min } : {}),
     run: routine.post !== undefined ? { post: routine.post } : { command: routine.command ?? [] },
     lease_s: routine.lease_s,
@@ -48,6 +49,17 @@ export interface EitherHosts {
   home: string
   lease_host: string
   workers: string[]
+  /** IANA zone `--at` is read in for these routines (home's); default the registering machine's. */
+  tz?: string
+}
+
+function validZone(tz: unknown): boolean {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz as string })
+    return typeof tz === 'string'
+  } catch {
+    return false
+  }
 }
 
 export function readEither(jobsFile: string): EitherHosts | null {
@@ -58,11 +70,15 @@ export function readEither(jobsFile: string): EitherHosts | null {
     !either ||
     !names.every((name) => typeof name === 'string' && KIND.test(name)) ||
     !either.workers?.includes(either.home as string) ||
-    !either.workers.includes(either.lease_host as string)
+    !either.workers.includes(either.lease_host as string) ||
+    (either.tz !== undefined && !validZone(either.tz))
   )
     return null
   return either as EitherHosts
 }
+
+/** The zone this machine's clock runs in (what built-in jobs' `at` means here). */
+const localZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone
 
 export interface RoutineInput {
   kind: string
@@ -152,6 +168,9 @@ export function newRoutine(
     ...(job.every_min !== undefined ? { every_min: job.every_min } : {}),
     ...('command' in job.run ? { command: job.run.command } : { post: job.run.post }),
     ...(placement ?? {}),
+    ...(job.at !== undefined
+      ? { tz: (input.hosts === 'either' ? either?.tz : undefined) ?? localZone() }
+      : {}),
     ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
     scope: job.scope ?? 'user',
     lease_s,

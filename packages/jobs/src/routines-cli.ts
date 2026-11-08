@@ -22,6 +22,7 @@ const ROUTINES_USAGE = `Usage: aico routines <command>
   resume KIND        schedule it again
   run KIND           run it now; its worker starts it within seconds
   log KIND           the output of its last run
+--at is the local time of the machine it runs on (--hosts either: the zone jobs.json names for the pair).
 --hosts either runs it on whichever of the two Aico machines is online (never twice for one slot);
 run add on a machine that can run it: it registers the routine on the other one over the fleet link.
 A failed routine shows in Status and the morning digest; it reaches the phone only if its own
@@ -58,6 +59,8 @@ export interface RoutineView {
   home: string
   /** Every machine that may run it, and the one that holds its lease. */
   hosts: string[]
+  /** The zone `at` is read in (registered routines). */
+  tz?: string
   leaseHost: string
   schedule: string
   at?: string
@@ -115,6 +118,7 @@ async function viewOf(job: JobDef, ctx: RoutinesContext): Promise<RoutineView> {
     source: job.source ?? 'built-in',
     home: job.home,
     hosts: job.workers ?? [job.home],
+    ...(job.tz ? { tz: job.tz } : {}),
     leaseHost: job.lease_host ?? job.home,
     schedule: schedule(job),
     ...(job.at !== undefined ? { at: job.at } : {}),
@@ -134,7 +138,8 @@ async function viewOf(job: JobDef, ctx: RoutinesContext): Promise<RoutineView> {
   }
 }
 
-const time = (ms: number | null) => (ms === null ? '-' : new Date(ms).toLocaleString('sv-SE'))
+const time = (ms: number | null, tz?: string) =>
+  ms === null ? '-' : new Date(ms).toLocaleString('sv-SE', tz ? { timeZone: tz } : {})
 
 /** Flags of `add`, parsed; `--command` takes the rest of the line. */
 export function parseAdd(args: readonly string[]): RoutineInput {
@@ -211,14 +216,14 @@ export async function routinesCommand(
       for (const view of views) {
         out(
           `${view.kind}  ${view.project}  ${view.schedule}${view.source === 'registered' ? '  (registered)' : ''}` +
-            `${view.paused ? '  PAUSED' : view.running ? '  running' : `  next ${time(view.nextRun)}`}`,
+            `${view.paused ? '  PAUSED' : view.running ? '  running' : `  next ${time(view.nextRun, view.tz)}`}`,
         )
         out(
           view.unreadable
             ? `  state unreadable: ${view.unreadable}`
             : view.lastRun === null
               ? `  not run yet${view.started ? '' : ' (the scheduler has not picked it up)'}`
-              : `  last ${time(view.lastRun)} on ${view.lastMachine ?? '-'}: ${view.lastState}: ${view.lastMeaning}`,
+              : `  last ${time(view.lastRun, view.tz)} on ${view.lastMachine ?? '-'}: ${view.lastState}: ${view.lastMeaning}`,
         )
       }
     return 0
