@@ -7,6 +7,8 @@ import {
   type Entry,
   type Event,
   eventLine,
+  type Kind,
+  kinds,
   labPath,
   meta,
   metaTip,
@@ -501,6 +503,7 @@ function DetailsEdit({
   busy: boolean
   save(patch: {
     notes: string
+    kind?: Kind
     login_url?: string
     target?: string
   }): Promise<void>
@@ -511,9 +514,11 @@ function DetailsEdit({
         event.preventDefault()
         const f = new FormData(event.currentTarget),
           page = String(f.get('loginUrl') ?? ''),
-          site = String(f.get('target') ?? '')
+          site = String(f.get('target') ?? ''),
+          kind = f.get('kind') as Kind | null
         void save({
           notes: String(f.get('notes') ?? ''),
+          ...(kind && kind !== entry.kind ? { kind } : {}),
           ...(page && page !== entry.lab?.login_url ? { login_url: page } : {}),
           ...(site && site !== entry.lab?.target ? { target: site } : {}),
         })
@@ -541,6 +546,20 @@ function DetailsEdit({
             autoComplete="off"
             defaultValue={entry.lab.login_url ?? ''}
           />
+        </label>
+      )}
+      {!entry.lab && (
+        <label>
+          Kind
+          <select name="kind" defaultValue={entry.kind}>
+            {kinds
+              .filter((kind) => kind !== 'lab login')
+              .map((kind) => (
+                <option key={kind} value={kind}>
+                  {kind}
+                </option>
+              ))}
+          </select>
         </label>
       )}
       <label>

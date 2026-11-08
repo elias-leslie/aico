@@ -152,13 +152,14 @@ export function registerLoginRoutes(
   router.on('POST', '/api/logins/:name/edit', (ctx) =>
     safe(async (client) => {
       const body = objectBody(await ctx.body())
-      for (const key of ['notes', 'login_url', 'target'] as const)
+      for (const key of ['notes', 'kind', 'login_url', 'target'] as const)
         if (body[key] !== undefined && typeof body[key] !== 'string')
           throw new LoginError(`Invalid ${key}`)
       const entry = await client.edit(
         ctx.params.name,
         {
           ...(body.notes !== undefined ? { notes: body.notes as string } : {}),
+          ...(body.kind ? { kind: body.kind as LoginKind } : {}),
           ...(body.login_url ? { login_url: body.login_url as string } : {}),
           ...(body.target ? { target: body.target as string } : {}),
         },

@@ -992,6 +992,66 @@ it('leaves backup keys, API keys, passwords and tool logins to the owner', () =>
   expect(store.edit('key', { notes: 'y' }, owner).notes).toBe('y')
 })
 
+it('leaves saving and replacing anything but a site login to the owner', () => {
+  store.set('key', 'value', { kind: 'API key', roles: ['job'] }, owner)
+  const agent = { role: 'job', machine: loginMachine(), session: 'a1b2c3d4' }
+  for (const save of [
+    () => store.set('key', 'other', { notes: 'x' }, agent, true),
+    () => store.set('new-key', 'value', {}, agent),
+    () => store.set('key', 'other', { lab: lab('x', 'y').metadata.lab }, agent, true),
+  ])
+    expect(save).toThrow(/Only the owner changes this login/)
+  expect(store.list().find((entry) => entry.name === 'new-key')).toBeUndefined()
+})
+
+it("keeps an account login's username, password and login page out of an agent's replace", () => {
+  const { name } = labIdentity('site-a', 'default')
+  const bundle = (values: Record<string, string>) =>
+    JSON.stringify({
+      schema_version: 1,
+      reference: labIdentity('site-a', 'default').reference,
+      kind: 'account',
+      expires_at: null,
+      values,
+    })
+  const saved = { username: 'u', password: 'p', login_url: 'https://site-a.test/login' }
+  const metadata = {
+    kind: 'lab login' as const,
+    lab: { target: 'site-a', actor: 'default', kind: 'account', expires_at: null, fields: [] },
+    roles: ['*'],
+  }
+  const agent = { role: 'job', machine: loginMachine(), session: 'a1b2c3d4' }
+  // Saving one is the owner's too.
+  expect(() => store.set(name, bundle(saved), metadata, agent)).toThrow(/are the owner's/)
+  store.set(name, bundle(saved), metadata, owner)
+  for (const changed of [
+    { ...saved, username: 'other' },
+    { ...saved, password: 'other' },
+    { ...saved, login_url: 'https://elsewhere.test/login' },
+  ])
+    expect(() => store.set(name, bundle(changed), {}, agent, true)).toThrow(/are the owner's/)
+  // Its other fields stay an agent's to fix.
+  expect(store.set(name, bundle({ ...saved, totp_secret: 'x' }), {}, agent, true).name).toBe(name)
+})
+
+it('a key named like a site does not hide the site login from an agent', () => {
+  const { identity, value, metadata } = lab('canvas', 'default')
+  store.set(identity.name, value, { ...metadata, roles: ['someone-else'] }, owner)
+  store.set('canvas', 'value', { kind: 'API key' }, owner)
+  const agent = { role: 'job', machine: loginMachine(), session: 'a1b2c3d4' }
+  expect(store.edit('canvas', { notes: 'fixed' }, agent)).toMatchObject({
+    name: identity.name,
+    notes: 'fixed',
+  })
+})
+
+it('an agent does not shut a restricted role out of a login', () => {
+  const { identity, value, metadata } = lab('site-b', 'default')
+  store.set(identity.name, value, metadata, owner)
+  const agent = { role: 'job', machine: loginMachine(), session: 'a1b2c3d4' }
+  expect(() => store.grant(identity.name, 'role', 'hunting', false, agent)).toThrow(/coordinator/)
+})
+
 it('edit by a caller the login is not open to still prints the fix', async () => {
   const { identity, value, metadata } = lab('shut', 'default')
   store.set(identity.name, value, { ...metadata, roles: ['someone-else'] }, owner)

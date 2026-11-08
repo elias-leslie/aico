@@ -141,6 +141,8 @@ const gapText = (gap: LoginGap, entry: Login) =>
 /** Backup keys, API keys, passwords and tool logins stay the owner's (owner decision 2026-11-08). */
 const OWNER_CHANGES =
   'Only the owner changes this login, on the Logins page; ask with one tether ask create.'
+const ACCOUNT_FIELDS_OWNERS =
+  "An account login's username and password are the owner's (one plain ask); change its login page with aico logins edit"
 /** The one command that gives CALLER what is missing, or the policy reason when no grant does. */
 export function loginFix(entry: Login, gaps: LoginGap[], caller?: LoginCaller) {
   if (gaps.some((gap) => gap.kind === 'policy'))
@@ -390,6 +392,9 @@ export class LoginStore {
   private find(index: Index, name: string): Login | undefined {
     const exact = index.entries.find((e) => e.name === name)
     if (exact || typeof name !== 'string') return exact
+    return this.siteNamed(index, name)
+  }
+  private siteNamed(index: Index, name: string): Login | undefined {
     const labs = index.entries.filter((e) => e.lab?.target === name)
     return labs.length === 1 ? labs[0] : labs.find((e) => e.lab?.actor === 'default')
   }
@@ -604,6 +609,12 @@ export class LoginStore {
         'A login with this name exists; Replace it on its row (aico logins rotate NAME)',
       )
     if (!old && replace) throw new LoginError('No login with this name; add it before replacing it')
+    // Agents save site logins only: a replacement can't turn another login into one or into a tool's.
+    if (
+      !caller.owner &&
+      (!(old ? old.lab : metadata.lab) || metadata.tool || metadata.provider || metadata.source)
+    )
+      throw new LoginError(`${name} is not a site login. ${OWNER_CHANGES}`)
     if (
       !caller.owner &&
       !old &&
@@ -623,8 +634,6 @@ export class LoginStore {
       const gaps = this.gaps(old, caller, index)
       if (gaps.length) throw new LoginError(unavailableText(old, caller, gaps))
     }
-    if (!caller.owner && !old && !metadata.lab && policy.restrictedRoles.includes(caller.role))
-      throw new LoginError(`Role ${caller.role} saves lab logins only (aico logins lab enroll)`)
     if (metadata.tool) {
       parseToolSecrets([metadata.tool])
       if (metadata.tool.file !== name)
@@ -684,6 +693,14 @@ export class LoginStore {
         )
         if (p.kind !== previous.kind) throw new LoginError('A lab replacement keeps its kind')
         if (
+          !caller.owner &&
+          p.kind === 'account' &&
+          ['username', 'password', 'login_url'].some(
+            (key) => p.values[key] !== previous.values[key],
+          )
+        )
+          throw new LoginError(ACCOUNT_FIELDS_OWNERS)
+        if (
           previous.values.login_url &&
           p.values.login_url &&
           !p.values.password &&
@@ -691,6 +708,7 @@ export class LoginStore {
         )
           throw new LoginError('Changing the site needs the password again')
       }
+      if (!old && !caller.owner && p.kind === 'account') throw new LoginError(ACCOUNT_FIELDS_OWNERS)
       if (name !== labIdentity(entry.lab.target, entry.lab.actor).name)
         throw new LoginError('Lab login identity mismatch')
       entry.lab = {
@@ -752,7 +770,7 @@ export class LoginStore {
     caller: LoginCaller,
   ) {
     this.selfService(caller)
-    if (type === 'role' && granted) this.subjects(caller, value)
+    if (type === 'role') this.subjects(caller, value)
     if (!/^[A-Za-z0-9_.*-]{1,128}$/.test(value)) throw new LoginError('Invalid grant')
     return this.change((index) => {
       const entry = this.siteLogin(this.existing(index, name, caller), caller)
@@ -810,7 +828,10 @@ export class LoginStore {
   }
   /** A login by name or site name for a change that does not read it (no access check). */
   private existing(index: Index, name: string, caller: LoginCaller) {
-    const entry = this.find(index, loginName(name))
+    const found = this.find(index, loginName(name))
+    // An agent only changes site logins: a key of the same name doesn't hide the site's.
+    const entry =
+      found && !found.lab && !caller.owner ? (this.siteNamed(index, name) ?? found) : found
     if (!entry || (!caller.owner && entry.verifierOnly))
       throw new LoginError(`No login named ${name}. aico logins list shows every saved login.`)
     return entry
@@ -1325,14 +1346,6 @@ export class LoginStore {
       }
       if (old.kind === 'account' && (!values.username || !values.password))
         throw new LoginError('An account login keeps its username and password')
-      if (
-        !caller.owner &&
-        old.kind === 'account' &&
-        ['username', 'password', 'login_url'].some((key) => values[key] !== old.values[key])
-      )
-        throw new LoginError(
-          "An account login's username and password are the owner's (one plain ask); change its login page with aico logins edit",
-        )
       if (
         old.values.login_url &&
         values.login_url &&

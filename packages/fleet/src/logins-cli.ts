@@ -51,7 +51,7 @@ Logins live in Aico's private secrets folder. Values enter through hidden input 
                                       site logins: give yourself (or ROLE; a coordinator: session ID) what
                                       is missing to use NAME: machine, role or session. Logged; no owner step
   edit NAME [--notes TEXT] [--kind KIND] [--login-url URL] [--site NAME] [--program PATH] [--no-program PATH]
-                                      fix notes, the kind, the login page (same site), the site name
+                                      fix notes, the kind (owner, not a site login), the login page (same site), the site name
                                       or the programs lab run may hand it to; the login page is
                                       checked for a password field. Logged; prints what show prints
   set NAME [--kind KIND] [--notes TEXT] hidden prompt or piped stdin. KIND: ${SETTABLE_KINDS}

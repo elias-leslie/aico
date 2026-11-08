@@ -158,6 +158,7 @@ it('checks an account login page on save and lets the owner fix notes, page and 
     'https://canvas.example.test/login/canvas',
   ])
   expect((await post('/api/logins/canvas-pcsb/edit', { notes: 3 })).status).toBe(400)
+  expect((await post('/api/logins/canvas-pcsb/edit', { kind: 3 })).status).toBe(400)
   const audit = (await (await fetch(`${base}/api/logins/audit`)).json()) as {
     events: Record<string, unknown>[]
   }

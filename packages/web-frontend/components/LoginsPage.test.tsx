@@ -608,6 +608,35 @@ it('a lab login that is not an account shows no All roles and ticks only named r
     screen.getByRole('checkbox', { name: 'implementation' }),
   ).not.toBeChecked()
 })
+it("fixes a key's kind on its row", async () => {
+  const { lab: _lab, ...rest } = school
+  const key = { ...rest, name: 'backup', kind: 'password' }
+  const fetcher = schoolApi({
+    '/api/logins': {
+      entries: [key],
+      machine: 'aico',
+      assignments: {},
+      revealSeconds: 30,
+    },
+    '/api/logins/backup/edit': { entry: key },
+  })
+  vi.stubGlobal('fetch', fetcher)
+  render(<LoginsPage />)
+  fireEvent.click(await screen.findByRole('button', { name: /backup/ }))
+  fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+  expect(
+    screen.queryByRole('option', { name: 'lab login' }),
+  ).not.toBeInTheDocument()
+  fireEvent.change(screen.getByLabelText('Kind'), {
+    target: { value: 'backup key' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+  expect(await screen.findByText('Login saved.')).toBeInTheDocument()
+  const edit = fetcher.mock.calls.find(([p]) => p.endsWith('/edit'))
+  expect(JSON.parse(String(edit?.[1]?.body))).toMatchObject({
+    kind: 'backup key',
+  })
+})
 it('edits notes and the login page, then offers the page that has a password field', async () => {
   const fetcher = schoolApi({
     '/api/logins/_lab_school--default/edit': {
