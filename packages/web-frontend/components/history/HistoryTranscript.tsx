@@ -27,6 +27,7 @@ import {
 } from '@/lib/hooks/use-history'
 import { useSessionLabels } from '@/lib/hooks/use-session-labels'
 import { Marked } from './Marked'
+import { ReopenSession } from './ReopenSession'
 
 /** A file the agent linked: opens in the session view's Files, when one is on screen. */
 const openPath = (path: string) => openFiles({ kind: 'path', path })
@@ -220,6 +221,13 @@ export function HistoryTranscript({
             <span className={`status-chip ${STANDING_CHIP[state]}`}>
               {STANDING_TEXT[state]}
             </span>
+          )}
+          {session && (
+            <ReopenSession
+              session={session}
+              liveHere={liveHere}
+              working={state === 'working'}
+            />
           )}
           <button
             type="button"

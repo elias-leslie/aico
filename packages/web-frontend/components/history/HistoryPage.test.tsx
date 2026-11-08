@@ -13,6 +13,11 @@ const api = vi.hoisted(() => ({
   sessions: { items: [] } as unknown,
   search: null as unknown,
   signals: [] as (AbortSignal | undefined)[],
+  created: [] as unknown[],
+  push: [] as string[],
+}))
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: (href: string) => api.push.push(href) }),
 }))
 vi.mock('@/lib/api-fetch', async () => {
   const actual =
@@ -25,6 +30,41 @@ vi.mock('@/lib/api-fetch', async () => {
       if (url.startsWith('/api/history/search'))
         api.signals.push(options?.signal ?? undefined)
       if (url === '/api/history/live') return api.live
+      if (url === '/api/agent-tools')
+        return [
+          {
+            id: 't1',
+            name: 'Codex',
+            slug: 'codex',
+            aliases: [],
+            enabled: true,
+            display_order: 0,
+          },
+        ]
+      if (url === '/api/projects')
+        return [
+          {
+            id: 'demo',
+            name: 'Demo',
+            root_path: '/work/demo',
+            enabled: true,
+            mode: 'shell',
+            display_order: 0,
+          },
+        ]
+      if (url === '/api/panes' && options?.method === 'POST') {
+        api.created.push(JSON.parse(String(options.body)))
+        return {
+          id: 'p1',
+          pane_type: 'project',
+          pane_name: 'Demo',
+          project_id: 'demo',
+          sessions: [
+            { id: 'aaaa0001', mode: 'shell' },
+            { id: 'aaaa0002', mode: 'codex' },
+          ],
+        }
+      }
       if (url.startsWith('/api/sessions')) return api.sessions
       if (url.startsWith('/api/history/search')) {
         if (api.search instanceof Error) throw api.search
@@ -105,6 +145,8 @@ beforeEach(() => {
   api.live = { items: [] }
   api.sessions = { items: [] }
   api.search = null
+  api.created = []
+  api.push = []
 })
 
 describe('recent sessions list', () => {
@@ -295,6 +337,72 @@ describe('transcript', () => {
     const transcript = screen.getByRole('region', { name: 'Transcript' })
     expect(transcript.querySelector('strong')?.textContent).toBe('done')
     expect(transcript).not.toHaveTextContent('**')
+  })
+
+  it('reopens an ended session in its own tool and folder, and opens a running one', async () => {
+    api.detail = {
+      ...session({ id: 'codex:0b9a8f7e-1234-4cde-8abc-0123456789ab' }),
+      path: '/x',
+      files: [],
+      subagents: {
+        count: 0,
+        toolCalls: 0,
+        tokens: { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 },
+      },
+    }
+    api.events = { newest: { items: [], older: null, newer: null, size: 0 } }
+    const view = renderPage('codex:0b9a8f7e-1234-4cde-8abc-0123456789ab')
+    fireEvent.click(await screen.findByRole('button', { name: 'Reopen' }))
+    await waitFor(() => expect(api.push).toEqual(['/?session=aaaa0002']))
+    expect(api.created[0]).toMatchObject({
+      pane_type: 'project',
+      project_id: 'demo',
+      working_dir: '/work/demo',
+      agent_tool_slug: 'codex',
+      resume_id: '0b9a8f7e-1234-4cde-8abc-0123456789ab',
+    })
+    view.unmount()
+
+    api.live = {
+      items: [
+        {
+          session: 'bbbb0001',
+          conversation: 'codex:0b9a8f7e-1234-4cde-8abc-0123456789ab',
+          activity: 'idle',
+          lastWriteAt: null,
+        },
+      ],
+    }
+    renderPage('codex:0b9a8f7e-1234-4cde-8abc-0123456789ab')
+    const open = await screen.findByRole('link', { name: 'Open' })
+    expect(open.getAttribute('href')).toBe('/?session=bbbb0001')
+    expect(screen.queryByRole('button', { name: 'Reopen' })).toBeNull()
+  })
+
+  it('offers no Reopen for a subagent or a transcript written a moment ago', async () => {
+    const detail = (over: object) => ({
+      ...session(over),
+      path: '/x',
+      files: [],
+      subagents: {
+        count: 0,
+        toolCalls: 0,
+        tokens: { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 },
+      },
+    })
+    api.events = { newest: { items: [], older: null, newer: null, size: 0 } }
+    api.detail = detail({
+      id: 'claude-code:agent-a1',
+      parentId: 'claude-code:p',
+    })
+    const view = renderPage('claude-code:agent-a1')
+    await screen.findByTestId('history-facts')
+    expect(screen.queryByRole('button', { name: 'Reopen' })).toBeNull()
+    view.unmount()
+    api.detail = detail({ outcome: null, endedAt: Date.now() - 1_000 })
+    renderPage('codex:abc')
+    await screen.findByTestId('history-facts')
+    expect(screen.queryByRole('button', { name: 'Reopen' })).toBeNull()
   })
 
   it('shows a linked file as its name in the final reply, never as [name](path)', async () => {

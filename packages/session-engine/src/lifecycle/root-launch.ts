@@ -57,11 +57,38 @@ export async function withRootPrompt<T>(
   }
 }
 
+/** How long a resumed conversation stays claimed after its launch returns, until its agent is
+ * seen running it (crash recovery waits as long to confirm a resumed agent). */
+export const RESUME_HOLD_MS = 120_000
+
+/** Conversations a session was just started on, kept past its launch until its agent can be
+ * seen running it (`holdResume`). */
+const heldResumes = new Map<string, { resumeId: string; until: number }>()
+
+/** Keep `resumeSessionId` claimed by `widgetId` for `ms` after its launch returns: the agent
+ * is not visible running it at once, and nobody else may resume it meanwhile. */
+export function holdResume(
+  widgetId: string,
+  resumeSessionId: string,
+  ms = RESUME_HOLD_MS,
+  now = Date.now(),
+): void {
+  heldResumes.set(widgetId, { resumeId: resumeSessionId, until: now + ms })
+}
+
 /** A session other than `except` whose launch is resuming this conversation
- * right now, if any. */
-export function launchingResume(resumeSessionId: string, except: string): string | null {
+ * right now, or was just started on it (`holdResume`), if any. */
+export function launchingResume(
+  resumeSessionId: string,
+  except: string,
+  now = Date.now(),
+): string | null {
   for (const [widgetId, id] of resumeSessions)
     if (id === resumeSessionId && widgetId !== except) return widgetId
+  for (const [widgetId, held] of heldResumes) {
+    if (held.until <= now || !getWidget(widgetId)) heldResumes.delete(widgetId)
+    else if (held.resumeId === resumeSessionId && widgetId !== except) return widgetId
+  }
   return null
 }
 

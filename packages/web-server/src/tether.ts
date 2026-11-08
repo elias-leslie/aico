@@ -36,10 +36,13 @@ export function createSession(
     host?: string | null
     /** Carry on from this session in `tool`, starting from a recap of it (Tether builds it). */
     continueFrom?: string | null
+    /** Reopen this ended conversation of `tool` (its native resume). */
+    resumeId?: string | null
   },
 ): Promise<SessionDescriptor> {
   const body: Record<string, unknown> = { origin: WEB_ORIGIN, tool: input.tool, size: input.size }
   if (input.continueFrom) body.continueFrom = input.continueFrom
+  if (input.resumeId) body.resumeId = input.resumeId
   if (input.host) body.host = input.host
   if (input.projectId) body.projectId = input.projectId
   if (input.projectRoot) body.projectRoot = input.projectRoot
@@ -119,6 +122,15 @@ const DETAILS: Record<string, [number, string]> = {
   unknown_session: [404, 'No session with that id'],
   ambiguous_session: [409, 'More than one session starts with that'],
   transcript_gone: [410, "The tool's transcript is gone, so its events cannot be read"],
+  conversation_open: [
+    409,
+    'Another session has this conversation open or just started on it; open that one, or end it first',
+  ],
+  reopen_needs_project: [400, 'Only a session that ran in a project folder can be reopened'],
+  reopen_unavailable: [
+    503,
+    'Tether can’t check right now whether another session has this conversation open; try again',
+  ],
 }
 
 const UNAVAILABLE_DETAIL =

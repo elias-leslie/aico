@@ -41,6 +41,8 @@ interface CreatePaneRequest {
   session_name?: string
   /** Start the agent from a recap of this session (another tool's). */
   continue_from?: string
+  /** Reopen this ended conversation of the agent's own tool. */
+  resume_id?: string
 }
 
 interface UpdatePaneRequest {
@@ -53,6 +55,7 @@ interface PanePlacementOptions {
   host?: string
   sessionName?: string
   continueFrom?: string
+  resumeId?: string
 }
 
 const api = {
@@ -319,6 +322,7 @@ export function useTerminalPanes() {
         host: options?.host,
         session_name: options?.sessionName,
         continue_from: options?.continueFrom,
+        resume_id: options?.resumeId,
       }),
     [createMutation],
   )

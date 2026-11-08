@@ -52,6 +52,8 @@ const HOST_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
 const MAX_SESSION_NAME = 160
 /** A Tether session id. */
 const SESSION_ID = /^[0-9a-f]{8}$/
+/** A tool's own conversation id (Claude Code and Codex use UUIDs). */
+const RESUME_ID = /^[0-9A-Za-z][0-9A-Za-z-]{7,63}$/
 
 export function buildApi(deps: ApiDeps): Router {
   const life = createLifecycle(deps)
@@ -117,6 +119,12 @@ export function buildApi(deps: ApiDeps): Router {
       optionalString(body, 'continue_from', { max: 8, pattern: SESSION_ID }) || null
     if (continueFrom && (paneType !== 'project' || !toolRef || toolRef === SHELL_MODE || host))
       throw new HttpError(400, 'continue_from needs a project tab, an agent tool and this computer')
+    // Reopen an ended session: its tool resumes that conversation (Tether checks the id).
+    const resumeId = optionalString(body, 'resume_id', { max: 64, pattern: RESUME_ID }) || null
+    if (resumeId && (paneType !== 'project' || !toolRef || toolRef === SHELL_MODE || host))
+      throw new HttpError(400, 'resume_id needs a project tab, an agent tool and this computer')
+    if (resumeId && continueFrom)
+      throw new HttpError(400, 'resume_id and continue_from cannot be combined')
     if (paneType === 'project' && !projectId)
       throw new HttpError(400, 'project_id required for project panes')
     if (paneType === 'adhoc' && projectId)
@@ -133,6 +141,7 @@ export function buildApi(deps: ApiDeps): Router {
       host,
       sessionName,
       continueFrom,
+      resumeId,
     })
     const { pane: view, order } = await paneById(created.id, false)
     return paneResponse(view, order)

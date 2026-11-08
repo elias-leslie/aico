@@ -95,7 +95,12 @@ import {
   type RootHandlerState,
   type WidgetMutation,
 } from '@aico/session-engine/root-control'
-import { sessionSpec, withRootPrompt } from '@aico/session-engine/root-launch'
+import {
+  holdResume,
+  launchingResume,
+  sessionSpec,
+  withRootPrompt,
+} from '@aico/session-engine/root-launch'
 import {
   generationOf,
   runTmux,
@@ -126,6 +131,7 @@ import {
   saveInstructions,
   sessionInstructions,
 } from '@aico/session-engine/tui/instructions'
+import { isResumeSessionId } from '@aico/session-engine/tui/launch'
 import { listsModel } from '@aico/session-engine/tui/models'
 import {
   ADAPTERS,
@@ -668,6 +674,40 @@ export function learnProjects(
     for (const row of listSessions()) notifySessionChanged(row.id, { force: true })
 }
 
+/** What a reopened session's agent is told first. */
+const REOPEN_PROMPT =
+  'The owner reopened this session after it ended. Processes, servers and watchers you started before are gone. Wait for their next message.'
+
+/**
+ * A session running, resuming or about to restore this conversation, if any. Read the slow
+ * way first (observing every agent may start a crash's recovery), then the quick claims.
+ * Refuses when it can't look: a guess could put two agents on one transcript.
+ */
+export async function conversationHolder(
+  context: LifecycleApiContext,
+  resumeId: string,
+): Promise<string | null> {
+  const continuity = context.continuity
+  if (!continuity) throw new HttpError(503, 'reopen_unavailable')
+  await continuity.restorePlanned
+  let observed: Awaited<ReturnType<Continuity['observe']>>
+  try {
+    observed = await continuity.observe()
+  } catch {
+    throw new HttpError(503, 'reopen_unavailable')
+  }
+  return (
+    observed.find((entry) => entry.resumeId === resumeId)?.row.id ??
+    listWidgets().find(
+      (row) =>
+        continuity.isAwaitingRestore(row.id) &&
+        continuity.resumeIdOf(row.id, row.tool) === resumeId,
+    )?.id ??
+    context.recovery?.resumeOwner(resumeId) ??
+    launchingResume(resumeId, '')
+  )
+}
+
 function createSession(context: LifecycleApiContext): Handler {
   const { store } = context
   return async (req, res) => {
@@ -684,9 +724,11 @@ function createSession(context: LifecycleApiContext): Handler {
       'size',
       'host',
       'continueFrom',
+      'resumeId',
     ])
     if (body.host !== undefined && body.host !== null) {
       if (body.continueFrom != null) throw new HttpError(400, 'continue_on_this_host_only')
+      if (body.resumeId != null) throw new HttpError(400, 'reopen_on_this_host_only')
       if (!context.hub) throw new HttpError(400, 'unknown_host', { host: body.host })
       await context.hub.create(res, '/v1/sessions', body)
       return
@@ -729,6 +771,8 @@ function createSession(context: LifecycleApiContext): Handler {
       projectRoot = await resolveProject(context, projectId)
       if (!projectRoot) throw new HttpError(400, 'unknown_project')
     }
+    if (body.resumeId != null && (body.continueFrom != null || body.blankSlate === true))
+      throw new HttpError(400, 'invalid_body', { field: 'resumeId' })
     // Continue another session: a recap of it is this one's first prompt, in the same checkout.
     let recap: string | null = null
     if (body.continueFrom !== undefined && body.continueFrom !== null) {
@@ -756,6 +800,18 @@ function createSession(context: LifecycleApiContext): Handler {
         throw error
       }
     }
+    // Reopen an ended session: its tool resumes its own conversation in the same checkout. Never
+    // a conversation another session is running or resuming now.
+    let resumeId: string | null = null
+    if (body.resumeId !== undefined && body.resumeId !== null) {
+      if (body.tool === undefined) throw new HttpError(400, 'invalid_body', { field: 'tool' })
+      if (!isResumeSessionId(getTui(tool.slug), body.resumeId))
+        throw new HttpError(400, 'invalid_body', { field: 'resumeId' })
+      if (!projectRoot) throw new HttpError(400, 'reopen_needs_project')
+      const holder = await conversationHolder(context, body.resumeId)
+      if (holder) throw new HttpError(409, 'conversation_open', { session: holder })
+      resumeId = body.resumeId
+    }
     // Blank Slate: a fresh empty workspace instead of a project (blank-slate.ts).
     if (body.blankSlate !== undefined && body.blankSlate !== false) {
       if (body.blankSlate !== true || projectId || projectRoot)
@@ -780,9 +836,23 @@ function createSession(context: LifecycleApiContext): Handler {
     if (projectId || projectRoot) setWidgetProject(id, projectId, projectRoot)
     if (name) setWidgetName(id, name)
     if (instructions) saveInstructions(id, instructions)
-    const started = await (recap === null
-      ? ensureSessionSerialized(id, grid)
-      : withRootPrompt(id, recap, () => ensureSessionSerialized(id, grid)))
+    const launch = () => ensureSessionSerialized(id, grid)
+    // Checked again here: nothing awaits between this and withRootPrompt claiming it.
+    const racing =
+      resumeId === null
+        ? null
+        : (launchingResume(resumeId, id) ?? context.recovery?.resumeOwner(resumeId) ?? null)
+    if (racing) {
+      if (discardNeverAllocated(id)) notifySessionChanged(id, { ended: true })
+      throw new HttpError(409, 'conversation_open', { session: racing })
+    }
+    // Held from before the launch claim ends until its agent can be seen, so no gap opens.
+    if (resumeId !== null) holdResume(id, resumeId)
+    const started = await (resumeId !== null
+      ? withRootPrompt(id, REOPEN_PROMPT, launch, resumeId).finally(() => holdResume(id, resumeId))
+      : recap === null
+        ? launch()
+        : withRootPrompt(id, recap, launch))
     if (!started) {
       const failure = lastEnsureFailure(id)
       if (failure?.code === 'admission_denied' || failure?.code === 'linger_required') {

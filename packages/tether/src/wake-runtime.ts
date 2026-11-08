@@ -41,7 +41,7 @@ import {
   whenReady,
 } from '@aico/session-engine/engine'
 import { nodeProcFs } from '@aico/session-engine/proc-fs'
-import { withRootPrompt } from '@aico/session-engine/root-launch'
+import { holdResume, launchingResume, withRootPrompt } from '@aico/session-engine/root-launch'
 import { pasteIntoRunningSession, runTmux } from '@aico/session-engine/running-session'
 import { captureVisibleTargetArgs, clientActivityTargetArgs } from '@aico/session-engine/tmux'
 import { MAIN_TURN_OVER } from '@aico/session-engine/tui/adapters/contract'
@@ -370,9 +370,11 @@ export class WakeService {
 
   private async conversationHolder(resumeId: string): Promise<string | null> {
     const continuity = this.context.continuity
-    if (!continuity) return null
+    if (!continuity) return launchingResume(resumeId, '')
     const observed = await continuity.observe().catch(() => [])
-    return observed.find((entry) => entry.resumeId === resumeId)?.row.id ?? null
+    return (
+      observed.find((entry) => entry.resumeId === resumeId)?.row.id ?? launchingResume(resumeId, '')
+    )
   }
 
   /** What a kept wake needs to start this session's conversation again. */
@@ -427,6 +429,8 @@ export class WakeService {
       recordLauncher(id, relaunchLauncher(ended.coordinatorId, ended.parentId ?? null))
     }
     let started = false
+    // The conversation stays claimed after the launch, until its agent can be seen running it.
+    if (resume) holdResume(id, resume)
     try {
       started = await withRootPrompt(
         id,
@@ -434,6 +438,7 @@ export class WakeService {
         () => ensureSessionSerialized(id, { cols: 100, rows: 30 }),
         resume,
       )
+      if (resume) holdResume(id, resume)
     } catch (error) {
       if (!(error instanceof AgentAdmissionDenied)) throw error
     }
