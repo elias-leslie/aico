@@ -129,7 +129,7 @@ export function formatStatus(
   out.push(
     problems === 0
       ? `No problems: ${healthyParts}.`
-      : `${plural(problems, 'problem')}${crowd ? ` (${crowd.count} on ${crowd.machine})` : ''}, ${healthyParts}.`,
+      : `${plural(problems, 'problem')}${crowd ? ` (${crowd.count} on ${crowd.machine})` : ''}${healthyParts ? `, ${healthyParts}` : ''}.`,
   )
   const shown = all
     ? rows

@@ -65,7 +65,6 @@ describe('CLI cutover', () => {
     'automations',
     'ctx',
     'native-sessions',
-    'note',
     'create',
     'claim',
     'done',
@@ -124,6 +123,43 @@ describe('CLI cutover', () => {
     const h = harness()
     expect(await h.go([verb, '--help'])).toBe(0)
     expect(h.calls[0]?.argv.slice(1)).toEqual([verb, '--help'])
+  })
+  it.each([
+    ['routines', ['routines', 'run', '--help'], ['routines', '--help']],
+    ['projects', ['projects', 'show', '--help'], ['projects', '--help']],
+    ['vm', ['vm', 'stop', '180', '--help'], ['vm', '--help']],
+    ['snap', ['snap', 'x', '-h'], ['snapshots', '--help']],
+    ['logins', ['logins', 'edit', '--help'], ['logins', 'edit', '--help']],
+    [
+      'run after --',
+      ['logins', 'run', '--with', 'a', '--', 'x', '--help'],
+      ['logins', 'run', '--with', 'a', '--', 'x', '--help'],
+    ],
+  ])(
+    '--help after a sub-command asks about the command, never acts: %s',
+    async (_name, argv, sent) => {
+      const h = harness({ AICO_CLI_NAME: 'aico' })
+      expect(await h.go(argv)).toBe(0)
+      expect(h.calls[0]?.argv.slice(1)).toEqual(sent)
+    },
+  )
+  it.each(['note', 'notes', 'share', 'files'])(
+    '%s points at tether, acting on nothing',
+    async (verb) => {
+      const h = harness()
+      expect(await h.go([verb, 'anything'])).toBe(2)
+      expect(h.calls).toEqual([])
+      expect(h.errors.join(' ')).toContain(
+        verb === 'note' || verb === 'notes' ? 'tether note' : 'tether share',
+      )
+    },
+  )
+  it('--help on any sessions verb prints the sessions help', async () => {
+    const h = harness()
+    for (const verb of ['inbox', 'confirm', 'wait', 'ack']) {
+      expect(await h.go(['sessions', verb, '--help'])).toBe(0)
+      expect(h.calls).toEqual([])
+    }
   })
   it.each([
     'graph',

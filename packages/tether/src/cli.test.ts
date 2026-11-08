@@ -238,6 +238,10 @@ describe('main', () => {
     ).toBe(0)
     expect(shared.out.join('\n')).toMatch(/tether share remove [0-9a-f]{12}/)
 
+    const listing = capture()
+    expect(await main(['-i', 'clitest', 'share', 'list'], listing.io)).toBe(0)
+    expect(listing.out.join('\n')).toContain(`${a.id}  https://example.com/a`)
+
     const none = capture()
     expect(await main(['-i', 'clitest', 'share', 'remove'], none.io)).toBe(2)
 

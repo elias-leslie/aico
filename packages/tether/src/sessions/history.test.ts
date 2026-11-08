@@ -626,11 +626,17 @@ describe('routes and command', () => {
     return { code, out: out.join('\n'), err: err.join('\n') }
   }
 
+  it('refuses a tool it does not know, naming the ones it does', async () => {
+    const bad = await run('list', '--tool', 'bogus')
+    expect(bad.code).toBe(2)
+    expect(bad.err).toContain('no tool bogus (claude-code, codex, pi, aico-agent)')
+  })
+
   it('lists, shows and dumps events', async () => {
     const list = await run('list')
     expect(list.code).toBe(0)
     expect(list.out.split('\n')[0]).toMatch(
-      /^ID +LAST ACTIVITY +OUTCOME +CALLS +MODEL +PROJECT +NAME$/,
+      /^ID +LAST ACTIVITY +OUTCOME +CALLS +TOKENS +MODEL +PROJECT +NAME$/,
     )
     expect(list.out).toContain('claude-code:s1')
     expect(list.out).toContain('OUTCOME: completed (it gave a final answer)')
@@ -696,6 +702,18 @@ describe('routes and command', () => {
     expect((await put({ ...pushed(now, []), outcome: 'done' })).status).toBe(400)
     expect((await put({ ...pushed(now, []), extra: 1 })).status).toBe(400)
     expect((await put(pushed(now, []), 'x')).status).toBe(400)
+  })
+
+  it('drops the envelope a harness wraps its notices in', () => {
+    const line = formatEvent({
+      offset: 1,
+      at: null,
+      role: 'user',
+      kind: 'text',
+      text: '<task-notification><system-reminder>Aico: [Ready] done</system-reminder></task-notification>',
+    })
+    expect(line).toContain('Aico: [Ready] done')
+    expect(line).not.toContain('<')
   })
 
   it('formats an event as a readable line, long text cut', () => {

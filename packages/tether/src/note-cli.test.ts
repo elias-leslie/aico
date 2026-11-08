@@ -171,6 +171,21 @@ describe('tether note', () => {
     ).toContain('project: aico')
   })
 
+  it('names the word it did not know, and says where a new note went', async () => {
+    const search = capture()
+    expect(await runNote(search.io, false, ['search', 'milk'], env())).toBe(2)
+    expect(search.err.join('')).toBe('tether note: to search, use list --q TEXT')
+    const typo = capture()
+    expect(await runNote(typo.io, false, ['ad', 'x'], env())).toBe(2)
+    expect(typo.err.join('')).toContain('unknown command ad')
+    const global = capture()
+    expect(await runNote(global.io, false, ['add', 'T', '--global'], env())).toBe(0)
+    expect(global.out.join('')).toContain('(no project)')
+    const inProject = capture()
+    expect(await runNote(inProject.io, false, ['add', 'T', '--project', 'aico'], env())).toBe(0)
+    expect(inProject.out.join('')).toContain('(project aico)')
+  })
+
   it('prints the edit time in local time', () => {
     const ms = new Date(2026, 10, 2, 14, 44).getTime()
     const base = { id: 'x', kind: 'note', title: 't', pinned: false, archived: false, labels: [] }

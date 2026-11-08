@@ -50,6 +50,7 @@ Commands:
                                 relative paths are from here; the session is
                                 this pane's own unless --session ID names one
   share --url <url> [--title T] [--session ID]
+  share list                    what is in Files > Shared, with the ID to remove each
   share remove <id>...          take entries out of Files > Shared (a file named
                                 "remove" is ./remove); an unknown id exits 1,
                                 the rest are still removed
@@ -281,6 +282,20 @@ export function shareBody(
 }
 
 /** `tether share remove ID...`: each entry goes; exit 1 if any ID was unknown. */
+async function runShareList(io: Io, json: boolean, socket: string): Promise<number> {
+  const response = await callSocket(socket, 'GET', '/v1/shares')
+  if (json || response.status !== 200) return render(io, json, response.status, response.body)
+  const { items } = response.body as {
+    items: { id: string; title?: string | null; paths?: string[] | null; url?: string | null }[]
+  }
+  if (!items.length) io.out('Nothing is shared.')
+  for (const { id, title, paths, url } of items) {
+    const where = url ?? paths?.join(', ') ?? ''
+    io.out(`${id}  ${title ? `${title}  ` : ''}${where}`)
+  }
+  return 0
+}
+
 async function runShareRemove(
   io: Io,
   json: boolean,
@@ -718,6 +733,7 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
         return runNote(io, json, parsed.args.slice(1), withOwnWidget(process.env))
       case 'share': {
         if (sub === 'remove') return runShareRemove(io, json, paths.socket, rest)
+        if (sub === 'list') return runShareList(io, json, paths.socket)
         const body = shareBody(parsed.args.slice(1), withOwnWidget(process.env), process.cwd())
         if (typeof body === 'string') {
           io.err(`tether share: ${body}`)
@@ -730,7 +746,7 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
         io.out(
           `${
             shared.paths
-              ? `Shared ${shared.paths.length === 1 ? '1 path' : `${shared.paths.length} paths`} as links (nothing copied); the owner opens them in Aico under Files > Shared.`
+              ? `Shared ${shared.paths.length === 1 ? '1 path' : `${shared.paths.length} paths`}; the owner opens them where they are, in Aico under Files > Shared (nothing is copied).`
               : 'Shared the link; the owner sees it in Aico.'
           }${remove}`,
         )

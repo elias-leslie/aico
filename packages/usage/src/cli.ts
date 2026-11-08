@@ -39,6 +39,8 @@ const USAGE = `Usage: aico usage [command]   (no command: show)
   aico usage collect [--no-status]   read each subscription's usage now and update its Status row
   aico usage [show] [--json]         what each subscription has left, and for Claude and Codex
                                      which projects the last 7 days of use came from
+Subscriptions are shown as what is left and when it resets, not money. One session's tokens:
+aico recent show ID.
 `
 
 class UsageError extends Error {}

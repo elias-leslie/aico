@@ -82,7 +82,11 @@ export function registerShowRoute(
     .add('POST', '/v1/show', async (req, res) => {
       const request = parseShow(await readJsonObject(req))
       if (request.kind === 'files') request.paths = await realPaths(request.paths)
-      const share = shares.add(request)
+      // Sharing the same files again answers with the entry already there, not a second row.
+      const share =
+        request.kind === 'files'
+          ? shares.filesShare(request.session, request.title, request.paths)
+          : shares.add(request)
       events.publish('show.requested', share)
       sendJson(res, 201, share)
     })

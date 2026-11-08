@@ -119,7 +119,10 @@ export async function main(argv: string[], env = process.env): Promise<number> {
       const args = journalArgs(req, project, run)
       if (args) return run('journalctl', args, { inherit: true }).code
       if (env.AICO_OPS_CALLER === 'st') return NOT_HANDLED
-      throw new Refusal(`no unit ${canonical(req.target)} (user or system)`, 2)
+      throw new Refusal(
+        `no unit ${canonical(req.target)} (user or system). A routine's last run: aico routines log KIND. The scheduler: aico logs aico-jobs. Units: systemctl --user list-units 'aico-*'`,
+        2,
+      )
     }
     if (verb === 'snapshots')
       return snapshots(

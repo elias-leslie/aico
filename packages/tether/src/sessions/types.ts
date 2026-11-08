@@ -4,7 +4,8 @@
 
 import { maskKnownSecrets } from '@aico/shared/secrets'
 
-export type HistoryTool = 'claude-code' | 'codex' | 'pi' | 'aico-agent'
+export const HISTORY_TOOLS = ['claude-code', 'codex', 'pi', 'aico-agent'] as const
+export type HistoryTool = (typeof HISTORY_TOOLS)[number]
 export type Outcome = 'completed' | 'aborted' | 'error'
 
 export interface Usage {

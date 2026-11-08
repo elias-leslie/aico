@@ -80,6 +80,9 @@ const NATIVE = new Set([
   'grants',
   'elevate',
 ])
+const ROUTINE_VERBS = new Set(['context', 'jobs', 'routines', 'agent'])
+/** Commands that answer `X sub --help` about that sub-command themselves. */
+const OWN_SUBCOMMAND_HELP = new Set(['logins'])
 const CORE = new Set([
   ...NATIVE,
   ...Object.keys(ALIASES),
@@ -604,7 +607,7 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
     name === 'aico'
       ? out(aicoHelp(data, state))
       : out(
-          'Usage: st <projects|sessions|recent|pulse|lease|check|commit|service|logs|backup|vm|memory|prompt|models|web|logins|declare|notify|tools|db|mockup|monitor> ...\nStandalone tools: browser, ui, neri, jobs, portfolio, bugout, ominull, uilint, wiki.\nUse st tools manifest --discover WORD for command details; aico --help for the grouped list.',
+          'Usage: st <aico|projects|sessions|recent|pulse|lease|check|commit|service|logs|backup|vm|memory|prompt|models|web|logins|declare|notify|tools|db|mockup|monitor> ...\nStandalone tools: browser, ui, neri, jobs, portfolio, bugout, ominull, uilint, wiki.\nst aico starts and ends agent sessions (st aico --help). st and aico are one tool: help that says aico X also works as st X.\nUse st tools manifest --discover WORD for command details; aico --help for the grouped list.',
         )
   try {
     const args = [...argv]
@@ -632,10 +635,7 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
       help()
       return verb ? 0 : 2
     }
-    if (
-      verb in config.removed &&
-      !(env.AICO_CLI_NAME === 'aico' && ['context', 'jobs', 'routines', 'agent'].includes(verb))
-    ) {
+    if (verb in config.removed && !(env.AICO_CLI_NAME === 'aico' && ROUTINE_VERBS.has(verb))) {
       err(`${name} ${verb}: ${config.removed[verb as keyof typeof config.removed]}.`)
       return 2
     }
@@ -646,6 +646,16 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
         own.replaceAll('{cli}', name).replaceAll('{stores}', Object.keys(config.stores).join(', ')),
       )
       return 0
+    }
+    // `X sub --help` asks about X: never let the sub-command take --help as a name or act on it.
+    const beforeDashes = rest.includes('--') ? rest.slice(0, rest.indexOf('--')) : rest
+    if (beforeDashes.slice(1).some((word) => ['--help', '-h'].includes(word))) {
+      if (verb === 'sessions') return main(['sessions', '--help'], options)
+      if (
+        !OWN_SUBCOMMAND_HELP.has(verb) &&
+        (NATIVE.has(verb) || ALIASES[verb] || ROUTINE_VERBS.has(verb))
+      )
+        return delegate([ALIASES[verb]?.[0] ?? verb, '--help'])
     }
     if (verb === 'tools') return await toolsCommand(cli, rest)
     if (verb === 'db') return await dbCommand(cli, rest)
@@ -711,8 +721,7 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
     if (verb === 'service') return await serviceCommand(cli, rest)
     if (verb === 'skills')
       return execute([join(root, 'native/service-tools/st-skills'), ...rest], cli.selectedEnv)
-    if (env.AICO_CLI_NAME === 'aico' && ['context', 'jobs', 'routines', 'agent'].includes(verb))
-      return delegate([verb, ...rest])
+    if (env.AICO_CLI_NAME === 'aico' && ROUTINE_VERBS.has(verb)) return delegate([verb, ...rest])
     if (verb === 'projects')
       return delegate(
         ['projects', ...(rest.length ? rest : ['list'])].filter(

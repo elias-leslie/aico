@@ -29,7 +29,10 @@ export interface PulseIo {
 const USAGE = `Usage: aico pulse [--brief] [--json]
   (no option)  live sessions per project, leases, open handshakes and what Status says is wrong
   --brief      the startup brief for this session: the project's roadmap (Now, Next) and the Status problems it concerns, by role
-  --json       the same data as JSON`
+  --json       the same data as JSON
+Children: sessions a coordinator started; vanished ones are gone without ending.
+Handshakes: messages between sessions waiting on an answer or a close (aico sessions inbox, aico sessions confirm).
+Lease: a session's claim on files it is editing, idle since its last activity (aico lease --help).`
 
 function dataDir(env: NodeJS.ProcessEnv): string {
   return dirname(tasksDbPathFromEnv(env))

@@ -421,7 +421,7 @@ async function runInUnit(
   console.log(
     result.code === 0
       ? 'Backup finished.'
-      : 'The backup did not finish cleanly. Check its Status row and log.',
+      : `The backup did not finish cleanly. Which sources failed: aico backups list. Its log: aico logs ${unit}.`,
   )
   return result.code
 }

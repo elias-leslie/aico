@@ -6,16 +6,17 @@ import type { TetherPaths } from '@aico/session-engine/paths'
 import { localTime } from '@aico/shared/time'
 import { callSocket } from '../client'
 import type { EventPage, SearchPage, SessionDetail, SessionSummary, Tokens } from './history'
-import type { SessionEvent } from './types'
+import { HISTORY_TOOLS, type HistoryTool, type SessionEvent } from './types'
 
 export const HISTORY_USAGE = `Usage:
   aico recent list [--tool T] [--project P] [--limit N (20)] [--json]
       Recent sessions of Claude Code, Codex, Pi and the Aico agent, newest first,
       each named by the tool's own name for it, else its first prompt.
-  aico recent search TEXT [--tool T] [--project P] [--limit N] [--json]
+  aico recent search TEXT [--tool T] [--project P] [--limit N (10)] [--hits N (3)] [--json]
       Text search through what was said and the commands run in past Claude Code,
       Codex and Pi sessions (not tool output). A phrase, any capitals. Newest
-      sessions first, with the matching lines; open one with the events command
+      sessions first, with up to --hits matching lines each and how many matched;
+      open one with the events command
       shown under it. Aico agent chats and Antigravity sessions are not searched yet.
   aico recent show <id> [--json]
       One session: model, project, start and end, outcome, tokens, tool
@@ -27,7 +28,10 @@ export const HISTORY_USAGE = `Usage:
       pages back, --from OFFSET reads forward. --json prints the whole records.
 
 Tokens: input is the part not served from the cache; cache read and cache
-write are the cached parts; output includes reasoning.`
+write are the cached parts; output includes reasoning. TOKENS in the list adds
+them all up, without subagents (show adds those). Sessions are counted in
+tokens, not money; what each subscription has left: aico usage. T: claude-code,
+codex, pi or aico-agent.`
 
 export interface HistoryIo {
   out(text: string): void
@@ -70,6 +74,13 @@ export function shortIds(ids: string[]): string[] {
 const OUTCOMES =
   'OUTCOME: completed (it gave a final answer), aborted, error, open (no final answer yet). Times are local.'
 
+/** The whole of a session's tokens, short enough for a column: 385.2M. */
+function tokenTotal(tokens: Tokens): string {
+  const total = tokens.input + tokens.cacheRead + tokens.cacheWrite + tokens.output
+  if (total >= 1e6) return `${(total / 1e6).toFixed(1)}M`
+  return total >= 1e3 ? `${Math.round(total / 1e3)}K` : String(total)
+}
+
 function table(items: SessionSummary[]): string[] {
   const ids = shortIds(items.map((item) => item.id))
   const width = Math.max(2, ...ids.map((id) => id.length))
@@ -78,6 +89,7 @@ function table(items: SessionSummary[]): string[] {
     last: string,
     outcome: string,
     calls: string,
+    tokens: string,
     model: string,
     where: string,
     name: string,
@@ -87,6 +99,7 @@ function table(items: SessionSummary[]): string[] {
       last.padEnd(20),
       outcome.padEnd(10),
       calls.padEnd(6),
+      tokens.padEnd(7),
       model.padEnd(22),
       where.padEnd(18),
       name,
@@ -94,13 +107,14 @@ function table(items: SessionSummary[]): string[] {
       .join(' ')
       .trimEnd()
   return [
-    cells('ID', 'LAST ACTIVITY', 'OUTCOME', 'CALLS', 'MODEL', 'PROJECT', 'NAME'),
+    cells('ID', 'LAST ACTIVITY', 'OUTCOME', 'CALLS', 'TOKENS', 'MODEL', 'PROJECT', 'NAME'),
     ...items.map((item, index) =>
       cells(
         ids[index] as string,
         when(item.endedAt),
         item.outcome ?? 'open',
         String(item.toolCalls),
+        tokenTotal(item.tokens),
         item.model ?? '-',
         clip(item.project ?? item.cwd ?? '-', 18),
         clip(flat(item.title ?? '-'), 60),
@@ -115,8 +129,12 @@ const clip = (text: string, max: number) =>
   text.length > max ? `${text.slice(0, max - 1)}…` : text
 
 /** One event for a person: when, who or what, and the gist. Raw records are --json. */
+/** The envelope a harness wraps its notices in says nothing a reader wants. */
+const HARNESS_TAGS =
+  /<\/?(?:task-notification|system-reminder|task-id|tool-use-id|output-file|status|summary|note|result|usage)>/g
+
 export function formatEvent(event: SessionEvent): string {
-  const text = flat(event.text)
+  const text = flat(event.role === 'user' ? event.text.replace(HARNESS_TAGS, ' ') : event.text)
   const tool = event.tool ?? 'tool'
   const label =
     event.kind === 'tool_call'
@@ -145,6 +163,11 @@ export async function runHistory(
     io.out(HISTORY_USAGE)
     return sub ? 0 : 2
   }
+  const tool = flag(rest, '--tool')
+  if (tool && !HISTORY_TOOLS.includes(tool as HistoryTool)) {
+    io.err(`aico recent: no tool ${tool} (${HISTORY_TOOLS.join(', ')})`)
+    return 2
+  }
   const wantJson = json || rest.includes('--json')
   const id = rest.find((arg, index) => !arg.startsWith('--') && !isFlagValue(rest, index))
   let path: string
@@ -168,10 +191,13 @@ export async function runHistory(
     }
     path = '/v1/history/search'
     query.set('q', text)
-    for (const name of ['tool', 'project', 'limit']) {
+    for (const name of ['tool', 'project', 'limit', 'hits']) {
       const value = flag(rest, `--${name}`)
       if (value) query.set(name, value)
     }
+    // Enough to pick the session; one word in 20 busy sessions otherwise prints 17 KB.
+    if (!query.has('limit')) query.set('limit', '10')
+    if (!query.has('hits')) query.set('hits', '3')
   } else if (sub === 'show' || sub === 'events') {
     if (!id) {
       io.err(`aico recent ${sub} needs a session id (aico recent list shows them)`)
@@ -227,7 +253,11 @@ export async function runHistory(
   if (sub === 'list') {
     const items = (response.body as { items: SessionSummary[] }).items
     if (!items.length)
-      io.out('No sessions read yet. Tether reads new transcripts every 15 seconds.')
+      io.out(
+        tool || flag(rest, '--project')
+          ? 'No sessions match. aico recent list without --tool or --project shows them all.'
+          : 'No sessions read yet. Tether reads new transcripts every 15 seconds.',
+      )
     for (const row of table(items)) io.out(row)
     return 0
   }
@@ -310,7 +340,7 @@ export function searchLines(page: SearchPage): string[] {
   return lines
 }
 
-const VALUE_FLAGS = new Set(['--tool', '--project', '--limit', '--before', '--from'])
+const VALUE_FLAGS = new Set(['--tool', '--project', '--limit', '--hits', '--before', '--from'])
 function isFlagValue(args: string[], index: number): boolean {
   return index > 0 && VALUE_FLAGS.has(args[index - 1] ?? '')
 }

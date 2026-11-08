@@ -175,7 +175,10 @@ export async function runNote(
       ...(flags.values.body !== undefined ? { body: flags.values.body } : {}),
       kind: isList ? 'list' : 'note',
     }
-    print = (answer) => `${(answer as NoteJson).id}  ${(answer as NoteJson).title}`
+    print = (answer) => {
+      const note = answer as NoteJson
+      return `${note.id}  ${note.title}  (${note.project ? `project ${note.project}` : 'no project'})`
+    }
   } else if (sub === 'move') {
     if (positional.length !== 2) return fail('move takes a note id and a project (or none)')
     const [id, project] = positional as [string, string]
@@ -218,8 +221,11 @@ export async function runNote(
     )
     return 0
   } else {
-    io.err(NOTE_USAGE)
-    return 2
+    return fail(
+      sub === 'search'
+        ? 'to search, use list --q TEXT'
+        : `unknown command ${sub}; tether note --help lists them`,
+    )
   }
 
   const answer = await send(io, base, method, path, body)
