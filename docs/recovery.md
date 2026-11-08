@@ -2,7 +2,7 @@
 
 Backup passwords are in Aico's **Logins** page (`/logins`, also linked from Hosts) with kind **password**; the CT 160 SSH keys there have kind **backup key**. The owner also keeps them in their offline password manager. If both Aico machines are unavailable, start with that offline copy. Never paste a password into a command, chat or log: save it in a private file (`chmod 600 FILE`). Keep the Drive rclone configuration private too.
 
-Recovery scripts stage files in a **new folder under `/srv/scratch`**. They never activate restored units or overwrite a running machine. Keep the original disks and all backup copies. Install the OS and disks on the replacement first; transferring the verified staging tree and activating services on that replacement is a separate, deliberate step.
+`/srv/scratch` is replaceable: nothing live or worth keeping goes there. Recovery scripts stage files in a **new folder under it**. They never activate restored units or overwrite a running machine. Keep the original disks and all backup copies. Install the OS and disks on the replacement first; transferring the verified staging tree and activating services on that replacement is a separate, deliberate step.
 
 ## Get the recovery tools
 

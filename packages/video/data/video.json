@@ -26,7 +26,7 @@
   },
   "cache": {
     "envDir": "AICO_VIDEO_DIR",
-    "dirs": ["/srv/scratch/aico/video", "~/.cache/aico/video"]
+    "dirs": ["~/.cache/aico/video"]
   },
   "transcript": {
     "paragraphSeconds": 60

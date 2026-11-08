@@ -13,7 +13,6 @@ export function cacheRoot(env: NodeJS.ProcessEnv, exists: (path: string) => bool
   const dirs = config.cache.dirs.map((dir) =>
     dir.startsWith('~/') ? join(home, dir.slice(2)) : dir,
   )
-  // /srv/scratch is the shared host's cache area; elsewhere the user's cache directory serves.
   const chosen = dirs.find((dir) => exists(join(dir, '..', '..'))) ?? dirs[dirs.length - 1]
   return chosen
 }
