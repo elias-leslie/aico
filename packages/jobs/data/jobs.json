@@ -59,6 +59,19 @@
       "lease_s": 120
     },
     {
+      "kind": "caretaker",
+      "what": "Caretaker: a problem that outlasts self-healing gets one action from a short list",
+      "project": "aico",
+      "home": "davion-sidarli",
+      "lease_host": "aico",
+      "workers": ["davion-sidarli", "aico"],
+      "every_min": 5,
+      "run": {
+        "command": ["../../web-server/scripts/aico", "caretaker", "run"]
+      },
+      "lease_s": 600
+    },
+    {
       "kind": "notes-export",
       "what": "Notes export to Drive",
       "project": "aico",

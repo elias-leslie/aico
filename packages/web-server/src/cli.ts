@@ -27,6 +27,7 @@ import { TetherClient, TetherError, TetherUnavailable, tetherSocketPath } from '
 import { runUsageCli, USAGE_COMMANDS } from '@aico/usage'
 import { runAppCli } from './app-cli'
 import { type BrokerTarget, createBroker, normalizeWorkingDir } from './broker'
+import { runCaretakerCli } from './caretaker-cli'
 import { dataDirPath, loadConfig, webDbPath } from './config'
 import { WebStore } from './db'
 import { createLifecycle, type Lifecycle } from './lifecycle'
@@ -46,6 +47,7 @@ export const CLI_COMMANDS = [
   'app',
   'phones',
   'machines',
+  'caretaker',
   ...CONTEXT_COMMANDS,
   ...USAGE_COMMANDS,
 ]
@@ -574,6 +576,15 @@ export async function runCli(command: string, argv: string[]): Promise<number> {
       err: (text) => process.stderr.write(text),
       baseUrl: `http://127.0.0.1:${loadConfig().port}`,
       fetch,
+    })
+  if (command === 'caretaker')
+    return runCaretakerCli(argv, {
+      out: (text) => process.stdout.write(text),
+      err: (text) => process.stderr.write(text),
+      baseUrl: `http://127.0.0.1:${loadConfig().port}`,
+      dataDir: dataDirPath(),
+      repoRoot: terminalIo().repoRoot,
+      env: process.env,
     })
   if (command === 'logins') return runLogins(argv)
   if (command === 'tnotes') return runNotesCli(argv, terminalIo().repoRoot)

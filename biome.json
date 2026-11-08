@@ -1175,12 +1175,10 @@
                       "@aico/tether/**",
                       "@aico/ui-kit",
                       "@aico/ui-kit/**",
-                      "@aico/video",
-                      "@aico/video/**",
                       "@aico/web-frontend",
                       "@aico/web-frontend/**"
                     ],
-                    "message": "@aico/web-server (layer 5): import only @aico/shared, @aico/context, @aico/notify, @aico/status, @aico/tasks, @aico/usage, @aico/fleet, @aico/notes, @aico/tether-client, @aico/agent, @aico/webtools (package.json aico.imports; depcruise is the gate)"
+                    "message": "@aico/web-server (layer 5): import only @aico/shared, @aico/context, @aico/notify, @aico/status, @aico/tasks, @aico/usage, @aico/fleet, @aico/notes, @aico/tether-client, @aico/agent, @aico/webtools, @aico/video (package.json aico.imports; depcruise is the gate)"
                   }
                 ]
               }

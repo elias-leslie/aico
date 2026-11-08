@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # `aico memory | prompt | models | context`: context.db (memories, prompts, roles, launch options).
 # `aico usage`: usage.db (what each subscription has left; packages/usage).
+# `aico caretaker`: the unattended agent, one action from a list per problem (packages/web-server).
 # `aico jobs | routines`: the scheduler's jobs and the owner-facing routines (packages/jobs, jobs.db).
 # `aico recent`: the session history, from the running Tether (`tether history`; `aico sessions list|show|events` still works).
 # `aico lease`, `aico sessions send|ack|confirm|inbox`: file leases and the agent handshakes (aico-hook).
@@ -138,7 +139,7 @@ aico_video() {
 
 case "${1:-}" in
   grants | elevate) shift; exec /usr/local/lib/host-steward/aico-grants "$@" ;;
-  memory | prompt | models | context | usage | logins | app | status | phones | machines) exec_aico_web "$@" ;;
+  memory | prompt | models | context | usage | logins | app | status | phones | machines | caretaker) exec_aico_web "$@" ;;
   check | commit | publish | nightly) aico_checks "$@" ;;
   deploy | logs | snapshots | vm | plug | away | backups | wip | context-sync) aico_ops "$@" ;;
   web) shift; aico_webtools "$@" ;;

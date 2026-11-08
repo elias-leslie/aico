@@ -84,6 +84,10 @@
         ["status", "every check, job, backup, service and machine, problems first"],
         ["monitor", "this machine's load, memory, connections, processes and mounts"],
         ["machines", "every machine once: Proxmox guest, power, session host, projects"],
+        [
+          "caretaker",
+          "the unattended agent: one action from a short list per problem; run, log, drill"
+        ],
         ["vm", "Proxmox guests: list, start, stop, snapshot"],
         [
           "plug",

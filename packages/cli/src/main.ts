@@ -60,6 +60,7 @@ export const NATIVE = new Set([
   'app',
   'phones',
   'machines',
+  'caretaker',
   'logins',
   'check',
   'commit',
