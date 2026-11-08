@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The lantern as one shape for themed launcher icons (Android tints the alpha). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <group android:scaleX="0.66" android:scaleY="0.66" android:translateX="21" android:translateY="21">
+        <path android:strokeColor="#FFFFFF" android:strokeWidth="9" android:pathData="M41.5,13a8.5,8.5 0 1,0 17,0a8.5,8.5 0 1,0 -17,0z" />
+        <path android:fillColor="#FFFFFF" android:pathData="M29.5,26H70.5a4.5,4.5 0 0 1 4.5,4.5V30.5a4.5,4.5 0 0 1 -4.5,4.5H29.5a4.5,4.5 0 0 1 -4.5,-4.5V30.5a4.5,4.5 0 0 1 4.5,-4.5z" />
+        <path android:fillColor="#FFFFFF" android:fillType="evenOdd" android:pathData="M14,84V70a36,36 0 0,1 72,0V84a10,10 0 0,1 -10,10H24a10,10 0 0,1 -10,-10zM50,55a15,15 0 1,0 0,30a15,15 0 1,0 0,-30z" />
+    </group>
+</vector>

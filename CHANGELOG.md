@@ -310,6 +310,8 @@
 
 ### Changed
 
+- New Aico icon: a quiet amber lantern (ring, cap, dome with its light cut out) in place of the lantern with a prompt. The web app gets a lighter favicon for 16 to 48 px, a maskable install icon and a 180 px apple-touch icon; the phone app gets the new launcher, a themed monochrome layer and a lantern notification icon (0.3.2); the tray icons follow. Sources: `packages/web-frontend/public/icons/*.svg`, `evidence/icon/final.mjs`.
+
 - Tether's memory guard reads Nightshift's `memory_state` when admission.json has it: Nightshift's `state`
   now also goes amber/red on low disk, which must not warn about memory or kill a tool job. Placement on
   this computer closes on an amber or red disk, agent launches and `wait cmd` starts on red; crash recovery

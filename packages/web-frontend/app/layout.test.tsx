@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
-import RootLayout from './layout'
+import RootLayout, { metadata } from './layout'
 
 vi.mock('@/components/frame/AppFrame', () => ({
   AppFrame: ({ children }: { children: React.ReactNode }) => children,
@@ -19,6 +19,15 @@ describe('RootLayout', () => {
   })
 })
 
+describe('layout metadata', () => {
+  it('shows the favicon in tabs and a 180px full-bleed icon for iOS', () => {
+    expect(metadata.icons).toMatchObject({
+      icon: [{ url: '/favicon.ico' }],
+      apple: [{ url: '/icons/apple-touch-icon.png', sizes: '180x180' }],
+    })
+  })
+})
+
 describe('manifest route', () => {
   it('serves an installable manifest', async () => {
     const { GET } = await import('./manifest.webmanifest/route')
@@ -32,9 +41,15 @@ describe('manifest route', () => {
       display: 'standalone',
       start_url: '/',
     })
-    expect(body.icons.map((icon: { sizes: string }) => icon.sizes)).toEqual([
-      '192x192',
-      '512x512',
+    expect(
+      body.icons.map((icon: { sizes: string; purpose: string }) => [
+        icon.sizes,
+        icon.purpose,
+      ]),
+    ).toEqual([
+      ['192x192', 'any'],
+      ['512x512', 'any'],
+      ['512x512', 'maskable'],
     ])
   })
 })

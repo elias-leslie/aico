@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="t d">
+  <title id="t">Aico lantern icon, small sizes</title>
+  <desc id="d">A heavier lantern without its base, for 16 to 48 px.</desc>
+  <rect width="512" height="512" rx="112" fill="#0B0D11"/>
+  <g transform="translate(46 46) scale(4.2)"><circle cx="50" cy="13" r="8.5" fill="none" stroke="#E5A647" stroke-width="9"/><rect x="25" y="26" width="50" height="9" rx="4.5" fill="#E5A647"/><path fill-rule="evenodd" fill="#E5A647" d="M14 84V70a36 36 0 0 1 72 0V84a10 10 0 0 1-10 10H24a10 10 0 0 1-10-10ZM50 55a15 15 0 1 0 0 30a15 15 0 1 0 0-30Z"/><circle cx="50" cy="70" r="15" fill="#FFE3A3"/></g>
+</svg>

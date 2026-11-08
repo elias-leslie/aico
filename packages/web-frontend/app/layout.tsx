@@ -19,12 +19,14 @@ export const metadata: Metadata = {
     title: PRODUCT_SHORT_NAME,
   },
   icons: {
-    icon: [
-      { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
-      { url: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
-    ],
+    // The tab icon is the small-size lantern in favicon.ico; the 192/512 PNGs are the install icons (manifest).
+    icon: [{ url: '/favicon.ico', sizes: '16x16 32x32 48x48' }],
     apple: [
-      { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+      {
+        url: '/icons/apple-touch-icon.png',
+        sizes: '180x180',
+        type: 'image/png',
+      },
     ],
   },
 }

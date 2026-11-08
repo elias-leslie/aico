@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Notification small icon: the Aico lantern, white on transparent (Android tints it). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
-    <path android:fillColor="#FFFFFF"
-        android:pathData="M12.5,3a9,9 0 1,0 8.5,12 7,7 0 0,1 -8.5,-12z" />
+    <group android:scaleX="0.2" android:scaleY="0.2" android:translateX="2" android:translateY="2">
+        <path android:strokeColor="#FFFFFF" android:strokeWidth="9" android:pathData="M41.5,13a8.5,8.5 0 1,0 17,0a8.5,8.5 0 1,0 -17,0z" />
+        <path android:fillColor="#FFFFFF" android:pathData="M29.5,26H70.5a4.5,4.5 0 0 1 4.5,4.5V30.5a4.5,4.5 0 0 1 -4.5,4.5H29.5a4.5,4.5 0 0 1 -4.5,-4.5V30.5a4.5,4.5 0 0 1 4.5,-4.5z" />
+        <path android:fillColor="#FFFFFF" android:fillType="evenOdd" android:pathData="M14,84V70a36,36 0 0,1 72,0V84a10,10 0 0,1 -10,10H24a10,10 0 0,1 -10,-10zM50,55a15,15 0 1,0 0,30a15,15 0 1,0 0,-30z" />
+    </group>
 </vector>
