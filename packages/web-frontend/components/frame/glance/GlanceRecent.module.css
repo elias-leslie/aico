@@ -153,3 +153,9 @@
     transition-duration: 0.01s;
   }
 }
+
+/* Filters read as buttons at rest; a pressed one takes the amber edge. */
+.toggle[aria-pressed="true"] {
+  border-color: var(--lantern);
+  color: var(--lantern);
+}

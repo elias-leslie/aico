@@ -233,7 +233,7 @@ export function GlanceMachines() {
       )}
       <button
         type="button"
-        className={`lantern-btn ghost small ${styles.refresh}`}
+        className={`lantern-btn small ${styles.refresh}`}
         disabled={refreshing}
         onClick={refresh}
       >

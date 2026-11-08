@@ -110,6 +110,7 @@
   font-weight: 600;
 }
 .bar {
+  display: block;
   position: relative;
   height: 5px;
   margin-top: 5px;

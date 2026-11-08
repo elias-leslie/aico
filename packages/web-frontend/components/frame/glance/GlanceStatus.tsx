@@ -294,7 +294,7 @@ export function GlanceStatus() {
           Nothing matches.{' '}
           <button
             type="button"
-            className="lantern-btn ghost small"
+            className="lantern-btn small"
             onClick={() => setFilter(NO_FILTER)}
           >
             Clear filters

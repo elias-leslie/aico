@@ -243,7 +243,7 @@ export function GlanceRecent() {
         </select>
         <button
           type="button"
-          className="lantern-btn ghost small"
+          className={`lantern-btn small ${styles.toggle}`}
           aria-pressed={onlyFailed}
           onClick={() => setOnlyFailed((value) => !value)}
         >
@@ -252,7 +252,7 @@ export function GlanceRecent() {
         {tests > 0 && (
           <button
             type="button"
-            className="lantern-btn ghost small"
+            className={`lantern-btn small ${styles.toggle}`}
             aria-pressed={showTests}
             onClick={() => setShowTests((value) => !value)}
           >

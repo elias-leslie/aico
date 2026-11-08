@@ -20,7 +20,7 @@ export function OpenLink({
   return (
     <Link
       href={href}
-      className="lantern-btn ghost small"
+      className="lantern-btn small"
       aria-label={label}
       onClick={(event) => {
         if (!frame) return
