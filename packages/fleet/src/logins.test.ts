@@ -444,7 +444,8 @@ it('CLI set --account saves an account login, shows only length, and the summary
 it('sends each command to the store, and says so for one it does not know', async () => {
   const out = vi.fn(),
     err = vi.fn()
-  const env = { ...process.env, HOME: home }
+  // Only the test home: the owner's XDG_STATE_HOME or AICO_DATA_DIR would send the store to real state.
+  const env = { PATH: process.env.PATH, HOME: home }
   let input = ''
   const io = { out, err, caller: owner, input: async () => input }
   const reply = () => out.mock.calls.at(-1)?.[0]
