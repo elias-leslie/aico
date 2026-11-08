@@ -215,7 +215,7 @@ export function clock(ms: number | null): string {
 }
 
 /** The name a session goes under: its project, else its folder, else "Session". */
-export function projectOf(session: HistorySession): string {
+function projectOf(session: HistorySession): string {
   return session.project ?? (shortFolder(session.cwd) || 'Session')
 }
 

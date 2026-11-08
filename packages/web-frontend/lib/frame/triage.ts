@@ -67,13 +67,3 @@ export function rowState(
   if (shell) return { text: 'running', tone: 'idle', quiet: null }
   return { text: 'no status', tone: 'idle', quiet: null }
 }
-
-/** The tooltip and accessible name for a rail mark or row. */
-export function rowSummary(
-  name: string,
-  agent: string,
-  state: RowState,
-  asks: AskCounts,
-): string {
-  return [name, agent, state.text, askText(asks)].filter(Boolean).join(' · ')
-}

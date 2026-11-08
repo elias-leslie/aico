@@ -12,7 +12,6 @@ import {
   NO_ASKS,
   type RowState,
   rowState,
-  rowSummary,
 } from '@/lib/frame/triage'
 import { useAgentTools } from '@/lib/hooks/use-agent-tools'
 import { useClock } from '@/lib/hooks/use-clock'

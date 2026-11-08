@@ -86,7 +86,7 @@ function PlaceRow({
 
 /** A project's places with their power controls and the confirm sheet a power button opens; the page and
  * the side's Projects section both use it, so they cannot drift apart. */
-export function Places({ project, now }: { project: Detail; now: number }) {
+function Places({ project, now }: { project: Detail; now: number }) {
   const [index, setIndex] = useState<number | null>(null)
   const place = index === null ? undefined : project.places[index]
   const actions = place && powerActions(place)

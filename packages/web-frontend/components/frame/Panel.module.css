@@ -14,23 +14,10 @@
   overscroll-behavior: contain;
   padding: 12px 12px 24px;
 }
-.section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
-}
-.note {
-  color: var(--mist);
-  font-size: 13px;
-}
 .glances {
   display: flex;
   flex-direction: column;
   border-block: 1px solid var(--line);
-}
-.sessions {
-  margin: 0 -8px;
 }
 /* The footer stays at the bottom however short the list is. */
 .foot {
