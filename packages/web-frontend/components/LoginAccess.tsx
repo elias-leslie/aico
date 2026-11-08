@@ -10,11 +10,17 @@ export interface Grants {
   roles: string[]
   deniedRoles?: string[]
 }
-/** What the checklists show: ticked machines, whether every role is allowed, and the ticked roles. */
+/**
+ * What the checklists show: ticked machines, whether every role is allowed, the ticked roles,
+ * the roles named on the login itself (kept next to "All roles"; a lab login needs one), and the
+ * sessions assigned to a lab login's target.
+ */
 export interface Access {
   machines: string[]
   all: boolean
   roles: string[]
+  named: string[]
+  sessions: string[]
 }
 /** One grant or revoke the server needs to turn the current access into the chosen one. */
 export interface GrantOp {
@@ -26,6 +32,8 @@ export interface GrantOp {
 export interface AccessSource extends Grants {
   name: string
   label: string
+  /** A lab login's target; its session assignments copy with it. */
+  target?: string
 }
 /** What the checklists are built from. */
 export interface AccessChoices {
@@ -38,6 +46,10 @@ export interface AccessChoices {
   registeredFailed: boolean
   /** This computer's name: where a new login is allowed until changed. */
   machine: string
+  /** Sessions a lab target can be assigned to, and who has which target now. */
+  sessions: { id: string; label: string }[]
+  sessionsFailed: boolean
+  assignments: Record<string, string[]>
 }
 
 const ALL = '*'
@@ -45,7 +57,11 @@ const unique = (items: string[]) => [...new Set(items)]
 const NAME = /^[A-Za-z0-9_.-]{1,128}$/
 
 /** The ticks for a login: with "All roles" on, every known role is ticked except the blocked ones. */
-export function accessOf(grants: Grants, known: string[]): Access {
+export function accessOf(
+  grants: Grants,
+  known: string[],
+  sessions: string[] = [],
+): Access {
   const all = grants.roles.includes(ALL),
     explicit = grants.roles.filter((r) => r !== ALL),
     denied = grants.deniedRoles ?? []
@@ -55,7 +71,67 @@ export function accessOf(grants: Grants, known: string[]): Access {
     roles: all
       ? unique([...explicit, ...known.filter((r) => !denied.includes(r))])
       : explicit,
+    named: explicit,
+    sessions,
   }
+}
+
+/** The sessions whose assignments include this lab target. */
+export const sessionsOf = (choices: AccessChoices, target?: string) =>
+  target
+    ? choices.sessions
+        .filter((s) => choices.assignments[s.id]?.includes(target))
+        .map((s) => s.id)
+    : []
+
+/** One session's new target list, where its membership of `target` has to change. */
+export interface AssignOp {
+  session: string
+  label: string
+  targets: string[]
+  granted: boolean
+}
+export function planSessions(
+  choices: AccessChoices,
+  target: string,
+  wanted: string[],
+): AssignOp[] {
+  const ops: AssignOp[] = []
+  for (const s of choices.sessions) {
+    const targets = choices.assignments[s.id] ?? [],
+      has = targets.includes(target),
+      want = wanted.includes(s.id)
+    if (has !== want)
+      ops.push({
+        session: s.id,
+        label: s.label,
+        granted: want,
+        targets: want
+          ? [...targets, target]
+          : targets.filter((t) => t !== target),
+      })
+  }
+  return ops
+}
+
+/** Runs the assignments through the owner-only assign endpoint; returns what failed and why. */
+export async function applySessions(
+  ops: AssignOp[],
+  send: (path: string, body: unknown) => Promise<unknown>,
+): Promise<string[]> {
+  const failed: string[] = []
+  for (const op of ops)
+    try {
+      await send('/api/logins/assign', {
+        session: op.session,
+        targets: op.targets,
+      })
+    } catch (error) {
+      failed.push(
+        `Could not ${op.granted ? 'give' : 'take away'} access for ${op.label} (session): ${(error as Error).message}`,
+      )
+    }
+  return failed
 }
 
 /** The grants and revokes that turn `current` into `wanted`, following the server's own rules for "All roles". */
@@ -92,10 +168,23 @@ export function planAccess(
     ...(current.deniedRoles ?? []),
     ...wanted.roles,
   ]).filter((r) => r !== ALL)
+  const named = new Set(wanted.named)
   for (const value of names) {
     const want = wanted.roles.includes(value)
     if (want && !allowed(value)) role(value, true)
+    // A named role stays named next to "All roles": a lab login is opened by it, not by "*".
+    else if (want && wanted.all && named.has(value) && !roles.has(value))
+      role(value, true)
     else if (!want && allowed(value)) role(value, false)
+  }
+  // Exact copy: a role named here but not on the wanted login goes back to counting through "All roles".
+  const drop = [...roles].filter(
+    (r) => r !== ALL && wanted.all && wanted.roles.includes(r) && !named.has(r),
+  )
+  if (drop.length) {
+    role(ALL, false)
+    for (const value of drop) role(value, false)
+    role(ALL, true)
   }
   return ops
 }
@@ -149,10 +238,13 @@ export function AccessChecklist({
   onChange,
   exclude,
   disabled,
+  lab,
 }: {
   choices: AccessChoices
   value: Access
   onChange(next: Access): void
+  /** A lab login: it also gets the sessions checklist. */
+  lab?: boolean
   /** The login being edited, left out of "Same access as". */
   exclude?: string
   disabled?: boolean
@@ -177,7 +269,15 @@ export function AccessChecklist({
     const source = sources.find((s) => s.name === name)
     if (!source) return
     const known = unique([...registered, ...roles])
-    onChange(accessOf(source, known))
+    onChange(
+      accessOf(
+        source,
+        known,
+        lab && source.target
+          ? sessionsOf(choices, source.target)
+          : value.sessions,
+      ),
+    )
   }
   const toggle = (list: string[], item: string, on: boolean) =>
     on ? unique([...list, item]) : list.filter((v) => v !== item)
@@ -246,6 +346,7 @@ export function AccessChecklist({
                   ...value,
                   all: e.target.checked,
                   roles: e.target.checked ? roles : value.roles,
+                  named: value.all ? value.named : value.roles,
                 })
               }}
             />
@@ -267,10 +368,20 @@ export function AccessChecklist({
                   onChange({
                     ...value,
                     roles: toggle(value.roles, r, e.target.checked),
+                    // Allowing a role by hand names it, also under "All roles".
+                    named: toggle(value.named, r, e.target.checked),
                   })
                 }}
               />
               {r}
+              {value.all && value.roles.includes(r) && isNamed(r) && (
+                <span
+                  className={kit.named}
+                  role="img"
+                  aria-label="Named"
+                  title="Named on this login. It still counts if All roles is turned off, and a lab login needs it."
+                />
+              )}
             </label>
           ))}
         </div>
@@ -297,13 +408,49 @@ export function AccessChecklist({
           Add role
         </button>
       </fieldset>
+      {lab && (
+        <fieldset disabled={disabled}>
+          <legend>Sessions</legend>
+          {choices.sessionsFailed && (
+            <Quiet role="alert">Sessions could not load.</Quiet>
+          )}
+          {!choices.sessionsFailed && choices.sessions.length === 0 && (
+            <Quiet>No sessions are available to assign.</Quiet>
+          )}
+          <div className={kit.checks}>
+            {choices.sessions.map((s) => (
+              <label className={kit.check} key={s.id}>
+                <input
+                  type="checkbox"
+                  checked={value.sessions.includes(s.id)}
+                  onChange={(e) => {
+                    setCopied('')
+                    onChange({
+                      ...value,
+                      sessions: toggle(value.sessions, s.id, e.target.checked),
+                    })
+                  }}
+                />
+                {s.label}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      )}
     </>
   )
+  function isNamed(role: string) {
+    return value.named.includes(role)
+  }
   function addOther() {
     const name = other.trim()
     if (!NAME.test(name)) return
     setExtra(unique([...extra, name]))
-    onChange({ ...value, roles: unique([...value.roles, name]) })
+    onChange({
+      ...value,
+      roles: unique([...value.roles, name]),
+      named: unique([...value.named, name]),
+    })
     setOther('')
   }
 }

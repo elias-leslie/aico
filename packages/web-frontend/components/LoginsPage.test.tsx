@@ -397,3 +397,70 @@ it('sets access in the Add login form and saves it with the login', async () => 
     ],
   ])
 })
+const labEntry = (target: string, roles: string[]) => ({
+  ...entry,
+  name: `_lab_${target}--default`,
+  kind: 'lab login',
+  machines: ['aico'],
+  roles,
+  lab: {
+    target,
+    actor: 'default',
+    kind: 'account',
+    fields: ['username', 'password', 'login_url'],
+    expires_at: null,
+  },
+})
+it('copies a lab login named roles and session assignments, and saves both', async () => {
+  machines.list = [{ name: 'aico', state: 'connected' }]
+  const fetcher = vi.fn(
+    async (path: string, options?: { method?: string; body?: string }) =>
+      Response.json(
+        path.endsWith('/roles')
+          ? { roles: ['coordinator', 'review'] }
+          : options?.method
+            ? {}
+            : path.endsWith('/sessions')
+              ? { sessions: [{ id: 's1', label: 'School session' }] }
+              : path.endsWith('/audit')
+                ? { events: [] }
+                : {
+                    entries: [
+                      labEntry('focus-pcsb', ['*', 'school-check']),
+                      labEntry('canvas-pcsb', ['*']),
+                    ],
+                    machine: 'aico',
+                    assignments: { s1: ['focus-pcsb'] },
+                    revealSeconds: 30,
+                  },
+      ),
+  )
+  vi.stubGlobal('fetch', fetcher)
+  render(<LoginsPage />)
+  await screen.findAllByText('canvas-pcsb')
+  fireEvent.click(screen.getByRole('button', { name: /canvas-pcsb/ }))
+  fireEvent.click(screen.getByRole('button', { name: 'Access' }))
+  expect(screen.getByLabelText('School session')).not.toBeChecked()
+  fireEvent.change(screen.getByLabelText('Same access as'), {
+    target: { value: '_lab_focus-pcsb--default' },
+  })
+  expect(screen.getByLabelText('All roles')).toBeChecked()
+  expect(screen.getByLabelText('school-check')).toBeChecked()
+  expect(screen.getByRole('img', { name: 'Named' })).toBeInTheDocument()
+  expect(screen.getByLabelText('School session')).toBeChecked()
+  fireEvent.click(screen.getByRole('button', { name: 'Save access' }))
+  await screen.findByText('Access saved.')
+  const sent = fetcher.mock.calls
+    .filter(([, o]) => o?.method === 'POST')
+    .map(([path, o]) => [path, JSON.parse(String(o?.body))])
+  expect(sent).toEqual([
+    [
+      '/api/logins/_lab_canvas-pcsb--default/grants',
+      { type: 'role', value: 'school-check', granted: true },
+    ],
+    [
+      '/api/logins/assign',
+      { session: 's1', targets: ['focus-pcsb', 'canvas-pcsb'] },
+    ],
+  ])
+})

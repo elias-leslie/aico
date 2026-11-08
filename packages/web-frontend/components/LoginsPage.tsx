@@ -10,9 +10,12 @@ import {
   type AccessChoices,
   accessOf,
   applyAccess,
+  applySessions,
   defaultAccess,
   knownRoles,
   planAccess,
+  planSessions,
+  sessionsOf,
 } from './LoginAccess'
 import {
   Actions,
@@ -235,6 +238,7 @@ export function LoginsPage() {
       machines: e.machines,
       roles: e.roles,
       deniedRoles: e.deniedRoles,
+      target: e.lab?.target,
     })),
     hosts: hosts.map((h) => h.name),
     hostsStatus: hostState.isLoading
@@ -245,6 +249,9 @@ export function LoginsPage() {
     registered,
     registeredFailed,
     machine: data?.machine ?? '',
+    sessions,
+    sessionsFailed: !!sessionError,
+    assignments: data?.assignments ?? {},
   }
   const shown = data
     ? data.entries.filter((e) =>
@@ -475,11 +482,19 @@ function AddLogin({
             form.reset()
             const made = result.entry
             const failed = made
-              ? await applyAccess(
-                  `/api/logins/${encodeURIComponent(made.name)}`,
-                  planAccess(made, access, knownRoles(choices)),
-                  api,
-                )
+              ? [
+                  ...(await applyAccess(
+                    `/api/logins/${encodeURIComponent(made.name)}`,
+                    planAccess(made, access, knownRoles(choices)),
+                    api,
+                  )),
+                  ...(made.lab
+                    ? await applySessions(
+                        planSessions(choices, made.lab.target, access.sessions),
+                        api,
+                      )
+                    : []),
+                ]
               : []
             onSaved(
               savedChars(secret),
@@ -592,6 +607,7 @@ function AddLogin({
           value={access}
           onChange={setEdited}
           disabled={busy}
+          lab={kind === ACCOUNT || kind === 'lab login'}
         />
         {error && <Quiet role="alert">{error}</Quiet>}
         <button type="submit" disabled={busy} className="lantern-btn small">
@@ -845,19 +861,25 @@ function AccessPanel({
   onCancel(): void
 }) {
   const known = knownRoles(choices),
-    current = accessOf(entry, known)
+    current = accessOf(entry, known, sessionsOf(choices, entry.lab?.target))
   const [edited, setEdited] = useState<Access | null>(null),
     [busy, setBusy] = useState(false),
     [failed, setFailed] = useState<string[]>([])
   const access = edited ?? current
   const ops = planAccess(entry, access, known)
+  const assigns = entry.lab
+    ? planSessions(choices, entry.lab.target, access.sessions)
+    : []
   return (
     <Form
       onSubmit={(event) => {
         event.preventDefault()
         setBusy(true)
         setFailed([])
-        void applyAccess(path, ops, api)
+        void (async () => [
+          ...(await applyAccess(path, ops, api)),
+          ...(await applySessions(assigns, api)),
+        ])()
           .then(async (errors) => {
             setFailed(errors)
             setEdited(null)
@@ -877,6 +899,7 @@ function AccessPanel({
         onChange={setEdited}
         exclude={entry.name}
         disabled={busy}
+        lab={!!entry.lab}
       />
       {failed.map((text) => (
         <Quiet role="alert" key={text}>
@@ -890,7 +913,7 @@ function AccessPanel({
         <button
           type="submit"
           className="lantern-btn small"
-          disabled={busy || ops.length === 0}
+          disabled={busy || ops.length + assigns.length === 0}
         >
           {busy ? 'Saving…' : 'Save access'}
         </button>

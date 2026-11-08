@@ -202,6 +202,13 @@ button.rowHead:focus-visible {
   grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
   column-gap: 8px;
 }
+.named {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--lantern);
+}
 .form .check {
   flex-direction: row;
   align-items: center;
