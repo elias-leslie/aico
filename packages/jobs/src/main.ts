@@ -5,7 +5,15 @@ import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { peerDir } from '@aico/fleet/hosts'
-import { drainOutbox, machineId, outboxDir, type StatusRow } from '@aico/status'
+import {
+  deleteStatusRow,
+  drainOutbox,
+  machineId,
+  outboxDir,
+  postStatusRows,
+  type StatusRow,
+  statusRowsUrl,
+} from '@aico/status'
 import { act, postJob, systemdUnits, unitInFlight, whereOf } from './act'
 import { remoteAuthority, serveLeases } from './fleet-leases'
 import type { JobDef } from './jobs'
@@ -54,21 +62,13 @@ function settings(env: NodeJS.ProcessEnv) {
 }
 
 async function postRows(webUrl: string, rows: StatusRow[]): Promise<void> {
-  const res = await fetch(new URL('/api/status/rows', webUrl), {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(rows),
-    signal: AbortSignal.timeout(10_000),
-  })
+  const res = await postStatusRows(webUrl, rows, { timeoutMs: 10_000 })
   if (!res.ok)
     throw new Error(`aico-web answered ${res.status}: ${(await res.text()).slice(0, 200)}`)
 }
 
 async function removeRow(webUrl: string, id: string): Promise<void> {
-  await fetch(new URL(`/api/status/rows?id=${encodeURIComponent(id)}`, webUrl), {
-    method: 'DELETE',
-    signal: AbortSignal.timeout(10_000),
-  })
+  await deleteStatusRow(webUrl, id, { timeoutMs: 10_000 })
 }
 
 const time = (ms: number | null) => (ms === null ? '-' : new Date(ms).toLocaleString('sv-SE'))
@@ -198,7 +198,7 @@ export async function main(argv: string[], env = process.env): Promise<number> {
   // scheduler adopts it (Runner.adopt) instead of starting a second.
   const units = { host: systemdUnits(env), dir: join(dataDir, 'job-runs') }
   const outbox = { dir: outboxDir(dataDir) }
-  const rowsUrl = new URL('/api/status/rows', webUrl).toString()
+  const rowsUrl = statusRowsUrl(webUrl)
   const runner = new Runner({
     store,
     jobs: () => loadJobs(jobsFile, store),
