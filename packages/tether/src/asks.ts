@@ -986,12 +986,8 @@ export function registerAskRoutes(
       if (request.attach) {
         // Linked where they are, as `tether share` does: nothing is copied.
         const paths = await realPaths(request.attach)
-        request.share = shares.filesShare(
-          request.session,
-          clipText(request.question, 120),
-          paths,
-          now(),
-        ).id
+        // Named by its file: in Shared, a question's words would read as still waiting once answered.
+        request.share = shares.filesShare(request.session, null, paths, now()).id
       }
       if (request.share && !shareExists(request.share))
         throw new HttpError(400, 'invalid_body', { field: 'share', detail: 'no such share' })

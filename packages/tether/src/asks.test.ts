@@ -24,6 +24,7 @@ import {
   registerAskRoutes,
   sessionAsks,
 } from './asks'
+import { ShareStore } from './shares'
 
 let dir: string
 let store: Store
@@ -259,7 +260,14 @@ describe('attached files', () => {
       session_id: string
       paths: string
     }
-    expect(share).toMatchObject({ title: 'Ship the plan?', session_id: '0123abcd' })
+    expect(share).toMatchObject({ title: null, session_id: '0123abcd' })
+    // An older share that took the question's words loses them.
+    const titled = store.db.prepare('UPDATE shares SET title = ? WHERE id = ?')
+    titled.run('Ship the plan?', created.body.share as string)
+    new ShareStore(store.db, { retentionDays: 30 } as never)
+    expect(
+      store.db.prepare('SELECT title FROM shares WHERE id = ?').get(created.body.share as string),
+    ).toMatchObject({ title: null })
     expect(JSON.parse(share.paths)).toEqual([plan, `${join(dir, 'shots')}/`])
     expect(created.body.attached).toEqual([
       { path: plan, name: 'plan.md', kind: 'file', size: 5 },

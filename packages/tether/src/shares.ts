@@ -71,7 +71,12 @@ export class ShareStore {
   constructor(
     private readonly db: Store['db'],
     private readonly config: ShowConfig,
-  ) {}
+  ) {
+    // Shares filed before questions stopped lending them their words.
+    db.exec(`UPDATE shares SET title = NULL WHERE id IN (
+      SELECT share_id FROM asks
+       WHERE share_id IS NOT NULL AND substr(question, 1, 100) = substr(shares.title, 1, 100))`)
+  }
 
   /** Record a share and drop those past the retention. */
   add(request: ShowRequest, now = Date.now()): Share {
