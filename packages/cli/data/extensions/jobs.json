@@ -25,7 +25,7 @@
     "update-profile": "Usage: jobs update-profile [OPTIONS] {path}\n\nArguments:\n  path  [required]\n\nOptions:\n  --human\n  --remote\n  --help    Show this message and exit.",
     "cv-versions": "Usage: jobs cv-versions [OPTIONS]\n\nOptions:\n  --human\n  --remote\n  --help    Show this message and exit.",
     "save-cv": "Usage: jobs save-cv [OPTIONS] {path}\n\nArguments:\n  path  [required]\n\nOptions:\n  --base-cv-id <int range>  [x>=1; required]\n  --verified\n  --label <str>             [default: Reviewed CV revision]\n  --human\n  --remote\n  --help                    Show this message and exit.",
-    "search": "Usage: jobs search [OPTIONS]\n\n  Postings narrowed by work mode, employment type, company size and distance.\n\nOptions:\n  --state <str>              new|triaged|shortlisted|applied|discarded\n  --fit <str>                matches|strong|possible|poor|pending|research_onl\n                             y|all  [default: matches]\n  --remote-kind <str>        remote|hybrid|onsite|unknown; repeatable\n  --employment <str>         full_time|part_time|contract|…; repeatable\n  --employee-band <str>      startup_1_50|small_51_200|…; repeatable\n  --segment <str>            msp|mssp|edr_xdr|…; repeatable\n  --channel-focus            Only companies that sell through MSPs\n  --max-distance <float>     Miles to the nearest researched office\n  --min-salary <int>         Advertised ceiling must reach this\n  --exclude-clearance        Drop postings that require a clearance\n  --min-score <float range>  [0<=x<=5]\n  --search <str>             Title or company substring\n  --limit <int range>        [default: 25; 1<=x<=500]\n  --offset <int range>       [default: 0; x>=0]\n  --human                    Plain-text rendering\n  --remote                   Use hosts.production_api\n  --help                     Show this message and exit.",
+    "search": "Usage: jobs search [OPTIONS]\n\n  Postings narrowed by work mode, employment type, company size and distance.\n\nOptions:\n  --state <str>              new|triaged|shortlisted|applied|discarded\n  --fit <str>                matches|strong|possible|poor|pending|research_onl\n                             y|all  [default: matches]\n  --remote-kind <str>        remote|hybrid|onsite|unknown; repeatable\n  --employment <str>         full_time|part_time|contract|…; repeatable\n  --employee-band <str>      startup_1_50|small_51_200|…; repeatable\n  --segment <str>            healthcare|education|software_saas|msp|…;\n                             repeatable\n  --channel-focus            Only IT or security vendors that sell through\n                             MSPs\n  --max-distance <float>     Miles to the nearest researched office\n  --min-salary <int>         Advertised ceiling must reach this\n  --exclude-clearance        Drop postings that require a clearance\n  --min-score <float range>  [0<=x<=5]\n  --search <str>             Title or company substring\n  --limit <int range>        [default: 25; 1<=x<=500]\n  --offset <int range>       [default: 0; x>=0]\n  --human                    Plain-text rendering\n  --remote                   Use hosts.production_api\n  --help                     Show this message and exit.",
     "session": "Usage: jobs session [OPTIONS]\n\nOptions:\n  --human\n  --remote\n  --help    Show this message and exit.",
     "cv": "Usage: jobs cv [OPTIONS]\n\nOptions:\n  --human\n  --remote\n  --help    Show this message and exit.",
     "assess": "Usage: jobs assess [OPTIONS] {path}\n\nArguments:\n  path  [required]\n\nOptions:\n  --human\n  --remote\n  --help    Show this message and exit.",
@@ -159,7 +159,7 @@
       "why": "writes a timeline transition as well as the new status, so funnel analytics stay truthful",
       "precautions": [
         "records state only; nothing is sent to an employer",
-        "statuses: evaluated applied responded interview offer rejected discarded skip hired"
+        "statuses: draft evaluated applied responded interview offer rejected discarded skip hired"
       ],
       "examples": ["st jobs status 9 interview -m 'panel scheduled for the 12th'"],
       "task_types": ["jobs", "career"]
@@ -549,5 +549,13 @@
       "examples": ["st jobs companies --segment msp --hiring --human"],
       "task_types": ["jobs", "career"]
     }
-  ]
+  ],
+  "help_options": {
+    "": {
+      "--profile": 1,
+      "--install-completion": 0,
+      "--show-completion": 0,
+      "--help": 0
+    }
+  }
 }
