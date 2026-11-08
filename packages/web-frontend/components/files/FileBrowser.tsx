@@ -92,6 +92,30 @@ interface TreeNodeProps {
   selectedPath: string | null
   onSelect: (entry: PaneFileTreeEntry) => void
   view?: ListingView
+  open: OpenFolders
+  onToggle: (entry: PaneFileTreeEntry) => void
+}
+
+/** The folders open in the list, by path. Kept above the rows so a find can't close them. */
+type OpenFolders = ReadonlyMap<string, PaneFileTreeEntry>
+
+const findText = (view?: ListingView) => view?.match?.trim().toLowerCase() ?? ''
+
+/** A folder's listing during a find: its open folders stay, above the names found. */
+function withOpenFolders(
+  entries: PaneFileTreeEntry[] | undefined,
+  parent: string,
+  open: OpenFolders,
+  view?: ListingView,
+): PaneFileTreeEntry[] | undefined {
+  if (!findText(view)) return entries
+  const shown = new Set(entries?.map((entry) => entry.path))
+  const kept = [...open.values()].filter(
+    (entry) =>
+      !shown.has(entry.path) &&
+      entry.path.slice(0, Math.max(0, entry.path.lastIndexOf('/'))) === parent,
+  )
+  return kept.length ? [...kept, ...(entries ?? [])] : entries
 }
 
 function TreeNode({
@@ -101,25 +125,32 @@ function TreeNode({
   selectedPath,
   onSelect,
   view,
+  open,
+  onToggle,
 }: TreeNodeProps) {
-  const [expanded, setExpanded] = useState(false)
+  const expanded = open.has(entry.path)
   const isSelected = selectedPath === entry.path
+  // Finding narrows an open folder too, unless the folder is itself what was found: then all of it.
+  const inside =
+    view && entry.name.toLowerCase().includes(findText(view))
+      ? { ...view, match: undefined }
+      : view
   const childTree = useFileTree(
     source,
     entry.path,
     expanded && entry.is_directory,
-    // Finding narrows the folder being looked at, not what's inside the folders it finds.
-    view && { ...view, match: undefined },
+    inside,
   )
+  const children = withOpenFolders(childTree.entries, entry.path, open, inside)
   const FileIcon = getFileIcon(entry)
 
   const handleClick = useCallback(() => {
     if (entry.is_directory) {
-      setExpanded((current) => !current)
+      onToggle(entry)
       return
     }
     onSelect(entry)
-  }, [entry, onSelect])
+  }, [entry, onSelect, onToggle])
 
   return (
     <li aria-expanded={entry.is_directory ? expanded : undefined}>
@@ -200,7 +231,7 @@ function TreeNode({
             </li>
           ) : (
             <>
-              {childTree.entries?.map((child) => (
+              {children?.map((child) => (
                 <TreeNode
                   key={child.path}
                   source={source}
@@ -208,15 +239,17 @@ function TreeNode({
                   depth={depth + 1}
                   selectedPath={selectedPath}
                   onSelect={onSelect}
-                  view={view}
+                  view={inside}
+                  open={open}
+                  onToggle={onToggle}
                 />
               ))}
-              {!childTree.entries?.length && (
+              {!children?.length && (
                 <li
                   className="py-1.5 text-xs"
                   style={{ paddingLeft: 38 + depth * 16, color: 'var(--mist)' }}
                 >
-                  Empty
+                  {findText(inside) ? 'No match in here' : 'Empty'}
                 </li>
               )}
               <MoreRow tree={childTree} indent={38 + depth * 16} />
@@ -294,6 +327,15 @@ export function FileBrowser({
 }) {
   const tree = useFileTree(source, '', true, view)
   const [selected, setSelected] = useState<FileChoice | null>(initialSelected)
+  const [open, setOpen] = useState<OpenFolders>(new Map())
+  const toggle = useCallback((entry: PaneFileTreeEntry) => {
+    setOpen((current) => {
+      const next = new Map(current)
+      if (!next.delete(entry.path)) next.set(entry.path, entry)
+      return next
+    })
+  }, [])
+  const entries = withOpenFolders(tree.entries, '', open, view)
 
   return (
     // max-md: keeps a plain `flex` off this element so it cannot beat md:grid.
@@ -319,9 +361,9 @@ export function FileBrowser({
               </button>
             )}
           </div>
-        ) : tree.entries?.length ? (
+        ) : entries?.length ? (
           <ul className="m-0 list-none p-0">
-            {tree.entries.map((entry) => (
+            {entries.map((entry) => (
               <TreeNode
                 key={entry.path}
                 source={source}
@@ -330,6 +372,8 @@ export function FileBrowser({
                 selectedPath={selected?.path ?? null}
                 onSelect={setSelected}
                 view={view}
+                open={open}
+                onToggle={toggle}
               />
             ))}
             <MoreRow tree={tree} indent={10} />

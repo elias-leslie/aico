@@ -481,6 +481,54 @@ describe('FilesDialog', () => {
     expect(download).toHaveAttribute('download', 'inner.txt')
   })
 
+  it('narrows an open folder while finding, and keeps it open', async () => {
+    const file = (name: string, path: string) => ({
+      name,
+      path,
+      is_directory: false,
+      size: 5,
+      extension: '.ts',
+    })
+    renderDialog(null, null, (url) => {
+      const { pathname, searchParams } = new URL(url, 'http://aico.test')
+      if (pathname !== '/api/files/tree') return serve(url)
+      const match = searchParams.get('match') ?? ''
+      const inFolder = searchParams.get('path') === 'src'
+      const all = inFolder
+        ? [file('keep.ts', 'src/keep.ts'), file('other.ts', 'src/other.ts')]
+        : [
+            {
+              name: 'src',
+              path: 'src',
+              is_directory: true,
+              children_count: 2,
+            },
+            file('keep-top.ts', 'keep-top.ts'),
+          ]
+      const entries = all.filter((entry) => entry.name.includes(match))
+      return json({
+        entries,
+        path: inFolder ? 'src' : '',
+        total: entries.length,
+      })
+    })
+    fireEvent.click(await screen.findByText('src'))
+    await screen.findByText('other.ts')
+    const find = screen.getByRole('searchbox', { name: 'Find in this folder' })
+
+    fireEvent.change(find, { target: { value: 'keep' } })
+    await waitFor(() => expect(screen.queryByText('other.ts')).toBeNull())
+    expect(screen.getByText('src')).toBeInTheDocument()
+    expect(screen.getByText('keep.ts')).toBeInTheDocument()
+    expect(screen.getByText('keep-top.ts')).toBeInTheDocument()
+
+    fireEvent.change(find, { target: { value: 'nothing' } })
+    expect(await screen.findByText('No match in here')).toBeInTheDocument()
+
+    fireEvent.change(find, { target: { value: '' } })
+    expect(await screen.findByText('other.ts')).toBeInTheDocument()
+  })
+
   it('works when storage is out of reach', async () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('blocked')
