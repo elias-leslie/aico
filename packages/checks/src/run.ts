@@ -21,7 +21,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { homedir, setPriority, tmpdir } from 'node:os'
-import { dirname, isAbsolute, join } from 'node:path'
+import { dirname, isAbsolute, join, relative } from 'node:path'
 import { SaxesParser } from 'saxes'
 import { blobIds, commonDir, git } from './git'
 import type { Config, Evidence, Lane, Planned, Step } from './plan'
@@ -511,7 +511,8 @@ export async function runSteps(
       required,
       inputs,
       reason: state === 'timeout' ? `timed out after ${step.timeoutS}s` : because,
-      details: `.dev-tools/${step.id}-${process.pid}-details.txt`,
+      // Reads from the folder the check was typed in, which may not be the repo root.
+      details: relative(process.cwd(), file),
       hint: firstLine,
       ...(state === 'pass' ? {} : { failures: failureLines(run.output, firstLine) }),
     }

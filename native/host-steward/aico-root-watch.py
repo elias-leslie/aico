@@ -3126,7 +3126,9 @@ def wait_main(argv: list[str]) -> int:
         parser.add_argument("--until", choices=pull[0], default=pull[0][0])
     if operation == "session":
         parser.add_argument("ref", help="the session id (eight hex characters) or its root request id")
-        parser.add_argument("--until", choices=WAIT_UNTILS, default="finished")
+        parser.add_argument("--until", choices=WAIT_UNTILS, default="finished",
+                            help=("finished (default): it ended a turn after you armed this; use it after root "
+                                  "send. idle: it is idle now, even before a message you just sent starts"))
     if arming:
         parser.add_argument("--timeout", type=wait_minutes, metavar="SPAN",
                             help=("give up after this long, stop the command and say so (default 6h)"

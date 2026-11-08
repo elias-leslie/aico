@@ -118,6 +118,25 @@ describe('stage selection', () => {
     ])
   })
 
+  it('names a details file that opens from the folder the check runs in', async () => {
+    const root = repo(
+      `[[native.stages]]\nid = "ok"\nkind = "check"\ncoverage = "full"\nquick = true\nargv = ["node", "-e", "0"]\n`,
+    )
+    const cfg = config(root)
+    const lines: string[] = []
+    await runSteps(
+      cfg,
+      'quick',
+      plan(cfg, 'quick', ['a.ts'], () => []),
+      {
+        out: (line) => lines.push(line),
+      },
+    )
+    const shown = /details:([^|]+)/.exec(lines.join('\n'))?.[1] ?? ''
+    expect(shown).not.toBe('')
+    expect(existsSync(shown)).toBe(true)
+  })
+
   it('hands a declared stage the changed files of a scoped run, and none to a whole-tree run', async () => {
     const log = join(mkdtempSync(join(tmpdir(), 'aico-scope-')), 'seen')
     roots.push(dirname(log))
