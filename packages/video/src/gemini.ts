@@ -54,6 +54,24 @@ const post: Post = (url, headers, body) =>
     req.end(body)
   })
 
+/** The same POST with the wire-silence bound every model call has: no bytes for this long is a dead connection. */
+export const silenceBound =
+  (seconds: number): Post =>
+  (url, headers, body) =>
+    new Promise((resolve, reject) => {
+      const req = request(url, { method: 'POST', headers }, (res) => {
+        const chunks: Buffer[] = []
+        res.on('data', (c) => chunks.push(c))
+        res.on('end', () =>
+          resolve({ status: res.statusCode ?? 0, text: Buffer.concat(chunks).toString('utf8') }),
+        )
+        res.on('error', reject)
+      })
+      req.setTimeout(seconds * 1000, () => req.destroy(new Error(`no bytes for ${seconds} s`)))
+      req.on('error', reject)
+      req.end(body)
+    })
+
 interface Key {
   name: string
   value: string
@@ -86,6 +104,8 @@ export async function generate(
     post?: Post
     store?: () => LoginStore
     sleep?: (ms: number) => Promise<void>
+    /** Give up on a 5xx at once, for a caller with its own next step and someone waiting. */
+    once?: boolean
   },
 ): Promise<Generated> {
   const send = options.post ?? post
@@ -107,7 +127,7 @@ export async function generate(
       } catch (error) {
         throw new GeminiError(`Gemini connection failed: ${(error as Error).message}`, 'network')
       }
-      const wait = config.gemini.retry.waitSeconds[attempt]
+      const wait = options.once ? undefined : config.gemini.retry.waitSeconds[attempt]
       if (wait === undefined || !config.gemini.retry.statuses.includes(answer.status)) break
       await (options.sleep ?? sleep)(wait * 1000)
     }

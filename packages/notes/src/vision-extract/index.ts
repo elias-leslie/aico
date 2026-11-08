@@ -10,6 +10,7 @@
 // what would have been run and return canned answers.
 
 import { extname } from 'node:path'
+import { agyReaderFlags } from '@aico/shared/agy-lockdown'
 import { type JsonSchema, validate } from './validate'
 
 export type { JsonSchema } from './validate'
@@ -45,8 +46,8 @@ export interface VisionRunners {
 export interface ExtractRequest {
   /** A file path with its real extension (jpg, pdf, m4a...). */
   file: string
-  /** Where agy runs; a folder that holds only the file. */
-  cwd?: string
+  /** Where agy runs; a folder of its own that holds only the file. */
+  cwd: string
   schema: JsonSchema
   /** What to do with the file. */
   instructions: string
@@ -113,36 +114,38 @@ async function viaAgy(
   config: VisionConfig,
   run: VisionRunners,
 ): Promise<{ json: unknown; raw: string }> {
-  const argv = [
-    config.agyPath,
-    '-p',
-    prompt(request, true),
-    '--model',
-    config.agyModel,
-    '--output-format',
-    'json',
-    '--json-schema',
-    JSON.stringify(request.schema),
-    '--dangerously-skip-permissions',
-  ]
   let result: ExecResult
   try {
+    const argv = [
+      config.agyPath,
+      '-p',
+      prompt(request, true),
+      '--model',
+      config.agyModel,
+      '--output-format',
+      'json',
+      '--json-schema',
+      JSON.stringify(request.schema),
+      ...agyReaderFlags(request.cwd),
+    ]
     result = await run.exec(argv, { cwd: request.cwd })
   } catch (error) {
     throw new RouteFailure("isn't available", `agy failed to run: ${(error as Error).message}`)
   }
+  // agy puts its reason in the JSON when it fails (signed out, say), and leaves stderr nearly empty.
+  const outer = parseJson(result.stdout) as
+    | { status?: string; error?: unknown; structured_output?: unknown; response?: unknown }
+    | undefined
+  const reason = outer && typeof outer === 'object' ? (outer.error ?? outer.status) : undefined
   if (result.code !== 0)
     throw new RouteFailure(
       'stopped with an error',
-      `agy exited ${result.code}: ${result.stderr.trim().slice(-300)}`,
+      `agy exited ${result.code}: ${String(reason ?? result.stderr.trim().slice(-300))}`,
     )
-  const outer = parseJson(result.stdout) as
-    | { status?: string; structured_output?: unknown; response?: unknown }
-    | undefined
   if (!outer || typeof outer !== 'object')
     throw new RouteFailure('gave no usable answer', 'agy printed no JSON')
   if (outer.status !== 'SUCCESS')
-    throw new RouteFailure('stopped with an error', `agy status ${String(outer.status)}`)
+    throw new RouteFailure('stopped with an error', `agy status ${String(reason)}`)
   const json =
     outer.structured_output ??
     (typeof outer.response === 'string' ? parseJson(outer.response) : undefined)

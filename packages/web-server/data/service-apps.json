@@ -1,5 +1,10 @@
 {
   "max_body_bytes": 8388608,
+  "free_tier": {
+    "about": "Used by a role marked free_tier when Antigravity is out or the prompt is too big for it. Google's free tier may train on what it is sent, so a role with private household or financial text stays unmarked and fails instead.",
+    "models": ["gemini-flash-latest", "gemini-flash-lite-latest"],
+    "wire_silence_seconds": 300
+  },
   "apps": {
     "portfolio-ai": {
       "agents": {
@@ -45,7 +50,8 @@
         },
         "credit-card-researcher": {
           "model": "gemini-4-argon",
-          "prompts": ["credit-card-researcher-system-prompt"]
+          "prompts": ["credit-card-researcher-system-prompt"],
+          "free_tier": true
         }
       },
       "prompts": [
@@ -74,47 +80,58 @@
       "agents": {
         "jobs-prep": {
           "model": "gemini-3.8-flash",
-          "prompts": ["jobs-prep-system-prompt"]
+          "prompts": ["jobs-prep-system-prompt"],
+          "free_tier": true
         },
         "jobs-evaluator": {
           "model": "gemini-3.8-flash",
-          "prompts": ["jobs-evaluator-system-prompt"]
+          "prompts": ["jobs-evaluator-system-prompt"],
+          "free_tier": true
         },
         "jobs-tailor": {
           "model": "gemini-3.8-flash",
-          "prompts": ["jobs-tailor-system-prompt"]
+          "prompts": ["jobs-tailor-system-prompt"],
+          "free_tier": true
         },
         "jobs-cover-codex": {
           "model": "gemini-4-argon",
-          "prompts": ["jobs-cover-codex-system-prompt"]
+          "prompts": ["jobs-cover-codex-system-prompt"],
+          "free_tier": true
         },
         "jobs-company": {
           "model": "gemini-4-argon",
-          "prompts": ["jobs-company-system-prompt"]
+          "prompts": ["jobs-company-system-prompt"],
+          "free_tier": true
         },
         "jobs-screener": {
           "model": "gemini-3.8-flash",
-          "prompts": ["jobs-screener-system-prompt"]
+          "prompts": ["jobs-screener-system-prompt"],
+          "free_tier": true
         },
         "jobs-critic-gemini": {
           "model": "gemini-3.8-flash",
-          "prompts": ["jobs-critic-gemini-system-prompt"]
+          "prompts": ["jobs-critic-gemini-system-prompt"],
+          "free_tier": true
         },
         "jobs-tailor-gemini": {
           "model": "gemini-3.8-flash",
-          "prompts": ["jobs-tailor-gemini-system-prompt"]
+          "prompts": ["jobs-tailor-gemini-system-prompt"],
+          "free_tier": true
         },
         "jobs-cover": {
           "model": "gemini-3.8-flash",
-          "prompts": ["jobs-cover-system-prompt"]
+          "prompts": ["jobs-cover-system-prompt"],
+          "free_tier": true
         },
         "jobs-evaluator-codex": {
           "model": "gemini-4-argon",
-          "prompts": ["jobs-evaluator-codex-system-prompt"]
+          "prompts": ["jobs-evaluator-codex-system-prompt"],
+          "free_tier": true
         },
         "jobs-critic-codex": {
           "model": "gemini-4-argon",
-          "prompts": ["jobs-critic-codex-system-prompt"]
+          "prompts": ["jobs-critic-codex-system-prompt"],
+          "free_tier": true
         }
       },
       "prompts": [

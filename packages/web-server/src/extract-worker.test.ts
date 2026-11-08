@@ -1,10 +1,10 @@
-import { mkdtempSync, readlinkSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { blobPath, putOriginal } from '@aico/notes/blobs'
 import { PreviewJobs } from '@aico/notes/heic'
 import { ExtractError } from '@aico/notes/vision-extract'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { type Extractor, ExtractWorker } from './extract-worker'
 import { NotesStore } from './notes-db'
 
@@ -74,7 +74,7 @@ describe('extract worker', () => {
       return 0
     })
     extractor = async (request) => {
-      calls.push({ file: readlinkSync(request.file), hint: request.hint })
+      calls.push({ file: readFileSync(request.file, 'utf8'), hint: request.hint })
       if (failWith) throw failWith
       return { json: GOOD, raw: '', route, ms: 5 }
     }
@@ -101,7 +101,10 @@ describe('extract worker', () => {
     expect(JSON.parse(done?.extract_json as string).title).toBe('List')
     expect(done?.seq).toBeGreaterThan(row.seq + 1)
     expect(calls).toEqual([
-      { file: blobPath(join(dir, 'blobs'), row.hash as string), hint: 'groceries' },
+      {
+        file: readFileSync(blobPath(join(dir, 'blobs'), row.hash as string), 'utf8'),
+        hint: 'groceries',
+      },
     ])
   })
 
@@ -209,6 +212,14 @@ describe('extract worker', () => {
     expect(told).toEqual([row.id])
   })
 
+  it('clears copies a restart left behind before reading anything', async () => {
+    const left = join(dir, 'read-left')
+    mkdirSync(left)
+    writeFileSync(join(left, 'capture.jpg'), 'private')
+    worker().start()
+    await vi.waitFor(() => expect(existsSync(left)).toBe(false))
+  })
+
   it('fails with a plain reason, and Retry reads it again', async () => {
     const row = await add('image', 'image/png', 'png-bytes')
     failWith = new ExtractError("the main reader isn't available", ['agy failed to run'])
@@ -232,7 +243,9 @@ describe('extract worker', () => {
     const w = worker()
     w.kick()
     await w.idle()
-    expect(calls[0]?.file).toBe(blobPath(join(dir, 'blobs'), row.hash as string, 'preview'))
+    expect(calls[0]?.file).toBe(
+      readFileSync(blobPath(join(dir, 'blobs'), row.hash as string, 'preview'), 'utf8'),
+    )
     converts = false
     const second = await add('image', 'image/heic', 'other-heic')
     w.kick()

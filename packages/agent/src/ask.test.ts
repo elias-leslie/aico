@@ -250,9 +250,54 @@ describe('agy', () => {
     const agy = fakeBin('agy-big', echoing(agyResult({})))
     const huge = { question: 'x'.repeat(200 * 1024) }
     const result = await ask(request('gemini-3.8-flash', huge), { context, bins: { agy } })
-    expect(result.outcome).toMatchObject({ kind: 'bad_input' })
+    expect(result.outcome).toMatchObject({ kind: 'bad_input', too_big: true })
     expect(JSON.stringify(result.outcome)).not.toContain('not installed')
     expect(existsSync(`${agy}.args`)).toBe(false)
+  })
+
+  it('keeps structured output by not naming an agent when there is a schema, still denying the tools', async () => {
+    const agy = fakeBin('agy-schema', echoing(agyResult({ structured_output: { answer: 1 } })))
+    await ask(request('gemini-3.8-flash', { schema: SCHEMA }), { context, bins: { agy } })
+    const args = readFileSync(`${agy}.args`, 'utf8').split('\n')
+    expect(args).not.toContain('--agent')
+    const { deny } = JSON.parse(args[args.indexOf('--settings') + 1] as string).permissions
+    expect(deny).toEqual(expect.arrayContaining(['read_file(*)', 'write_file(*)', 'command(*)']))
+  })
+
+  it('runs with every tool off and an agent with none, in a folder of its own', async () => {
+    const agy = fakeBin(
+      'agy-locked',
+      `cat .agents/agents/aico-answer.md > "${dir}/agent.md"\n${echoing(agyResult({}))}`,
+    )
+    const result = await ask(request('gemini-3.8-flash'), { context, bins: { agy } })
+    expect(result.outcome).toMatchObject({ kind: 'done' })
+    const args = readFileSync(`${agy}.args`, 'utf8').split('\n')
+    expect(args[args.indexOf('--agent') + 1]).toBe('aico-answer')
+    expect(args).toContain('--disable-slash-commands')
+    expect(args).not.toContain('--dangerously-skip-permissions')
+    const { deny } = JSON.parse(args[args.indexOf('--settings') + 1] as string).permissions
+    expect(deny).toEqual(
+      expect.arrayContaining(['read_file(*)', 'write_file(*)', 'command(*)', 'read_url(*)']),
+    )
+    expect(readFileSync(`${dir}/agent.md`, 'utf8')).toContain('tools: []')
+  })
+
+  it('says why when agy reports an error, as when it is signed out', async () => {
+    const agy = fakeBin(
+      'agy-out',
+      `${echoing(agyResult({ status: 'ERROR', response: '', error: 'authentication failed or timed out' }))}\nexit 1`,
+    )
+    const result = await ask(request('gemini-3.8-flash'), { context, bins: { agy } })
+    expect(result.outcome).toMatchObject({
+      kind: 'error',
+      detail: expect.stringContaining('authentication failed'),
+    })
+  })
+
+  it('takes an empty answer as a failure, not as done', async () => {
+    const agy = fakeBin('agy-empty', echoing(agyResult({ response: '  ' })))
+    const result = await ask(request('gemini-3.8-flash'), { context, bins: { agy } })
+    expect(result.outcome).toMatchObject({ kind: 'error' })
   })
 
   it('still reports a missing agy command as not installed', async () => {

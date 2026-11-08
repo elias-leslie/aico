@@ -6,7 +6,8 @@
 // No time limit: a read ends when its process exits or errors. How long one has
 // been running shows as "Reading since <time>" (the capture's `updated_at`).
 
-import { mkdtemp, readFile, rm, symlink } from 'node:fs/promises'
+import { constants, existsSync, readdirSync, rmSync } from 'node:fs'
+import { copyFile, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { blobPath, hasBlob } from '@aico/notes/blobs'
@@ -61,7 +62,25 @@ export class ExtractWorker {
   start(): void {
     const requeued = this.options.store.requeueExtracting()
     if (requeued) this.log(`requeued ${requeued} capture(s) that were being read`)
+    try {
+      this.sweepReads()
+    } catch (error) {
+      this.log(`could not clear old reads: ${(error as Error).message}`)
+    }
     this.kick()
+  }
+
+  /** The folder reads work in, owner-only: one read's rules can't list a folder made after them. */
+  private readsDir(): string {
+    return this.options.workDir ?? join(tmpdir(), 'aico-reads')
+  }
+
+  /** A restart can cut a read short before it removes its copy of the capture. Runs before any read starts. */
+  private sweepReads(): void {
+    const reads = this.readsDir()
+    if (!existsSync(reads)) return
+    for (const name of readdirSync(reads))
+      if (name.startsWith('read-')) rmSync(join(reads, name), { recursive: true, force: true })
   }
 
   stop(): void {
@@ -158,11 +177,14 @@ export class ExtractWorker {
       row.kind === 'image' && needsPreview(row.mime) ? 'jpg' : extensionForMime(row.mime)
     if (!extension) return nothing
 
-    // The reader gets a folder of its own holding one link with a real extension.
-    const dir = await mkdtemp(join(this.options.workDir ?? tmpdir(), 'aico-read-'))
+    // The reader gets a folder of its own holding one copy with a real extension: agy follows a
+    // link to the folder it's in and refuses to read outside its own.
+    const reads = this.readsDir()
+    await mkdir(reads, { recursive: true, mode: 0o700 })
+    const dir = await mkdtemp(join(reads, 'read-'))
     try {
       const file = join(dir, `capture.${extension}`)
-      await symlink(source, file)
+      await copyFile(source, file, constants.COPYFILE_FICLONE)
       const result = await this.options.extract({
         file,
         cwd: dir,

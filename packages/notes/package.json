@@ -22,5 +22,8 @@
   },
   "scripts": {
     "test": "vitest run"
+  },
+  "dependencies": {
+    "@aico/shared": "0.1.0"
   }
 }

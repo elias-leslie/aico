@@ -1,7 +1,8 @@
 // `aico prompt-model MODEL "question"`: one question to one model, no tools, an answer or a typed
 // failure. The model goes through the same rules as a run (route() deny rows for the
 // role and project, the harness's provider allowlist). Claude runs only as `claude -p`
-// with tools off and never with an Anthropic API key; Gemini runs as `agy -p`; Codex and
+// with tools off and never with an Anthropic API key; Gemini runs as `agy -p` with its tools
+// locked off (@aico/shared/agy-lockdown); Codex and
 // the OpenCode Go models run through pi-ai with the harness's providers. The only time
 // bound is on wire silence (data/harness.json, `ask`): that long with no bytes from the
 // model means a dead connection and the call stops. With --schema the answer is checked
@@ -14,6 +15,7 @@ import { homedir, tmpdir } from 'node:os'
 import { basename, join, resolve, sep } from 'node:path'
 import { parseArgs } from 'node:util'
 import { Catalog, contextDbPath, route } from '@aico/context'
+import { agyAnswerFlags } from '@aico/shared/agy-lockdown'
 import type { AssistantMessage, Models } from '@earendil-works/pi-ai'
 import { getAgentDir } from '@earendil-works/pi-coding-agent'
 import { dataDir } from './cli'
@@ -56,7 +58,7 @@ export type AskOutcome =
   | { kind: 'silent'; model: string; seconds: number }
   | { kind: 'tool_denied'; model: string; detail: string }
   | { kind: 'schema_invalid'; model: string; errors: string[]; text: string }
-  | { kind: 'bad_input'; detail: string }
+  | { kind: 'bad_input'; detail: string; too_big?: true }
   | { kind: 'error'; model: string; detail: string }
 
 export interface AskResult {
@@ -335,7 +337,7 @@ async function viaClaude(
   return { outcome: { text, data: result.structured_output }, tokens }
 }
 
-/** `agy -p`: its tools are denied in headless mode, so an answer that needed one is a typed failure. */
+/** `agy -p` with its tools denied (see agyAnswerFlags), so an answer that needed one is a typed failure. */
 async function viaAgy(
   entry: { id: string },
   prompt: string,
@@ -345,16 +347,24 @@ async function viaAgy(
   silenceMs: number,
   scratch: string,
 ): Promise<Answer> {
-  const args = ['-p', prompt, '--model', entry.id, '--output-format', 'stream-json']
+  let lockdown: string[]
+  try {
+    lockdown = agyAnswerFlags(scratch, schema !== undefined)
+  } catch (error) {
+    return failed(entry.id, `could not set up agy's limits: ${(error as Error).message}`)
+  }
+  const args = ['-p', prompt, ...lockdown, '--model', entry.id, '--output-format', 'stream-json']
   if (req.effort) args.push('--effort', req.effort)
   if (schema !== undefined) args.push('--json-schema', JSON.stringify(schema))
-  // agy takes the prompt as an argument (its stdin is only the stream-json protocol), and Linux
-  // refuses a single argument of 128 KiB or more with E2BIG.
+  // agy takes the prompt as an argument, and Linux refuses a single argument of 128 KiB or more with
+  // E2BIG. Its stdin is no way round: seen live, it cuts a prompt there at about 175 KB and still
+  // says SUCCESS, answering from the first part.
   const tooBig = args.find((arg) => Buffer.byteLength(arg) >= MAX_ARG_BYTES)
   if (tooBig)
     return {
       outcome: {
         kind: 'bad_input',
+        too_big: true,
         detail: `this model takes the prompt as a command argument, and this one is ${Math.round(Buffer.byteLength(tooBig) / 1024)} KiB; the limit is ${MAX_ARG_BYTES / 1024} KiB. Shorten it or pick another model.`,
       },
       tokens: NO_TOKENS,
@@ -382,7 +392,13 @@ async function viaAgy(
       tokens,
     }
   if (result.status !== 'SUCCESS')
-    return failed(entry.id, `agy: ${String(result.status ?? 'failed')} ${response}`.trim(), tokens)
+    return failed(
+      entry.id,
+      `agy: ${String(result.error ?? result.status ?? 'failed')} ${response}`.trim(),
+      tokens,
+    )
+  if (!response.trim() && result.structured_output === undefined)
+    return failed(entry.id, 'agy answered with nothing', tokens)
   return { outcome: { text: response, data: result.structured_output }, tokens }
 }
 

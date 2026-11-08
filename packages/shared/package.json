@@ -10,6 +10,7 @@
   },
   "type": "module",
   "exports": {
+    "./agy-lockdown": "./src/agy-lockdown.ts",
     "./backup-targets": "./src/backup-targets.ts",
     "./data-dir": "./src/data-dir.ts",
     "./hlc": "./src/hlc.ts",

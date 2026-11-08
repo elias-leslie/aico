@@ -22,6 +22,7 @@ export {
   runAgent,
   systemPrompt,
 } from './run'
+export { compileSchema, jsonIn } from './schema'
 export { tetherPush } from './tether'
 export { guardBash, leanTools } from './tools'
 export {

@@ -2,5 +2,5 @@
 
 export { parseVtt, renderTranscript } from './captions'
 export { runVideoCli, USAGE } from './cli'
-export { generate, type Post } from './gemini'
+export { GeminiError, generate, type Post, silenceBound } from './gemini'
 export { runVideo } from './video'

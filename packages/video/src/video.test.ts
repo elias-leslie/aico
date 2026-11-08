@@ -2,10 +2,10 @@ import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { LoginStore } from '@aico/fleet/logins'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { runVideoCli } from './cli'
 import { config } from './config'
-import type { Post } from './gemini'
+import { generate, type Post } from './gemini'
 import type { Exec } from './ytdlp'
 
 const SECRET = 'AIza-test-secret-key'
@@ -195,6 +195,13 @@ describe('aico video review', () => {
     expect(g.sent).toHaveLength(3)
     expect(waits).toEqual(config.gemini.retry.waitSeconds.map((n) => n * 1000))
     expect(stdout()).toContain('third time')
+  })
+
+  it('gives up on a 503 at once for a caller that has its own next step', async () => {
+    const post = vi.fn(async () => failure(503, 'high demand')())
+    const env = { GEMINI_API_KEY: 'k' }
+    await expect(generate('m', [{ text: 'q' }], { env, post, once: true })).rejects.toThrow('503')
+    expect(post).toHaveBeenCalledTimes(1)
   })
 
   it('keeps a video review when a later --refresh can only manage captions', async () => {

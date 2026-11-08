@@ -4,7 +4,7 @@
 import { createHash, timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type RequestListener, type Server } from 'node:http'
 import { join } from 'node:path'
-import { ask, dataDir } from '@aico/agent'
+import { type AskResult, ask, dataDir } from '@aico/agent'
 import { Catalog, contextDbPath, getPrompt, openContext } from '@aico/context'
 import { privateFile, secretsDir } from '@aico/fleet/secrets'
 import { NoticeError, parseNotice } from '@aico/notify'
@@ -12,12 +12,13 @@ import { machineId, parseRow, RowError, type StatusStore } from '@aico/status'
 import type { TetherClient } from '@aico/tether-client'
 import { count, counterRow, fetchPage, openCounter, searchWeb, today } from '@aico/webtools'
 import settings from '../data/service-apps.json' with { type: 'json' }
+import { type AskFallback, askFreeTier, wantsFreeTier } from './ask-free-tier'
 import { objectBody, RAW, type RequestContext, Router, requiredString, sendJson } from './http'
 import { fromLan, type NotifyHub, tetherAsks } from './notify'
 import { frontedBy } from './service-primary'
 import { HttpError } from './tether'
 
-type Profile = { model: string; prompts: string[] }
+type Profile = { model: string; prompts: string[]; free_tier?: boolean }
 type App = { machine: string; agents: Record<string, Profile>; prompts: string[] }
 type Apps = Record<string, App>
 export const SERVICE_APPS: Apps = settings.apps
@@ -31,6 +32,8 @@ export interface ServiceAppsDeps {
   primary?: string | null
   apps?: Apps
   ask?: typeof ask
+  /** The Gemini free tier, for a role marked free_tier when its own model can't answer. */
+  freeTier?: AskFallback
   prompt?: (slug: string) => string | null
   web?: { search: typeof searchWeb; fetch: typeof fetchPage }
 }
@@ -208,11 +211,12 @@ function serviceAppsRouter(deps: ServiceAppsDeps): Router {
     if (!question.trim()) throw new HttpError(422, 'question is required')
     if (body.effort !== undefined && typeof body.effort !== 'string')
       throw new HttpError(422, 'effort must be a string')
-    const result = await (deps.ask ?? ask)(
+    const prompted = [...profile.prompts.map(readPrompt), question].join('\n\n')
+    let result: AskResult & { provider?: string } = await (deps.ask ?? ask)(
       {
         model: model.id,
         cwd: process.cwd(),
-        question: [...profile.prompts.map(readPrompt), question].join('\n\n'),
+        question: prompted,
         ...(body.schema !== undefined && { schema: body.schema }),
         // ask validates every image and its combined size before dispatch.
         ...(body.images !== undefined && {
@@ -223,6 +227,18 @@ function serviceAppsRouter(deps: ServiceAppsDeps): Router {
       {},
       env,
     )
+    if (profile.free_tier && body.images === undefined && wantsFreeTier(result.outcome)) {
+      console.warn(
+        `[service-apps] ${app}/${slug}: ${model.id} did not answer, trying the free tier`,
+      )
+      result = await (deps.freeTier ?? askFreeTier)(
+        settings.free_tier,
+        prompted,
+        body.schema,
+        result,
+        env,
+      )
+    }
     sendJson(
       ctx.res,
       result.outcome.kind === 'done' ? 200 : result.outcome.kind === 'bad_input' ? 422 : 502,

@@ -16,7 +16,12 @@ import { StatusStore } from '@aico/status'
 import type { TetherClient } from '@aico/tether-client'
 import { fetchPage, openCounter, type searchWeb, today } from '@aico/webtools'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createServiceAppsServer, SERVICE_APPS, serviceTokenApp } from './service-apps'
+import {
+  createServiceAppsServer,
+  SERVICE_APPS,
+  type ServiceAppsDeps,
+  serviceTokenApp,
+} from './service-apps'
 
 const token = 'p'.repeat(43)
 const otherToken = 'j'.repeat(43)
@@ -75,7 +80,11 @@ beforeEach(async () => {
   tether.mockResolvedValue({
     body: { id: '0123456789ab', requester: 'portfolio-ai', state: 'open' },
   })
-  server = createServiceAppsServer({
+  server = await listen(apps)
+})
+/** The listener over this test's stores, and `base` pointing at it. */
+async function listen(served: typeof apps, freeTier?: ServiceAppsDeps['freeTier']) {
+  const made = createServiceAppsServer({
     status,
     notify: {
       notifier: {
@@ -92,14 +101,16 @@ beforeEach(async () => {
     },
     tether: { request: tether } as Pick<TetherClient, 'request'>,
     env,
-    apps,
+    apps: served,
     ask: run,
+    ...(freeTier && { freeTier }),
     web: { search, fetch: page },
     prompt: (slug) => (slug === 'review-prompt' ? 'Review carefully.' : null),
   })
-  await new Promise<void>((done) => server.listen(0, '127.0.0.1', done))
-  base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
-})
+  await new Promise<void>((done) => made.listen(0, '127.0.0.1', done))
+  base = `http://127.0.0.1:${(made.address() as AddressInfo).port}`
+  return made
+}
 afterEach(async () => {
   server.closeAllConnections()
   await new Promise<void>((done) => server.close(() => done()))
@@ -184,6 +195,63 @@ it('uses only assigned model roles and prompts and preserves schema and image pa
     schema,
     images,
   })
+})
+
+it('falls to the free tier only for a role marked for it, and says so', async () => {
+  const failing: AskResult = {
+    outcome: { kind: 'error', model: 'codex/gpt-6.1-sol', detail: 'signed out' },
+    tokens: { input: 0, output: 0 },
+    wallMs: 1,
+  }
+  run.mockResolvedValue(failing)
+  const free = vi.fn(async () => ({
+    outcome: { kind: 'done' as const, model: 'flash', text: 'From the free tier' },
+    tokens: { input: 1, output: 1 },
+    wallMs: 2,
+    provider: 'gemini-free-tier',
+  }))
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  server.closeAllConnections()
+  await new Promise((done) => server.close(done))
+  const marked = {
+    ...apps,
+    'portfolio-ai': {
+      ...apps['portfolio-ai'],
+      agents: {
+        review: { model: 'codex/gpt-6.1-sol', prompts: ['review-prompt'], free_tier: true },
+        private: { model: 'codex/gpt-6.1-sol', prompts: ['review-prompt'] },
+      },
+    },
+  } as typeof apps
+  server = await listen(marked, free)
+  const to = (agent_slug: string) => call('POST', '/v1/ask', { agent_slug, question: 'Hello' })
+  const fell = await to('review')
+  expect(fell.status).toBe(200)
+  expect(await fell.json()).toMatchObject({
+    provider: 'gemini-free-tier',
+    outcome: { kind: 'done' },
+  })
+  expect(free).toHaveBeenCalledTimes(1)
+  expect(warn).toHaveBeenCalledWith(expect.stringContaining('portfolio-ai/review'))
+  const stayed = await to('private')
+  expect(stayed.status).toBe(502)
+  expect(free).toHaveBeenCalledTimes(1)
+  // Photos never go to it: the free-tier path sends text only, and a photo may be a private document.
+  const photo = await call('POST', '/v1/ask', {
+    agent_slug: 'review',
+    question: 'Hello',
+    images: [{ media_type: 'image/png', data: 'AAAA' }],
+  })
+  expect(photo.status).not.toBe(200)
+  expect(free).toHaveBeenCalledTimes(1)
+  // A prompt too big for agy is a reason to fall, like a failure.
+  run.mockResolvedValue({
+    ...failing,
+    outcome: { kind: 'bad_input', detail: 'too big', too_big: true },
+  })
+  expect((await to('review')).status).toBe(200)
+  expect(free).toHaveBeenCalledTimes(2)
+  warn.mockRestore()
 })
 
 const row = {

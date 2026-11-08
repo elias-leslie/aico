@@ -1,0 +1,9 @@
+{
+  "about": "What Antigravity's CLI may do when Aico calls it with `agy -p`. Print mode leaves its file tools on (seen live with agy 1.5.3: it read and wrote files outside its folder), so every call denies them. A call without a schema also names an agent with no tools. A call with --json-schema can't: seen live, a custom agent loses structured_output and loops looking for a finish tool, so it keeps search_web, which no deny rule stops. Permission names are agy's own: read_file(path), write_file(path), command(prefix), mcp(server/tool), read_url(domain), execute_url(domain).",
+  "answer_agent": {
+    "name": "aico-answer",
+    "description": "Answers from the text it is given, with no tools.",
+    "body": "Answer from the text you are given. You have no tools."
+  },
+  "deny": ["write_file(*)", "command(*)", "mcp(*)", "read_url(*)", "execute_url(*)"]
+}

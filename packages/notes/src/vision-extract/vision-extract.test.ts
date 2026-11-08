@@ -1,3 +1,6 @@
+import { mkdtempSync, readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { CAPTURE_SCHEMA } from './capture-schema'
 import {
@@ -54,9 +57,10 @@ const agyOut = (structured: unknown) => ({
   stdout: JSON.stringify({ status: 'SUCCESS', structured_output: structured }),
   stderr: '',
 })
+const work = mkdtempSync(join(tmpdir(), 'aico-vision-test-'))
 const request = {
-  file: '/work/capture.jpg',
-  cwd: '/work',
+  file: join(work, 'capture.jpg'),
+  cwd: work,
   schema: CAPTURE_SCHEMA,
   instructions: 'Read it.',
   hint: 'my car',
@@ -69,20 +73,28 @@ describe('extract', () => {
     const result = await extract(request, config, fake, () => clock.shift() as number)
     expect(result).toMatchObject({ json: GOOD, route: 'agy', ms: 2500 })
     const { argv, cwd } = calls.exec[0] as { argv: string[]; cwd: string }
-    expect(cwd).toBe('/work')
+    expect(cwd).toBe(work)
     expect(argv.slice(0, 1)).toEqual(['/opt/agy'])
     expect(argv.slice(1, 2)).toEqual(['-p'])
-    expect(argv[2]).toContain('/work/capture.jpg')
+    expect(argv[2]).toContain(`${work}/capture.jpg`)
     expect(argv[2]).toContain('my car')
-    expect(argv.slice(3)).toEqual([
+    expect(argv.slice(3, 9)).toEqual([
       '--model',
       'model-a',
       '--output-format',
       'json',
       '--json-schema',
       JSON.stringify(CAPTURE_SCHEMA),
-      '--dangerously-skip-permissions',
     ])
+    expect(argv).not.toContain('--dangerously-skip-permissions')
+    expect(argv[9]).toBe('--settings')
+    const rules = JSON.parse(readFileSync(argv[10] as string, 'utf8')).permissions
+    expect(rules.allow).toEqual([`read_file(${work})`])
+    expect(rules.deny).toEqual(
+      expect.arrayContaining(['write_file(*)', 'command(*)', 'read_url(*)']),
+    )
+    expect(rules.deny).toContain('read_file(/etc)')
+    expect(rules.deny.some((rule: string) => rule.includes(work))).toBe(false)
     expect(calls.post).toHaveLength(0)
   })
 
