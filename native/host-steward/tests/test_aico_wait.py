@@ -178,6 +178,12 @@ def test_an_interrupt_cancels_only_a_wait_this_command_armed(monkeypatch, capsys
     assert code == 130 and deleted == ([WAIT["id"]] if cancels else [])
 
 
+def test_an_interrupt_before_the_wait_is_armed_says_so(monkeypatch, capsys):
+    code, _, output = run(monkeypatch, ["wait", "session", "bbbb0001", "--block"], [admin.WaitInterrupted()])
+    assert code == 130 and output == []
+    assert "stopped before the wait was armed" in capsys.readouterr().err
+
+
 def test_a_server_error_is_not_a_refusal(monkeypatch):
     code, _, output = run(monkeypatch, ["wait", "session", "bbbb0001"], [(500, {"error": "internal_error"})])
     assert code == 1 and output[0]["applied"] is None and output[0]["reason"] == "internal_error"

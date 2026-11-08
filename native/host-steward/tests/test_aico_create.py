@@ -158,6 +158,18 @@ def test_conflicts_auth_and_unknown_receipts_never_retry_or_echo(monkeypatch, re
     assert "private" not in json.dumps(output)
 
 
+@pytest.mark.parametrize("widget, shown", [("0a1b2c3d", "0a1b2c3d"), ("not a session", None), (None, None)])
+def test_a_create_during_recovery_names_the_session_resuming_it(monkeypatch, widget, shown):
+    output = []
+    monkeypatch.setattr(admin.Collector, "receipt", lambda *_args, **_kwargs: (
+        409, {"error": "recovery_pending", "widgetId": widget}))
+    monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
+    monkeypatch.setattr(admin, "emit_unless_stopped", lambda _, record: output.append(record))
+    assert admin.main(BASE) == 1
+    assert output[0]["reason"] == "recovery_pending"
+    assert output[0].get("recoveringWidget") == shown
+
+
 def test_actual_owner_transport_uses_compact_utf8_and_exact_resume(tmp_path, monkeypatch):
     requests, output = [], []
 
