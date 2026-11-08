@@ -22,10 +22,12 @@ export const HISTORY_USAGE = `Usage:
       One session: model, project, start and end, outcome, tokens, tool
       calls, files written and its subagents (an Aico agent run: the model of
       each turn). <id> is the id in the list or the start of the tool's own id.
-  aico recent events <id> [--limit N] [--before OFFSET | --from OFFSET] [--json]
+  aico recent events <id> [--limit N] [--before OFFSET | --from OFFSET] [--full] [--json]
       What was said and done, one readable line each (long text is cut), read
       from the tool's transcript. The last N by default (50); --before OFFSET
-      pages back, --from OFFSET reads forward. --json prints the whole records.
+      pages back, --from OFFSET reads forward (offsets come from search and the
+      older:/newer: lines). Long text is cut; --full keeps it (its last message:
+      --limit 1 --full). --json prints the whole records.
 
 Tokens: input is the part not served from the cache; cache read and cache
 write are the cached parts; output includes reasoning. TOKENS in the list adds
@@ -43,7 +45,8 @@ function when(at: number | null): string {
 }
 
 function count(n: number): string {
-  return n >= 10_000 ? `${(n / 1000).toFixed(n >= 1e6 ? 0 : 1)}k` : String(n)
+  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`
+  return n >= 10_000 ? `${(n / 1000).toFixed(1)}k` : String(n)
 }
 
 function formatTokens(tokens: Tokens): string {
@@ -135,7 +138,7 @@ const HARNESS_TAGS =
 
 const HARNESS_ENVELOPE = /<(?:task-notification|system-reminder)>/
 
-export function formatEvent(event: SessionEvent): string {
+export function formatEvent(event: SessionEvent, full = false): string {
   // Only a harness notice: someone's own text may well mention <summary>.
   const text = flat(
     event.role === 'user' && HARNESS_ENVELOPE.test(event.text)
@@ -155,7 +158,9 @@ export function formatEvent(event: SessionEvent): string {
             : event.role === 'assistant'
               ? 'assistant'
               : event.role
-  const body = clip(text, event.kind === 'tool_result' || event.kind === 'thinking' ? 120 : 220)
+  const body = full
+    ? text
+    : clip(text, event.kind === 'tool_result' || event.kind === 'thinking' ? 120 : 220)
   return `${when(event.at).padEnd(20)} ${label.padEnd(12)} ${body}`.trimEnd()
 }
 
@@ -294,7 +299,7 @@ export async function runHistory(
   }
   const page = response.body as EventPage
   if (!page.items.length) io.out('No events in this range.')
-  for (const event of page.items) io.out(formatEvent(event))
+  for (const event of page.items) io.out(formatEvent(event, rest.includes('--full')))
   if (page.items.length) io.out('Longer text is cut; --json gives the whole records.')
   if (page.older !== null) io.out(`older: --before ${page.older}`)
   if (page.newer !== null) io.out(`newer: --from ${page.newer}`)

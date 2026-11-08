@@ -103,6 +103,22 @@ describe('registering a routine', () => {
 })
 
 describe('aico routines', () => {
+  it('run during a run says so and asks for nothing, because finishing would clear it', async () => {
+    const h = harness()
+    expect(await h.run('add', ...ADD, '--at', '19:00', '--command', 'true')).toBe(0)
+    h.store.ensure('school-check', h.clock.now)
+    const running = h.store.claim(
+      'school-check',
+      { holder: 'w:1', machine: 'ws' },
+      h.clock.now,
+      1_000_000,
+    )
+    if (!running) throw new Error('no lease')
+    expect(await h.run('run', 'school-check')).toBe(0)
+    expect(h.lines.join('\n')).toContain('already running on ws')
+    expect(h.store.get('school-check')?.runNow).toBe(false)
+  })
+
   it('adds, lists with the built-in jobs, and removes', async () => {
     const h = harness()
     expect(await h.run('add', ...ADD, '--at', '19:00', '--command', 'true')).toBe(0)

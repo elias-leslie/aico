@@ -137,6 +137,9 @@ function hint(output: string, failed: boolean): string {
 }
 
 /** What failed, past the hint: the failing lines, or the output's end if none look like one. */
+/** Past this many skipped checks the line gives a count. */
+const SKIP_NAMES_SHOWN = 8
+
 export function failureLines(output: string, shown: string): string[] {
   const lines = outputLines(output).filter((line) => !line.startsWith('$ '))
   const failing = lines.filter((line) => FAILURE_LINE.test(line))
@@ -354,13 +357,18 @@ export async function runSteps(
       ...(skipped.get(result.reason as string) ?? []),
       result.id,
     ])
-  // Path-scoped skips are the common case and only a count helps; other reasons name each check.
-  for (const [reason, ids] of skipped)
+  // Nothing to do here is the common case: one line, and past a few names only how many.
+  const idle = [...skipped].filter(
+    ([reason]) => reason.startsWith('no_') || reason.startsWith('no '),
+  )
+  const idleIds = idle.flatMap(([, ids]) => ids)
+  if (idleIds.length)
     out(
-      reason === 'no_relevant_changed_paths'
-        ? `CHECK:SKIP:${reason.replaceAll('_', ' ')}: ${ids.length} check(s)`
-        : `CHECK:SKIP:${reason.replaceAll('_', ' ')}: ${ids.join(', ')}`,
+      `CHECK:SKIP:nothing to do here: ${idleIds.length > SKIP_NAMES_SHOWN ? `${idleIds.length} check(s)` : idleIds.join(', ')}`,
     )
+  for (const [reason, ids] of skipped)
+    if (!idle.some(([other]) => other === reason))
+      out(`CHECK:SKIP:${reason.replaceAll('_', ' ')}: ${ids.join(', ')}`)
   const steps = planned.flatMap((item) => (item.step ? [item.step] : []))
   if (!steps.length) return planned.map((item) => results.get(item.id) as StepResult)
 

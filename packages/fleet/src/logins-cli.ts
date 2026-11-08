@@ -37,7 +37,7 @@ Logins live in Aico's private secrets folder. Values enter through hidden input 
   list [TEXT] [--json]                every login, one line each: name, kind, then "usable" or the
                                       command that makes it usable. With TEXT (part of a name) or
                                       --json: the matching ones in full as JSON, no values, with
-                                      state (Unused means never used yet) and what is missing
+                                      state (Unused means no session has used it yet, usable or not) and what is missing
   show NAME                           metadata and recent activity, no value (NAME or an account
                                       login's site name)
   allow NAME [--role ROLE | --session ID] [--machine NAME]

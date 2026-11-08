@@ -26,7 +26,7 @@ export interface CliIo {
 }
 
 const CHECK_USAGE = `aico check: the repo's gate (.st-check.toml; without one, the default checks for
-what is in the repo; a check with nothing to do here prints SKIP). Details go to .dev-tools/.
+what is in the repo; a check with nothing to do here prints SKIP). Details go to .dev-tools/ (kept out of Git).
   aico check --quick [--changed-only]     the fast lane on your own changed files (commit runs it)
   aico check [--changed-only]             the full gate on the working tree
   aico check --fix [--paths P...]         Biome and ruff fixes on your own changed files only
@@ -38,7 +38,7 @@ what is in the repo; a check with nothing to do here prints SKIP). Details go to
 Your own changed files: the dirty files no other session wrote or holds a lease on (aico lease --help).`
 
 const COMMIT_USAGE = `aico commit -m MSG --paths P... [--with-ack ID] [--skip-checks]
-  Runs the quick check on the changed files under P, commits only them, and releases your leases on them.
+  --paths is required. Runs the quick check on the changed files under P, commits only them, and releases your leases on them.
   Prints COMMIT[1]:status=SUCCESS with the commit id; it does not push.
   --with-ack ID: needed only when another session wrote these files or holds the project: the id of its yes (st sessions send).`
 
@@ -169,14 +169,14 @@ async function checkCli(argv: string[], io: CliIo): Promise<number> {
   }
   const args = parse(argv, ['--sha', '--jobs', '--with-ack', '--scope'])
   if (args.flags.has('--help') || args.flags.has('-h')) {
-    io.out(CHECK_USAGE)
+    io.out(usage(CHECK_USAGE, io))
     return 0
   }
   const known = ['--quick', '--changed-only', '--acceptance', '--fix', '--no-reuse', '--check']
   const unknown = [...args.flags].filter((flag) => !known.includes(flag))
   if (unknown.length || args.extra.length) {
     io.err(`aico check: unsupported ${[...unknown, ...args.extra].join(' ')}`)
-    io.err(CHECK_USAGE)
+    io.err(usage(CHECK_USAGE, io))
     return 2
   }
   const { root, config } = load(io)
@@ -229,7 +229,7 @@ async function checkCli(argv: string[], io: CliIo): Promise<number> {
 async function commitCli(argv: string[], io: CliIo): Promise<number> {
   const args = parse(argv, ['-m', '--message', '--msg', '--with-ack', '--jobs'])
   if (args.flags.has('--help') || args.flags.has('-h')) {
-    io.out(COMMIT_USAGE)
+    io.out(usage(COMMIT_USAGE, io))
     return 0
   }
   const unknown = [...args.flags].filter((flag) => !['--skip-checks', '--no-push'].includes(flag))
@@ -240,7 +240,7 @@ async function commitCli(argv: string[], io: CliIo): Promise<number> {
         ? `aico commit: unsupported ${[...unknown, ...args.extra].join(' ')}`
         : 'aico commit: -m MSG and --paths are required',
     )
-    io.err(COMMIT_USAGE)
+    io.err(usage(COMMIT_USAGE, io))
     return 2
   }
   // The launcher checks arguments before it queues for the heavy-work lane.
@@ -277,6 +277,10 @@ async function commitCli(argv: string[], io: CliIo): Promise<number> {
 }
 
 /** Runs one verb, turning the expected refusals into a message and exit 1. */
+/** The help names the command as it was typed: `st check` and `aico check` are one tool. */
+const usage = (text: string, io: CliIo) =>
+  io.env.AICO_CLI_NAME === 'aico' ? text : text.replace(/\baico (check|commit|lease)\b/g, 'st $1')
+
 export async function runCli(verb: 'check' | 'commit', argv: string[], io: CliIo): Promise<number> {
   try {
     return await (verb === 'check' ? checkCli(argv, io) : commitCli(argv, io))

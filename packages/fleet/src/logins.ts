@@ -538,11 +538,20 @@ export class LoginStore {
   details(name: string, caller: LoginCaller) {
     const index = this.read()
     const entry = this.require(index, name, caller)
-    // Who did what, in detail, is the owner's (audit); others see when and which kind of change.
+    // Who did it is the owner's (audit); others see when and what changed.
     const activity = this.trim(index.audit)
       .filter((event) => event.name === entry.name)
       .slice(-policy.showActivity)
-      .map((event) => (caller.owner ? event : { at: event.at, action: event.action }))
+      .map((event) =>
+        caller.owner
+          ? event
+          : {
+              at: event.at,
+              action: event.action,
+              // A link's query can hold a code; the rest says what changed.
+              ...(event.detail ? { detail: event.detail.replace(/\?\S*/g, '') } : {}),
+            },
+      )
     return { ...structuredClone(entry), state: this.state(entry), activity }
   }
   state(entry: Login) {

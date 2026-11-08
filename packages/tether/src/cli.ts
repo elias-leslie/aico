@@ -281,18 +281,28 @@ export function shareBody(
   }
 }
 
+/** Without --all, how many entries `share list` prints, and how much of a title. */
+const SHARES_SHOWN = 20
+const SHARE_TITLE_CHARS = 60
+
 /** `tether share remove ID...`: each entry goes; exit 1 if any ID was unknown. */
-async function runShareList(io: Io, json: boolean, socket: string): Promise<number> {
+async function runShareList(io: Io, json: boolean, socket: string, all = false): Promise<number> {
   const response = await callSocket(socket, 'GET', '/v1/shares')
   if (json || response.status !== 200) return render(io, json, response.status, response.body)
   const { items } = response.body as {
     items: { id: string; title?: string | null; paths?: string[] | null; url?: string | null }[]
   }
   if (!items.length) io.out('Nothing is shared.')
-  for (const { id, title, paths, url } of items) {
-    const where = url ?? paths?.join(', ') ?? ''
-    io.out(`${id}  ${title ? `${title}  ` : ''}${where}`)
+  const shown = all ? items : items.slice(-SHARES_SHOWN)
+  const clip = (text: string, max: number) =>
+    text.length > max ? `${text.slice(0, max - 1)}…` : text
+  // Newest first. A link's query can hold a sign-in code, and whole ones are --json.
+  for (const { id, title, paths, url } of [...shown].reverse()) {
+    const where = url ? url.split('?')[0] : (paths?.join(', ') ?? '')
+    io.out(`${id}  ${title ? `${clip(title, SHARE_TITLE_CHARS)}  ` : ''}${where}`)
   }
+  if (shown.length < items.length)
+    io.out(`${items.length - shown.length} older: tether share list --all (--json for every field)`)
   return 0
 }
 
@@ -733,7 +743,8 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
         return runNote(io, json, parsed.args.slice(1), withOwnWidget(process.env))
       case 'share': {
         if (sub === 'remove') return runShareRemove(io, json, paths.socket, rest)
-        if (sub === 'list' && rest.length === 0) return runShareList(io, json, paths.socket)
+        if (sub === 'list' && (rest.length === 0 || (rest.length === 1 && rest[0] === '--all')))
+          return runShareList(io, json, paths.socket, rest[0] === '--all')
         const body = shareBody(parsed.args.slice(1), withOwnWidget(process.env), process.cwd())
         if (typeof body === 'string') {
           io.err(`tether share: ${body}`)

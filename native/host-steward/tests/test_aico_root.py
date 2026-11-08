@@ -306,8 +306,13 @@ def test_send_inject_refusal_is_not_applied_but_unqualified_reply_is_uncertain(m
     assert "Private" not in json.dumps(output)
 
 
+def test_send_without_a_generation_uses_the_root_s_current_one(monkeypatch):
+    code, calls, _ = invoke(monkeypatch, ["send", ROOT, FOLLOWUP], [
+        (200, PI_BLANK_SLATE), (200, SESSION), (200, {"generation": GENERATION, "delivered": True})])
+    assert code == 0 and calls[2][2]["generation"] == GENERATION
+
+
 @pytest.mark.parametrize("args", [
-    ["send", ROOT, FOLLOWUP],
     ["send", ROOT, FOLLOWUP, "--generation", "a" * 63],
     ["send", ROOT, "--generation", GENERATION],
     ["send", ROOT, "   ", "--generation", GENERATION],

@@ -483,6 +483,16 @@ export async function routinesCommand(
     const control = controlOf(job, ctx)
     let done: boolean
     try {
+      // A run asked for during a run is cleared when that one finishes, so say so instead.
+      if (verb === 'run') {
+        const state = await control.get(job.kind)
+        if (state?.leaseId && (state.leaseExpires ?? 0) > (ctx.now ?? Date.now)()) {
+          out(
+            `${job.kind} is already running on ${state.holderMachine ?? 'its machine'}, so no second run was started. Run this again after it ends.`,
+          )
+          return 0
+        }
+      }
       done = await control[verb](job.kind)
     } catch (error) {
       err(

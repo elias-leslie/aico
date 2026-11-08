@@ -15,6 +15,7 @@ export const NOTE_USAGE = `Usage:
   tether note add "title" [--body TEXT] [--list] [--project P | --global] [--json]
       Make a note; --list makes it a checklist. It belongs to project P, else to
       this session's project ($AICO_PROJECT_ID); --global makes it a note of no project.
+  (Deleting a note is the owner's, on Aico's Notes page.)
   tether note move <id> <project|none> [--json]
       Move a note to another project, or to none (a global note).
   tether note item add <id> "text" [--json]

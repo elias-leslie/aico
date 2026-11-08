@@ -2118,9 +2118,9 @@ def agent_id_of(collector: Collector, socket_name: str, session: dict) -> str | 
 
 
 ROOT_STATUS_HELP = (
-    "status: running until the session ends. state: what its agent is doing: working; idle (finished its "
-    "turn, its answer is lastMessage); blocked (waiting, see waitingOn); unknown (not read yet, just after "
-    "it starts). model: the one it last used, null until its first reply.")
+    "status: running until the session ends. state: what its agent is doing: starting or unknown (just "
+    "started, not read yet); working; idle (finished its turn, its answer is lastMessage); blocked "
+    "(waiting, see waitingOn). model: the one it last used, null until its first reply.")
 
 
 def lane_view(collector: Collector, socket_name: str, widget: str) -> dict:
@@ -2134,6 +2134,9 @@ def lane_view(collector: Collector, socket_name: str, widget: str) -> dict:
     report = session_report(collector, socket_name, widget)
     view["context"] = context_label(report)
     view["model"] = report.get("model")
+    # Idle with nothing said and no model yet: it has not begun, not finished.
+    if view.get("state") == "idle" and report and not report.get("text") and not report.get("model"):
+        view["state"] = "starting"
     text = report.get("text")
     if isinstance(text, str):
         view["lastMessage"] = text[:STATUS_MESSAGE_CHARS]
@@ -2177,8 +2180,9 @@ def root_main(argv: list[str]) -> int:
             command.add_argument("label")
         elif operation == "send":
             command.add_argument("text", nargs="?", help=f"follow-up, <={PROMPT_BYTES} sanitized UTF-8 bytes")
-            command.add_argument("--generation", required=True,
-                                 help="exact generation from root status; a restarted or changed root refuses")
+            command.add_argument("--generation",
+                                 help="exact generation from root status (default: the root's current one); "
+                                      "a restarted or changed root refuses")
             command.add_argument("--stdin", action="store_true", help="read the follow-up from stdin instead")
         elif operation == "rewind":
             command.add_argument("--generation",
@@ -2314,7 +2318,7 @@ def root_send(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
     Tether's inject route fences it again under the lifecycle lock and sends one
     bracketed paste plus Enter, which a busy harness queues as steering. Delivered
     means the pane received it, not that the agent consumed it. Never retried."""
-    if not re.fullmatch(GENERATION, args.generation):
+    if args.generation is not None and not re.fullmatch(GENERATION, args.generation):
         parser.error("--generation expects the root's exact SHA-256 generation")
     if args.stdin and args.text is not None:
         parser.error("conflicting follow-up options")
@@ -2342,21 +2346,22 @@ def root_send(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
         widget = pinned["hostIdentity"]
         if pinned["status"] != "running" or not re.fullmatch(WIDGET, widget):
             raise Refused("workload_unavailable")
-        if pinned["generation"] != args.generation:
+        generation = args.generation or pinned["generation"]
+        if pinned["generation"] != generation:
             raise Refused("stale_generation")
         # The root's host session must be the same workload before any input.
         status, session = collector.receipt(control, f"/v1/sessions/{widget}", timeout=1)
         owner_reply(status, session, "session_receipt_unqualified")
-        if session.get("id") != widget or session.get("generation") != args.generation:
+        if session.get("id") != widget or session.get("generation") != generation:
             raise Refused("stale_generation")
-        payload = {"generation": args.generation, "text": text, "mode": "paste", "submit": True}
+        payload = {"generation": generation, "text": text, "mode": "paste", "submit": True}
         # The sender: a wait it sets on this root counts turns from this send.
         if (sender := send_origin(collector, control, widget, session)) is not None:
             payload["from"] = sender
         sent = True
         status, data = collector.receipt(control, f"/v1/sessions/{widget}/inject", payload, timeout=5)
         owner_reply(status, data, "send_receipt_unqualified")
-        if data.get("generation") != args.generation or data.get("delivered") is not True:
+        if data.get("generation") != generation or data.get("delivered") is not True:
             raise Unavailable("send_receipt_unqualified")
         output.update(applied=True, delivered=True, bytes=len(text.encode("utf-8")))
         emit_json(collector, output)
