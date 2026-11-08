@@ -8,10 +8,9 @@ import {
   type BackupState,
   type Copy,
   copyKey,
-  driveGuests,
+  driveSources,
   driveTarget,
   homePath,
-  migrated,
 } from './backup-plan'
 import {
   checked,
@@ -21,6 +20,9 @@ import {
   restic,
   summary,
 } from './backup-runtime'
+
+/** The independent host guard left this work pending for the scheduler's existing busy retry. */
+export class BackupDeferred extends Error {}
 
 export interface BackupJob {
   id: string
@@ -250,6 +252,7 @@ async function proxmoxJob(
   rt: Runtime,
   state: BackupState,
   source: { id: string; path: string },
+  localSqliteAt?: string,
 ): Promise<BackupJob> {
   const target = new URL(source.path)
   const ssh = await pveSsh(rt, rt.cfg.pve.backupKey)
@@ -286,11 +289,14 @@ async function proxmoxJob(
   if (source.id === rt.cfg.remoteSqlite.source) {
     if (machine.before.state === 'off') return offline()
     try {
-      await checked(rt.run, rt.cfg.remoteSqlite.snapshotCommand)
-      const seconds = Number((await checked(rt.run, rt.cfg.remoteSqlite.timeCommand)).trim())
-      if (!Number.isFinite(seconds) || seconds <= 0)
-        throw new Error('The gem Aico snapshot date is unavailable.')
-      dataAt = new Date(Math.min(rt.now().getTime(), seconds * 1000)).toISOString()
+      if (localSqliteAt) dataAt = localSqliteAt
+      else {
+        await checked(rt.run, rt.cfg.remoteSqlite.snapshotCommand)
+        const seconds = Number((await checked(rt.run, rt.cfg.remoteSqlite.timeCommand)).trim())
+        if (!Number.isFinite(seconds) || seconds <= 0)
+          throw new Error('The gem Aico snapshot date is unavailable.')
+        dataAt = new Date(Math.min(rt.now().getTime(), seconds * 1000)).toISOString()
+      }
     } catch (error) {
       if (await wentOff()) return offline()
       throw error
@@ -308,10 +314,15 @@ async function proxmoxJob(
       (parts[2] === 'files' || state.copies[copyKey(source.id, 'drive')]?.snapshot)
     )
       return offline()
-    if (guest.type === 'lxc' && guest.status === 'running' && parts[2] !== 'files') {
+    if (
+      guest.status === 'running' &&
+      ((guest.type === 'lxc' && parts[2] !== 'files') ||
+        (guest.type === 'qemu' && parts[2] === 'files'))
+    ) {
       try {
-        const pool = Number(await checked(rt.run, [...ssh, 'thinpool']))
-        if (!Number.isFinite(pool) || pool >= rt.cfg.pve.thinPoolMaximumPercent)
+        const value = (await checked(rt.run, [...ssh, 'thinpool'])).trim()
+        const pool = Number(value)
+        if (!value || !Number.isFinite(pool) || pool >= rt.cfg.pve.thinPoolMaximumPercent)
           throw new Error('The Proxmox storage pool has insufficient room for a capture.')
       } catch (error) {
         if (await wentOff()) return offline()
@@ -320,7 +331,7 @@ async function proxmoxJob(
     }
     filename =
       parts[2] === 'files'
-        ? `files-${parts[0]}-${parts[1]}.tar${target.searchParams.get('via') === 'agent' ? '.gz' : ''}`
+        ? `files-${parts[0]}-${parts[1]}.tar`
         : `vzdump-${parts[0]}-${parts[1]}.${parts[0] === 'qemu' ? 'vma' : 'tar'}`
   } else if (parts[0] === 'host') filename = 'files-host.tar'
   return {
@@ -468,6 +479,22 @@ export async function backupJob(
           ...job.paths,
         ]
     const result = await restic(rt, target, args, job.binds)
+    if (
+      result.code === 75 ||
+      (result.code !== 0 && job.command && /command failed: exit status 75\b/.test(result.err))
+    )
+      throw new BackupDeferred(
+        `Backup paused by gem's backup guard${failureReason(
+          {
+            ...result,
+            err: result.err
+              .split('\n')
+              .filter((line) => !line.trim().startsWith('{'))
+              .join('\n'),
+          },
+          ': ',
+        )}.`,
+      )
     const saved = summary(result)
     if (
       result.code !== 0 ||
@@ -488,6 +515,7 @@ export async function backupJob(
       attemptedAt,
     }
   } catch (error) {
+    if (error instanceof BackupDeferred) throw error
     const seconds = (rt.now().getTime() - Date.parse(attemptedAt)) / 1000
     const machine = await failedCopyMachine(job, seconds, (error as Error).message)
     if (machine === 'off') return off()
@@ -554,17 +582,25 @@ export async function driveBackup(
   save: () => void,
 ): Promise<boolean> {
   const jobs: BackupJob[] = machine === rt.cfg.workstation ? volumeJobs(rt.cfg, state) : []
-  // The workstation copies every source. The standby copies the machines on its own Proxmox host to
-  // its own repository, every day, so nothing there depends on the workstation being on.
-  const sources = migrated.sources.filter(
-    (s) => s.enabled && (machine === rt.cfg.workstation || driveGuests(rt.cfg).includes(s.id)),
-  )
+  // The configured Drive clients own their guest sources; the workstation copies its own data.
+  const sources = driveSources(rt.cfg, machine)
+  // Its owner stages its own live SQLite files without a round trip through an admin SSH key.
+  const sqlite = stageSqlite(rt.cfg, rt.now())
+  let ok = true
   for (const s of sources) {
     const stage = rt.cfg.drive?.stages?.[s.id as keyof typeof rt.cfg.drive.stages]
     if (s.path.startsWith('proxmox://')) {
       try {
-        jobs.push(await proxmoxJob(rt, state, s))
+        jobs.push(
+          await proxmoxJob(
+            rt,
+            state,
+            s,
+            machine === rt.cfg.remoteSqlite.machine ? sqlite.dataAt : undefined,
+          ),
+        )
       } catch (error) {
+        ok = false
         state.copies[copyKey(s.id, 'drive')] = {
           ...state.copies[copyKey(s.id, 'drive')],
           source: s.id,
@@ -593,21 +629,24 @@ export async function driveBackup(
       })
     }
   }
-  const sqlite = stageSqlite(rt.cfg, rt.now())
   // The standby's own work (checkouts edited there, phones, pending asks) has no other copy while the
   // workstation is off, and CT 160 is too small for it: Drive only.
   sqlite.paths.push(...standbyWork(rt.cfg, machine))
   jobs.push({ id: `aico-${machine}`, ...sqlite, binds: [] })
-  let ok = true
   for (const job of jobs) {
-    const result = await backupJob(rt, state, job)
+    let result: Copy
+    try {
+      result = await backupJob(rt, state, job)
+    } catch (error) {
+      // Earlier genuine failures still make the run fail, even if the guard pauses a later source.
+      if (error instanceof BackupDeferred && !ok) return false
+      throw error
+    }
     state.copies[copyKey(job.id, 'drive')] = result
     if (result.error) ok = false
     save()
   }
-  return (
-    ok && !migrated.sources.some((s) => s.enabled && state.copies[copyKey(s.id, 'drive')]?.error)
-  )
+  return ok && !sources.some((s) => state.copies[copyKey(s.id, 'drive')]?.error)
 }
 
 function previousQualification(

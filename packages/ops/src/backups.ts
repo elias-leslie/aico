@@ -15,7 +15,7 @@ import {
   type StatusRow,
   statusRowsUrl,
 } from '@aico/status'
-import { appendMachine, backupJob, driveBackup, stageSqlite } from './backup-drive'
+import { appendMachine, BackupDeferred, backupJob, driveBackup, stageSqlite } from './backup-drive'
 import { observeExternal } from './backup-external'
 import { nativeBackup } from './backup-native'
 import {
@@ -274,18 +274,20 @@ export async function runBackup(
     saveState(rt.cfg, state)
     return true
   }
+  const previousRun = state.runs[target]
   const away = target === 'native' ? state.runs.native?.unpluggedAt : undefined
   state.runs[target] = { started, ok: false, ...(away ? { unpluggedAt: away } : {}) }
   saveRun(rt.cfg, target, state.runs[target] as NonNullable<BackupState['runs'][typeof target]>)
   if (target !== 'snapshots' && target !== 'guard') saveState(rt.cfg, state)
   let ok = false
+  let deferred = false
   try {
     if (target === 'native') await nativeBackup(rt, state, scheduled)
     else if (target === 'drive') {
       ok = await driveBackup(rt, state, machine, () => saveState(rt.cfg, state))
       if (!ok)
         throw new Error('Some sources did not reach Drive; their last good copies are preserved.')
-      if (scheduled && ok) await retainDrive(rt, state)
+      if (scheduled && ok) await retainDrive(rt, state, machine)
     } else if (target === 'verify') await verifyDrive(rt, scheduled)
     else if (target === 'append') {
       const staged = stageSqlite(rt.cfg, rt.now()),
@@ -312,6 +314,10 @@ export async function runBackup(
     }
     ok = true
   } catch (error) {
+    if (error instanceof BackupDeferred) {
+      deferred = true
+      throw error
+    }
     const message = (error as Error).message
     // Pulled out mid-run: the same, not a failure.
     if (t7Gone()) ok = true
@@ -327,8 +333,19 @@ export async function runBackup(
     console.error(message)
   } finally {
     const finished = rt.now().toISOString()
-    state.runs[target] = { started, finished, ok, ...(t7Gone() ? { unpluggedAt: finished } : {}) }
-    saveRun(rt.cfg, target, state.runs[target] as NonNullable<BackupState['runs'][typeof target]>)
+    if (deferred) {
+      if (previousRun) {
+        state.runs[target] = previousRun
+        saveRun(rt.cfg, target, previousRun)
+      } else {
+        delete state.runs[target]
+        // Remove only the in-progress receipt this invocation just created.
+        rmSync(join(homePath(rt.cfg.stateDir), 'runs', `${target}.json`), { force: true })
+      }
+    } else {
+      state.runs[target] = { started, finished, ok, ...(t7Gone() ? { unpluggedAt: finished } : {}) }
+      saveRun(rt.cfg, target, state.runs[target] as NonNullable<BackupState['runs'][typeof target]>)
+    }
     if (target !== 'snapshots' && target !== 'guard') saveState(rt.cfg, state)
   }
   return ok
@@ -438,7 +455,10 @@ async function runInUnit(
     '--collect',
     '--wait',
     `--unit=${unit}`,
-    ...cfg.runProperties.flatMap((p) => ['--property', p]),
+    ...[...cfg.runProperties, ...(cfg.drive?.runProperties ?? [])].flatMap((p) => [
+      '--property',
+      p,
+    ]),
     ...kept,
     '--setenv=AICO_BACKUPS_UNIT=1',
     process.execPath,
@@ -454,7 +474,7 @@ async function runInUnit(
     return busy()
   if (result.out) process.stdout.write(result.out)
   if (result.err) process.stderr.write(result.err)
-  if (result.code === BUSY_EXIT) return busy()
+  if (result.code === BUSY_EXIT) return BUSY_EXIT
   console.log(
     result.code === 0
       ? 'Backup finished.'
@@ -525,7 +545,7 @@ async function runUnderLock(
   )
   if (result.out) process.stdout.write(result.out)
   if (result.err) process.stderr.write(result.err)
-  if (result.code === BUSY_EXIT)
+  if (result.code === BUSY_EXIT && !result.out && !result.err)
     console.error('Another backup is running. Its data is left alone; run again after it finishes.')
   return result.code
 }
@@ -568,13 +588,21 @@ async function runCommand(
     console.log(JSON.stringify({ ok: true, target, pressure: true, deleted, scratch }))
     return 0
   }
-  const ok = await runBackup(
-    rt,
-    state,
-    target as BackupTarget | 'snapshots' | 'guard' | 'verify',
-    machine,
-    args.includes('--scheduled'),
-  )
+  let ok: boolean
+  try {
+    ok = await runBackup(
+      rt,
+      state,
+      target as BackupTarget | 'snapshots' | 'guard' | 'verify',
+      machine,
+      args.includes('--scheduled'),
+    )
+  } catch (error) {
+    if (!(error instanceof BackupDeferred)) throw error
+    await report(cfg, readState(cfg), machine)
+    console.log(error.message)
+    return BUSY_EXIT
+  }
   if (machine === cfg.workstation && target !== 'snapshots' && target !== 'guard') {
     await observeExternal(rt, state)
     saveState(cfg, state)

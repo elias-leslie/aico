@@ -27,13 +27,14 @@ PVE's or root's secrets (config.db, /etc/pve priv directories, /root, /etc/ssh,
 OmniNull hub (CT 150) and append-only restic (CT 160) are never captured.
 """
 
-import base64
 import fcntl
+from contextlib import contextmanager
 import fnmatch
 import json
 import os
 import re
 import secrets
+import signal
 import shlex
 import sqlite3
 import subprocess
@@ -49,8 +50,10 @@ CONFIG_DATABASE = "/var/lib/pve-cluster/config.db"
 DUMP_DIRECTORY = Path("/var/lib/vz/dump")
 DUMP_LOG_KEEP_DAYS = 7
 THIN_POOL = "pve/data"
-AGENT_PART_BYTES = 12_000_000  # Base64 text per guest-agent read; a multiple of 4, under the 16 MiB limit.
-GUEST_EXEC_TIMEOUT_SECONDS = 1800
+GUARD = "/usr/local/sbin/aico-backup-guard"
+GUARD_STATUS = Path("/run/aico-backup-guard/status.json")
+DISPATCHER = str(Path(__file__).resolve())
+GUEST_LOCK = "/run/lock/aico-backup-export.lock"
 MOUNT_PARENT = "/run"  # Where a stopped VM's disk snapshot is mounted, read-only, for one capture.
 # The only host files and directories a source may read: exactly what pve-host-files captures.
 HOST_PATHS = frozenset({"/vault/identity", "/vault/meta/recovery-key.json", "/etc/pve/qemu-server/120.conf",
@@ -66,11 +69,14 @@ _SOURCE_ID = re.compile(r"[A-Za-z0-9._-]{1,128}")
 _DIGEST = re.compile(r"[0-9a-f]{64}")
 _PATH = re.compile(r"/(?:[A-Za-z0-9._@+-][A-Za-z0-9 ._@+-]*/?)+")
 _EXCLUDE = re.compile(r"[A-Za-z0-9 ._*@+/-]{1,128}")
-_PART = re.compile(r"part\.[0-9]{5}")
 _VIA = {"host": "host", "lxc": "pct", "qemu": "agent"}
 
 
 class Refused(Exception):
+    pass
+
+
+class Deferred(Refused):
     pass
 
 
@@ -187,6 +193,8 @@ def _boot_volume(node, vmid, run, kind="qemu"):
     """The guest's root disk as a device path: a VM's first of boot order, scsi0, virtio0, sata0, ide0; a container's rootfs."""
     config = json.loads(run(["pvesh", "get", f"/nodes/{node}/{kind}/{vmid}/config", "--output-format", "json"],
                             capture_output=True, text=True, check=True).stdout)
+    if config.get("lock"):
+        raise Deferred(f"{kind} {vmid} has a Proxmox operation in progress")
     order = re.search(r"order=([^;]*)", str(config.get("boot", "")))
     keys = ["rootfs"] if kind == "lxc" else (order.group(1).split(";") if order else []) + ["scsi0", "virtio0", "sata0", "ide0"]
     for key in keys:
@@ -216,8 +224,51 @@ def _root_partition(device, run):
     return best["path"], best["fstype"]
 
 
-def disk_files(vmid, files, out, node, run=subprocess.run, kind="qemu"):
-    """Tar a stopped guest's files from a read-only mount of a thin snapshot of its disk (nothing is written to the guest).
+def frozen_snapshot(vmid, create, run):
+    """Freeze only while creating the thin snapshot; confirm thaw before any mount or stream."""
+    def command(verb):
+        return run(["qm", "guest", "cmd", str(vmid), "fsfreeze-" + verb], capture_output=True, text=True)
+
+    before = command("status")
+    if before.returncode or before.stdout.strip() != "thawed":
+        raise Refused(f"qemu {vmid} is not confirmed thawed; no snapshot was taken")
+    # Freeze can partially succeed before qm reports failure. Always thaw after attempting it.
+    try:
+        frozen = command("freeze")
+        if frozen.returncode:
+            raise Refused(f"qemu {vmid} could not freeze its filesystem")
+        status = command("status")
+        if status.returncode or status.stdout.strip() != "frozen":
+            raise Refused(f"qemu {vmid} did not confirm its frozen filesystem")
+        create()
+    finally:
+        command("thaw")
+        after = command("status")
+        if after.returncode or after.stdout.strip() != "thawed":
+            raise Refused(f"qemu {vmid} could not confirm its filesystem thawed; no files were streamed")
+
+
+@contextmanager
+def capture_signals():
+    """A normal stop/disconnect unwinds snapshot and thaw cleanup; repeated signals do not cut cleanup short."""
+    interrupted = False
+
+    def stop(signum, _frame):
+        nonlocal interrupted
+        if not interrupted:
+            interrupted = True
+            raise Refused(f"capture interrupted by {signal.Signals(signum).name}")
+
+    previous = {number: signal.signal(number, stop) for number in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT)}
+    try:
+        yield
+    finally:
+        for number, handler in previous.items():
+            signal.signal(number, handler)
+
+
+def disk_files(vmid, files, out, node, run=subprocess.run, kind="qemu", running=False):
+    """Tar selected files from a read-only thin snapshot; a running VM is briefly frozen while it is created.
 
     A container's disk is one filesystem and is mounted as it is (no loop device); its owner ids are the host's mapped ids.
 
@@ -251,8 +302,14 @@ def disk_files(vmid, files, out, node, run=subprocess.run, kind="qemu"):
         quiet(["losetup", "-d", stale.split(":")[0]])
     quiet(["lvremove", "-f", snapshot])
     try:
-        run(["lvcreate", "--snapshot", "--name", snapshot_name, "--setactivationskip", "n", "--quiet", f"{group}/{volume}"],
-            capture_output=True, text=True, check=True)
+        def create():
+            run(["lvcreate", "--snapshot", "--name", snapshot_name, "--setactivationskip", "n", "--quiet", f"{group}/{volume}"],
+                capture_output=True, text=True, check=True)
+
+        if running:
+            frozen_snapshot(vmid, create, run)
+        else:
+            create()
         if kind == "lxc":
             partition = f"/dev/{snapshot}"
             fstype = run(["blkid", "-o", "value", "-s", "TYPE", partition], capture_output=True, text=True,
@@ -274,48 +331,102 @@ def disk_files(vmid, files, out, node, run=subprocess.run, kind="qemu"):
             if resolved != root and not resolved.startswith(root + "/"):
                 raise Refused(f"{path} resolves outside the guest filesystem")
         out.flush()
-        tar = shlex.join(tar_command(files, root=str(mount)))
-        packed = "cat" if kind == "lxc" else "gzip -n"
-        return run(["bash", "-c", f'set -o pipefail; {{ {tar}; rc=$?; [ "$rc" -le 1 ]; }} | {packed}']).returncode
+        return _tar_ok(run(tar_command(files, root=str(mount))).returncode)
     finally:
         release()
 
 
-def agent_files(vmid, files, out, run=subprocess.run):
-    """Tar inside the VM through its QEMU agent, read the base64 parts back in bounded chunks, always remove the guest copy."""
-    guest_vm = _guest_of(vmid, run)
-    node = str(guest_vm["node"])
-    if guest_vm.get("status") == "stopped":
-        return disk_files(vmid, files, out, node, run)
-    directory = f"/tmp/st-backup-{secrets.token_hex(8)}"
-    script = shlex.join(tar_command(files)) + '; rc=$?; [ "$rc" -le 1 ]'
-    build = (f"set -o pipefail; umask 077; rm -rf {directory}; mkdir {directory} || exit 9; "
-             f"{{ {script}; }} | gzip -n | base64 -w0 | split -b {AGENT_PART_BYTES} -d -a 5 - {directory}/part.")
-
-    def guest(command):
-        result = run(["qm", "guest", "exec", str(vmid), "--timeout", str(GUEST_EXEC_TIMEOUT_SECONDS), "--", "bash", "-c", command],
-                     capture_output=True, text=True)
-        if result.returncode:
-            raise Refused("guest agent exec failed: " + result.stderr.strip()[-300:])
-        return json.loads(result.stdout)
-
+def guard_budget(*, initial=False):
+    """Read the host guard's existing policy snapshot; a running stream retains its last cap if stale."""
     try:
-        built = guest(build)
-        if built.get("exitcode") != 0:
-            raise Refused("guest tar failed: " + str(built.get("err-data", ""))[-300:])
-        for part in sorted(guest("ls -1 " + directory).get("out-data", "").split()):
-            if not _PART.fullmatch(part):
-                raise Refused("unexpected file in the guest staging directory")
-            read = run(["pvesh", "get", f"/nodes/{node}/qemu/{vmid}/agent/file-read", "--file", f"{directory}/{part}",
-                        "--output-format", "json"], capture_output=True, text=True, check=True)
-            chunk = json.loads(read.stdout)
-            if chunk.get("truncated"):
-                raise Refused("guest agent read was truncated")
-            out.write(base64.b64decode(chunk["content"]))
-        out.flush()
-    finally:
-        guest("rm -rf " + directory)
-    return 0
+        budget = json.loads(GUARD_STATUS.read_text())
+        quota = budget["cpu_quota_percent"]
+        sample = budget["policy"]["sample_s"]
+        stale = budget["policy"]["stale_s"]
+        boot = BOOT_ID.read_text().strip()
+        fresh = (budget["boot_id"] == boot and 0 <= time.time() - budget["observed_at"] <= stale)
+        if not isinstance(quota, (int, float)) or isinstance(quota, bool) or quota <= 0:
+            raise ValueError("invalid backup CPU ceiling")
+        if not isinstance(sample, (int, float)) or isinstance(sample, bool) or sample <= 0:
+            raise ValueError("invalid backup sample interval")
+        if fresh and (not initial or budget["admission_open"]):
+            return quota, sample
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    if initial:
+        raise Deferred("the host backup guard has no fresh admission budget")
+    return None
+
+
+def guest_command(vmid, argv):
+    return ["pct", "exec", str(vmid), "--", *argv]
+
+
+def guest_stream(vmid, files, out, run=subprocess.run):
+    """One supported pct stdout stream, with the producer capped inside its own container.
+
+    The host guard controls admission and supplies changing CPU budgets. A lost status reading does
+    not cancel work; its last cap stays. Only a changed budget causes a guest control request.
+    Unique scope names keep cleanup from stopping another controller's export. No staged payload exists.
+    """
+    quota, sample = guard_budget(initial=True)
+    unit = "aico-backup-export-" + secrets.token_hex(8) + ".scope"
+    tar = shlex.join(tar_command(files))
+    script = f'{{ {tar}; rc=$?; [ "$rc" -le 1 ]; }}'
+    stop = ["systemctl", "--no-ask-password", "stop", unit]
+    cleanup = shlex.join(stop) + ' >/dev/null 2>&1 || true'
+    managed = ["systemd-run", "--no-ask-password", "--quiet", "--scope", "--collect", "--unit", unit,
+               "--property", f"CPUQuota={quota}%", "--", "bash", "-c", script]
+    # flock belongs to the guest, so two bridges/controllers cannot run exporters there together.
+    body = "trap " + shlex.quote(cleanup) + " EXIT; trap 'exit 143' HUP INT TERM; " + shlex.join(managed)
+    remote = ["flock", "--exclusive", "--nonblock", "--conflict-exit-code", "75",
+              GUEST_LOCK, "bash", "-c", body]
+
+    def control(argv):
+        return run(guest_command(vmid, argv), capture_output=True, text=True)
+
+    out.flush()
+    with tempfile.TemporaryFile() as errors:
+        process = subprocess.Popen(guest_command(vmid, remote), stdin=subprocess.DEVNULL, stdout=out, stderr=errors)
+        try:
+            while True:
+                try:
+                    code = process.wait(timeout=sample)
+                    break
+                except subprocess.TimeoutExpired:
+                    budget = guard_budget()
+                    if budget is None:
+                        continue
+                    next_quota, sample = budget
+                    if next_quota != quota:
+                        changed = control(["systemctl", "--no-ask-password", "set-property", "--runtime", unit,
+                                           f"CPUQuota={next_quota}%"])
+                        # The exporter may have finished just before its transient scope was collected.
+                        if changed.returncode and process.poll() is None:
+                            raise Refused("the guest export CPU ceiling could not be changed")
+                        quota = next_quota
+            if code == 75:
+                raise Deferred("another file export is running in the container")
+            if code:
+                errors.seek(0, os.SEEK_END)
+                errors.seek(max(0, errors.tell() - 300))
+                raise Refused("guest file stream failed: " + errors.read().decode(errors="replace").strip())
+            return 0
+        finally:
+            # Covers a broken stdout, budget-control failure, or cancellation as well as a normal exit.
+            try:
+                control(stop)
+            finally:
+                if process.poll() is None:
+                    process.terminate()
+                    process.wait()
+
+
+def agent_files(vmid, files, out, run=subprocess.run):
+    """QGA freezes a running VM only for the thin snapshot; selected files stream continuously on the host."""
+    guest_vm = _guest_of(vmid, run)
+    return disk_files(vmid, files, out, str(guest_vm["node"]), run,
+                      running=guest_vm.get("status") != "stopped")
 
 
 def capture(entry, out, run=subprocess.run):
@@ -330,7 +441,7 @@ def capture(entry, out, run=subprocess.run):
         guest_ct = _guest_of(vmid, run, "lxc")
         if guest_ct.get("status") == "stopped":
             return disk_files(vmid, files, out, str(guest_ct["node"]), run, "lxc")
-        return _tar_ok(run(["pct", "exec", str(vmid), "--", *tar_command(files)]).returncode)
+        return guest_stream(vmid, files, out, run)
     return agent_files(vmid, files, out, run)
 
 
@@ -354,17 +465,40 @@ def main(command=None, run=subprocess.run, out=None):
             entry = load_source(words[1], words[2])
             if entry.get("vmid") is None:
                 return capture(entry, out, run)
-            # The two backup machines can copy the same guest. Keep its staging data and stopped
-            # disk snapshot to one capture at a time, through cleanup; other guests run independently.
+            # Keep a guest disk snapshot or exporter to one capture at a time, through cleanup.
             CAPTURE_LOCKS.mkdir(mode=0o700, parents=True, exist_ok=True)
             with (CAPTURE_LOCKS / f"guest-{entry['vmid']}.lock").open("a") as lock:
                 fcntl.flock(lock, fcntl.LOCK_EX)
                 return capture(entry, out, run)
         raise Refused("unknown request; this key runs only guests, host-boot, thinpool, sources or capture SOURCE DIGEST")
+    except Deferred as exc:
+        sys.stderr.write(f"summitflow-pve-backup: {exc}\n")
+        return 75
     except (Refused, OSError, ValueError, sqlite3.Error, subprocess.CalledProcessError) as exc:
         sys.stderr.write(f"summitflow-pve-backup: {exc}\n")
         return 2
 
 
+def entrypoint(argv=None, run=subprocess.run, out=None):
+    """Only the local guard subprocess can request the internal entry point; SSH sends fixed verbs."""
+    argv = sys.argv[1:] if argv is None else argv
+    if len(argv) == 3 and argv[0] == "--guarded-capture":
+        with capture_signals():
+            return main("capture " + " ".join(argv[1:]), run=run, out=out)
+    if argv:
+        sys.stderr.write("summitflow-pve-backup: unknown local arguments\n")
+        return 2
+    words = os.environ.get("SSH_ORIGINAL_COMMAND", "").split()
+    if len(words) == 3 and words[0] == "capture":
+        try:
+            load_source(words[1], words[2])
+            return run([GUARD, "run", "--", DISPATCHER, "--guarded-capture", *words[1:]],
+                       stdout=out or sys.stdout.buffer).returncode
+        except (Refused, OSError, ValueError) as exc:
+            sys.stderr.write(f"summitflow-pve-backup: {exc}\n")
+            return 2
+    return main(run=run, out=out)
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(entrypoint())

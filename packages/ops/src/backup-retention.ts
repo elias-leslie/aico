@@ -13,7 +13,15 @@ import {
 import { dirname, join, relative, resolve } from 'node:path'
 import { writeFileDurable } from '@aico/shared/durable-file'
 import ops from '../data/ops.json' with { type: 'json' }
-import { type BackupConfig, type BackupState, driveSpec, homePath, migrated } from './backup-plan'
+import {
+  type BackupConfig,
+  type BackupState,
+  driveSourceOwner,
+  driveSources,
+  driveSpec,
+  homePath,
+  migrated,
+} from './backup-plan'
 import { checked, pastStaleLock, type Runtime, resticArgs, resticJson } from './backup-runtime'
 import type { Point } from './snapshots'
 
@@ -175,12 +183,11 @@ export async function snapshotSweep(
   }
   return deleted
 }
-function driveRetentionArgs(cfg: BackupConfig): string[] {
+function driveRetentionArgs(cfg: BackupConfig, sources: string[]): string[] {
   const p = cfg.retention.drive
   return [
     'forget',
-    '--tag',
-    'offsite',
+    ...sources.flatMap((source) => ['--tag', `offsite,source:${source}`]),
     '--group-by',
     'host,paths',
     '--keep-daily',
@@ -468,6 +475,7 @@ function qualifyWorkProject(
 function legacyRetentionIds(
   snapshots: { id: string; time: string; tags?: string[] }[],
   enabled: string[],
+  owned: ReadonlySet<string>,
   days: number,
   now: number,
 ): string[] {
@@ -485,6 +493,9 @@ function legacyRetentionIds(
       (s) =>
         !s.tags?.includes('offsite') &&
         s.tags?.some((t) => t.startsWith('source:')) &&
+        s.tags
+          .filter((t) => t.startsWith('source:'))
+          .every((t) => owned.has(t.slice('source:'.length))) &&
         Date.parse(s.time) < now - days * 86400000 &&
         !keep.has(s.id),
     )
@@ -492,10 +503,18 @@ function legacyRetentionIds(
     .sort()
 }
 /** Called only by the scheduled Drive run, never by Run now or the restore path. */
-export async function retainDrive(rt: Runtime, state: BackupState): Promise<void> {
+export async function retainDrive(rt: Runtime, state: BackupState, machine: string): Promise<void> {
   if (!driveSpec(rt.cfg).pruneQualified)
     throw new Error('Automatic Drive retention is not qualified; backup data is preserved.')
-  const request = resticArgs(rt.cfg, 'drive', driveRetentionArgs(rt.cfg))
+  const enabled = driveSources(rt.cfg, machine).map((s) => s.id)
+  const ownJobs = [
+    ...new Set([
+      ...enabled,
+      ...(machine === rt.cfg.workstation ? Object.keys(rt.cfg.subvolumes) : []),
+      `aico-${machine}`,
+    ]),
+  ].sort()
+  const request = resticArgs(rt.cfg, 'drive', driveRetentionArgs(rt.cfg, ownJobs))
   request.argv.splice(
     request.argv.indexOf('forget'),
     0,
@@ -512,7 +531,13 @@ export async function retainDrive(rt: Runtime, state: BackupState): Promise<void
     }[]
     const ids = legacyRetentionIds(
       snapshots,
-      migrated.sources.filter((s) => s.enabled).map((s) => s.id),
+      enabled,
+      new Set([
+        ...ownJobs,
+        ...migrated.sources
+          .filter((s) => driveSourceOwner(rt.cfg, s.id) === machine)
+          .map((s) => s.id),
+      ]),
       rt.cfg.retention.drive.legacyDays,
       rt.now().getTime(),
     )

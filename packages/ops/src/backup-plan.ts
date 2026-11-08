@@ -87,6 +87,16 @@ export function driveTarget() {
 }
 /** The sources this machine copies to its own Drive repository besides its own databases. */
 export const driveGuests = (cfg: BackupConfig): readonly string[] => cfg.drive?.guests ?? []
+/** One source has one Drive owner; unclaimed sources belong to the workstation. */
+export function driveSourceOwner(cfg: BackupConfig, source: string): string {
+  const owners = Object.entries(cfg.driveClients)
+    .filter(([, client]) => (client.guests as readonly string[]).includes(source))
+    .map(([machine]) => machine)
+  if (owners.length > 1) throw new Error(`Drive source ${source} has more than one owner.`)
+  return owners[0] ?? cfg.workstation
+}
+export const driveSources = (cfg: BackupConfig, machine: string): Source[] =>
+  imported.sources.filter((s) => s.enabled && driveSourceOwner(cfg, s.id) === machine)
 /** The Drive repository this machine writes: its own (`driveClients`), else the workstation's migrated one. */
 export const driveSpec = (cfg: BackupConfig) => cfg.drive ?? driveTarget()
 export const contains = (parent: string, path: string) =>
@@ -201,6 +211,7 @@ export function entries(
   if (machine === cfg.workstation) {
     for (const source of imported.sources)
       for (const target of ['native', 'drive'] as const) {
+        if (target === 'drive' && driveSourceOwner(cfg, source.id) !== machine) continue
         const owner = coverage(source, target, cfg)
         if (owner) {
           const item = entry(
@@ -268,26 +279,6 @@ export function entries(
       if (source.project_id) item.project = source.project_id
       all.push(item)
     }
-  if (machine === cfg.workstation) {
-    const source = cfg.remoteSqlite.source
-    const remote = entry(
-      source,
-      'Aico on gem · databases and photos',
-      'drive',
-      state.copies[copyKey(source, 'drive')],
-      cfg,
-      machine,
-      now,
-    )
-    remote.meaning =
-      `${remote.meaning} Copied from gem by the workstation; gem also copies itself to Drive on its own.`.slice(
-        0,
-        300,
-      )
-    // This registered source already has a Drive row. Use its plain name and dependency there.
-    const existing = all.find((e) => e.source === source && e.target === 'drive')
-    if (existing) Object.assign(existing, remote)
-  }
   if (machine === cfg.workstation)
     for (const external of migrated.external.filter((s) => s.enabled)) {
       const copy = state.copies[`external/${external.id}`]

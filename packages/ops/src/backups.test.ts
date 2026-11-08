@@ -501,20 +501,20 @@ it('source refresh qualifies its previous generation only against a confirmed Dr
   })
 })
 
-it('gem has one append copy and the workstation owns its single real Drive receipt', () => {
+it('the gem owner reports its sources and the workstation preserves their history without copying them', () => {
   const c = cfg(),
     s = emptyState()
   s.copies[copyKey(c.remoteSqlite.source, 'drive')] = {
     source: c.remoteSqlite.source,
     target: 'drive',
     dataAt: new Date(now).toISOString(),
+    snapshot: 'a'.repeat(64),
   }
-  expect(entries(s, c, 'aico', now).filter((e) => e.target === 'drive')).toHaveLength(0)
-  expect(
-    entries(s, c, c.workstation, now).filter(
-      (e) => e.source === c.remoteSqlite.source && e.target === 'drive',
-    ),
-  ).toHaveLength(1)
+  const previous = structuredClone(s)
+  expect(entries(s, c, c.workstation, now).some((e) => e.source === c.remoteSqlite.source)).toBe(
+    false,
+  )
+  expect(s).toEqual(previous)
 })
 it('gem backs itself up to its own Drive repository with its own login, reported from gem', async () => {
   const c = config({ AICO_BACKUP_MACHINE: 'aico' })
@@ -528,10 +528,13 @@ it('gem backs itself up to its own Drive repository with its own login, reported
   expect(new Set(drive.map((e) => e.source))).toEqual(
     new Set([
       'aico-aico',
+      'pve-ct-190-aico-data',
       'pve-ct-191-jobinator-data',
       'pve-vm-210-dadbot-data',
       'pve-vm-180-app-recovery',
+      'pve-vm-100-browser-state',
       'pve-cluster-config',
+      'pve-host-files',
       'ominull-production-state',
     ]),
   )
@@ -1299,3 +1302,40 @@ it('an empty or broken backup state stops the job in plain words and stays as it
     expect(readFileSync(path, 'utf8')).toBe(broken)
   }
 })
+
+it.each(['files-qemu-180.tar.gz', 'files-qemu-180.tar'])(
+  'restores the exact stored filename and bytes for historical or new VM archives (%s)',
+  async (filename) => {
+    const c = cfg(),
+      root = temp(),
+      destination = join(root, 'restored'),
+      id = 'c'.repeat(64)
+    c.restoreRoot = root
+    const bytes = Buffer.from([0x1f, 0x8b, 0x08, 0x00, 0xff, 0x42])
+    const run = vi.fn(async (argv: string[]) => {
+      if (argv.includes('snapshots'))
+        return {
+          code: 0,
+          out: JSON.stringify([{ id, time: new Date(now).toISOString(), paths: [`/${filename}`] }]),
+          err: '',
+        }
+      if (argv.includes('restore')) {
+        mkdirSync(destination)
+        writeFileSync(join(destination, filename), bytes)
+      }
+      return { code: 0, out: '', err: '' }
+    })
+    await restoreFiles(
+      { cfg: c, run, now: () => new Date(now) },
+      'drive',
+      'pve-vm-180-app-recovery',
+      id,
+      `/${filename}`,
+      destination,
+    )
+    const restore = run.mock.calls.find(([argv]) => argv.includes('restore'))?.[0] as string[]
+    expect(restore[restore.indexOf('--include') + 1]).toBe(`/${filename}`)
+    expect(restore).toContain('--verify')
+    expect(readFileSync(join(destination, filename))).toEqual(bytes)
+  },
+)

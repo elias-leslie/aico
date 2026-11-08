@@ -81,6 +81,8 @@ const cfg = () => {
   c.cacheDir = temp()
   c.rootCacheDir = temp()
   c.workstation = HOST
+  // This replay uses a synthetic workstation controller that owns its guest sources.
+  c.driveClients.aico.guests = []
   return c
 }
 const emptyState = (): BackupState => ({ copies: {}, runs: {}, points: [] })

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 import concurrent.futures
 import hashlib
 import importlib.machinery
@@ -10,11 +9,14 @@ import importlib.util
 import io
 import json
 import os
+import shlex
 import shutil
+import signal
 import sqlite3
 import subprocess
 import threading
 import time
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -77,6 +79,10 @@ def dispatcher(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     monkeypatch.setattr(module, "SOURCES", tmp_path / "sources.json")
     monkeypatch.setattr(module, "DUMP_DIRECTORY", tmp_path / "dump")
     monkeypatch.setattr(module, "CAPTURE_LOCKS", tmp_path / "locks")
+    monkeypatch.setattr(module, "GUARD_STATUS", tmp_path / "guard.json")
+    monkeypatch.setattr(module, "BOOT_ID", tmp_path / "boot_id")
+    module.BOOT_ID.write_text("test-boot")
+    _budget(module)
     monkeypatch.delenv("SSH_ORIGINAL_COMMAND", raising=False)
     return module
 
@@ -86,6 +92,46 @@ def _install(module: ModuleType, sources: dict[str, str]) -> dict[str, str]:
     entries = {name: px.dispatcher_entry(path) for name, path in sources.items()}
     module.SOURCES.write_text(json.dumps(entries))
     return {name: px.path_digest(path) for name, path in sources.items()}
+
+
+def _budget(module, quota=50, **changes):
+    payload = {"cpu_quota_percent": quota, "admission_open": True, "observed_at": time.time(),
+               "boot_id": "test-boot", "policy": {"sample_s": 15, "stale_s": 45}, **changes}
+    module.GUARD_STATUS.write_text(json.dumps(payload))
+
+
+class Stream:
+    def __init__(self, ticks: Iterable[Callable[[], None]] = ()):
+        self.ticks = iter(ticks)
+        self.code = None
+        self.terminated = False
+
+    def wait(self, timeout=None):
+        tick = next(self.ticks, None)
+        if tick:
+            tick()
+            raise subprocess.TimeoutExpired("synthetic export", timeout)
+        self.code = 0 if self.code is None else self.code
+        return self.code
+
+    def poll(self):
+        return self.code
+
+    def terminate(self):
+        self.terminated = True
+        self.code = -15
+
+
+def _stream_process(monkeypatch, process=None):
+    calls = []
+    process = process or Stream()
+
+    def start(argv, **kwargs):
+        calls.append(argv)
+        return process
+
+    monkeypatch.setattr(subprocess, "Popen", start)
+    return calls, process
 
 
 HOST = "proxmox://proxmox-gem/host/files?path=/vault/identity&path=/etc/pve/qemu-server/120.conf"
@@ -399,13 +445,17 @@ def _container(status: str):
     return {"pvesh": json.dumps([{"vmid": 140, "type": "lxc", "node": "davion-gem", "status": status}])}
 
 
-def test_container_files_run_tar_through_pct_without_a_shell(dispatcher):
+def test_container_files_run_in_a_capped_guest_scope_and_leave_no_staging(dispatcher, monkeypatch):
     digests = _install(dispatcher, {"ct": CT})
     runs = Runs(_container("running"))
+    calls, _ = _stream_process(monkeypatch)
     assert dispatcher.main(f"capture ct {digests['ct']}", run=runs, out=io.BytesIO()) == 0
-    command = runs.calls[-1]
-    assert command[:4] == ["pct", "exec", "140", "--"] and command[4] == "tar" and "sh" not in command and "-c" not in command
-    assert "--exclude=*.tmp" in command and command[-1] == "srv/data"
+    command = calls[0]
+    assert command[:4] == ["pct", "exec", "140", "--"] and command[4] == "flock"
+    assert "systemd-run" in command[-1] and "CPUQuota=50%" in command[-1]
+    assert "--exclude=*.tmp" in command[-1] and "srv/data" in command[-1]
+    assert "split" not in command[-1] and "gzip" not in command[-1]
+    assert runs.calls[-1][:4] == ["pct", "exec", "140", "--"] and "stop" in runs.calls[-1]
 
 
 def test_a_stopped_container_is_read_from_a_read_only_thin_snapshot_without_starting_it(dispatcher, tmp_path, monkeypatch):
@@ -426,8 +476,8 @@ def test_a_stopped_container_is_read_from_a_read_only_thin_snapshot_without_star
     assert create[-1] == "pve/vm-140-disk-0" and "st-backup-140" in create
     mount = next(call for call in runs.calls if call[0] == "mount")
     assert mount[-2] == "/dev/pve/st-backup-140" and "ro,nodev,nosuid,noexec,norecovery" in mount
-    tar = next(call for call in runs.calls if call[0] == "bash")
-    assert "--exclude=*.tmp" in tar[-1] and "srv/data" in tar[-1] and "gzip" not in tar[-1]
+    tar = next(call for call in runs.calls if call[0] == "tar")
+    assert "--exclude=*.tmp" in tar and "srv/data" in tar
     assert verbs[-2:] == ["umount", "lvremove"]
     assert list(tmp_path.glob("st-backup-140-*")) == []
 
@@ -448,34 +498,6 @@ def test_whole_guest_streams_in_snapshot_mode_and_trims_week_old_logs(dispatcher
     assert runs.calls == [["vzdump", "140", "--stdout", "1", "--mode", "snapshot", "--compress", "0", "--quiet", "1"]]
     assert not old.exists() and recent.exists() and other.exists()
 
-
-def _agent(parts: str, contents: dict[str, bytes]):
-    def qm(argv: list[str]) -> str:
-        command = argv[-1]
-        if command.startswith("ls -1 "):
-            return json.dumps({"exitcode": 0, "out-data": parts})
-        return json.dumps({"exitcode": 0})
-
-    def pvesh(argv: list[str]) -> str:
-        if argv[2] == "/cluster/resources":
-            return json.dumps([{"vmid": 100, "type": "qemu", "node": "davion-gem"}])
-        name = argv[argv.index("--file") + 1].rsplit("/", 1)[1]
-        return json.dumps({"content": base64.b64encode(contents[name]).decode()})
-
-    return {"qm": qm, "pvesh": pvesh}
-
-
-def test_vm_files_come_back_through_the_guest_agent_and_the_guest_copy_is_always_removed(dispatcher):
-    digests = _install(dispatcher, {"vm": VM})
-    runs = Runs(_agent("part.00001\npart.00000\n", {"part.00000": b"AB", "part.00001": b"CD"}))
-    out = io.BytesIO()
-    assert dispatcher.main(f"capture vm {digests['vm']}", run=runs, out=out) == 0
-    assert out.getvalue() == b"ABCD"
-    build = runs.calls[1]
-    assert build[:4] == ["qm", "guest", "exec", "100"] and "--exclude=Cache" in build[-1] and "home/u/p" in build[-1]
-    assert runs.calls[-1][-1].startswith("rm -rf /tmp/st-backup-")
-    reads = [call for call in runs.calls if call[0] == "pvesh" and "file-read" in call[2]]
-    assert [call[2] for call in reads] == ["/nodes/davion-gem/qemu/100/agent/file-read"] * 2
 
 
 def _stopped(contents: str = "part.00000\n"):
@@ -508,8 +530,8 @@ def test_a_stopped_vm_is_read_from_a_read_only_thin_snapshot_and_everything_is_r
     assert ["losetup", "--find", "--show", "--read-only", "--partscan", "/dev/pve/st-backup-100"] in runs.calls
     mount = next(call for call in runs.calls if call[0] == "mount")
     assert mount[-2] == "/dev/loop7p1" and "ro,nodev,nosuid,noexec,norecovery" in mount
-    tar = next(call for call in runs.calls if call[0] == "bash")
-    assert "--exclude=Cache" in tar[-1] and mount[-1] in tar[-1] and "home/u/p" in tar[-1] and "gzip -n" in tar[-1]
+    tar = next(call for call in runs.calls if call[0] == "tar")
+    assert "--exclude=Cache" in tar and mount[-1] in tar and "home/u/p" in tar
     assert verbs[-3:] == ["umount", "losetup", "lvremove"]
     assert list(tmp_path.glob("st-backup-100-*")) == []
 
@@ -521,13 +543,208 @@ def test_a_stopped_vm_path_that_leaves_the_guest_filesystem_is_refused_and_relea
     answers["mount"] = lambda argv: (Path(argv[-1]) / "home").symlink_to("/etc") or ""
     runs = Runs(answers)
     assert dispatcher.main(f"capture vm {digests['vm']}", run=runs, out=io.BytesIO()) == 2
-    assert not any(call[0] == "bash" for call in runs.calls)
+    assert not any(call[0] == "tar" for call in runs.calls)
     assert [call[0] for call in runs.calls][-3:] == ["umount", "losetup", "lvremove"]
 
 
-def test_a_guest_cannot_steer_the_host_side_read(dispatcher):
-    digests = _install(dispatcher, {"vm": VM})
-    runs = Runs(_agent("part.00000\n../../../etc/pve/priv/authkey.key\n", {"part.00000": b"AB"}))
-    assert dispatcher.main(f"capture vm {digests['vm']}", run=runs, out=io.BytesIO()) == 2
-    assert not any("authkey" in " ".join(call) for call in runs.calls if call[0] == "pvesh")
-    assert runs.calls[-1][-1].startswith("rm -rf /tmp/st-backup-")
+def _running_snapshot(failure=None):
+    answers = _stopped()
+    original = answers["pvesh"]
+    state = {"freeze": "thawed"}
+
+    def pvesh(argv):
+        if argv[2] == "/cluster/resources":
+            return json.dumps([{"vmid": 100, "type": "qemu", "node": "davion-gem", "status": "running"}])
+        if failure == "locked":
+            return json.dumps({"lock": "backup", "scsi0": "local-lvm:vm-100-disk-0"})
+        return original(argv)
+
+    def qm(argv):
+        verb = argv[-1]
+        if verb == "fsfreeze-status":
+            return state["freeze"]
+        if verb == "fsfreeze-freeze":
+            state["freeze"] = "frozen"
+            return (1 if failure == "freeze" else 0, "1")
+        if verb == "fsfreeze-thaw":
+            if failure == "thaw":
+                return (1, "")
+            state["freeze"] = "thawed"
+            return "1"
+        raise AssertionError(argv)
+
+    def create(argv):
+        assert state["freeze"] == "frozen"
+        if failure == "create":
+            raise subprocess.CalledProcessError(1, argv)
+        if failure == "signal":
+            signal.raise_signal(signal.SIGTERM)
+        return ""
+
+    answers.update({"pvesh": pvesh, "qm": qm, "lvcreate": create})
+    return answers, state
+
+
+def test_running_vm_freezes_only_for_thin_snapshot_then_streams_plain_tar_on_the_host(dispatcher, tmp_path, monkeypatch):
+    monkeypatch.setattr(dispatcher, "MOUNT_PARENT", str(tmp_path))
+    digest = _install(dispatcher, {"vm": VM})["vm"]
+    answers, state = _running_snapshot()
+    runs = Runs(answers)
+    assert dispatcher.main(f"capture vm {digest}", run=runs, out=io.BytesIO()) == 0
+    verbs = [call[0] for call in runs.calls]
+    freeze = next(i for i, call in enumerate(runs.calls) if call[-1] == "fsfreeze-freeze")
+    thaw = next(i for i, call in enumerate(runs.calls) if call[-1] == "fsfreeze-thaw")
+    assert freeze < verbs.index("lvcreate") < thaw < verbs.index("mount") < verbs.index("tar")
+    assert state["freeze"] == "thawed"
+    assert not any("file-read" in " ".join(call) or call[0] in ("ssh", "pct") for call in runs.calls)
+    assert verbs[-3:] == ["umount", "losetup", "lvremove"]
+
+
+@pytest.mark.parametrize("failure", ["freeze", "create", "signal", "thaw", "locked"])
+def test_failed_snapshot_or_signal_thaws_before_cleanup_and_never_streams(dispatcher, tmp_path, monkeypatch, failure):
+    monkeypatch.setattr(dispatcher, "MOUNT_PARENT", str(tmp_path))
+    digest = _install(dispatcher, {"vm": VM})["vm"]
+    answers, state = _running_snapshot(failure)
+    runs = Runs(answers)
+    with dispatcher.capture_signals():
+        assert dispatcher.main(f"capture vm {digest}", run=runs, out=io.BytesIO()) == (75 if failure == "locked" else 2)
+    assert not any(call[0] in ("mount", "tar") for call in runs.calls)
+    if failure != "locked":
+        assert any(call[-1] == "fsfreeze-thaw" for call in runs.calls)
+        assert state["freeze"] == ("frozen" if failure == "thaw" else "thawed")
+        assert runs.calls[-1][:2] == ["lvremove", "-f"]
+    else:
+        assert not any(call[0] in ("qm", "lvcreate") for call in runs.calls)
+
+
+def test_an_already_frozen_guest_is_not_thawed_by_this_capture(dispatcher, tmp_path, monkeypatch):
+    monkeypatch.setattr(dispatcher, "MOUNT_PARENT", str(tmp_path))
+    digest = _install(dispatcher, {"vm": VM})["vm"]
+    answers, state = _running_snapshot()
+    state["freeze"] = "frozen"
+    runs = Runs(answers)
+    assert dispatcher.main(f"capture vm {digest}", run=runs, out=io.BytesIO()) == 2
+    assert not any(call[-1] in ("fsfreeze-freeze", "fsfreeze-thaw") or call[0] in ("lvcreate", "mount", "tar") for call in runs.calls)
+
+
+def test_host_capture_reenters_only_under_the_independent_guard(dispatcher, monkeypatch):
+    digest = _install(dispatcher, {"host": HOST})["host"]
+    monkeypatch.setenv("SSH_ORIGINAL_COMMAND", f"capture host {digest}")
+    runs = Runs({dispatcher.GUARD: (75, "")})
+    assert dispatcher.entrypoint([], run=runs, out=io.BytesIO()) == 75
+    assert runs.calls == [[dispatcher.GUARD, "run", "--", dispatcher.DISPATCHER, "--guarded-capture", "host", digest]]
+    monkeypatch.setenv("SSH_ORIGINAL_COMMAND", f"--guarded-capture host {digest}")
+    runs = Runs()
+    assert dispatcher.entrypoint([], run=runs, out=io.BytesIO()) == 2
+    assert not runs.calls
+    monkeypatch.setenv("SSH_ORIGINAL_COMMAND", "id")
+    runs = Runs()
+    assert dispatcher.entrypoint(["--guarded-capture", "host", digest], run=runs, out=io.BytesIO()) == 0
+    assert runs.calls[0][0] == "tar"
+
+
+def test_missing_guard_fails_before_reading_payload(dispatcher, monkeypatch):
+    digest = _install(dispatcher, {"host": HOST})["host"]
+    monkeypatch.setenv("SSH_ORIGINAL_COMMAND", f"capture host {digest}")
+
+    def missing(argv, **kwargs):
+        assert argv[0] == dispatcher.GUARD
+        raise FileNotFoundError("guard not installed")
+
+    assert dispatcher.entrypoint([], run=missing, out=io.BytesIO()) == 2
+
+
+def test_running_guest_budget_changes_reach_actual_guest_scope_once_and_stale_retains_last_cap(dispatcher, monkeypatch):
+    digest = _install(dispatcher, {"ct": CT})["ct"]
+    ticks = [lambda: _budget(dispatcher, 20), lambda: _budget(dispatcher, 20),
+             lambda: _budget(dispatcher, 10), lambda: _budget(dispatcher, 50, observed_at=0)]
+    calls, process = _stream_process(monkeypatch, Stream(ticks))
+    runs = Runs(_container("running"))
+    assert dispatcher.main(f"capture ct {digest}", run=runs, out=io.BytesIO()) == 0
+    updates = [call for call in runs.calls if "set-property" in call]
+    assert [call[-1] for call in updates] == ["CPUQuota=20%", "CPUQuota=10%"]
+    assert len({call[-2] for call in updates}) == 1 and updates[0][-2] in calls[0][-1]
+    assert not process.terminated
+
+
+def test_control_failure_stops_only_its_own_producer_and_preserves_failure(dispatcher, monkeypatch, capsys):
+    digest = _install(dispatcher, {"ct": CT})["ct"]
+    calls, process = _stream_process(monkeypatch, Stream([lambda: _budget(dispatcher, 10)]))
+    runs = Runs(_container("running"))
+    original = runs.__call__
+
+    def run(argv, **kwargs):
+        if "set-property" in argv:
+            runs.calls.append(argv)
+            return subprocess.CompletedProcess(argv, 1, "", "denied")
+        return original(argv, **kwargs)
+
+    assert dispatcher.main(f"capture ct {digest}", run=run, out=io.BytesIO()) == 2
+    assert "ceiling could not be changed" in capsys.readouterr().err
+    assert process.terminated and "stop" in runs.calls[-1]
+    scope = runs.calls[-1][-1]
+    assert scope in calls[0][-1]
+
+
+def _local_export(dispatcher, tmp_path, monkeypatch):
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    systemd = bin_dir / "systemd-run"
+    systemd.write_text('#!/bin/sh\nwhile [ "$1" != -- ]; do shift; done\nshift\nexec "$@"\n')
+    systemd.chmod(0o755)
+    ctl = bin_dir / "systemctl"
+    cleanup = tmp_path / "cleanup"
+    ctl.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> ' + shlex.quote(str(cleanup)) + '\n')
+    ctl.chmod(0o755)
+    monkeypatch.setenv("PATH", str(bin_dir) + ":" + os.environ["PATH"])
+    monkeypatch.setattr(dispatcher, "GUEST_LOCK", str(tmp_path / "guest.lock"))
+    monkeypatch.setattr(dispatcher, "guest_command", lambda vmid, argv: argv)
+    source = tmp_path / "source"
+    source.mkdir()
+    return source, cleanup
+
+
+@pytest.mark.skipif(shutil.which("tar") is None, reason="needs GNU tar")
+def test_real_stream_roundtrips_without_chunks_and_cleans_its_guest_scope(dispatcher, tmp_path, monkeypatch):
+    source, cleanup = _local_export(dispatcher, tmp_path, monkeypatch)
+    (source / "saved.txt").write_text("synthetic durable payload")
+    output = tmp_path / "stream.tar"
+    with output.open("wb") as out:
+        assert dispatcher.guest_stream(100, {"paths": [str(source)], "excludes": []}, out) == 0
+    restored = subprocess.run(["tar", "-xOf", str(output), str(source).lstrip("/") + "/saved.txt"],
+                              capture_output=True, check=True).stdout
+    assert restored == b"synthetic durable payload"
+    assert "stop aico-backup-export-" in cleanup.read_text()
+    assert not list(tmp_path.glob("st-backup-*"))
+
+
+@pytest.mark.skipif(shutil.which("tar") is None, reason="needs GNU tar")
+def test_broken_output_fails_and_releases_real_stream_processes_and_lock(dispatcher, tmp_path, monkeypatch):
+    source, cleanup = _local_export(dispatcher, tmp_path, monkeypatch)
+    (source / "payload").write_bytes(os.urandom(2 * 1024 * 1024))
+    read_fd, write_fd = os.pipe()
+    os.close(read_fd)
+    with os.fdopen(write_fd, "wb") as out, pytest.raises(dispatcher.Refused, match="guest file stream failed"):
+        dispatcher.guest_stream(100, {"paths": [str(source)], "excludes": []}, out)
+    assert "stop aico-backup-export-" in cleanup.read_text()
+    with (tmp_path / "guest.lock").open("a") as lock:
+        __import__("fcntl").flock(lock, __import__("fcntl").LOCK_EX | __import__("fcntl").LOCK_NB)
+
+
+@pytest.mark.parametrize("changes", [{"admission_open": False}, {"observed_at": 0}, {"boot_id": "previous-boot"}])
+def test_guard_change_before_container_start_defers_without_launching_a_producer(dispatcher, monkeypatch, changes):
+    digest = _install(dispatcher, {"ct": CT})["ct"]
+    _budget(dispatcher, **changes)
+    calls, _ = _stream_process(monkeypatch)
+    assert dispatcher.main(f"capture ct {digest}", run=Runs(_container("running")), out=io.BytesIO()) == 75
+    assert not calls
+
+
+def test_a_guest_export_lock_conflict_is_busy_and_cleans_only_its_unique_scope(dispatcher, monkeypatch):
+    digest = _install(dispatcher, {"ct": CT})["ct"]
+    process = Stream()
+    process.code = 75
+    calls, _ = _stream_process(monkeypatch, process)
+    runs = Runs(_container("running"))
+    assert dispatcher.main(f"capture ct {digest}", run=runs, out=io.BytesIO()) == 75
+    assert runs.calls[-1][-1] in calls[0][-1]
