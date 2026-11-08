@@ -134,7 +134,8 @@ def sweep_scratch(
     root = Path(cfg.get("scratch_root", ""))
     if not cfg.get("scratch_root") or not root.is_dir():
         return 0
-    cutoff = now - float(cfg["scratch_older_days"]) * 86400
+    # The real clock caps it: a clock ahead of the world (a test's, a wrong RTC) must not make everything look old.
+    cutoff = min(now, time.time()) - float(cfg["scratch_older_days"]) * 86400
     freed = 0
     for entry in sorted(root.iterdir()):
         if any(fnmatchcase(entry.name, keep) for keep in cfg["scratch_keep"]):

@@ -318,7 +318,7 @@ package_caches = [
 # keep: names or fnmatch patterns it never touches: files other tools read by path, and runs that may be evidence.
 scratch_root = "/srv/scratch"
 scratch_older_days = 21
-scratch_keep = ["models", "cache", "briefs", "latest", "restic*", "st-*", "passive*", "traffic*", "*redteam*", ".*"]
+scratch_keep = ["models", "cache", "tmp", "briefs", "latest", "aico-backups", "restic*", "st-*", "passive*", "traffic*", "*redteam*", ".*"]
 # Untagged image layers no container uses, older than a week. Tagged images stay.
 image_prune = [
   { name = "podman", as_owner = true, argv = ["podman", "image", "prune", "--force", "--filter", "until=168h"] },

@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import time
 
 import pytest
 
@@ -134,6 +135,9 @@ def test_every_controller_has_a_switch():
 def hk_cfg(tmp_path, **over):
     return {
         **DATA["jobs"]["housekeeping"],
+        # Never the real disk: NOW is in the future, so to this sweep everything there looks old.
+        "scratch_root": str(tmp_path / "scratch-root"),
+        "image_prune": [],
         "spotify_cache": str(tmp_path / "spotify"),
         "guestfs_dir": str(tmp_path / "gfs"),
         "package_caches": [],
@@ -770,7 +774,8 @@ def scratch_cfg(root):
 
 
 def test_scratch_sweep_takes_only_old_untouched_unused_entries(tmp_path):
-    old = NOW - 30 * 86400
+    now = time.time()
+    old = now - 30 * 86400
     for name in ("old-run", "models", "st-keep", "held", "fresh", "deep"):
         (tmp_path / name).mkdir()
         (tmp_path / name / "f").write_text("x")
@@ -778,25 +783,34 @@ def test_scratch_sweep_takes_only_old_untouched_unused_entries(tmp_path):
         os.utime(tmp_path / name, (old, old))
     (tmp_path / "deep" / "sub").mkdir()
     (tmp_path / "deep" / "sub" / "new").write_text("x")
-    os.utime(tmp_path / "deep" / "sub" / "new", (NOW, NOW))
-    os.utime(tmp_path / "fresh" / "f", (NOW, NOW))
+    os.utime(tmp_path / "deep" / "sub" / "new", (now, now))
+    os.utime(tmp_path / "fresh" / "f", (now, now))
     target = tmp_path / "outside"
     target.mkdir()
     (tmp_path / "link").symlink_to(target)
     os.utime(tmp_path / "link", (old, old), follow_symlinks=False)
-    os.utime(target, (NOW, NOW))
+    os.utime(target, (now, now))
     in_use = {str(tmp_path / "held" / "f")}
 
     dry = acts.Actor(False, run=Fake())
-    housekeeping.sweep_scratch(scratch_cfg(tmp_path), dry, NOW, [], in_use)
+    housekeeping.sweep_scratch(scratch_cfg(tmp_path), dry, now, [], in_use)
     assert (tmp_path / "old-run").exists() and any("old-run" in text for text in dry.would)
 
     notes = []
-    housekeeping.sweep_scratch(scratch_cfg(tmp_path), acts.Actor(True, run=Fake()), NOW, notes, in_use)
+    housekeeping.sweep_scratch(scratch_cfg(tmp_path), acts.Actor(True, run=Fake()), now, notes, in_use)
     names = {path.name for path in tmp_path.iterdir()}
     assert "old-run" not in names and "link" not in names
     assert {"models", "st-keep", "held", "fresh", "deep", "outside"} <= names
     assert (target).is_dir()  # A link goes, what it points at stays.
+
+
+def test_scratch_sweep_ignores_a_clock_ahead_of_the_world(tmp_path):
+    # Tests run this with a future NOW; once that wiped the real scratch disk.
+    (tmp_path / "work").mkdir()
+    (tmp_path / "work" / "f").write_text("x")
+    actor = acts.Actor(True, run=Fake())
+    housekeeping.sweep_scratch(scratch_cfg(tmp_path), actor, time.time() + 365 * 86400, [], set())
+    assert (tmp_path / "work" / "f").exists()
 
 
 def test_image_prune_stays_on_untagged_layers_and_reports_failure(monkeypatch):
