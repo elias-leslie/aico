@@ -11,7 +11,14 @@ afterEach(() => {
 const sandbox = () => mkdtempSync(join(tmpdir(), 'sweep-'))
 
 it('a test’s temp folders live in the run’s own folder, which the run removes', () => {
-  expect(tmpdir()).toMatch(/\/vt-\d+$/)
+  const top = sandbox()
+  vi.stubEnv('TMPDIR', top)
+  const done = setup()
+  const own = tmpdir()
+  expect(own).toBe(join(top, `vt-${process.pid}`))
+  expect(existsSync(own)).toBe(true)
+  done()
+  expect(existsSync(own)).toBe(false)
 })
 
 it('removes only the folders of runs that have ended', () => {
