@@ -1170,15 +1170,22 @@ it('a copy that fails because its machine changed keeps an earlier real error an
       run: async () => ({ code: 1, out: '', err: 'restic failed' }),
       now: () => new Date(now),
     }
-  const job = {
-    id: 'guest',
-    paths: ['/files'],
-    binds: [] as [string, string][],
-    dataAt: new Date(now).toISOString(),
-    machine: { before: { state: 'off' as const }, read: power('on') },
+  // Off as its copy starts, on by the time the copy fails.
+  const job = () => {
+    let reads = 0
+    return {
+      id: 'guest',
+      paths: ['/files'],
+      binds: [] as [string, string][],
+      dataAt: new Date(now).toISOString(),
+      machine: {
+        before: { state: 'off' as const },
+        read: async () => ({ state: reads++ ? ('on' as const) : ('off' as const) }),
+      },
+    }
   }
   state.copies[key] = { ...goodCopy, observed: 'failed', error: 'Drive refused the last copy' }
-  const kept = await backupJob(failing, state, job)
+  const kept = await backupJob(failing, state, job())
   expect(kept).toEqual({
     ...goodCopy,
     observed: 'failed',
@@ -1187,12 +1194,12 @@ it('a copy that fails because its machine changed keeps an earlier real error an
   })
   // With no earlier error it stays free of one: the machine is why it failed.
   state.copies[key] = { ...goodCopy }
-  const clean = await backupJob(failing, state, job)
+  const clean = await backupJob(failing, state, job())
   expect(clean.error).toBeUndefined()
   expect(clean).toMatchObject({ observed: 'ok', snapshot: goodCopy.snapshot })
   // A machine that stayed on failed for real.
   const stayed = await backupJob(failing, state, {
-    ...job,
+    ...job(),
     machine: { before: { state: 'on' as const }, read: power('on') },
   })
   expect(stayed).toMatchObject({ observed: 'failed', snapshot: goodCopy.snapshot })

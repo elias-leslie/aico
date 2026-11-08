@@ -178,16 +178,22 @@ describe('the notices that fired because a machine was off', () => {
       expect(copy.observed).toBe('offline')
       expect(copy.error).toBeUndefined()
     })
+    it('off when the run began, switched on while it waited, shut down mid-copy: off', async () => {
+      // Live on 2026-11-08: VM 180 off at the start of a 30-minute run, on by its turn.
+      const copy = await failedCopy(off, { state: 'on', uptime: 1800 }, emptyState(), off)
+      expect(copy.observed).toBe('offline')
+      expect(copy.error).toBeUndefined()
+    })
     it('the Proxmox host stops answering mid-copy: the same', async () => {
       const copy = await failedCopy({ state: 'on' }, { state: 'off' })
       expect(copy.observed).toBe('offline')
     })
     it('started or restarted mid-copy: no failure, the next normal run takes it', async () => {
-      for (const [before, now] of [
-        [off, on],
+      for (const [before, ...now] of [
+        [off, off, on],
         [on, { state: 'on', uptime: 60 }],
-      ] as [GuestPower, GuestPower][]) {
-        const copy = await failedCopy(before, now)
+      ] as [GuestPower, GuestPower, GuestPower?][]) {
+        const copy = await failedCopy(before, now[0], emptyState(), now[1])
         expect(copy.error).toBeUndefined()
         expect(copy.observed).toBe('ok')
         expect(copy.snapshot).toBe(GOOD.snapshot)

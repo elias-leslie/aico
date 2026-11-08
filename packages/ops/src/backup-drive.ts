@@ -403,6 +403,12 @@ export async function backupJob(
     if (job.prepare) job.dataAt = payloadTime(job.paths[0] as string) ?? ''
     if (!job.dataAt)
       throw new Error('The source has no readable payload date; no fresh backup was claimed.')
+    // Jobs are built when the run starts and a copy can wait half an hour behind the others. A
+    // machine switched on since then was on when this copy started, so going off is what stopped it.
+    if (job.machine?.before.state === 'off') {
+      const fresh = await job.machine.read().catch((): GuestPower => ({ state: 'unknown' }))
+      if (fresh.state === 'on') job.machine.before = fresh
+    }
     const tags = ['offsite', `job:${job.id}`, `source:${job.id}`]
     const base = [
       'backup',
