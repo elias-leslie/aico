@@ -23,6 +23,8 @@ import {
   stateFile,
 } from './backup-plan'
 
+/** Enough for restic's error and a capture's own line; a backup row is not a log. */
+const REASON_LIMIT = 300
 export interface Result {
   code: number
   out: string
@@ -54,9 +56,51 @@ export const checked = async (run: Execute, argv: string[], options?: Parameters
   const result = await run(argv, options)
   if (result.code !== 0)
     throw new Error(
-      `${argv[0]?.split('/').at(-1)} failed (exit ${result.code}); see the backup log.`,
+      `${argv[0]?.split('/').at(-1)} failed (exit ${result.code})${failureReason(result, ': ')}.`,
     )
   return result.out
+}
+/** One line for the copy's record: no file paths from inside a backup, nothing that looks like a secret. */
+function cleanReason(text: string): string {
+  return (text.split('\n', 1)[0] as string)
+    .replace(/(^|[\s"'(=:])(?!i\/o\b)(?!\d{4}\/\d{2}\/\d{2}\b)[^\s"'(=:]*\/[^:"')]*/g, '$1<path>')
+    .replace(
+      /\b(token|password|secret|key|authorization|bearer)(\s*[=:]\s*|\s+)\S+/gi,
+      '$1 <hidden>',
+    )
+    .replace(/\b[A-Za-z0-9+_-]{32,}\b/g, '<hidden>')
+    .trim()
+}
+/**
+ * Why a failed run failed, from what restic (with --json) and what it ran wrote to stderr: its exit
+ * message, its last per-file or per-stream error, and the last plain line (a capture's or rclone's own
+ * words). Empty when they said nothing. The prefix only appears with a reason.
+ */
+export function failureReason(result: Result, prefix = ''): string {
+  let exit = '',
+    failed = '',
+    plain = ''
+  for (const line of result.err.split('\n')) {
+    if (!line.trim()) continue
+    try {
+      const v = JSON.parse(line) as {
+        message_type?: string
+        message?: string
+        error?: { message?: string }
+      }
+      if (v.message_type === 'exit_error') exit = cleanReason(v.message ?? '')
+      // A per-file message names the file, more than once and in two forms: keep only why.
+      if (v.message_type === 'error')
+        failed = cleanReason(v.error?.message?.split(': ').at(-1) ?? '')
+      if (v.message_type) continue
+    } catch {}
+    plain = cleanReason(line.replace(/^subprocess \S+: /, ''))
+  }
+  const reasons = [exit, failed, plain].filter(
+    (reason, at, all) =>
+      reason && all.indexOf(reason) === at && !all.some((o) => o !== reason && o.includes(reason)),
+  )
+  return reasons.length ? `${prefix}${reasons.join('; ').slice(0, REASON_LIMIT)}` : ''
 }
 function readRootState(cfg: BackupConfig): BackupState {
   if (existsSync(stateFile(cfg))) {

@@ -12,7 +12,14 @@ import {
   homePath,
   migrated,
 } from './backup-plan'
-import { checked, excludesPath, type Runtime, restic, summary } from './backup-runtime'
+import {
+  checked,
+  excludesPath,
+  failureReason,
+  type Runtime,
+  restic,
+  summary,
+} from './backup-runtime'
 
 export interface BackupJob {
   id: string
@@ -275,7 +282,7 @@ export async function backupJob(
       (job.command && !(saved.total_bytes_processed && saved.total_bytes_processed > 0))
     )
       throw new Error(
-        `The ${target === 'drive' ? 'Drive' : 'CT 160'} copy failed (restic exit ${result.code}); the last good copy is preserved.`,
+        `The ${target === 'drive' ? 'Drive' : 'CT 160'} copy failed (restic exit ${result.code}); the last good copy is preserved.${failureReason(result, ' Restic said: ')}`,
       )
     return {
       source: job.id,

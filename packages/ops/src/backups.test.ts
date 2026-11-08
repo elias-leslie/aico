@@ -43,7 +43,14 @@ import {
   retentionSelection,
   snapshotSweep,
 } from './backup-retention'
-import { copyRootAuth, type Runtime, readState, restic, saveState } from './backup-runtime'
+import {
+  copyRootAuth,
+  failureReason,
+  type Runtime,
+  readState,
+  restic,
+  saveState,
+} from './backup-runtime'
 import {
   nativePath,
   report,
@@ -678,6 +685,62 @@ it('offline freshness proof is carried only from a successful copy, never a fail
       })
     ).offlineSince,
   ).toBeUndefined()
+})
+it('a failed copy keeps restic and the capture words, without paths or secrets', async () => {
+  // Real restic 0.19 --json stderr for a capture whose command failed.
+  const err = [
+    'subprocess ssh: summitflow-pve-backup: the stopped VM disk has no readable root filesystem',
+    '{"message_type":"error","error":{"message":"failed to save /files-qemu-180.tar.gz: Fatal: command failed: exit status 2"},"during":"archival","item":"/files-qemu-180.tar.gz"}',
+    '{"message_type":"exit_error","code":1,"message":"Fatal: unable to save snapshot: failed to save /files-qemu-180.tar.gz: Fatal: command failed: exit status 2"}',
+  ].join('\n')
+  const copy = await backupJob(
+    {
+      cfg: cfg(),
+      run: async () => ({ code: 1, out: '', err }),
+      now: () => new Date(now),
+    },
+    emptyState(),
+    {
+      id: 'pve-vm-180-app-recovery',
+      paths: [],
+      binds: [],
+      dataAt: new Date(now).toISOString(),
+      command: ['ssh'],
+      filename: 'files-qemu-180.tar.gz',
+    },
+  )
+  expect(copy.error).toBe(
+    'The Drive copy failed (restic exit 1); the last good copy is preserved. Restic said: Fatal: unable to save snapshot: failed to save <path>: Fatal: command failed: exit status 2; summitflow-pve-backup: the stopped VM disk has no readable root filesystem',
+  )
+  expect(copy.observed).toBe('failed')
+})
+it('a failure reason hides paths from inside backups and anything like a secret', () => {
+  const reason = (err: string) => failureReason({ code: 1, out: '', err })
+  expect(
+    reason(
+      '{"message_type":"error","error":{"message":"/srv/my files/tax return.pdf: open my files/tax return.pdf: permission denied"},"during":"archival","item":"/srv/my files/tax return.pdf"}\n{"message_type":"exit_error","code":3,"message":"Warning: at least one source file could not be read"}',
+    ),
+  ).toBe('Warning: at least one source file could not be read; permission denied')
+  expect(reason('tar: srv/data/a b.db: Cannot open: Permission denied')).toBe(
+    'tar: <path>: Cannot open: Permission denied',
+  )
+  expect(reason('read tcp 1.2.3.4:5->6.7.8.9:443: i/o timeout')).toBe(
+    'read tcp 1.2.3.4:5->6.7.8.9:443: i/o timeout',
+  )
+  expect(reason('rclone: 2026/11/08 08:54:01 ERROR : data/ab/abc: 403 quota exceeded')).toBe(
+    'rclone: 2026/11/08 08:54:01 ERROR : <path>: 403 quota exceeded',
+  )
+  expect(reason('auth failed password=hunter2 token: ya29.abc')).toBe(
+    'auth failed password <hidden> token <hidden>',
+  )
+  expect(reason(`bad ${'a1'.repeat(30)}`)).toBe('bad <hidden>')
+  expect(
+    reason(
+      '{"message_type":"exit_error","code":10,"message":"Fatal: repository does not exist: stat /srv/x/config: no such file\\nIs there a repository at /srv/x"}',
+    ),
+  ).toBe('Fatal: repository does not exist: stat <path>: no such file')
+  expect(reason('')).toBe('')
+  expect(reason('x'.repeat(10) + ' y'.repeat(400)).length).toBe(300)
 })
 it('a stale restic lock is recovered using the existing safe unlock protocol', async () => {
   const c = cfg(),
