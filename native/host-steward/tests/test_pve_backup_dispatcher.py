@@ -517,6 +517,8 @@ def _stopped(contents: str = "part.00000\n"):
     def pvesh(argv: list[str]) -> str:
         if argv[2] == "/cluster/resources":
             return json.dumps([{"vmid": 100, "type": "qemu", "node": "davion-gem", "status": "stopped"}])
+        if argv[2] == "/nodes/davion-gem/qemu/100/status/current":
+            return json.dumps({"status": "stopped"})
         assert argv[2] == "/nodes/davion-gem/qemu/100/config"
         return json.dumps(config)
 
@@ -531,6 +533,10 @@ def test_a_stopped_vm_is_read_from_a_read_only_thin_snapshot_and_everything_is_r
     assert dispatcher.main(f"capture vm {digests['vm']}", run=runs, out=io.BytesIO()) == 0
     verbs = [call[0] for call in runs.calls]
     assert "qm" not in verbs
+    acquire = next(i for i, call in enumerate(runs.calls) if call[0] == "/usr/bin/perl" and "->set_lock" in call[3])
+    current = next(i for i, call in enumerate(runs.calls) if call[:3] == ["pvesh", "get", "/nodes/davion-gem/qemu/100/status/current"])
+    unlock = next(i for i, call in enumerate(runs.calls) if call[0] == "/usr/bin/perl" and "->remove_lock" in call[3])
+    assert acquire < current < verbs.index("lvcreate") < unlock < verbs.index("mount")
     create = next(call for call in runs.calls if call[0] == "lvcreate")
     assert create[-1] == "pve/vm-100-disk-0" and "st-backup-100" in create and "--snapshot" in create
     assert ["losetup", "--find", "--show", "--read-only", "--partscan", "/dev/pve/st-backup-100"] in runs.calls
@@ -553,14 +559,17 @@ def test_a_stopped_vm_path_that_leaves_the_guest_filesystem_is_refused_and_relea
     assert [call[0] for call in runs.calls][-3:] == ["umount", "losetup", "lvremove"]
 
 
-def _running_snapshot(failure=None):
+def _running_snapshot(failure=None, *, current="running", cached="running"):
     answers = _stopped()
     original = answers["pvesh"]
-    state: dict[str, Any] = {"freeze": "thawed", "lock": None, "attempts": []}
+    state: dict[str, Any] = {"freeze": "thawed", "lock": None, "attempts": [], "power": current}
 
     def pvesh(argv):
         if argv[2] == "/cluster/resources":
-            return json.dumps([{"vmid": 100, "type": "qemu", "node": "davion-gem", "status": "running"}])
+            return json.dumps([{"vmid": 100, "type": "qemu", "node": "davion-gem", "status": cached}])
+        if argv[2] == "/nodes/davion-gem/qemu/100/status/current":
+            assert state["lock"] == "ours"
+            return json.dumps({"status": state["power"]})
         if failure == "locked":
             return json.dumps({"lock": "backup", "scsi0": "local-lvm:vm-100-disk-0"})
         return original(argv)
@@ -581,7 +590,7 @@ def _running_snapshot(failure=None):
                 state["lock"] = "migration"
             if state["lock"] != "ours":
                 return (1, "", "found lock migration trying to remove backup lock")
-            assert state["freeze"] == "thawed"
+            assert not state.get("thaw_attempted") or state["freeze"] == "thawed"
             state["lock"] = None
             if failure == "signal-unlock":
                 signal.raise_signal(signal.SIGTERM)
@@ -621,7 +630,7 @@ def _running_snapshot(failure=None):
         raise AssertionError(argv)
 
     def create(argv):
-        assert state["freeze"] == "frozen"
+        assert state["freeze"] == ("frozen" if state["power"] == "running" else "thawed")
         if failure == "create":
             raise subprocess.CalledProcessError(1, argv)
         if failure == "signal":
@@ -630,6 +639,83 @@ def _running_snapshot(failure=None):
 
     answers.update({"pvesh": pvesh, "qm": qm, "lvcreate": create, "/usr/bin/perl": lock})
     return answers, state
+
+
+def test_a_native_start_winning_before_backup_acquisition_uses_fresh_running_state(dispatcher, tmp_path, monkeypatch):
+    monkeypatch.setattr(dispatcher, "MOUNT_PARENT", str(tmp_path))
+    digest = _install(dispatcher, {"vm": VM})["vm"]
+    answers, state = _running_snapshot(current="stopped", cached="stopped")
+    operation = answers["/usr/bin/perl"]
+
+    def lock(argv):
+        if "->set_lock" in argv[3]:
+            # Native start wins its config lock after our stopped observation, before set_lock.
+            assert state["lock"] is None and state["power"] == "stopped"
+            state["power"] = "running"
+            state["attempts"].append("started-before-acquire")
+        return operation(argv)
+
+    answers["/usr/bin/perl"] = lock
+    runs = Runs(answers)
+    assert dispatcher.main(f"capture vm {digest}", run=runs, out=io.BytesIO()) == 0
+    acquire = next(i for i, call in enumerate(runs.calls) if call[0] == "/usr/bin/perl" and "->set_lock" in call[3])
+    current = next(i for i, call in enumerate(runs.calls) if call[:3] == ["pvesh", "get", "/nodes/davion-gem/qemu/100/status/current"])
+    freeze = next(i for i, call in enumerate(runs.calls) if call[-1] == "fsfreeze-freeze")
+    create = next(i for i, call in enumerate(runs.calls) if call[0] == "lvcreate")
+    assert acquire < current < freeze < create
+    assert state["freeze"] == "thawed" and state["lock"] is None and state["power"] == "running"
+    assert state["attempts"] == ["started-before-acquire"]
+
+
+def test_a_native_start_after_backup_acquisition_is_blocked_until_the_stopped_snapshot_exists(dispatcher, tmp_path, monkeypatch):
+    monkeypatch.setattr(dispatcher, "MOUNT_PARENT", str(tmp_path))
+    digest = _install(dispatcher, {"vm": VM})["vm"]
+    answers, state = _running_snapshot(current="stopped", cached="stopped")
+    operation, current = answers["/usr/bin/perl"], answers["pvesh"]
+
+    def native_start():
+        if state["lock"]:
+            state["attempts"].append("blocked")
+        else:
+            state["attempts"].append("started")
+            state["power"] = "running"
+
+    def lock(argv):
+        result = operation(argv)
+        native_start()  # Native qm start checks the backup flag under its own config lock.
+        return result
+
+    def pvesh(argv):
+        if argv[2].endswith("/status/current"):
+            native_start()
+        return current(argv)
+
+    def create(argv):
+        assert state["lock"] == "ours" and state["power"] == "stopped"
+        native_start()
+        assert state["power"] == "stopped"
+        return ""
+
+    answers.update({"/usr/bin/perl": lock, "pvesh": pvesh, "lvcreate": create})
+    runs = Runs(answers)
+    assert dispatcher.main(f"capture vm {digest}", run=runs, out=io.BytesIO()) == 0
+    assert state["attempts"] == ["blocked", "blocked", "blocked", "started"]
+    assert state["lock"] is None and state["power"] == "running"
+    assert not any(call[0] == "qm" for call in runs.calls)
+    create_at = next(i for i, call in enumerate(runs.calls) if call[0] == "lvcreate")
+    unlock = next(i for i, call in enumerate(runs.calls) if call[0] == "/usr/bin/perl" and "->remove_lock" in call[3])
+    assert create_at < unlock < next(i for i, call in enumerate(runs.calls) if call[0] == "mount")
+
+
+@pytest.mark.parametrize("status", ["unknown", None])
+def test_unconfirmed_current_vm_state_releases_our_flag_without_freeze_thaw_or_snapshot(dispatcher, tmp_path, monkeypatch, status):
+    monkeypatch.setattr(dispatcher, "MOUNT_PARENT", str(tmp_path))
+    digest = _install(dispatcher, {"vm": VM})["vm"]
+    answers, state = _running_snapshot(current=status, cached="stopped")
+    runs = Runs(answers)
+    assert dispatcher.main(f"capture vm {digest}", run=runs, out=io.BytesIO()) == 2
+    assert state["lock"] is None and state["freeze"] == "thawed"
+    assert not any(call[0] in ("qm", "lvcreate", "mount", "tar") for call in runs.calls)
 
 
 def test_running_vm_freezes_only_for_thin_snapshot_then_streams_plain_tar_on_the_host(dispatcher, tmp_path, monkeypatch):
@@ -676,6 +762,7 @@ def test_an_already_frozen_guest_is_not_thawed_by_this_capture(dispatcher, tmp_p
     runs = Runs(answers)
     assert dispatcher.main(f"capture vm {digest}", run=runs, out=io.BytesIO()) == 2
     assert not any(call[-1] in ("fsfreeze-freeze", "fsfreeze-thaw") or call[0] in ("lvcreate", "mount", "tar") for call in runs.calls)
+    assert state["lock"] is None and state["freeze"] == "frozen"
 
 
 def test_host_capture_reenters_only_under_the_independent_guard(dispatcher, monkeypatch):
@@ -873,17 +960,18 @@ def test_expected_lock_value_prevents_clearing_a_foreign_operation_flag(dispatch
 
 
 @pytest.mark.parametrize("number", [signal.SIGTERM, signal.SIGHUP, signal.SIGINT])
-def test_first_stop_at_the_finally_boundary_is_already_masked_and_cannot_skip_thaw(dispatcher, tmp_path, monkeypatch, number):
+@pytest.mark.parametrize("power", ["running", "stopped"])
+def test_first_stop_at_the_finally_boundary_is_already_masked_and_cannot_skip_cleanup(dispatcher, tmp_path, monkeypatch, number, power):
     monkeypatch.setattr(dispatcher, "MOUNT_PARENT", str(tmp_path))
     digest = _install(dispatcher, {"vm": VM})["vm"]
-    answers, state = _running_snapshot()
+    answers, state = _running_snapshot(current=power)
     runs = Runs(answers)
-    lines, first = inspect.getsourcelines(dispatcher.frozen_snapshot)
+    lines, first = inspect.getsourcelines(dispatcher.qemu_snapshot)
     boundary = first + next(i for i, line in enumerate(lines) if line.strip() == "if owned:")
     observed = []
 
     def trace(frame, event, arg):
-        if frame.f_code is dispatcher.frozen_snapshot.__code__ and event == "line" and frame.f_lineno == boundary and not observed:
+        if frame.f_code is dispatcher.qemu_snapshot.__code__ and event == "line" and frame.f_lineno == boundary and not observed:
             observed.append(number in signal.pthread_sigmask(signal.SIG_BLOCK, []))
             # This is the first stop, before any statement in the finally body can run.
             signal.raise_signal(number)
@@ -899,3 +987,5 @@ def test_first_stop_at_the_finally_boundary_is_already_masked_and_cannot_skip_th
     assert observed == [True]
     assert state["freeze"] == "thawed" and state["lock"] is None
     assert not any(call[0] in ("mount", "tar") for call in runs.calls)
+    if power == "stopped":
+        assert not any(call[0] == "qm" for call in runs.calls)
