@@ -113,9 +113,11 @@ export class Runner {
     for (const job of this.jobs) {
       this.rowKinds.add(job.kind)
       if ((job.lease_host ?? job.home) !== machine) continue
-      store.ensure(job.kind, job.every_min === undefined ? nextRun(job, this.now()) : this.now())
+      const now = this.now()
+      store.ensure(job.kind, job.every_min === undefined ? nextRun(job, now) : now)
       const state = store.get(job.kind)
-      if (state && this.announced.get(job.kind) !== rowSignature(state)) this.queueRow(job, state)
+      if (state && this.announced.get(job.kind) !== rowSignature(state, now))
+        this.queueRow(job, state, now)
     }
   }
 
@@ -396,11 +398,11 @@ export class Runner {
     if (state) this.queueRow(job, state)
   }
 
-  private queueRow(job: JobDef, state: JobState): void {
-    const row = jobRow(job, state, this.now())
+  private queueRow(job: JobDef, state: JobState, now = this.now()): void {
+    const row = jobRow(job, state, now)
     this.unsent.set(row.id, row)
     this.rowKinds.add(job.kind)
-    this.announced.set(job.kind, rowSignature(state))
+    this.announced.set(job.kind, rowSignature(state, now))
   }
 
   private async flush(): Promise<void> {
@@ -417,8 +419,11 @@ export class Runner {
   }
 }
 
-/** What the job's Status row says, apart from the clock. */
-const rowSignature = (state: JobState) =>
+const liveLease = (state: JobState, now: number) =>
+  Boolean(state.leaseId && (state.leaseExpires ?? 0) > now)
+
+/** What the job's Status row says, including the clock crossing a retry lease's expiry. */
+const rowSignature = (state: JobState, now: number) =>
   [
     state.paused,
     state.lastRun,
@@ -427,6 +432,7 @@ const rowSignature = (state: JobState) =>
     state.lastMachine,
     state.nextRun,
     state.leaseExpires,
+    liveLease(state, now),
   ].join('|')
 
 /**
@@ -466,7 +472,7 @@ export function jobRow(job: JobDef, state: JobState, now = Date.now()): StatusRo
     state: (state.lastState as JobResult['state'] | null) ?? 'ok',
     meaning: ran
       ? cut(
-          state.lastState === 'failed' && state.leaseId && (state.leaseExpires ?? 0) > now
+          state.lastState === 'failed' && liveLease(state, now)
             ? `Retrying. Last run failed: ${state.lastMeaning || 'It failed.'}`
             : state.lastMeaning || 'Finished.',
         )

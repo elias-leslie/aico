@@ -139,6 +139,47 @@ it('publishes the active retry when it starts, before waiting for its result', a
   })
 })
 
+it('publishes the expired retry once when the remote worker dies without changing its lease row', async () => {
+  const store = new JobStore(':memory:')
+  store.ensure(job.kind, 0)
+  const first = store.claim(job.kind, { holder: 'b:1', machine: 'b' }, 0, 60_000)
+  if (!first) throw new Error('no first lease')
+  store.complete(first, { state: 'failed', meaning: '1 source failed: Dadbot.' }, 0, 1_000)
+  if (!store.claim(job.kind, { holder: 'b:2', machine: 'b' }, 1_000, 60_000))
+    throw new Error('no retry lease')
+  const lease = store.get(job.kind)
+  const rows: ReturnType<typeof jobRow>[] = []
+  const clock = { now: 1_000 }
+  let runs = 0
+  const runner = new Runner({
+    store,
+    jobs: [{ ...job, home: 'b', lease_host: 'a', workers: ['b'] }],
+    machine: 'a',
+    holder: 'a:1',
+    now: () => clock.now,
+    log: () => {},
+    act: async () => {
+      runs++
+      return { state: 'ok', meaning: 'Finished.' }
+    },
+    postRows: async (batch) => void rows.push(...batch),
+  })
+  await runner.tick()
+  expect(rows.at(-1)?.meaning).toBe('Retrying. Last run failed: 1 source failed: Dadbot.')
+  clock.now = 60_999
+  await runner.tick()
+  expect(rows).toHaveLength(1)
+  clock.now = 61_000
+  await runner.tick()
+  expect(rows.at(-1)).toMatchObject({ state: 'failed', meaning: '1 source failed: Dadbot.' })
+  expect(rows).toHaveLength(2)
+  clock.now = 61_001
+  await runner.tick()
+  expect(rows).toHaveLength(2)
+  expect(store.get(job.kind)).toEqual(lease)
+  expect(runs).toBe(0)
+})
+
 describe('a run survives a scheduler restart', () => {
   it('adopts the live run: one start, one recorded result, the old holder fenced out', async () => {
     const dir = scratch()

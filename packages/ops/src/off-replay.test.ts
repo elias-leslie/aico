@@ -228,6 +228,36 @@ describe('the notices that fired because a machine was off', () => {
       expect(copy.observed).toBe('offline')
     })
 
+    it('keeps known power evidence when the refresh fails just before the host goes off', async () => {
+      const s = status()
+      s.beat()
+      const state = emptyState()
+      const copy = await failedCopy({ state: 'on', hostBootId: 'before' }, away, state, undefined, {
+        state: 'unknown',
+      })
+      expect(copy).toMatchObject({
+        observed: 'offline',
+        snapshot: GOOD.snapshot,
+        dataAt: GOOD.dataAt,
+      })
+      expect(copy.error).toBeUndefined()
+      state.copies[copyKey(GOOD.source, 'drive')] = copy
+      s.store.upsert([copyRow(state)])
+      expect(s.titles()).toEqual([])
+    })
+
+    it('an unknown refresh alone does not excuse a real capture failure', async () => {
+      const before: GuestPower = { state: 'on', uptime: old, hostBootId: 'same-boot' }
+      for (const [known, after] of [
+        [before, before],
+        [before, { state: 'unknown' }],
+        [{ state: 'unknown' }, away],
+      ] as [GuestPower, GuestPower][]) {
+        const copy = await failedCopy(known, after, undefined, undefined, { state: 'unknown' })
+        expect(copy.error).toContain('The Drive copy failed')
+      }
+    })
+
     it('real failures with the host up all along still fail', async () => {
       const stayedUp: GuestPower = { state: 'off', hostBootId: 'same-boot' }
       for (const [before, now, later] of [

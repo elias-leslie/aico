@@ -439,7 +439,9 @@ export async function backupJob(
         (job.machine.before.state !== 'unknown' && job.machine.before.hostBootId))
     ) {
       const fresh = await job.machine.read().catch((): GuestPower => ({ state: 'unknown' }))
-      job.machine.before = fresh
+      // A disappearing host can make this probe fail before the copy itself fails. Keep the last
+      // known observation so a later confirmed shutdown can still explain the interrupted copy.
+      if (fresh.state !== 'unknown') job.machine.before = fresh
     }
     const tags = ['offsite', `job:${job.id}`, `source:${job.id}`]
     const base = [
