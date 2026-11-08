@@ -8,7 +8,7 @@
 // says so. State is context-replica.json beside context.db: its presence marks the machine as a copy.
 
 import { createHash } from 'node:crypto'
-import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { readQuery, snapshotDatabase, transaction } from '@aico/store'
 import { type Database, openContext } from './db'
