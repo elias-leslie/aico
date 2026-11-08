@@ -9,7 +9,7 @@
 import { resolve } from 'node:path'
 import { blobPath } from '@aico/notes/blobs'
 import type { TetherClient } from '@aico/tether-client'
-import { ASK_LIMITS, ASK_ORIGINS, type AskOrigin } from '@aico/tether-client/client/asks'
+import { ASK_LIMITS, ASK_ORIGINS, type AskOrigin } from '@aico/tether-client/asks'
 import { pendingGrants } from './grants'
 import { objectBody, type Router } from './http'
 import { tetherCall } from './lifecycle'

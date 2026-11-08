@@ -14,7 +14,7 @@ import type { Hub } from '@aico/fleet/hub/hub'
 import type { EventBus } from '@aico/session-engine/events'
 import type { Db } from '@aico/session-engine/store'
 import { HttpError, type Router, readJsonObject, sendJson } from '@aico/shared/http'
-import { ASK_LIMITS, ASK_ORIGINS, type AskOrigin } from '@aico/tether-client/client/asks'
+import { ASK_LIMITS, ASK_ORIGINS, type AskOrigin } from '@aico/tether-client/asks'
 import type { ShowConfig } from './config'
 import { realPaths, ShareStore } from './shares'
 
