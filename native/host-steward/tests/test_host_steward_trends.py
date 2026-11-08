@@ -647,7 +647,16 @@ def run_assets(secs, now=NOW, state=None, site=None):
     return {s.code: s for s in registry.run(ctx)}, ctx
 
 
-def test_a_parked_machine_running_unexplained_warns_then_fails_when_it_holds_data():
+@pytest.fixture
+def parked_data_asset(monkeypatch):
+    data = assets.load_file()
+    for asset in data["assets"]:
+        if asset["id"] == "blackbox-vault":
+            asset["presence"] = "parked"
+    monkeypatch.setattr(assets, "load_file", lambda: data)
+
+
+def test_a_parked_machine_running_unexplained_warns_then_fails_when_it_holds_data(parked_data_asset):
     secs = sections(
         [140], starts=UPID.format(hex=f"{int(NOW) - 600:08X}", vmid=140, user="root@pam") + " OK"
     )
@@ -661,7 +670,7 @@ def test_a_parked_machine_running_unexplained_warns_then_fails_when_it_holds_dat
     assert later["assets.parked_running"].state == "failed"
 
 
-def test_a_token_start_or_a_lab_use_declaration_explains_a_parked_machine(tmp_path):
+def test_a_token_start_or_a_lab_use_declaration_explains_a_parked_machine(tmp_path, parked_data_asset):
     secs = sections(
         [140],
         starts=UPID.format(hex=f"{int(NOW) - 600:08X}", vmid=140, user="summitflow@pve!automation")

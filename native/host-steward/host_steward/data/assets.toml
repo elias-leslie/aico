@@ -71,7 +71,7 @@ names = ["blackbox-vault", "linux-blackbox-vault"]
 backup_targets = ["blackbox-vault-archive", "pve-host-files", "blackbox-archive"]
 data = true
 at_rest = false
-presence = "parked"
+presence = "always_on"
 note = "household photo archive (client-encrypted media, plaintext metadata and device key)"
 
 [[assets]]
