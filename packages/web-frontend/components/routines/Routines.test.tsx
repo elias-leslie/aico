@@ -305,9 +305,9 @@ describe('Routines', () => {
       .getAllByRole('button', { expanded: true })
       .filter((b) => b.className.includes('groupHead'))
     expect(heads.map((b) => b.textContent)).toEqual([
-      'davion-gem1 routine1 not known',
+      'Proxmox host1 routine1 not known',
       'davion-sidarli2 routines1 failed',
-      'aico1 routine',
+      'Standby1 routine',
     ])
     const rows = screen.getAllByRole('listitem')
     // Failed first inside its machine.
@@ -393,6 +393,28 @@ describe('Routines', () => {
     const row = await screen.findByTestId('routine-late')
     fireEvent.click(row.querySelector('button') as HTMLElement)
     expect(row.textContent).toContain('(23 min random delay)')
+  })
+
+  it('says when a clock change skips a timer’s day', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(Date.parse('2027-03-13T17:00:00Z'))
+    list = [
+      routine({
+        kind: 'skipped',
+        what: 'Skipped timer',
+        schedule: 'daily at 02:30',
+        tz: 'America/New_York',
+        source: 'systemd',
+        nextRun: Date.parse('2027-03-15T06:30:00Z'),
+      }),
+    ]
+    view()
+    const row = await screen.findByTestId('routine-skipped')
+    fireEvent.click(row.querySelector('button') as HTMLElement)
+    expect(row.textContent).toContain(
+      '(no run Mar 14: the clock change skips 02:30)',
+    )
+    vi.useRealTimers()
   })
 
   it('says so when the last run printed nothing', async () => {

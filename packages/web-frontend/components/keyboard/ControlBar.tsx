@@ -76,6 +76,7 @@ export function ControlBar({
       aria-label={label}
       aria-pressed={extra.pressed}
       title={extra.title ?? label}
+      data-no-touch-tip
       className="lantern-key flex-1"
       style={{ height: remSize(KEY_ROW_METRICS.buttonSize) }}
     >

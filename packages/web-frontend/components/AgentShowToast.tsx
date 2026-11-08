@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { isHtmlPath, rawFileUrl, sharedPageUrl } from '@/lib/api/pane-files'
 import { openFiles } from '@/lib/files-opener'
 import { type AgentShow, useAgentShows } from '@/lib/hooks/use-agent-shows'
+import { sessionHostLabel } from '@/lib/machines'
 
 /** A path's last part; a shared folder's path ends in `/`. */
 export function baseName(path: string): string {
@@ -77,7 +78,7 @@ export function AgentShowToast({
         <div className="min-w-0 flex-1">
           <p className="m-0 text-xs" style={{ color: 'var(--mist)' }}>
             {sessionName ? `Shared by ${sessionName}` : 'Shared by an agent'}
-            {show.host ? ` on ${show.host}` : ''}
+            {show.host ? ` on ${sessionHostLabel(show.host)}` : ''}
           </p>
           <p
             className="m-0 mt-[3px] break-words"
@@ -108,7 +109,7 @@ export function AgentShowToast({
       <div className="mt-3 flex">
         {show.kind === 'files' && show.host ? (
           <p className="m-0 flex-1 text-xs" style={{ color: 'var(--mist)' }}>
-            These files are on {show.host}. Open them there.
+            These files are on {sessionHostLabel(show.host)}. Open them there.
           </p>
         ) : show.kind === 'files' ? (
           <button

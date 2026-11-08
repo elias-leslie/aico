@@ -296,7 +296,7 @@ function HostCard({ host, sync }: { host: HostChoice; sync?: PeerSync }) {
     if (sessions > 0) {
       setConfirm({
         kind: 'off',
-        message: `${plural(sessions, 'session')} running on ${host.name} will end.`,
+        message: `${plural(sessions, 'session')} running on ${sessionHostLabel(host.name)} will end.`,
         confirmText: 'Power off',
       })
     } else {
@@ -403,11 +403,11 @@ function HostCard({ host, sync }: { host: HostChoice; sync?: PeerSync }) {
         title={
           confirm?.kind === 'trust'
             ? 'Trust this machine?'
-            : `Power off ${host.name}?`
+            : `Power off ${sessionHostLabel(host.name)}?`
         }
         message={
           confirm?.kind === 'trust'
-            ? `Trust the machine now answering as ${host.name}?`
+            ? `Trust the machine now answering as ${sessionHostLabel(host.name)}?`
             : (confirm?.message ?? '')
         }
         confirmText={

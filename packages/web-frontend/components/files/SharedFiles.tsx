@@ -5,6 +5,7 @@ import { Code, File, Folder, Globe, Link, X } from 'lucide-react'
 import { baseName } from '@/components/AgentShowToast'
 import { isHtmlPath, sharedPageUrl } from '@/lib/api/pane-files'
 import { removeShow, useShareList } from '@/lib/hooks/use-agent-shows'
+import { sessionHostLabel } from '@/lib/machines'
 
 /** When it was shared: the time today, else the day. */
 function sharedWhen(createdAt: string, now = new Date()): string {
@@ -107,7 +108,7 @@ export function SharedFiles({
                 </span>
                 {' · '}
                 {from ?? 'an agent'} · {sharedWhen(share.createdAt)}
-                {share.host ? ` · on ${share.host}` : ''}
+                {share.host ? ` · on ${sessionHostLabel(share.host)}` : ''}
               </p>
               {share.host ? null : (
                 <button

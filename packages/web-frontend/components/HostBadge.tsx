@@ -1,5 +1,7 @@
 'use client'
 
+import { sessionHostLabel } from '@/lib/machines'
+
 /** The remote host a session runs on, beside its title: a neutral chip that
  * stays readable on a phone. It shows up to 12 characters and gives up width
  * only once the title is down to its minimum (the title side shrinks 100 times
@@ -16,9 +18,10 @@ export function HostBadge({
 }) {
   if (!host) return null
   const away = !!state && state !== 'connected'
+  const name = sessionHostLabel(host)
   const label = away
-    ? `Runs on ${host} (${state.replace('_', ' ')})`
-    : `Runs on ${host}`
+    ? `Runs on ${name} (${state.replace('_', ' ')})`
+    : `Runs on ${name}`
   return (
     <span
       data-testid="host-badge"
@@ -34,7 +37,7 @@ export function HostBadge({
         opacity: away ? 0.6 : 1,
       }}
     >
-      {host}
+      {name}
     </span>
   )
 }

@@ -302,7 +302,7 @@ function Group({ group }: { group: RoutineGroup }) {
         onClick={() => setOpen((now) => !now)}
       >
         <Chevron className="h-3.5 w-3.5" strokeWidth={1.7} aria-hidden="true" />
-        <span className={styles.host}>{group.host}</span>
+        <span className={styles.host}>{machineLabel(group.host)}</span>
         <span className={styles.count}>
           {plural(group.routines.length, 'routine')}
         </span>
@@ -314,7 +314,10 @@ function Group({ group }: { group: RoutineGroup }) {
         )}
       </button>
       {open && (
-        <ul className={styles.list} aria-label={`Routines on ${group.host}`}>
+        <ul
+          className={styles.list}
+          aria-label={`Routines on ${machineLabel(group.host)}`}
+        >
           {group.routines.map((routine) => (
             <Row key={routine.kind} routine={routine} />
           ))}

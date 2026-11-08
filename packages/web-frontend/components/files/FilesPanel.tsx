@@ -11,6 +11,7 @@ import {
 import type { FilesRequest } from '@/lib/files-opener'
 import { useNewShares } from '@/lib/hooks/use-agent-shows'
 import { useFilePlaces, useProjectRoot } from '@/lib/hooks/use-pane-files'
+import { sessionHostLabel } from '@/lib/machines'
 import { FileBrowser, type FileChoice } from './FileBrowser'
 import {
   defaultSort,
@@ -216,7 +217,7 @@ export function FilesPanel({
               />
             </div>
           ) : remoteHost ? (
-            <p className="files-note">On {remoteHost}</p>
+            <p className="files-note">On {sessionHostLabel(remoteHost)}</p>
           ) : null}
           {project && (
             <FileBrowser
@@ -244,8 +245,8 @@ export function FilesPanel({
           />
           {remoteHost && (
             <p className="files-note">
-              These are this computer’s files. {remoteHost}’s files are under
-              This project.
+              These are this computer’s files. {sessionHostLabel(remoteHost)}’s
+              files are under This project.
             </p>
           )}
           {view.kind === 'shared' ? (

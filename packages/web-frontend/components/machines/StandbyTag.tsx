@@ -6,11 +6,15 @@ import { STANDBY_TIP, type Standby } from '@/lib/machines'
  * copy it needs is behind; the tooltip says what it does and what is behind. */
 export function StandbyTag({
   standby,
+  name,
   className,
 }: {
   standby: Standby
+  /** What the row calls this machine: the tag says Standby itself when the row doesn't. */
+  name: string
   className: string
 }) {
+  const state = standby.ready ? 'Ready' : 'Behind'
   const tip = standby.ready
     ? `${STANDBY_TIP}\nReady to take over.`
     : `${STANDBY_TIP}\nNot fully in sync:\n${standby.behind.map((line) => `• ${line}`).join('\n')}`
@@ -30,7 +34,7 @@ export function StandbyTag({
           backgroundColor: standby.ready ? 'var(--jade)' : 'var(--beacon)',
         }}
       />
-      {standby.ready ? 'Ready' : 'Behind'}
+      {name === 'Standby' ? state : `Standby · ${state}`}
     </span>
   )
 }

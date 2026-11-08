@@ -119,7 +119,11 @@ function Row({
           </span>
         )}
         {machine.standby && (
-          <StandbyTag standby={machine.standby} className={styles.tag} />
+          <StandbyTag
+            standby={machine.standby}
+            name={machine.name}
+            className={styles.tag}
+          />
         )}
       </div>
       {machine.purpose && <p className={styles.line}>{machine.purpose}</p>}
