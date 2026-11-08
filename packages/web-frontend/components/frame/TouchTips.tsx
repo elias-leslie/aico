@@ -7,6 +7,8 @@ import styles from './TouchTips.module.css'
 const HOLD_MS = 450
 /** A finger that moves this far is scrolling, not holding. */
 const MOVE_PX = 10
+/** How long after a hold's release its click can still arrive. */
+const CLICK_MS = 400
 const ACTS_ON_TAP =
   'a,button,input,select,textarea,label,summary,[role="button"],[role="link"],[role="tab"],[role="menuitem"],[tabindex]'
 
@@ -49,6 +51,8 @@ export function TouchTips() {
       held = false
       if (event.pointerType !== 'touch' || !(event.target instanceof Element))
         return
+      // The session's keys are pressed, slowly or not: a hold there is still the key.
+      if (event.target.closest('[data-no-touch-tip]')) return
       const from = event.target.closest('[title]')
       const text = from?.getAttribute('title')?.trim()
       if (!from || !text) return
@@ -69,6 +73,11 @@ export function TouchTips() {
     const onUp = (event: PointerEvent) => {
       const tapped = down
       cancel()
+      // Only the click this finger's release makes; a keyboard's or a screen reader's later one acts.
+      if (held)
+        window.setTimeout(() => {
+          held = false
+        }, CLICK_MS)
       if (tapped && !(event.target as Element).closest?.(ACTS_ON_TAP))
         show(tapped)
     }
@@ -79,12 +88,21 @@ export function TouchTips() {
       event.preventDefault()
       event.stopPropagation()
     }
+    // On plain text the menu stays: that's how Android selects it.
     const onMenu = (event: Event) => {
-      if (held) event.preventDefault()
+      if (held && (event.target as Element).closest?.(ACTS_ON_TAP))
+        event.preventDefault()
     }
-    const onScroll = () => {
+    // Only a scroll that moves the tip's element: a chat following its output elsewhere doesn't.
+    const onScroll = (event: Event) => {
+      const at = shown ?? down?.from
+      if (!at || !(event.target as Node).contains?.(at)) return
       cancel()
       close()
+    }
+    // A touch in a rendered page's frame never reaches this window, but its focus leaves.
+    const onBlur = (event: Event) => {
+      if (!(event.target instanceof Node)) close()
     }
     const listen: [string, EventListener][] = [
       ['pointerdown', onDown as EventListener],
@@ -94,6 +112,7 @@ export function TouchTips() {
       ['click', onClick as EventListener],
       ['contextmenu', onMenu],
       ['scroll', onScroll],
+      ['blur', onBlur],
     ]
     for (const [type, handler] of listen)
       window.addEventListener(type, handler, { capture: true, passive: false })

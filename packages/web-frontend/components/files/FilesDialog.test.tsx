@@ -527,6 +527,64 @@ describe('FilesDialog', () => {
 
     fireEvent.change(find, { target: { value: '' } })
     expect(await screen.findByText('other.ts')).toBeInTheDocument()
+
+    // Closed during a find, it keeps its row until the find changes.
+    fireEvent.change(find, { target: { value: 'keep' } })
+    await waitFor(() => expect(screen.queryByText('other.ts')).toBeNull())
+    fireEvent.click(screen.getByText('src'))
+    await waitFor(() => expect(screen.queryByText('keep.ts')).toBeNull())
+    expect(screen.getByText('src')).toBeInTheDocument()
+    fireEvent.change(find, { target: { value: 'keep-' } })
+    await waitFor(() => expect(screen.queryByText('src')).toBeNull())
+  })
+
+  it('shows all of a folder found by name, and narrows a folder open inside another', async () => {
+    const file = (name: string, path: string) => ({
+      name,
+      path,
+      is_directory: false,
+      size: 5,
+      extension: '.ts',
+    })
+    const folder = (name: string, path: string) => ({
+      name,
+      path,
+      is_directory: true,
+      children_count: 1,
+    })
+    const tree: Record<string, object[]> = {
+      '': [folder('box', 'box'), folder('found', 'found')],
+      box: [folder('deep', 'box/deep'), file('x.ts', 'box/x.ts')],
+      'box/deep': [
+        file('found.ts', 'box/deep/found.ts'),
+        file('y.ts', 'box/deep/y.ts'),
+      ],
+      found: [file('inside.ts', 'found/inside.ts')],
+    }
+    renderDialog(null, null, (url) => {
+      const { pathname, searchParams } = new URL(url, 'http://aico.test')
+      if (pathname !== '/api/files/tree') return serve(url)
+      const match = searchParams.get('match') ?? ''
+      const path = searchParams.get('path') ?? ''
+      const entries = (tree[path] ?? []).filter((entry) =>
+        (entry as { name: string }).name.includes(match),
+      )
+      return json({ entries, path, total: entries.length })
+    })
+    fireEvent.click(await screen.findByText('box'))
+    fireEvent.click(await screen.findByText('deep'))
+    await screen.findByText('y.ts')
+    fireEvent.click(screen.getByText('found'))
+    await screen.findByText('inside.ts')
+    fireEvent.change(
+      screen.getByRole('searchbox', { name: 'Find in this folder' }),
+      { target: { value: 'found' } },
+    )
+    await waitFor(() => expect(screen.queryByText('y.ts')).toBeNull())
+    expect(screen.queryByText('x.ts')).toBeNull()
+    expect(screen.getByText('deep')).toBeInTheDocument()
+    expect(screen.getByText('found.ts')).toBeInTheDocument()
+    expect(screen.getByText('inside.ts')).toBeInTheDocument()
   })
 
   it('works when storage is out of reach', async () => {

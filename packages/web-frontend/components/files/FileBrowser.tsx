@@ -96,8 +96,12 @@ interface TreeNodeProps {
   onToggle: (entry: PaneFileTreeEntry) => void
 }
 
-/** The folders open in the list, by path. Kept above the rows so a find can't close them. */
-type OpenFolders = ReadonlyMap<string, PaneFileTreeEntry>
+/** The folders open in the list, by path. Kept above the rows so a find can't close them; one
+ * closed during a find keeps its row (open false) until the find changes. */
+type OpenFolders = ReadonlyMap<
+  string,
+  { entry: PaneFileTreeEntry; open: boolean }
+>
 
 const findText = (view?: ListingView) => view?.match?.trim().toLowerCase() ?? ''
 
@@ -110,11 +114,15 @@ function withOpenFolders(
 ): PaneFileTreeEntry[] | undefined {
   if (!findText(view)) return entries
   const shown = new Set(entries?.map((entry) => entry.path))
-  const kept = [...open.values()].filter(
-    (entry) =>
-      !shown.has(entry.path) &&
-      entry.path.slice(0, Math.max(0, entry.path.lastIndexOf('/'))) === parent,
-  )
+  const kept = [...open.values()]
+    .map((folder) => folder.entry)
+    .filter(
+      (entry) =>
+        !shown.has(entry.path) &&
+        (view?.showHidden !== false || !entry.name.startsWith('.')) &&
+        entry.path.slice(0, Math.max(0, entry.path.lastIndexOf('/'))) ===
+          parent,
+    )
   return kept.length ? [...kept, ...(entries ?? [])] : entries
 }
 
@@ -128,7 +136,7 @@ function TreeNode({
   open,
   onToggle,
 }: TreeNodeProps) {
-  const expanded = open.has(entry.path)
+  const expanded = open.get(entry.path)?.open ?? false
   const isSelected = selectedPath === entry.path
   // Finding narrows an open folder too, unless the folder is itself what was found: then all of it.
   const inside =
@@ -328,13 +336,25 @@ export function FileBrowser({
   const tree = useFileTree(source, '', true, view)
   const [selected, setSelected] = useState<FileChoice | null>(initialSelected)
   const [open, setOpen] = useState<OpenFolders>(new Map())
-  const toggle = useCallback((entry: PaneFileTreeEntry) => {
-    setOpen((current) => {
-      const next = new Map(current)
-      if (!next.delete(entry.path)) next.set(entry.path, entry)
-      return next
-    })
-  }, [])
+  const finding = findText(view)
+  const toggle = useCallback(
+    (entry: PaneFileTreeEntry) => {
+      setOpen((current) => {
+        const next = new Map(current)
+        if (!current.get(entry.path)?.open)
+          next.set(entry.path, { entry, open: true })
+        else if (finding) next.set(entry.path, { entry, open: false })
+        else next.delete(entry.path)
+        return next
+      })
+    },
+    [finding],
+  )
+  const [foundFor, setFoundFor] = useState(finding)
+  if (foundFor !== finding) {
+    setFoundFor(finding)
+    setOpen(new Map([...open].filter(([, folder]) => folder.open)))
+  }
   const entries = withOpenFolders(tree.entries, '', open, view)
 
   return (

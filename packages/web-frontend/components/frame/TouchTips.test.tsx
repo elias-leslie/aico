@@ -75,6 +75,87 @@ describe('TouchTips', () => {
     pointer(name, 'pointerup')
     act(() => name.click())
     expect(pressed).toHaveBeenCalledTimes(1)
+
+    // A hold whose release made no click doesn't eat a keyboard's later one.
+    pointer(name, 'pointerdown')
+    act(() => vi.advanceTimersByTime(500))
+    pointer(name, 'pointerup')
+    act(() => vi.advanceTimersByTime(500))
+    act(() => name.click())
+    expect(pressed).toHaveBeenCalledTimes(2)
+  })
+
+  it('leaves the session’s keys alone, and plain text its selection menu', () => {
+    const pressed = vi.fn()
+    render(
+      <>
+        <TouchTips />
+        <button
+          type="button"
+          title="Enter"
+          data-no-touch-tip
+          onClick={pressed}
+          data-testid="key"
+        />
+        <span title="Whole name" data-testid="text">
+          Whole…
+        </span>
+        <button type="button" title="Run" data-testid="control" />
+      </>,
+    )
+    const key = screen.getByTestId('key')
+    pointer(key, 'pointerdown')
+    act(() => vi.advanceTimersByTime(500))
+    pointer(key, 'pointerup')
+    expect(tip()).toBeNull()
+    act(() => key.click())
+    expect(pressed).toHaveBeenCalledTimes(1)
+
+    const menuOn = (target: Element) => {
+      const event = new Event('contextmenu', {
+        bubbles: true,
+        cancelable: true,
+      })
+      target.dispatchEvent(event)
+      return event.defaultPrevented
+    }
+    const text = screen.getByTestId('text')
+    pointer(text, 'pointerdown')
+    act(() => vi.advanceTimersByTime(500))
+    expect(menuOn(text)).toBe(false)
+    const control = screen.getByTestId('control')
+    pointer(control, 'pointerdown')
+    act(() => vi.advanceTimersByTime(500))
+    expect(menuOn(control)).toBe(true)
+  })
+
+  it('closes when the page behind it scrolls or focus leaves, not for a scroll elsewhere', () => {
+    render(
+      <>
+        <TouchTips />
+        <div data-testid="around">
+          <span title="Tip" data-testid="badge">
+            dot
+          </span>
+        </div>
+        <div data-testid="elsewhere" />
+      </>,
+    )
+    const badge = screen.getByTestId('badge')
+    const scroll = (target: Element) =>
+      act(() => {
+        target.dispatchEvent(new Event('scroll'))
+      })
+    tap(badge)
+    scroll(screen.getByTestId('elsewhere'))
+    expect(tip()).not.toBeNull()
+    scroll(screen.getByTestId('around'))
+    expect(tip()).toBeNull()
+    tap(badge)
+    act(() => {
+      window.dispatchEvent(new Event('blur'))
+    })
+    expect(tip()).toBeNull()
   })
 
   it('leaves a scroll, a mouse and a title-less touch alone', () => {
