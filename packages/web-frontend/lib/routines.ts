@@ -113,12 +113,20 @@ const DAY_MIN = 24 * 60
 
 /** Minutes a systemd timer's next run falls after its set time: its random delay. */
 export function timerDelay(routine: Routine): number {
-  const set = routine.schedule.match(/(\d{1,2}):(\d\d)/)
-  if (routine.source !== 'systemd' || routine.nextRun === null || !set) return 0
+  const times = [...routine.schedule.matchAll(/(\d{1,2}):(\d\d)/g)]
+  const set = times[0]
+  if (
+    routine.source !== 'systemd' ||
+    routine.nextRun === null ||
+    !routine.tz ||
+    !set ||
+    times.length > 1
+  )
+    return 0
   let clock: Intl.DateTimeFormatPart[]
   try {
     clock = new Intl.DateTimeFormat('en-US', {
-      timeZone: routine.tz ?? undefined,
+      timeZone: routine.tz,
       hourCycle: 'h23',
       hour: 'numeric',
       minute: 'numeric',

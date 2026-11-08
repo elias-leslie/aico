@@ -4,12 +4,7 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { clsx } from 'clsx'
 import { Search } from 'lucide-react'
 import { type ReactNode, useMemo, useState } from 'react'
-import {
-  pickerGlance,
-  pickerSuffix,
-  pickerTip,
-  quotaGlances,
-} from '@/lib/frame/quota'
+import { pickerGlance, pickerSuffix, quotaGlances } from '@/lib/frame/quota'
 import { type AgentTool, useAgentTools } from '@/lib/hooks/use-agent-tools'
 import {
   HOST_STATE_LABELS,
@@ -87,7 +82,7 @@ function AgentChoices({
         aria-pressed={t.slug === picked}
         onClick={() => onPick(t.slug)}
         className="lantern-tool"
-        title={glance && pickerTip(glance)}
+        title={glance?.answer}
       >
         <AgentIcon slug={t.slug} color={getAgentColor(t.slug, t.color)} />
         <span className="flex min-w-0 flex-col leading-tight">

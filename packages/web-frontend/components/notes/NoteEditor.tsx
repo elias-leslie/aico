@@ -184,16 +184,23 @@ const madeFromDraft = new Map<string, string>()
 export const noteScreenKey = (id: string | null) =>
   id === null ? `new-${draftSerial}` : (madeFromDraft.get(id) ?? id)
 
-/** What deleting takes with it, naming only what this note has. */
+const counted = (n: number, word: string) =>
+  n === 1 ? `its ${word}` : `its ${n} ${word}s`
+
+/** What deleting takes with it and what stays, naming only what this note has. */
 export function deleteWarning(note: NoteDetail): string {
-  const items = note.items.length
-  const gone = items
-    ? `, with its ${items === 1 ? 'item' : `${items} items`},`
-    : ''
-  const kept = note.attachments.some((file) => file.captureId)
-    ? ' Its photos and files stay in Captures.'
-    : ''
-  return `${note.title || 'This note'} will be removed${gone} and can’t be brought back.${kept}`
+  const own = note.attachments.filter((file) => !file.captureId).length
+  const gone = [
+    note.items.length ? counted(note.items.length, 'item') : '',
+    own ? counted(own, 'file') : '',
+  ].filter(Boolean)
+  const kept = note.attachments.length > own
+  return [
+    `${note.title || 'This note'} will be removed`,
+    gone.length ? `, with ${gone.join(' and ')},` : '',
+    ' and can’t be brought back.',
+    kept ? ' Photos and files from Captures stay there.' : '',
+  ].join('')
 }
 
 function Editor({

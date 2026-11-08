@@ -189,16 +189,19 @@ export function pickerGlance(
   )
 }
 
-/** The agent picker's few words: "73% left", "on credits", "used up"; nothing when not known. */
+/** The agent picker's few words: "73% left", "on credits", "used up"; nothing when not known.
+ * A subscription the tool doesn't share a name with is named: "OpenCode Go used up". */
 export function pickerSuffix(glance: QuotaGlance): string | null {
-  if (glance.state === 'credits') return 'on credits'
-  if (glance.state === 'used_up') return 'used up'
-  return glance.partly || glance.left === null ? null : `${glance.left}% left`
+  const words =
+    glance.state === 'credits'
+      ? 'on credits'
+      : glance.state === 'used_up'
+        ? 'used up'
+        : glance.partly || glance.left === null
+          ? null
+          : `${glance.left}% left`
+  return words && glance.tools.length ? `${glance.name} ${words}` : words
 }
-
-/** The picker's tooltip; it names a subscription the tool doesn't share a name with. */
-export const pickerTip = (glance: QuotaGlance) =>
-  glance.tools.length ? `${glance.name}: ${glance.answer}` : glance.answer
 
 /** Every subscription's glance, in the order the report lists them. */
 export function quotaGlances(

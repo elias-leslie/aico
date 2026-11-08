@@ -377,6 +377,24 @@ describe('Routines', () => {
     expect(here.textContent).not.toContain('here)')
   })
 
+  it('says when a timer’s random delay moves its next run', async () => {
+    const nextRun = Date.parse('2026-11-15T05:38:00Z')
+    list = [
+      routine({
+        kind: 'late',
+        what: 'Late timer',
+        schedule: 'Sundays at 05:15',
+        tz: 'UTC',
+        source: 'systemd',
+        nextRun,
+      }),
+    ]
+    view()
+    const row = await screen.findByTestId('routine-late')
+    fireEvent.click(row.querySelector('button') as HTMLElement)
+    expect(row.textContent).toContain('(23 min random delay)')
+  })
+
   it('says so when the last run printed nothing', async () => {
     logLines = ['']
     view()

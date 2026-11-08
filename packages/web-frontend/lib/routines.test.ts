@@ -89,5 +89,9 @@ describe('timerDelay', () => {
       timerDelay({ ...timer, nextRun, schedule: 'every 10 minutes' }),
     ).toBe(0)
     expect(timerDelay({ ...timer, nextRun, tz: 'Mars/Olympus' })).toBe(0)
+    expect(timerDelay({ ...timer, nextRun, tz: undefined })).toBe(0)
+    expect(
+      timerDelay({ ...timer, nextRun, schedule: 'daily at 05:15 and 12:15' }),
+    ).toBe(0)
   })
 })

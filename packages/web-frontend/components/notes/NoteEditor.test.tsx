@@ -41,7 +41,22 @@ describe('deleteWarning', () => {
         }),
       ),
     ).toBe(
-      'Shop will be removed, with its 2 items, and can’t be brought back. Its photos and files stay in Captures.',
+      'Shop will be removed, with its 2 items, and can’t be brought back. Photos and files from Captures stay there.',
+    )
+    expect(
+      deleteWarning(
+        note({
+          title: 'Trip',
+          items: [{}] as NoteDetail['items'],
+          attachments: [
+            { captureId: null },
+            { captureId: null },
+            { captureId: 'c1' },
+          ] as NoteDetail['attachments'],
+        }),
+      ),
+    ).toBe(
+      'Trip will be removed, with its item and its 2 files, and can’t be brought back. Photos and files from Captures stay there.',
     )
   })
 })
