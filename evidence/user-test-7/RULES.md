@@ -1,0 +1,12 @@
+# Rules for testers
+- Aico web app: headless browser only, never a desktop window. Open it with the helper: `const { open } = require('/srv/workspaces/projects/aico/evidence/user-test-7/lib.cjs'); const { browser, context, page } = await open(phone, path)`. It returns a Playwright page. `phone` true is 390x844 with touch (use `.tap()`), false is 1440x900. Run scripts with `node`.
+- Always use that helper. Some of what it shows is made-up test data; treat it as real and report what you see.
+- Test both widths. Use only what the screen shows you; don't read the app's source code or docs.
+- At desktop width, Files and Notes open in a separate browser window: `const [win] = await Promise.all([context.waitForEvent('page'), button.click()])` (`open` also returns `context`). Clicking again while it's open brings the same window to that tab, without a new page event. Keep that window's page and use it.
+- Files shows the real machine: go only to /srv/scratch/zz-test-files or your own folder. Don't open anything else you see listed there.
+- Stay on Aico. Don't open sessions from other projects, or logins' secrets. Answer only the made-up questions the helper shows.
+- Notes you create: title starts with "zz-test-". Delete them before you finish.
+- Do not power machines on or off, restore or delete backups, or run or pause routines. Run/Pause buttons do nothing in this helper; don't press them.
+- Write everything (scripts, screenshots, report.md) only in your output folder. Never use rm in a command or script: overwrite or use a fresh file name.
+- report.md: for each step, what you tried, what you saw (screenshot name), and every point where you were unsure what to do, what a word meant, or something looked wrong. Confusion counts as a finding. Quote the exact text on screen. Read your screenshots back: judge what a person would see, not only the DOM.
+- Also list what worked. Keep it factual; say "fine" when it was fine.
