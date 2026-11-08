@@ -1,8 +1,8 @@
 # Proxmox guest states for after the readiness work
 
 Inventory observed Nov 8 at 2:38 PM EST. The owner approved these states, with
-VM 100 changed to automatic on-demand power. VM 180 remains on until its
-backup-dependent work is complete.
+VM 100 changed to automatic on-demand power. VM 180 is now off; the replacement
+backup transport reads a hypervisor snapshot without starting it.
 
 | ID | VM | Current | Recommended after work |
 |---|---|---|---|
@@ -36,3 +36,9 @@ BlackBox update: CT 140 was started and its autostart enabled at the owner's
 request. Its application health check passed. Other power changes remain after
 the active backups and final checks. VM 100 still has autostart enabled until its
 automatic on-demand lifecycle is installed and validated.
+
+Fresh inventory before deployment: all listed containers and VM 210 are running with
+autostart enabled. All other QEMU guests except VM 100 are off with autostart
+disabled. Both templates are off. VM 100 is the only remaining state change;
+its helper and both controllers must be deployed and verified first. No guest
+currently has a PVE operation lock.

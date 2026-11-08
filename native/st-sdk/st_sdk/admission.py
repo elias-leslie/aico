@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import fcntl
 import json
+import math
 import os
 import re
 import shutil
@@ -43,6 +44,7 @@ _SPARE_LANE = "heavy2"
 # admission. Without a current host decision, apply Tether's agent
 # admission PSI thresholds (src/lifecycle/agent-admission.ts).
 HOST_ADMISSION = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")) / _POLICY["host_admission_file"]
+_THERMAL_STATUS = Path(_POLICY["thermal_guard_status"])
 PRESSURE_MAX_FULL_AVG60 = _POLICY["pressure_max_full_avg60"]
 PRESSURE_MAX_FULL_AVG10 = _POLICY["pressure_max_full_avg10"]
 _PSI_MEMORY = Path("/proc/pressure/memory")
@@ -151,9 +153,35 @@ def host_memory(now: float | None = None) -> dict[str, Any] | None:
             **{k: state[k] for k in ("mem_available_gib", "swap_used_pct", "psi_some_avg60") if isinstance(state.get(k), int | float)}}
 
 
+def _thermal_admission(now: float) -> Admission | None:
+    """The host guard's read-only local snapshot; absent installation leaves memory policy alone.
+
+    PVE exposes this directory read-only to its agent container. No Aico, SSH,
+    sensor probe or duplicate temperature policy is needed at job admission.
+    """
+    try:
+        if not _THERMAL_STATUS.parent.is_dir():
+            return None
+        state = json.loads(_THERMAL_STATUS.read_text())
+        observed, stale = state["observed_at"], state["policy"]["stale_s"]
+        if (any(not isinstance(value, int | float) or isinstance(value, bool)
+                or not math.isfinite(value) for value in (observed, stale))
+                or stale <= 0 or not 0 <= now - observed <= stale):
+            return Admission(False, "host thermal: waiting for a fresh temperature check")
+        if state.get("mode") == "normal" and state.get("admission_open") is True:
+            return Admission(True, "host thermal: normal")
+        return Admission(False, "host thermal: background work waits for cooling or a valid sensor")
+    except (OSError, ValueError, TypeError, KeyError, AttributeError, OverflowError):
+        return Admission(False, "host thermal: waiting for a valid local guard reading")
+
+
 def admission_state(now: float | None = None) -> Admission:
     """Whether new heavy work may start on this host now (advisory)."""
-    decided = _host_admission(time.time() if now is None else now)
+    now = time.time() if now is None else now
+    thermal = _thermal_admission(now)
+    if thermal is not None and not thermal.admit:
+        return thermal
+    decided = _host_admission(now)
     if decided is not None:
         return decided
     try:

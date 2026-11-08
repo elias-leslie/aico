@@ -19,7 +19,8 @@ interrupted Claude work; prove defects before fixing them. No publication.
   This does not prove recovery from a power cut.
 - Apply the owner-approved Proxmox VM and container states in
   `proxmox-guest-states-2026-11-08.md`. Make VM 100 start automatically for agent
-  browser work and shut down when unused. Keep VM 180 on while backups need it.
+  browser work and shut down when unused. VM 180 can remain off: its replacement
+  backup path reads a temporary hypervisor snapshot without starting the guest.
 - Restore Cinderwake's missing voice environments before its next use; remove the
   abandoned proof-stuck routine. Inspect documented remaining risks without expanding
   into unrelated redesigns, updates or private records.
@@ -111,9 +112,8 @@ agents when no coordinator is present; enforcement must not depend on agents.
   The earlier Claude coordinator requested the workstation run at 14:00:02 and
   its child requested the standby run at 14:12:39. Their host export sessions
   consumed 47m40s and 44m57s of CPU time. Local locks did not coordinate hosts.
-- VM 180 is currently off. Before stopping, its two generated export directories
-  occupied about 13.57 GB each; inspect and reclaim only proven unused generated
-  staging. The 10.12 GB application-backup folder includes 9.45 GB of weekly
+- VM 180 is currently off. Its two abandoned generated export directories have
+  been reclaimed as detailed below. The 10.12 GB application-backup folder includes 9.45 GB of weekly
   Portfolio archives; this is durable history and must be preserved.
 - Gem was about 87–89°C during overlapping transfers and returned to about
   45°C after the stop. A bounded synthetic API test confirms significant transfer
@@ -152,6 +152,15 @@ agents when no coordinator is present; enforcement must not depend on agents.
   A two-controller shutdown race was reproduced before rollout; the browser
   worker is fixing it at the existing guest pool lock using existing guest sudo
   authority. No new grants, keys or permissions are needed.
+- `ce3876bd`: the final phone receipt checkpoint passed fresh independent review
+  and 43 focused tests. `a9532b08`: thermal delivery receipts and cancellation of
+  obsolete withdrawals now commit atomically; the interruption/restart regression
+  reproduced the defect before the fix. Fresh independent review and all 15
+  thermal delivery tests pass. These checkpoints are not deployed yet.
+- The local ST heavy-work admission integration passes 45 SDK tests and 115
+  service-tool tests. It reads the guard's cached public heartbeat, closes new
+  heavy admission when installed evidence is hot or invalid, and retains memory
+  admission. Fresh review is underway. No new polling or SSH is introduced.
 - Verify fixed retention behavior without manually deleting/pruning backups;
   perform the controlled gem reboot once active work and handshakes permit it,
   verify recovery, and apply the approved guest states.

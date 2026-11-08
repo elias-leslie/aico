@@ -19,6 +19,12 @@ from st_sdk import admission as guard
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.fixture(autouse=True)
+def isolated_thermal_host(tmp_path, monkeypatch):
+    """Admission tests never depend on a real host's current temperature."""
+    monkeypatch.setattr(guard, '_THERMAL_STATUS', tmp_path / 'unconfigured-thermal' / 'status.json')
+
+
 @pytest.fixture
 def lane(tmp_path, monkeypatch):
     directory = tmp_path / 'lane'
@@ -169,6 +175,39 @@ def test_host_decision_and_psi_fallback_keep_existing_thresholds(monkeypatch, tm
                                     'state': 'green', 'reason': 'fixture'}))
     assert guard.admission_state(100).admit
     assert not guard.admission_state(102).admit
+
+
+def test_host_heat_blocks_heavy_admission_without_aico_and_keeps_memory_gate(monkeypatch, tmp_path):
+    status = guard._THERMAL_STATUS
+    status.parent.mkdir()
+    memory = tmp_path / 'memory-admission.json'
+    memory.write_text(json.dumps({'v': 1, 'expires_at': 200, 'admit': True,
+                                 'state': 'green', 'reason': 'memory is available'}))
+    monkeypatch.setattr(guard, 'HOST_ADMISSION', memory)
+    reading = {'mode': 'hot', 'admission_open': False, 'observed_at': 99,
+               'policy': {'stale_s': 45}}
+    status.write_text(json.dumps(reading))
+    assert not guard.admission_state(100).admit
+    assert 'thermal' in guard.admission_state(100).reason
+    status.write_text(json.dumps({**reading, 'mode': 'normal', 'admission_open': True}))
+    assert guard.admission_state(100).admit
+    memory.write_text(json.dumps({'v': 1, 'expires_at': 200, 'admit': False,
+                                 'state': 'red', 'reason': 'memory pressure'}))
+    assert not guard.admission_state(100).admit
+    assert 'memory pressure' in guard.admission_state(100).reason
+
+
+@pytest.mark.parametrize('reading', [None, {}, {'observed_at': 1, 'policy': {'stale_s': 45}},
+                                    {'observed_at': 101, 'policy': {'stale_s': 45}},
+                                    {'observed_at': True, 'policy': {'stale_s': 45}},
+                                    {'observed_at': 99, 'policy': {'stale_s': 10**309}}])
+def test_installed_thermal_guard_missing_invalid_or_stale_closes_admission(reading):
+    status = guard._THERMAL_STATUS
+    status.parent.mkdir()
+    if reading is not None:
+        status.write_text(json.dumps(reading))
+    decision = guard.admission_state(100)
+    assert not decision.admit and 'thermal' in decision.reason
 
 
 def test_wait_reason_stays_readable_and_wait_lines_back_off(monkeypatch, tmp_path):

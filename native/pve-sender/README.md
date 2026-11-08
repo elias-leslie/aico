@@ -59,6 +59,15 @@ only its named guest export scope when the CPU budget changes; it must not SSH o
 each sample. `delivery_machine` in policy selects the Aico instance that delivers
 typed guard episodes; it currently names CT 190's `aico` instance.
 
+The public runtime heartbeat is readable through a read-only bind mount in the
+agent container at the same path. ST's existing heavy-work admission reads this
+local snapshot before admitting a new heavy job: hot, missing or stale installed
+guard evidence closes admission without calling Aico, SSH or a sensor command.
+Normal heat evidence does not bypass memory admission. Hosts without this guard
+directory keep their existing admission policy. Root lock files and persistent
+episode state remain private. The guard starts before `pve-guests.service` so the
+runtime directory is present when Proxmox mounts it into the container.
+
 Verification is synthetic: `st check pytest -- native/host-steward/tests/test_backup_guard.py
 native/host-steward/tests/test_pve_sender.py`. No heater, full backup or live service
 restart is needed for these tests.
