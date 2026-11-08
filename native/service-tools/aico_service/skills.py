@@ -33,7 +33,10 @@ import yaml
 from st_sdk.output import output_error, output_json, output_success
 from st_sdk.usage import usage
 
-app = typer.Typer(help="Manage harness-neutral agent skills (symlink distribution, audit, and import)")
+app = typer.Typer(
+    help="Manage harness-neutral agent skills (symlink distribution, audit, and import)",
+    rich_markup_mode=None,  # plain Click help and errors, as st service
+)
 
 
 def _canon() -> Path:

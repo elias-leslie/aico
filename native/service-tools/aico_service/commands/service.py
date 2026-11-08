@@ -25,7 +25,9 @@ app = typer.Typer(
         "Project service lifecycle through st. Use rebuild/restart instead of "
         "raw systemctl or docker commands so build, migrations, unit sync, "
         "health checks, and seed sync stay together."
-    )
+    ),
+    # Plain Click help and errors: a Rich panel costs agents about 5x the text it frames.
+    rich_markup_mode=None,
 )
 
 
