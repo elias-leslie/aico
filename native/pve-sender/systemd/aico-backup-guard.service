@@ -1,0 +1,22 @@
+[Unit]
+Description=Local thermal admission and CPU limits for Aico backup exports
+After=local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/aico-backup-guard daemon
+Restart=on-failure
+RestartSec=5s
+RuntimeDirectory=aico-backup-guard
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=yes
+StateDirectory=aico/backup-guard
+StateDirectoryMode=0700
+UMask=0077
+Nice=10
+NoNewPrivileges=yes
+ProtectSystem=full
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

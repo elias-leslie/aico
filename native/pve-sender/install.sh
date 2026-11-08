@@ -8,13 +8,18 @@ prefix="${PVE_SENDER_PREFIX:-/usr/local/lib/aico-pve-sender}"
 units="${PVE_SENDER_UNITS:-/etc/systemd/system}"
 sbin="${PVE_SENDER_SBIN:-/usr/local/sbin}"
 config="${PVE_SENDER_CONFIG:-/etc/aico/pve-sender.json}"
+guard_config="${PVE_BACKUP_GUARD_CONFIG:-$(dirname "$config")/backup-guard.json}"
 steward="${PVE_SENDER_STEWARD:-/usr/local/lib/host-steward}"
 install -d -m 0755 "$prefix/pve_sender" "$units" "$sbin" "$steward"
 install -d -m 0755 "$(dirname "$config")"
 install -m 0644 "$here"/pve_sender/*.py "$prefix/pve_sender/"
 install -m 0755 "$here/pve-sender" "$prefix/pve-sender"
+install -m 0755 "$here/aico-backup-guard" "$prefix/aico-backup-guard"
 ln -sfn "$prefix/pve-sender" "$sbin/pve-sender"
+ln -sfn "$prefix/aico-backup-guard" "$sbin/aico-backup-guard"
 if [ ! -f "$config" ]; then install -m 0644 "$here/config.json" "$config"; fi
+install -d -m 0755 "$(dirname "$guard_config")"
+if [ ! -f "$guard_config" ]; then install -m 0644 "$here/backup-guard.json" "$guard_config"; fi
 # An installed config that still names the old credential and token paths is pointed at the Aico ones.
 python3 - "$config" <<'PY'
 import json
@@ -40,6 +45,8 @@ install -m 0644 "$here"/systemd/* "$units/"
 if [ "${PVE_SENDER_NO_SYSTEMCTL:-0}" != 1 ]; then
   /usr/bin/python3 -c 'import cryptography' # distro dependency, present on gem
   systemctl --no-ask-password daemon-reload
+  systemctl --no-ask-password enable aico-backup-guard.service
+  systemctl --no-ask-password restart aico-backup-guard.service
   # Verify the replacement before switching either producer off. No immediate real push is forced.
   "$sbin/pve-sender" tick
   systemctl --no-ask-password enable --now aico-pve-sender.timer

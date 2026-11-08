@@ -1,0 +1,20 @@
+{
+  "runtime_dir": "/run/aico-backup-guard",
+  "state_dir": "/var/lib/aico/backup-guard",
+  "hwmon_root": "/sys/class/hwmon",
+  "sensor_chip": "k10temp",
+  "sensor_label": "Tctl",
+  "boot_id_path": "/proc/sys/kernel/random/boot_id",
+  "delivery_machine": "aico",
+  "sample_s": 15,
+  "stale_s": 45,
+  "hot_c": 85,
+  "hot_samples": 2,
+  "critical_c": 90,
+  "recover_c": 80,
+  "normal_cpu_percent": 50,
+  "hot_cpu_percent": 20,
+  "critical_cpu_percent": 10,
+  "slice": "aico-backup.slice",
+  "scope": "aico-backup-export.scope"
+}

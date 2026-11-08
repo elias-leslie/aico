@@ -68,6 +68,34 @@ def test_pve_sender_keeps_its_local_ecc_row_when_workstation_publication_is_reti
     assert row["what"] == "PVE memory errors"
 
 
+def test_local_thermal_reuses_collected_sensor_and_never_direct_pushes(cfg, monkeypatch):
+    from pve_sender import watch
+
+    calls = []
+
+    def local_command(*args, **_kwargs):
+        calls.append(args)
+        return watch.core.Result(0, "===NS hwmon\nT k10temp Tctl 95000 0 0\n===NS end\n", "")
+
+    monkeypatch.setattr(watch.core, "run_command", local_command)
+    state = {}
+    rows = watch.local_rows(state, 1000, "davion-gem")
+    thermal = next(row for row in rows if row["id"] == "davion-gem/check-thermal")
+    assert thermal["state"] == "failed" and "95C" in thermal["meaning"]
+    assert len(calls) == 1  # no separate SSH, GPU or second sensor collection
+    assert state["push_failed"][thermal["id"]] is False
+    beats(cfg, ws=100, ct=1000)
+    notices = []
+
+    def local(check_state, *_args):
+        check_state["push_failed"] = {thermal["id"]: False}
+        return [thermal]
+
+    watchdog.tick(cfg, now=1000, boot=0, local=local, door=lambda *_a: None,
+                  send=lambda notice: notices.append(notice) or {"ok": True}, publish=False)
+    assert notices == []  # absent workstation never turns severity into a phone interrupt
+
+
 @pytest.fixture
 def cfg(tmp_path):
     data = json.loads((ROOT / "native/pve-sender/config.json").read_text())
@@ -382,6 +410,9 @@ def test_installer_copies_only_and_preserves_config(tmp_path):
     assert json.loads(config.read_text()) == {"operator_setting": True}
     assert (tmp_path / "units/aico-pve-sender.timer").is_file()
     assert (tmp_path / "sbin/pve-sender").resolve() == tmp_path / "lib/pve-sender"
+    assert (tmp_path / "sbin/aico-backup-guard").resolve() == tmp_path / "lib/aico-backup-guard"
+    assert (tmp_path / "units/aico-backup-guard.service").is_file()
+    assert json.loads((config.parent / "backup-guard.json").read_text())["normal_cpu_percent"] == 50
     assert not (tmp_path / "sbin/aico-push").exists()  # live wrapper switch needs the runtime preflight
 
 
