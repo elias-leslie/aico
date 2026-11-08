@@ -1,6 +1,6 @@
 // When a commit's quick check fails and other files are dirty, the stages that failed run again on
 // what the commit would actually make: a clean worktree of HEAD plus the committed files. Nothing
-// here touches the checkout, its index or its stashes; the worktree is always removed.
+// here touches the checkout, its index or its stashes; the worktree is always removed, even on a signal.
 
 import { copyFileSync, lstatSync, mkdirSync, readlinkSync, rmSync, symlinkSync } from 'node:fs'
 import { dirname, join } from 'node:path'
