@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { NoteDetail } from '@/lib/api/notes'
-import { isBlankNote, NoteEditor } from './NoteEditor'
+import { deleteWarning, isBlankNote, NoteEditor } from './NoteEditor'
 
 const note = (over: Partial<NoteDetail> = {}): NoteDetail => ({
   id: 'abcdef012345',
@@ -26,6 +26,25 @@ const note = (over: Partial<NoteDetail> = {}): NoteDetail => ({
   ...over,
 })
 const empty = { title: '', body: '' }
+
+describe('deleteWarning', () => {
+  it('names only what this note has', () => {
+    expect(deleteWarning(note({ title: 'Plan' }))).toBe(
+      'Plan will be removed and can’t be brought back.',
+    )
+    expect(
+      deleteWarning(
+        note({
+          title: 'Shop',
+          items: [{}, {}] as NoteDetail['items'],
+          attachments: [{ captureId: 'c1' }] as NoteDetail['attachments'],
+        }),
+      ),
+    ).toBe(
+      'Shop will be removed, with its 2 items, and can’t be brought back. Its photos and files stay in Captures.',
+    )
+  })
+})
 
 describe('isBlankNote', () => {
   it('is blank with nothing in it', () => {

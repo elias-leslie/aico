@@ -184,6 +184,18 @@ const madeFromDraft = new Map<string, string>()
 export const noteScreenKey = (id: string | null) =>
   id === null ? `new-${draftSerial}` : (madeFromDraft.get(id) ?? id)
 
+/** What deleting takes with it, naming only what this note has. */
+export function deleteWarning(note: NoteDetail): string {
+  const items = note.items.length
+  const gone = items
+    ? `, with its ${items === 1 ? 'item' : `${items} items`},`
+    : ''
+  const kept = note.attachments.some((file) => file.captureId)
+    ? ' Its photos and files stay in Captures.'
+    : ''
+  return `${note.title || 'This note'} will be removed${gone} and can’t be brought back.${kept}`
+}
+
 function Editor({
   id,
   note,
@@ -499,7 +511,7 @@ function Editor({
       <ConfirmationDialog
         isOpen={confirming}
         title="Delete this note?"
-        message={`${note.title || 'This note'} will be removed, with its items, and can’t be brought back. Its photos stay in Captures.`}
+        message={deleteWarning(note)}
         confirmText="Delete"
         pendingText="Deleting…"
         isPending={remove.isPending}
