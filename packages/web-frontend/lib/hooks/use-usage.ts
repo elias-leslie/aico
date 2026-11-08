@@ -11,8 +11,9 @@ const USAGE_QUERY_KEY = ['usage']
  * GET /api/usage: the one read of the providers' windows, shared by the Quota page, the Panel's
  * quota bars and the side's glance, so they all show the same numbers.
  */
-export function useUsage() {
+export function useUsage(enabled = true) {
   const query = useQuery({
+    enabled,
     queryKey: USAGE_QUERY_KEY,
     queryFn: () =>
       apiFetch<UsageReport>('/api/usage', undefined, 'Aico did not answer'),

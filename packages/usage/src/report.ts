@@ -141,7 +141,7 @@ export function usageReport(
     const days = lastDays(now, SPEND_DAYS)
     const splitDays = lastDays(now, config.project_split.days)
     const providers = config.providers.map((provider): ReportProvider => {
-      const usage = optionUsage(provider.id, windows, facts.credits)
+      const usage = optionUsage(provider.id, windows, facts.credits, facts.plan_ended)
       const shown = usage.windows.filter((window) => window.state !== 'not_reported')
       const spend = spendOf(db as Database, provider.id, days)
       return {
@@ -167,7 +167,10 @@ export function usageReport(
               text: creditText(usage.credits, now),
             }
           : null,
-        problem: saved.problems?.[provider.id] ?? facts.unreadable?.[provider.id] ?? null,
+        problem:
+          usage.status === 'no_plan'
+            ? null
+            : (saved.problems?.[provider.id] ?? facts.unreadable?.[provider.id] ?? null),
         unreadable: facts.unreadable?.[provider.id] ?? null,
         spend,
         by_project: projectSplit(db as Database, provider.id, spend.unit, splitDays, projects),

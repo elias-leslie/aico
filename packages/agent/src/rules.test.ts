@@ -297,10 +297,17 @@ describe('fail closed', () => {
         ),
       )
       expect(result.reason).toBe('used_up')
-      expect(result.detail).toMatch(/^every model role 'implementation' may run is used up: /)
-      expect(result.detail).toContain('codex/gpt-6.1-sol until Nov 11')
-      expect(result.detail).toContain('opencode-go/deepseek-v4.1-flash until Nov 8')
-      expect(result.detail).toContain('opencode-go/glm-5.3 until Nov 8')
+      expect(result.detail).toMatch(/^every model role 'implementation' may run is out: /)
+      expect(result.detail).toContain('codex/gpt-6.1-sol used up until Nov 11')
+      expect(result.detail).toContain('opencode-go/deepseek-v4.1-flash used up until Nov 8')
+      expect(result.detail).toContain('opencode-go/glm-5.3 used up until Nov 8')
+    })
+
+    it('leaves out a subscription with no plan, and says so when it was the last', () => {
+      const ended = { codex: '2026-11-08T19:20:00.000Z', 'opencode-go': '2026-11-08T19:20:00.000Z' }
+      const result = refusal(withUsage({ ...facts(), plan_ended: ended }))
+      expect(result.reason).toBe('used_up')
+      expect(result.detail).toContain('codex/gpt-6.1-sol no plan since Nov 8')
     })
 
     it('keeps an explicit --model even when its subscription is used up', () => {

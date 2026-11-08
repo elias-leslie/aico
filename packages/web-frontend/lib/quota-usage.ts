@@ -46,6 +46,7 @@ export interface UsageProvider {
     | 'partly_unknown'
     | 'used_up'
     | 'on_credits'
+    | 'no_plan'
     | 'unknown'
     | 'untracked'
   /** The plain answer to "can I use it now?", ahead of the windows: "Used up until Nov 8, 7:00 PM EST (weekly)". */

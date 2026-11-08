@@ -110,9 +110,11 @@ async function collectCommand(argv: string[], io: UsageCliIo): Promise<number> {
     const rows = spendRows(input)
     if (!set.has('--no-status')) await postRows(io, rows)
     const summary = config.providers.map((provider) => brief(provider, input)).join('; ')
-    if (done.failed.length) {
-      for (const provider of done.failed) io.err(`${provider}: ${done.problems[provider]}\n`)
-      io.out(`Could not read ${done.failed.join(', ')}. ${summary}.\n`)
+    // A subscription with no plan may well stop answering: that isn't a failed collection.
+    const failed = done.failed.filter((provider) => !input.facts.plan_ended?.[provider])
+    if (failed.length) {
+      for (const provider of failed) io.err(`${provider}: ${done.problems[provider]}\n`)
+      io.out(`Could not read ${failed.join(', ')}. ${summary}.\n`)
       return 1
     }
     io.out(`Usage read: ${summary}.\n`)

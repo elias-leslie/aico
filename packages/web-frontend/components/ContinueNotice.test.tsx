@@ -56,6 +56,16 @@ const slot = (over: Partial<ProjectSlot> = {}): ProjectSlot =>
   }) as ProjectSlot
 
 describe('continueTargets', () => {
+  it("offers another tool when the session's subscription has no plan", () => {
+    expect(
+      continueTargets(
+        'claude-code',
+        [glance('claude', 'no_plan'), glance('codex', 'credits')],
+        [CLAUDE, CODEX],
+      ),
+    ).toEqual([CODEX])
+  })
+
   it('leaves Pi out: it can run on another provider than the subscription that lists it', () => {
     const PI = tool('pi', 'Pi')
     const opencode = { ...glance('opencode-go', 'used_up'), tools: ['pi'] }

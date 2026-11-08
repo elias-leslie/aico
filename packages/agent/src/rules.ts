@@ -54,12 +54,14 @@ export interface ChainModel {
   effort: string | null
 }
 
-/** A chain model left out because its subscription is used up. */
+/** A chain model left out because its subscription is used up or has no plan. */
 export interface SkippedModel {
   id: string
   provider: string
   /** ISO time the subscription's used-up windows have all reset, or null when unknown. */
   until: string | null
+  /** ISO time its plan ended, when that is why. */
+  planEnded?: string
 }
 
 export interface RoleRules {
@@ -163,14 +165,21 @@ export interface RulesRequest {
   project?: string
   /** The working folder; the project comes from it when `project` is not given. */
   cwd?: string
-  /** Usage facts: models whose subscription reads used up are left out of the chain (not an explicit `model`). */
+  /** Usage facts: models whose subscription reads used up or has no plan are left out of the chain (not an explicit `model`). */
   usage?: { facts: Facts; now: string }
 }
 
 /** "Nov 8, 7:00 PM EST" in the local zone, as `aico usage show` prints reset times. */
-export function resetText(iso: string | null): string {
+function resetText(iso: string | null): string {
   if (!iso) return 'a reset time Aico does not know'
   return localTime(iso)
+}
+
+/** Why a chain model was left out: "used up until ...", "no plan since ...". */
+export function skippedText(skip: SkippedModel): string {
+  return skip.planEnded
+    ? `no plan since ${resetText(skip.planEnded)}`
+    : `used up until ${resetText(skip.until)}`
 }
 
 /** Why `model` may not run for this role in this harness, or null. */
@@ -310,7 +319,7 @@ export function roleRules(
       tool && request.usage
         ? modelUsage(policy, request.usage.facts, tool, next.id, request.usage.now)
         : null
-    if (usage?.status === 'used_up') {
+    if (usage?.status === 'used_up' || usage?.status === 'no_plan') {
       if (skipped.some((entry) => entry.id === next.id)) continue
       const resets = usage.windows
         .filter((window) => window.state === 'used_up' && window.resets_at)
@@ -320,6 +329,7 @@ export function roleRules(
         id: next.id,
         provider: usage.provider ?? next.id,
         until: resets.at(-1) ?? null,
+        ...(usage.plan_ended_at && { planEnded: usage.plan_ended_at }),
       })
       continue
     }
@@ -328,8 +338,8 @@ export function roleRules(
   if (!chain.length && skipped.length)
     return refused(
       'used_up',
-      `every model role '${request.role}' may run is used up: ${skipped
-        .map((entry) => `${entry.id} until ${resetText(entry.until)}`)
+      `every model role '${request.role}' may run is out: ${skipped
+        .map((entry) => `${entry.id} ${skippedText(entry)}`)
         .join('; ')}`,
     )
   if (!chain.length)
@@ -407,8 +417,8 @@ export function loadRoleRules(
 }
 
 /**
- * `loadRoleRules` with Aico's usage facts attached, so models whose subscription reads used up
- * drop out of the chain. The CLI and web chat both start runs through this. No facts (usage not
+ * `loadRoleRules` with Aico's usage facts attached, so models whose subscription reads used up or
+ * has no plan drop out of the chain. The CLI and web chat both start runs through this. No facts (usage not
  * collected, unreadable) drops nothing. `load` and `facts` are test seams.
  */
 export function loadRoutedRules(

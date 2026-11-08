@@ -8,6 +8,7 @@ import { collectClaude, statuslinePaths } from './claude'
 import { collectClaudeTranscripts } from './claude-transcripts'
 import { collectCodex } from './codex'
 import { type Database, getState, putState } from './db'
+import { notePlanUse } from './facts'
 import { nativeHomes, privateMatcher } from './homes'
 import { collectOpenCode } from './opencode'
 import { localDay, type Plans } from './plans'
@@ -131,6 +132,7 @@ export async function collect(db: Database, io: CollectIo): Promise<Collected> {
     fail('opencode-go', error)
   }
 
+  notePlanUse(db, io.plans, new Date(io.now).toISOString())
   // Readings past the lookback can no longer be the newest of anything.
   db.prepare('DELETE FROM readings WHERE observed_at < ?').run(
     new Date(io.now - config.lookback_days * 86400_000).toISOString(),

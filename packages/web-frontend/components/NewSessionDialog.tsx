@@ -4,7 +4,12 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { clsx } from 'clsx'
 import { Search } from 'lucide-react'
 import { type ReactNode, useMemo, useState } from 'react'
-import { pickerGlance, pickerSuffix, quotaGlances } from '@/lib/frame/quota'
+import {
+  pickerGlance,
+  pickerSuffix,
+  type QuotaGlance,
+  quotaGlances,
+} from '@/lib/frame/quota'
 import { type AgentTool, useAgentTools } from '@/lib/hooks/use-agent-tools'
 import {
   HOST_STATE_LABELS,
@@ -60,18 +65,18 @@ function matchesProject(project: ProjectSetting, query: string): boolean {
  * then a project, and optionally name it. The picker stays put above the
  * project list, which scrolls on its own.
  */
-/** The agent buttons, each with what its subscription has left. Mounted only while
- * the dialog is open, so a closed dialog doesn't poll usage. */
+/** The agent buttons, each with what its subscription has left. */
 function AgentChoices({
   tools,
+  glances,
   picked,
   onPick,
 }: {
   tools: readonly AgentTool[]
+  glances: readonly QuotaGlance[]
   picked: string | undefined
   onPick: (slug: string) => void
 }) {
-  const glances = quotaGlances(useUsage().report)
   return tools.map((t) => {
     const glance = pickerGlance(glances, [t.slug, ...t.aliases])
     const suffix = glance && pickerSuffix(glance)
@@ -108,6 +113,8 @@ export function NewSessionDialog({
 }: NewSessionDialogProps) {
   const local = useProjectSettings()
   const { enabledTools, defaultTool } = useAgentTools()
+  // Only while open, so a closed dialog doesn't poll usage.
+  const glances = quotaGlances(useUsage(isOpen).report)
   const [query, setQuery] = useState('')
   const [pickedProjectId, setPickedProjectId] = useState<string | null>(null)
   const [kind, setKind] = useState<'agent' | 'shell'>('agent')
@@ -131,14 +138,22 @@ export function NewSessionDialog({
   } = useHosts(isOpen, starting && !!pickedHost)
 
   // The pick, else the agent this device started last, else the newest
-  // session's, else the registry's default.
+  // session's, else the registry's default; past one with no plan to the next
+  // that has one, unless it is picked.
   const enabledTool = (slug: string | null | undefined) =>
     enabledTools.find((t) => t.slug === slug)
   const rememberedTool =
     enabledTool(lastToolSlug) ?? enabledTool(recentAgentSlug)
+  const hasPlan = (candidate: AgentTool | undefined) =>
+    !!candidate &&
+    pickerGlance(glances, [candidate.slug, ...candidate.aliases])?.state !==
+      'no_plan'
   const tool =
     kind === 'agent'
-      ? (enabledTool(pickedToolSlug) ?? rememberedTool ?? defaultTool)
+      ? (enabledTool(pickedToolSlug) ??
+        [rememberedTool, defaultTool, ...enabledTools].find(hasPlan) ??
+        rememberedTool ??
+        defaultTool)
       : undefined
   const toolIsLastUsed =
     !!tool && !pickedToolSlug && tool.slug === rememberedTool?.slug
@@ -274,6 +289,7 @@ export function NewSessionDialog({
                 <fieldset aria-label="Agent" className="lantern-tools mt-2.5">
                   <AgentChoices
                     tools={enabledTools}
+                    glances={glances}
                     picked={tool?.slug}
                     onPick={setPickedToolSlug}
                   />

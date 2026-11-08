@@ -1,11 +1,11 @@
 // `aico usage`: bare means show, mistakes name the command and the problem, times are local with a zone.
 
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it } from 'vitest'
 import { runUsageCli } from './cli'
-import { openUsage, putState, usageDbPath } from './db'
+import { openUsage, plansPath, putState, usageDbPath } from './db'
 import { storeReading } from './readings'
 
 let dir: string
@@ -17,7 +17,7 @@ afterEach(() => rmSync(dir, { recursive: true, force: true }))
 const NOW = Date.parse('2026-11-07T03:28:50.155Z')
 const HOUR = 3_600_000
 
-async function run(argv: string[]) {
+async function run(argv: string[], env: NodeJS.ProcessEnv = {}) {
   let out = ''
   let err = ''
   const code = await runUsageCli(argv, {
@@ -29,7 +29,7 @@ async function run(argv: string[]) {
     },
     dataDir: dir,
     home: dir,
-    env: {},
+    env,
     machine: 'm',
     statusUrl: null,
     fetch,
@@ -86,4 +86,33 @@ it('names the command and the problem on a mistake', async () => {
   )
   expect((await run(['--help'])).code).toBe(0)
   expect((await run(['collect', '--help'])).out).toContain('aico usage [show]')
+})
+
+it('collect fails on an unreadable snapshot, but not once that subscription has no plan', async () => {
+  mkdirSync(join(dir, 'state', 'claude-usage'), { recursive: true })
+  writeFileSync(join(dir, 'state', 'claude-usage', 'rate-limits.json'), 'not json')
+  const env = { XDG_STATE_HOME: join(dir, 'state'), AICO_CODEX_SESSIONS: join(dir, 'codex') }
+  const collect = await run(['collect', '--no-status'], env)
+  expect(collect.code).toBe(1)
+  expect(collect.out).toContain('Could not read claude')
+  writeFileSync(
+    plansPath(dir),
+    JSON.stringify({
+      plans: [
+        {
+          provider: 'claude',
+          plan: 'max',
+          monthly_usd: null,
+          price_verified: false,
+          evidence: null,
+          effective_from: '2026-01-01T00:00:00+00:00',
+          effective_to: '2026-11-06T00:00:00+00:00',
+        },
+      ],
+      lots: [],
+    }),
+  )
+  const ended = await run(['collect', '--no-status'], env)
+  expect(ended.code).toBe(0)
+  expect(ended.out).toContain('Claude no plan since')
 })

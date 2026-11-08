@@ -7,7 +7,7 @@
 import type { UsageProvider, UsageReport, UsageWindow } from '../quota-usage'
 import { compact, sentence, windowGone } from '../quota-usage'
 
-export type QuotaState = 'left' | 'credits' | 'used_up' | 'unknown'
+export type QuotaState = 'left' | 'credits' | 'used_up' | 'no_plan' | 'unknown'
 
 export interface QuotaGlance {
   id: string
@@ -107,6 +107,7 @@ function shortLine(
   now: number,
   windows: readonly UsageWindow[],
 ): string {
+  if (state === 'no_plan') return 'no plan'
   if (state === 'left') {
     const reset = window?.resets_at ? resetDay(window.resets_at, now) : ''
     return `${left}% left${reset ? ` · resets ${reset}` : ''}`
@@ -145,7 +146,8 @@ function glanceOf(provider: UsageProvider, now: number): QuotaGlance {
   const left = window ? leftOf(window) : null
   const gone = window ? windowGone(window) : null
   let state: QuotaState
-  if (provider.status === 'on_credits') state = 'credits'
+  if (provider.status === 'no_plan') state = 'no_plan'
+  else if (provider.status === 'on_credits') state = 'credits'
   else if (provider.status === 'used_up' || left === 0) state = 'used_up'
   else if (left === null) state = 'unknown'
   else state = 'left'
@@ -215,9 +217,11 @@ export function pickerSuffix(glance: QuotaGlance): string | null {
       ? 'on credits'
       : glance.state === 'used_up'
         ? 'used up'
-        : glance.partly || glance.left === null
-          ? null
-          : `${glance.left}% left`
+        : glance.state === 'no_plan'
+          ? 'no plan'
+          : glance.partly || glance.left === null
+            ? null
+            : `${glance.left}% left`
   return words && glance.tools.length ? `${glance.name} ${words}` : words
 }
 
@@ -239,6 +243,7 @@ export function quotaLine(glances: readonly QuotaGlance[]): string {
       if (glance.state === 'left') return `${glance.name} ${glance.left}% left`
       if (glance.state === 'credits') return `${glance.name} on credits${until}`
       if (glance.state === 'used_up') return `${glance.name} used up${until}`
+      if (glance.state === 'no_plan') return `${glance.name} no plan`
       return `${glance.name} unknown`
     })
     .join(' · ')

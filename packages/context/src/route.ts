@@ -245,16 +245,16 @@ export function route(
     rows,
     model_notes: {},
   }
-  if (facts) attachFacts(payload, policy, catalog, facts, now)
+  if (facts) attachFacts(payload, policy, catalog, facts, now, request.model ?? null)
   return payload
 }
 
 // -- usage facts ------------------------------------------------------------------------------
 
-/** The subscription a tool/model draws on: a model id's prefix when listed, else the tool's. */
+/** The subscription a tool/model draws on: a model id's prefix (none we track when not listed), else the tool's. */
 function usageProvider(policy: LaunchPolicy, tool: string, model: string | null): string | null {
   const prefix = model?.includes('/') ? (model.split('/')[0] as string) : null
-  if (prefix && policy.usageProviders.includes(prefix)) return prefix
+  if (prefix) return policy.usageProviders.includes(prefix) ? prefix : null
   return policy.tools.find((entry) => entry.name === tool)?.usageProvider ?? null
 }
 
@@ -292,7 +292,7 @@ function usageOf(
   // Stale or failed facts say nothing: unknown, never zero used and never room.
   return unreadable
     ? { provider, status: 'unknown', windows: [], credits: null, unknown_windows: [], unreadable }
-    : optionUsage(provider, windows, facts.credits)
+    : optionUsage(provider, windows, facts.credits, facts.plan_ended)
 }
 
 /** What the subscription behind `tool` and `model` has left, as the route rows show it. */
@@ -313,10 +313,18 @@ function attachFacts(
   catalog: Catalog,
   facts: Facts,
   now: string,
+  requestedModel: string | null,
 ): void {
   const windows = windowFacts(facts.readings, now)
   for (const row of payload.rows) {
-    row.usage = usageOf(policy, facts, windows, row.tool, row.model)
+    // An explicit --model is what would run, so its subscription is the one that counts.
+    row.usage = usageOf(
+      policy,
+      facts,
+      windows,
+      row.tool,
+      (row.allowed ? requestedModel : null) ?? row.model,
+    )
     row.last_refusal = row.allowed ? lastRefusal(catalog, row.model, facts.refusals) : null
     for (const alt of row.alternates)
       alt.last_refusal = row.allowed

@@ -429,6 +429,32 @@ describe('NewSessionDialog', () => {
     expect(screen.queryByTestId('last-used-agent')).toBeNull()
   })
 
+  it('passes a remembered or default agent with no plan, until it is picked', () => {
+    usage.report = {
+      providers: [
+        {
+          id: 'claude',
+          name: 'Claude',
+          status: 'no_plan',
+          answer: 'No plan since Nov 8, 2:20 PM EST',
+          windows: [],
+          credits: null,
+          plan: null,
+          problem: null,
+        },
+      ],
+    }
+    renderDialog()
+    expect(
+      screen.getByRole('button', { name: /^Start Codex in/ }),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Claude Code/ }))
+    expect(
+      screen.getByRole('button', { name: /^Start Claude Code in/ }),
+    ).toBeInTheDocument()
+    usage.report = null
+  })
+
   it('remembers the agent that was started', () => {
     renderDialog('neri')
     fireEvent.click(screen.getByRole('button', { name: 'Codex' }))

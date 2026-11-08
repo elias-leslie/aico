@@ -12,7 +12,7 @@ import {
   type Refused,
   type RoleRules,
   type RulesRequest,
-  resetText,
+  skippedText,
 } from './rules'
 import { type RunOptions, type RunResult, runAgent } from './run'
 import { type PushRun, tetherPush } from './tether'
@@ -124,7 +124,7 @@ export async function main(
     }
     const log = (line: string) => process.stderr.write(`· ${line}\n`)
     for (const skip of rules.skipped ?? [])
-      log(`skipped ${skip.id}: ${skip.provider} usage is used up until ${resetText(skip.until)}`)
+      log(`skipped ${skip.id}: ${skip.provider} ${skippedText(skip)}`)
     const push = deps.push ?? tetherPush(env, log)
     const tell = (runId: string) => push(runReport(db, runId))
     const once = async (task: string | null) => {

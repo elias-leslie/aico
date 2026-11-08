@@ -3,8 +3,8 @@
 // balance from its lots and the credits drawn since, and the newest refusals.
 
 import config from '../data/usage.json' with { type: 'json' }
-import { type Database, getState } from './db'
-import { creditFacts, type Lot, localDay, type Plans } from './plans'
+import { type Database, getState, putState } from './db'
+import { creditFacts, type Lot, localDay, type Plans, planEndedAt } from './plans'
 import { type Credit, type Facts, micros, type Reading, type Refusal } from './windows'
 
 const REFUSAL_ROWS = 1000
@@ -101,6 +101,65 @@ function recentRefusals(db: Database): Refusal[] {
     .slice(0, REFUSAL_ROWS)
 }
 
+const planUsedKey = (provider: string) => `plan_used:${provider}`
+
+/** The same window: a reset time can move by this much between readings (as storeReading treats it). */
+const RESET_JITTER_MICROS = 60e6
+
+/**
+ * Whether a tool shows real use after its plan's end: within one window (one reset time) the
+ * number rises once the end has settled. Not a new time (an open session rewrites its last numbers
+ * on every redraw), not a number that rose before the end but was only read after it, and not a
+ * window that rolled by itself.
+ */
+function usedAfterEnd(rows: ReadingRow[], end: string): boolean {
+  const settled = micros(end) + config.plan_end_settle_min * 60e6
+  const open = new Map<number, { resets: number | null; high: number }>()
+  for (const row of [...rows].sort((a, b) => micros(a.observed_at) - micros(b.observed_at))) {
+    const resets = row.resets_at ? micros(row.resets_at) : null
+    const seen = open.get(row.window_minutes)
+    const same =
+      seen !== undefined &&
+      (resets === null || seen.resets === null
+        ? resets === seen.resets
+        : Math.abs(resets - seen.resets) <= RESET_JITTER_MICROS)
+    if (!same) {
+      open.set(row.window_minutes, { resets, high: row.used_percent })
+      continue
+    }
+    if (row.used_percent <= seen.high) continue
+    if (micros(row.observed_at) > settled) return true
+    seen.high = row.used_percent
+  }
+  return false
+}
+
+/**
+ * Remembers use seen after a plan's end, while the readings that show it still exist: they are
+ * dropped after the lookback, and an idle tool must not read as ended again because of that.
+ * Collection calls this; a new end date starts over.
+ */
+export function notePlanUse(db: Database, plans: Plans, now: string): void {
+  for (const { id } of config.providers) {
+    const end = planEndedAt(plans.plans, id, now)
+    if (!end || getState<string>(db, planUsedKey(id)) === end) continue
+    const rows = db
+      .prepare('SELECT * FROM readings WHERE provider = ?')
+      .all(id) as unknown as ReadingRow[]
+    if (usedAfterEnd(rows, end)) putState(db, planUsedKey(id), end)
+  }
+}
+
+/** The providers with no plan now, with when it ended; use noted after the end wins (it was early, or the plan is back). */
+function endedPlans(db: Database, plans: Plans, now: string): Record<string, string> {
+  const ended: Record<string, string> = {}
+  for (const { id } of config.providers) {
+    const end = planEndedAt(plans.plans, id, now)
+    if (end && getState<string>(db, planUsedKey(id)) !== end) ended[id] = end
+  }
+  return ended
+}
+
 /** Everything routing and the spend rows need, as of `now`. */
 export function loadFacts(db: Database, plans: Plans, now: string): Facts {
   const facts: Facts = {
@@ -108,6 +167,8 @@ export function loadFacts(db: Database, plans: Plans, now: string): Facts {
     credits: creditsOf(db, plans, now),
     refusals: recentRefusals(db),
   }
+  const planEnded = endedPlans(db, plans, now)
+  if (Object.keys(planEnded).length) facts.plan_ended = planEnded
   const saved = getState<{ at: string; problems?: Record<string, string>; failed?: string[] }>(
     db,
     'collected',
@@ -118,6 +179,7 @@ export function loadFacts(db: Database, plans: Plans, now: string): Facts {
   const staleMin = (micros(now) - micros(saved.at)) / 60e6
   const unreadable: Record<string, string> = {}
   for (const { id } of config.providers) {
+    if (planEnded[id]) continue // No collection changes that.
     if (staleMin > config.unknown_after_min)
       unreadable[id] = `last collected ${Math.floor(staleMin)} minutes ago, too old to trust`
     else if (saved.failed?.includes(id))

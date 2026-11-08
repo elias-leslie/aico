@@ -488,6 +488,26 @@ def test_pi_launch_waits_out_a_rate_limited_opencode_go_window(monkeypatch, caps
     assert "opencode-go quota is used up" in capsys.readouterr().err
 
 
+def test_no_plan_is_refused_before_anything_reaches_tether(monkeypatch, capsys):
+    row = {"allowed": True, "job": "implementation", "work_roles": ["implementation"],
+           "usage": {"status": "no_plan", "plan_ended_at": "2026-11-08T19:20:00+00:00"}}
+    monkeypatch.setattr(admin, "launch_row", lambda *_a, **_k: row)
+    monkeypatch.setattr(admin.Collector, "receipt", lambda *_a, **_k: pytest.fail("Tether contacted"))
+    with pytest.raises(SystemExit):
+        admin.main(["create", "req-no-plan", "hi", "--tool", "claude-code", "--project", "aico",
+                    "--project-root", "/srv/workspaces/projects/aico", "--work-role", "implementation"])
+    err = capsys.readouterr().err
+    assert "claude-code has no plan since Nov 8" in err
+    assert "st models route --role implementation" in err
+
+
+def test_no_plan_refusal_only_for_a_row_that_says_so():
+    assert admin.no_plan_refusal("review", "codex", None) is None
+    assert admin.no_plan_refusal("review", "codex", {"usage": {"status": "on_credits"}}) is None
+    assert admin.no_plan_refusal("review", "codex", {}) is None
+    assert "pi has no plan, so" in admin.no_plan_refusal("review", "pi", {"usage": {"status": "no_plan"}})
+
+
 def test_pi_launch_goes_ahead_with_quota_left_or_without_aico(monkeypatch):
     calls = []
     monkeypatch.setattr(admin.Collector, "receipt", lambda *_a, **_k: (calls.append(1) or (409, {"error": "request_conflict"})))

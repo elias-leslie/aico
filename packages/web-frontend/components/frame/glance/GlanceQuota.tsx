@@ -111,6 +111,8 @@ export function useQuotaGlance(): GlanceHead {
     }
   }
   if (unknown) return { value: 'Unknown', tone: 'unknown' }
+  if (glances.some((glance) => glance.state === 'no_plan'))
+    return { value: 'No plan', tone: null }
   return { value: 'On credits', tone: null }
 }
 

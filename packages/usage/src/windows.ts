@@ -8,6 +8,7 @@
 //   reported" (Claude reports only the 7-day one now); it does not make the option unknown.
 // - A window at 100% is used up until it resets; a provider with a credit balance runs
 //   on credits then.
+// - A provider whose plan ended has no plan, whatever its last windows said.
 
 /** One usage-window reading of a subscription. */
 export interface Reading {
@@ -44,6 +45,8 @@ export interface Facts {
   collected_at?: string
   /** Providers whose facts cannot be trusted now, by provider id, with the plain reason. */
   unreadable?: Record<string, string>
+  /** Providers with no plan now, by provider id, with when it ended (facts.ts decides). */
+  plan_ended?: Record<string, string>
 }
 
 export const WINDOW_LABELS: Record<number, string> = {
@@ -78,7 +81,7 @@ export interface Window {
 
 export interface Usage {
   provider: string | null
-  status: 'ok' | 'partly_unknown' | 'used_up' | 'on_credits' | 'unknown' | 'untracked'
+  status: 'ok' | 'partly_unknown' | 'used_up' | 'on_credits' | 'no_plan' | 'unknown' | 'untracked'
   windows: Window[]
   credits:
     | (Credit & {
@@ -90,6 +93,8 @@ export interface Usage {
   unknown_windows: string[]
   /** Why nothing is said about this provider: its facts are stale or its last collection failed. */
   unreadable?: string
+  /** With status no_plan: when its plan ended. */
+  plan_ended_at?: string
 }
 
 /** The reading no longer says how much is used: its reset passed, or it names none and its window is over. */
@@ -160,14 +165,27 @@ export function optionUsage(
   provider: string | null,
   windows: Record<string, Window[]>,
   credits: Record<string, Credit>,
+  planEnded: Record<string, string> = {},
 ): Usage {
   if (provider === null)
     return { provider: null, status: 'untracked', windows: [], credits: null, unknown_windows: [] }
-  const own = windows[provider] ?? []
   const credit = credits[provider]
+  // Credits still buy use without a plan; either way the last windows say nothing any more.
+  const ended = planEnded[provider]
+  const own = ended ? [] : (windows[provider] ?? [])
+  if (ended && !(credit && credit.balance > 0))
+    return {
+      provider,
+      status: 'no_plan',
+      windows: [],
+      credits: null,
+      unknown_windows: [],
+      plan_ended_at: ended,
+    }
   const usedUp = own.filter((window) => window.state === 'used_up')
   let status: Usage['status']
-  if (usedUp.length) status = credit && credit.balance > 0 ? 'on_credits' : 'used_up'
+  if (ended) status = 'on_credits'
+  else if (usedUp.length) status = credit && credit.balance > 0 ? 'on_credits' : 'used_up'
   else if (own.some((window) => window.state === 'ok'))
     status = own.some((window) => window.state === 'unknown') ? 'partly_unknown' : 'ok'
   else status = 'unknown'

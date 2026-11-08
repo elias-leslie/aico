@@ -80,6 +80,20 @@ export function currentPlan(plans: Plan[], provider: string, at: string): Plan |
   )
 }
 
+/**
+ * When the provider's plan ran out, while none is in force now; null while one is, or when no plan
+ * was ever on file (nothing is known, which is not "no plan").
+ */
+export function planEndedAt(plans: Plan[], provider: string, at: string): string | null {
+  const own = plans.filter((plan) => plan.provider === provider)
+  if (!own.length || currentPlan(own, provider, at)) return null
+  const ends = own
+    .map((plan) => plan.effective_to)
+    .filter((end): end is string => end !== null && micros(end) <= micros(at))
+    .sort((a, b) => micros(a) - micros(b))
+  return ends.at(-1) ?? null
+}
+
 export interface LotState {
   lot: Lot
   remaining: number

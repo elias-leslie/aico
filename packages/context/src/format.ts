@@ -138,6 +138,7 @@ const STATUS: Record<string, string> = {
   ok: 'has room',
   used_up: 'used up',
   on_credits: 'running on credits',
+  no_plan: 'no plan',
   unknown: 'usage unknown',
   untracked: 'usage not tracked',
 }
@@ -154,6 +155,8 @@ function statusText(usage: Partial<Usage>): string {
 
 function usageLine(usage: Partial<Usage>): string {
   if (usage.unreadable) return usage.unreadable
+  if (usage.status === 'no_plan')
+    return `no plan since ${when(usage.plan_ended_at as string)}; this route starts working again once it has one`
   const windows = usage.windows ?? []
   if (!windows.length) return usage.status !== 'untracked' ? 'no usage readings' : ''
   return windows.map(windowText).join('; ')

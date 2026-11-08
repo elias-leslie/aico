@@ -166,6 +166,30 @@ describe('route', () => {
     expect(stale.usage).toMatchObject({ status: 'unknown', windows: [], credits: null })
     expect(formatOptions(stale.payload, 'implementation')).toContain('last collected 7200')
     expect(formatOptions(stale.payload, 'implementation')).not.toContain('has room')
+    // A plan that ended says so plainly, and the old windows say nothing any more.
+    const ended = codex({
+      ...roomy,
+      credits: {},
+      plan_ended: { codex: '2026-10-30T11:00:00.000Z' },
+    })
+    expect(ended.usage).toMatchObject({ status: 'no_plan', windows: [] })
+    const options = formatOptions(ended.payload, 'implementation')
+    expect(options).toContain('  no plan')
+    expect(options).toContain('no plan since Oct 30')
+    expect(options).not.toContain('has room')
+    expect(options).not.toContain('% left')
+    expect(ended.payload.rows[0]?.allowed).toBe(true)
+    // An explicit model is judged by its own subscription: a Pi model elsewhere isn't OpenCode's.
+    const pi = (model: string) =>
+      route(
+        policy,
+        catalog,
+        { role: 'implementation', tool: 'pi', model },
+        { ...roomy, plan_ended: { 'opencode-go': '2026-10-30T11:00:00.000Z' } },
+        now,
+      ).rows[0]?.usage?.status
+    expect(pi('opencode-go/glm-5.3')).toBe('no_plan')
+    expect(pi('zai/some-model')).toBe('untracked')
     // A failed collection of one provider leaves the others alone.
     const failed = { ...roomy, unreadable: { claude: 'its last collection failed' } }
     expect(codex(failed).usage?.status).toBe('ok')

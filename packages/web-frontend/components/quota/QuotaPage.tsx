@@ -150,7 +150,7 @@ function ProviderCard({
   const stateChip =
     provider.status === 'used_up'
       ? 'warn'
-      : provider.status === 'unknown'
+      : provider.status === 'unknown' || provider.status === 'no_plan'
         ? 'unknown'
         : null
   return (
@@ -159,7 +159,11 @@ function ProviderCard({
         <h2>{provider.name}</h2>
         {stateChip && (
           <span className={`status-chip ${stateChip}`}>
-            {provider.status === 'used_up' ? 'Used up' : 'Unknown'}
+            {provider.status === 'used_up'
+              ? 'Used up'
+              : provider.status === 'no_plan'
+                ? 'No plan'
+                : 'Unknown'}
           </span>
         )}
         {provider.plan && (
@@ -194,7 +198,7 @@ export function ProviderDetails({
             <WindowRow key={window.label} window={window} />
           ))}
         </ul>
-      ) : (
+      ) : provider.status === 'no_plan' ? null : (
         <p className={styles.spendNote}>
           No usage windows read yet for {provider.name}.
         </p>

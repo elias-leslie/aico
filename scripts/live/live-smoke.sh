@@ -208,13 +208,29 @@ run_tool() {
   return 0
 }
 
-declare -a rows=() failed_tools=() skipped=()
+# When a tool's subscription's plan ended and no credits carry it (aico usage says), else nothing: a
+# tool with no plan can't pass tonight and that isn't Aico breaking, so it's skipped, not failed.
+# Unreadable: run it.
+plan_ended() {
+  local provider=$1
+  case $1 in claude-code) provider=claude ;; pi) provider=${pi_model%%/*} ;; esac
+  "${AICO_CLI:-aico}" usage show --json 2>/dev/null | jq -r --arg p "$provider" 'if (.facts.credits[$p].balance // 0) > 0 then empty else (.facts.plan_ended[$p] // empty) end' 2>/dev/null
+}
+
+declare -a rows=() failed_tools=() skipped=() no_plan=()
 failed=0
 for tool in "${tools[@]}"; do
   bin=$tool; [[ $tool == claude-code ]] && bin=claude
   if ! command -v "$bin" >/dev/null 2>&1; then
     printf 'SKIP %s: not installed\n' "$tool"
     rows+=("$tool"$'\t'SKIP$'\t'"not installed"$'\t\t\t\t')
+    continue
+  fi
+  ended=$(plan_ended "$tool")
+  if [[ -n $ended ]]; then
+    printf 'SKIP %s: no plan since %s\n' "$tool" "$ended"
+    rows+=("$tool"$'\t'SKIP$'\t'"no plan since $ended"$'\t\t\t\t')
+    no_plan+=("$tool")
     continue
   fi
   start=$SECONDS
@@ -262,7 +278,8 @@ fi
 # Last line: the nightly Status row shows it.
 summary="live-smoke: ${#failed_tools[@]} tool(s) failed${failed_tools[*]:+ (${failed_tools[*]})}"
 ((${#skipped[@]})) && summary+=", skipped for provider limits: ${skipped[*]}"
+((${#no_plan[@]})) && summary+=", skipped with no plan: ${no_plan[*]}"
 ((left == 0)) || summary+=", $left session(s) left running"
-((failed == 0)) && summary="live-smoke passed${skipped[*]:+ (skipped for provider limits: ${skipped[*]})}"
+((failed == 0)) && summary="live-smoke passed${skipped[*]:+ (skipped for provider limits: ${skipped[*]})}${no_plan[*]:+ (skipped with no plan: ${no_plan[*]})}"
 echo "$summary"
 ((failed == 0))

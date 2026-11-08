@@ -1403,6 +1403,22 @@ def launch_refusal(role: str, tool: str, model: str | None, row: dict | None,
             f"See the options: st models route --role {role}")
 
 
+def no_plan_refusal(role: str, tool: str, row: dict | None) -> str | None:
+    """Why a launch can't work: the table says its subscription has no plan, so the tool would
+    sit on a login or error screen with nobody there. Another row of the table is the way on."""
+    usage = row.get("usage") if row else None
+    if not isinstance(usage, dict) or usage.get("status") != "no_plan":
+        return None
+    since = str(usage.get("plan_ended_at") or "")
+    try:
+        since = " since " + datetime.datetime.fromisoformat(since).astimezone().strftime("%b %-d, %-I:%M %p %Z")
+    except ValueError:
+        since = ""
+    return (f"{tool} has no plan{since}, so it would only sit on a login or error screen. "
+            f"Use another tool: st models route --role {role}. "
+            "This lifts by itself once its use shows again, or with a new plan row in usage-plans.json.")
+
+
 def apply_launch_defaults(args: argparse.Namespace, row: dict) -> dict:
     """Fill what the caller left out from the table row; explicit flags always win. Effort and
     Daybreak come with the table's model only. Returns what was filled."""
@@ -1571,6 +1587,9 @@ def create_launch(args: argparse.Namespace, refuse: typing.Callable[[str], typin
             launch = None
         # A hard rule: nothing reaches Tether, on this computer or a host, with an entry or without.
         if (reason := launch_refusal(args.work_role, args.tool, args.model, launch, args.project)) is not None:
+            refuse(reason)
+        # An entry has its own provider setup; a host's login is the same account's plan.
+        if args.entry is None and (reason := no_plan_refusal(args.work_role, args.tool, launch)) is not None:
             refuse(reason)
         if launch is not None:
             applied = apply_launch_defaults(args, launch)

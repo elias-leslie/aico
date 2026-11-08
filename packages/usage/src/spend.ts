@@ -1,6 +1,7 @@
 // The spend card: one Status row per subscription, in plain words: what is left in each
 // window, when it resets, and the credits behind it. State is ok while the subscription
-// has room (or credits carry it) and warn when it is used up, unknown, or could not be read.
+// has room (or credits carry it) and warn when it is used up, unknown, or could not be read. A
+// provider with no plan is ok: the owner ended it, and nothing there needs anyone.
 
 import { ago as agoText, localTime } from '@aico/shared/time'
 import type { StatusRow } from '@aico/status'
@@ -99,6 +100,8 @@ export function answerText(usage: Usage, now: string | number = Date.now()): str
       const names = usage.unknown_windows.join(', ')
       return `Available now; the ${names} window${usage.unknown_windows.length === 1 ? ' was' : 's were'} not reported this time`
     }
+    case 'no_plan':
+      return `No plan since ${when(usage.plan_ended_at as string)}`
     case 'unknown':
       return 'Can’t tell yet: no current usage reading'
     case 'untracked':
@@ -109,7 +112,7 @@ export function answerText(usage: Usage, now: string | number = Date.now()): str
 }
 
 export interface SpendInput {
-  facts: Pick<Facts, 'readings' | 'credits'>
+  facts: Pick<Facts, 'readings' | 'credits' | 'plan_ended'>
   plans: Plans
   machine: string
   now: string
@@ -128,6 +131,7 @@ export function spendRow(
     provider.id,
     windowFacts(input.facts.readings, input.now),
     input.facts.credits,
+    input.facts.plan_ended,
   )
   const shown = usage.windows.filter((w) => w.state !== 'not_reported')
   // The answer to "can I use it now?" leads; the windows follow, so "5h 100% left" beside a used-up
@@ -138,12 +142,15 @@ export function spendRow(
   // Credits already in the answer when the provider is running on them.
   if (usage.credits && usage.status !== 'on_credits')
     parts.push(`${creditText(usage.credits, input.now)}.`)
-  const problem = input.problems[provider.id]
+  const noPlan = usage.status === 'no_plan'
+  // Nothing to read on a provider with no plan is no problem.
+  const problem = noPlan ? undefined : input.problems[provider.id]
   let meaning = [lead, ...parts].join(' ')
   if (problem) meaning += ` ${problem}.`
   const plan = currentPlan(input.plans.plans, provider.id, input.now)
   if (plan && meaning.length + plan.plan.length < 280) meaning += ` Plan: ${plan.plan}.`
   const fine =
+    noPlan ||
     usage.status === 'ok' ||
     usage.status === 'partly_unknown' ||
     usage.status === 'on_credits' ||
@@ -175,8 +182,11 @@ export function brief(provider: { id: string; name: string }, input: SpendInput)
     provider.id,
     windowFacts(input.facts.readings, input.now),
     input.facts.credits,
+    input.facts.plan_ended,
   )
   const problem = input.problems[provider.id]
+  if (usage.status === 'no_plan')
+    return `${provider.name} no plan since ${when(usage.plan_ended_at as string)}`
   if (usage.status === 'on_credits') return `${provider.name} on credits`
   if (usage.status === 'used_up') {
     const out = lastToReset(usage.windows)

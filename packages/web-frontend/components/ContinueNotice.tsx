@@ -31,7 +31,7 @@ export function continueTargets(
   const named = (tool: AgentTool) => [tool.slug, ...tool.aliases]
   const active = tools.find((tool) => named(tool).includes(mode))
   const own = ownGlance(glances, mode, active)
-  if (own?.state !== 'used_up') return []
+  if (own?.state !== 'used_up' && own?.state !== 'no_plan') return []
   const open = new Set(
     glances
       .filter(
@@ -108,7 +108,8 @@ export function ContinueNotice({ slot }: { slot: TerminalSlot | PaneSlot }) {
       <p className="line">
         <span aria-hidden="true" className="dot" />
         <span className="t" title={own?.meaning}>
-          {failure ?? `${own?.name ?? 'This tool'} is used up`}
+          {failure ??
+            `${own?.name ?? 'This tool'} ${own?.state === 'no_plan' ? 'has no plan' : 'is used up'}`}
         </span>
         {targets.map((tool) => (
           <button

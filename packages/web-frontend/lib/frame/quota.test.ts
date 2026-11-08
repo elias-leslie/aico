@@ -226,3 +226,26 @@ describe('quota glance', () => {
     expect(quotaGlances(null)).toEqual([])
   })
 })
+
+describe('a subscription with no plan', () => {
+  const [glance] = quotaGlances(
+    report(
+      provider({
+        status: 'no_plan',
+        answer: 'No plan since Nov 8, 2:20 PM EST',
+        windows: [],
+      }),
+    ),
+  )
+  it('says so everywhere without warning', () => {
+    expect(glance).toMatchObject({
+      state: 'no_plan',
+      short: 'no plan',
+      line: 'No plan since Nov 8, 2:20 PM EST',
+      warn: false,
+      stale: false,
+    })
+    expect(pickerSuffix(glance as never)).toBe('no plan')
+    expect(quotaLine([glance as never])).toBe('Claude no plan')
+  })
+})
