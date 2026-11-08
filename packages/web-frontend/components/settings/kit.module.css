@@ -199,8 +199,8 @@ button.rowHead:focus-visible {
 }
 .checks {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  column-gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  column-gap: 8px;
 }
 .form .check {
   flex-direction: row;
