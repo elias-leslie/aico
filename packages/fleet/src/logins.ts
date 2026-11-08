@@ -51,6 +51,8 @@ export interface Login {
     /** Account logins only: the two non-secret fields, kept here so the page and lists can show them. */
     username?: string
     login_url?: string
+    /** Account logins only: the owner opened this account to restricted roles (`hunters-ok`). */
+    huntersOk?: boolean
     /** Programs (absolute paths, compared by real path when used, so a `current` release link
      * follows deploys) this login's values may go to besides the shared adapters (policy
      * labPrograms); `lab run` refuses any other child. */
@@ -64,6 +66,8 @@ export interface LoginCaller {
   machine: string
   session?: string
   owner?: boolean
+  /** Tether lists this session as a coordinator, whatever work role it was started with. */
+  coordinator?: boolean
 }
 export interface LoginAudit {
   id?: string
@@ -76,7 +80,8 @@ export interface LoginAudit {
 }
 /** One thing that keeps a caller from a login, and the grant that fixes it. */
 export interface LoginGap {
-  /** policy: a restricted role never uses this kind of login; no grant opens it. */
+  /** policy: a restricted role does not use this login (a key, or an account the owner has not marked
+   * hunters OK); no grant or assignment opens it. */
   kind: 'machine' | 'role' | 'session' | 'policy'
   value: string
 }
@@ -137,20 +142,48 @@ const gapText = (gap: LoginGap, entry: Login) =>
       ? `session ${gap.value} is not assigned target ${entry.lab?.target}`
       : gap.kind === 'role'
         ? `role ${gap.value} is not allowed`
-        : `role ${gap.value} never uses this kind of login (policy)`
+        : entry.lab?.kind === 'account'
+          ? `role ${gap.value} does not use the owner's real accounts`
+          : `role ${gap.value} does not use this kind of login`
 /** Backup keys, API keys, passwords and tool logins stay the owner's (owner decision 2026-11-08). */
 const OWNER_CHANGES =
-  'Only the owner changes this login, on the Logins page; ask with one tether ask create.'
+  "This key is the owner's: only the owner changes it, on the Logins page. Ask the owner only if a key you need doesn't exist yet (one tether ask create)."
+const ASK_COORDINATOR = 'Ask your coordinator, never the owner.'
+const restrictedCaller = (caller: LoginCaller) =>
+  !caller.owner && policy.restrictedRoles.includes(caller.role)
+const noLogin = (name: string, caller: LoginCaller) =>
+  restrictedCaller(caller)
+    ? `No login named ${name}. ${ASK_COORDINATOR} A coordinator enrolls a test login and assigns it.`
+    : `No login named ${name}. aico logins list shows every login you can use or be given.`
+/** Why a role can't be named on an account the owner has not marked. */
+const closedAccount = (entry: Login, role: string, caller: LoginCaller) =>
+  `Role ${role} can't use ${loginLabel(entry)}: ${gapText({ kind: 'policy', value: role }, entry)}. ${
+    caller.owner
+      ? `Mark it first: aico logins hunters-ok ${loginLabel(entry)} on.`
+      : 'Give it a test login (aico logins lab enroll, then aico logins assign).'
+  }`
+/** Owner decision 2026-11-08: coordinators and hunter coordinators give hunters test logins. A hunter
+ * coordinator is either work role coordinator or a session Tether lists as one; a restricted role never
+ * counts as one, even if it launched sessions of its own. */
+const coordinates = (caller: LoginCaller) =>
+  !policy.restrictedRoles.includes(caller.role) &&
+  (policy.coordinatorRoles.includes(caller.role) || caller.coordinator === true)
 const ACCOUNT_FIELDS_OWNERS =
   "An account login's username and password are the owner's (one plain ask); change its login page with aico logins edit"
 /** The one command that gives CALLER what is missing, or the policy reason when no grant does. */
 export function loginFix(entry: Login, gaps: LoginGap[], caller?: LoginCaller) {
   if (gaps.some((gap) => gap.kind === 'policy'))
-    return 'No grant opens it for this role; use a lab login assigned to your session.'
+    return `No grant opens it for this role; use a test login assigned to your session. ${ASK_COORDINATOR}`
   if (!entry.lab) return OWNER_CHANGES
-  // Restricted roles never change access themselves: a coordinator assigns their lab targets.
-  if (caller && policy.restrictedRoles.includes(caller.role))
-    return `A coordinator runs: aico logins assign ${caller.session || 'SESSION'} --target ${entry.lab?.target || loginLabel(entry)}`
+  // Restricted roles never change access themselves: a coordinator assigns their test logins.
+  if (caller && policy.restrictedRoles.includes(caller.role)) {
+    const steps = gaps.map((gap) =>
+      gap.kind === 'session'
+        ? `aico logins assign ${gap.value} --target ${entry.lab?.target}`
+        : `aico logins grant ${loginLabel(entry)} --${gap.kind} ${gap.value}`,
+    )
+    return `${ASK_COORDINATOR} A coordinator runs: ${steps.join('; ')}`
+  }
   return `aico logins allow ${loginLabel(entry)}`
 }
 export function unavailableText(entry: Login, caller: LoginCaller, gaps: LoginGap[]) {
@@ -360,14 +393,17 @@ export class LoginStore {
     return { time: index.clock, node: this.node }
   }
   /** What keeps CALLER from ENTRY; empty when it may use it. Restricted roles stay out of the owner's
-   * own logins by policy. A lab login opens through a session's target assignment or a role named on it;
+   * keys, and out of the owner's real accounts unless the owner marked that account hunters OK: this one
+   * check at the moment of use means a rename or an assignment can't hand an account over, so neither
+   * needs a gate of its own. A lab login opens through a session's target assignment or a role named on it;
    * an account login (the owner's own site login) also opens through "All roles" for unrestricted roles. */
   gaps(entry: Login, caller: LoginCaller, index = this.read(), toolRuntime = false): LoginGap[] {
     if (caller.owner) return []
     const restricted = policy.restrictedRoles.includes(caller.role)
     if (
       (restricted && !entry.lab && !(toolRuntime && entry.tool)) ||
-      (restricted && policy.restrictedTools.includes(entry.tool?.tool || entry.provider || ''))
+      (restricted && policy.restrictedTools.includes(entry.tool?.tool || entry.provider || '')) ||
+      (restricted && entry.lab?.kind === 'account' && entry.lab.huntersOk !== true)
     )
       return [{ kind: 'policy', value: caller.role }]
     const gaps: LoginGap[] = []
@@ -405,8 +441,7 @@ export class LoginStore {
   }
   private require(index: Index, name: string, caller: LoginCaller, toolRuntime = false) {
     const entry = this.findFor(index, name, caller)
-    if (!entry)
-      throw new LoginError(`No login named ${name}. aico logins list shows every saved login.`)
+    if (!entry) throw new LoginError(noLogin(name, caller))
     const gaps = this.gaps(entry, caller, index, toolRuntime)
     if (gaps.length) throw new LoginError(unavailableText(entry, caller, gaps))
     return entry
@@ -624,7 +659,9 @@ export class LoginStore {
         (!(old ? old.lab : metadata.lab) &&
           (!policy.toolGrants.includes(name) || policy.restrictedRoles.includes(caller.role))))
     )
-      throw new LoginError(`${name} is not a site login. ${OWNER_CHANGES}`)
+      throw new LoginError(
+        `${name} is not a site login. ${restrictedCaller(caller) ? ASK_COORDINATOR : OWNER_CHANGES}`,
+      )
     if (
       !caller.owner &&
       !old &&
@@ -635,7 +672,7 @@ export class LoginStore {
       // is given targets by a coordinator.
       if (!caller.session || policy.restrictedRoles.includes(caller.role))
         throw new LoginError(
-          `This session is not assigned lab target ${metadata.lab.target}. A coordinator runs: aico logins assign ${caller.session || 'SESSION'} --target ${metadata.lab.target}`,
+          `This session is not assigned lab target ${metadata.lab.target}. ${restrictedCaller(caller) ? `${ASK_COORDINATOR} ` : ''}A coordinator runs: aico logins assign ${caller.session || 'SESSION'} --target ${metadata.lab.target}`,
         )
       this.addTarget(index, caller.session, metadata.lab.target)
       this.record(index, caller, 'allow', name, false, `session ${caller.session}`)
@@ -643,6 +680,11 @@ export class LoginStore {
     if (!caller.owner && old) {
       const gaps = this.gaps(old, caller, index)
       if (gaps.length) throw new LoginError(unavailableText(old, caller, gaps))
+      // The owner's mark opens a real account to use, never to change.
+      if (restrictedCaller(caller) && old.lab?.kind === 'account')
+        throw new LoginError(
+          `${loginLabel(old)} is the owner's real account: hunters use it and don't change it. ${ASK_COORDINATOR}`,
+        )
     }
     if (metadata.tool) {
       parseToolSecrets([metadata.tool])
@@ -718,7 +760,12 @@ export class LoginStore {
         )
           throw new LoginError('Changing the site needs the password again')
       }
-      if (!old && !caller.owner && p.kind === 'account') throw new LoginError(ACCOUNT_FIELDS_OWNERS)
+      if (!old && !caller.owner && p.kind === 'account')
+        throw new LoginError(
+          restrictedCaller(caller)
+            ? `Real accounts are the owner's. ${ASK_COORDINATOR} A coordinator enrolls a test login and assigns it.`
+            : ACCOUNT_FIELDS_OWNERS,
+        )
       if (name !== labIdentity(entry.lab.target, entry.lab.actor).name)
         throw new LoginError('Lab login identity mismatch')
       entry.lab = {
@@ -730,6 +777,8 @@ export class LoginStore {
         ...(p.kind === 'account' && p.values.username ? { username: p.values.username } : {}),
         ...(p.kind === 'account' && p.values.login_url ? { login_url: p.values.login_url } : {}),
         ...(old?.lab?.programs?.length ? { programs: old.lab.programs } : {}),
+        // Never from the request: only huntersOk() sets or clears the mark.
+        ...(old?.lab?.huntersOk === true ? { huntersOk: true } : {}),
       }
     }
     writePrivate(join(this.folder, entry.file), value)
@@ -784,6 +833,15 @@ export class LoginStore {
     if (!/^[A-Za-z0-9_.*-]{1,128}$/.test(value)) throw new LoginError('Invalid grant')
     return this.change((index) => {
       const entry = this.siteLogin(this.existing(index, name, caller), caller)
+      if (
+        type === 'role' &&
+        granted &&
+        !caller.owner &&
+        policy.restrictedRoles.includes(value) &&
+        entry.lab?.kind === 'account' &&
+        entry.lab.huntersOk !== true
+      )
+        throw new LoginError(closedAccount(entry, value, caller))
       entry.revision = this.revision(index)
       const key = type === 'machine' ? 'machines' : 'roles'
       entry[key] = [
@@ -806,8 +864,8 @@ export class LoginStore {
   }
   /** Owner decisions 2026-11-07 and 11-08: once the owner saved a site login's username and password, any
    * agent fixes the rest itself (machines, roles, sessions, login page, notes, site name), logged and shown
-   * in the login's activity. Everything else in the store stays the owner's. Restricted roles (policy) keep
-   * coordinator-given access only. */
+   * in the login's activity. Everything else in the store stays the owner's. Restricted roles (policy) get
+   * their test logins from a coordinator. */
   private siteLogin(entry: Login, caller: LoginCaller) {
     if (!caller.owner && !entry.lab)
       throw new LoginError(`${loginLabel(entry)} is not a site login. ${OWNER_CHANGES}`)
@@ -816,31 +874,32 @@ export class LoginStore {
   private selfService(caller: LoginCaller) {
     if (!caller.owner && policy.restrictedRoles.includes(caller.role))
       throw new LoginError(
-        `Role ${caller.role} does not change login access; a coordinator assigns lab targets (aico logins assign SESSION --target TARGET)`,
+        `Role ${caller.role} does not change login access. ${ASK_COORDINATOR} A coordinator runs: aico logins assign SESSION --target TARGET`,
       )
   }
   /** Agents may open a login to their own session and to unrestricted roles; another session (it may be
-   * a hunter's) is a coordinator's or the owner's call, as is anything for a restricted role. */
+   * a hunter's) is a coordinator's or the owner's call, as is naming a restricted role. */
   private subjects(caller: LoginCaller, role?: string, session?: string) {
     if (caller.owner) return
-    if (role && policy.restrictedRoles.includes(role))
+    if (role && policy.restrictedRoles.includes(role) && !coordinates(caller))
       throw new LoginError(
-        `Role ${role} gets lab targets from a coordinator: aico logins assign SESSION --target TARGET`,
+        `Role ${role} gets test logins from a coordinator: aico logins assign SESSION --target TARGET`,
       )
-    if (session && session !== caller.session && caller.role !== 'coordinator')
+    if (session && session !== caller.session && !coordinates(caller))
       throw new LoginError(
-        `Only a coordinator or the owner opens a login to another session (${session}); your own session needs no flag.`,
+        `Only a coordinator or the owner opens a login to another session (${session}); ask your coordinator. Your own session needs no flag.`,
       )
   }
   private coordinator(caller: LoginCaller) {
-    if (!caller.owner && caller.role !== 'coordinator')
-      throw new LoginError('Only a coordinator or the owner can manage lab assignments')
+    if (!caller.owner && !coordinates(caller))
+      throw new LoginError(
+        'Only a coordinator or the owner manages lab assignments; ask your coordinator.',
+      )
   }
   /** A login by name or site name for a change that does not read it (no access check). */
   private existing(index: Index, name: string, caller: LoginCaller) {
     const entry = this.findFor(index, name, caller)
-    if (!entry || (!caller.owner && entry.verifierOnly))
-      throw new LoginError(`No login named ${name}. aico logins list shows every saved login.`)
+    if (!entry || (!caller.owner && entry.verifierOnly)) throw new LoginError(noLogin(name, caller))
     return entry
   }
   private addTarget(index: Index, session: string, target: string) {
@@ -875,7 +934,11 @@ export class LoginStore {
       const entry = this.siteLogin(this.existing(index, name, caller), caller)
       const gaps = this.gaps(entry, who, index)
       if (gaps.some((gap) => gap.kind === 'policy'))
-        throw new LoginError(unavailableText(entry, who, gaps))
+        throw new LoginError(
+          subject.role && subject.role !== caller.role
+            ? closedAccount(entry, subject.role, caller)
+            : unavailableText(entry, who, gaps),
+        )
       const changed: string[] = []
       for (const gap of gaps) {
         if (gap.kind === 'machine') {
@@ -1016,6 +1079,25 @@ export class LoginStore {
         entry.revision = this.revision(index)
         this.record(index, caller, 'edit', entry.name, false, changed.join(', '))
       }
+      return structuredClone(entry)
+    })
+  }
+  /** Opens the owner's real account to restricted roles, or closes it again. Owner only, logged. It still
+   * takes an assignment or a named role to reach a session. */
+  huntersOk(name: string, on: boolean, caller: LoginCaller): Login {
+    if (!caller.owner)
+      throw new LoginError(
+        'Only the owner marks an account hunters OK, on the Logins page. Agents use a test login instead.',
+      )
+    return this.change((index) => {
+      const entry = this.existing(index, name, caller)
+      if (entry.lab?.kind !== 'account')
+        throw new LoginError('Only an account login takes this mark')
+      if ((entry.lab.huntersOk === true) === on) return structuredClone(entry)
+      if (on) entry.lab.huntersOk = true
+      else delete entry.lab.huntersOk
+      entry.revision = this.revision(index)
+      this.record(index, caller, 'hunters OK', entry.name, false, on ? 'on' : 'off')
       return structuredClone(entry)
     })
   }
@@ -1168,6 +1250,8 @@ export class LoginStore {
           (!Array.isArray(programs) ||
             programs.some((p) => typeof p !== 'string' || !/^(\/|~\/)/.test(p)))
         )
+          throw new LoginError('Invalid login snapshot')
+        if (entry.lab.huntersOk !== undefined && entry.lab.huntersOk !== true)
           throw new LoginError('Invalid login snapshot')
       }
       seen.add(entry.name)
@@ -1394,7 +1478,7 @@ export class LoginStore {
           if (!labPrograms(entry).some((p) => sameFile(p, program, this.env)))
             throw new LoginError(
               policy.restrictedRoles.includes(caller.role) && !caller.owner
-                ? `${loginLabel(entry)} does not go to ${program}; a coordinator adds it: aico logins edit ${loginLabel(entry)} --program ${program}`
+                ? `${loginLabel(entry)} does not go to ${program}. ${ASK_COORDINATOR} A coordinator runs: aico logins edit ${loginLabel(entry)} --program ${program}`
                 : `${loginLabel(entry)} does not go to ${program}. If that program should get it: aico logins edit ${loginLabel(entry)} --program ${program}`,
             )
           const p = labPayload(

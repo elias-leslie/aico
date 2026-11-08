@@ -43,6 +43,7 @@ export interface Entry {
     expires_at: string | null
     username?: string
     login_url?: string
+    huntersOk?: boolean
   }
 }
 export interface Event {

@@ -739,3 +739,63 @@ it('removes a lab login by the site name its row shows, not its stored name', as
     confirm: '_lab_school--default',
   })
 })
+it('marks an account login hunters OK from its row, and shows the badge', async () => {
+  const account = {
+    ...entry,
+    name: '_lab_focus-pcsb--default',
+    kind: 'lab login',
+    lab: {
+      target: 'focus-pcsb',
+      actor: 'default',
+      kind: 'account',
+      fields: ['username', 'password', 'login_url'],
+      expires_at: null,
+    },
+  }
+  let marked = false
+  const fetcher = vi.fn(async (path: string, options?: RequestInit) => {
+    if (path.endsWith('/hunters-ok')) {
+      marked = JSON.parse(String(options?.body)).on
+      return Response.json({ entry: account })
+    }
+    return Response.json(
+      path.endsWith('/sessions')
+        ? { sessions: [] }
+        : path.endsWith('/audit')
+          ? { events: [] }
+          : path.endsWith('/roles')
+            ? { roles: [] }
+            : {
+                entries: [
+                  {
+                    ...account,
+                    lab: {
+                      ...account.lab,
+                      ...(marked ? { huntersOk: true } : {}),
+                    },
+                  },
+                  { ...entry },
+                ],
+                assignments: {},
+                revealSeconds: 30,
+              },
+    )
+  })
+  vi.stubGlobal('fetch', fetcher)
+  render(<LoginsPage />)
+  fireEvent.click(await screen.findByRole('button', { name: /focus-pcsb/ }))
+  expect(screen.queryByRole('img', { name: 'Hunters OK' })).toBeNull()
+  const toggle = screen.getByRole('switch', { name: 'Hunters OK' })
+  expect(toggle).not.toBeChecked()
+  fireEvent.click(toggle)
+  expect(
+    await screen.findByRole('img', { name: 'Hunters OK' }),
+  ).toHaveAttribute('title', expect.stringContaining('Off: closed to them'))
+  expect(screen.getByRole('switch', { name: 'Hunters OK' })).toBeChecked()
+  expect(
+    fetcher.mock.calls.find(([path]) => path.endsWith('/hunters-ok'))?.[0],
+  ).toBe('/api/logins/_lab_focus-pcsb--default/hunters-ok')
+  // A login that is not an account takes no mark.
+  fireEvent.click(screen.getByRole('button', { name: /scratch/ }))
+  expect(screen.getAllByRole('switch', { name: 'Hunters OK' })).toHaveLength(1)
+})

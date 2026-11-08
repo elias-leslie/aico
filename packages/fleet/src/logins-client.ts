@@ -31,6 +31,7 @@ type Operation =
   | 'catalog'
   | 'allow'
   | 'edit'
+  | 'huntersOk'
 interface LoginRequest {
   operation: Operation
   args: unknown[]
@@ -84,6 +85,8 @@ function perform(store: LoginStore, request: LoginRequest): unknown {
       return store.allow(args[0] as string, args[1] as Parameters<LoginStore['allow']>[1], caller)
     case 'edit':
       return store.edit(args[0] as string, args[1] as LoginEdit, caller)
+    case 'huntersOk':
+      return store.huntersOk(args[0] as string, args[1] === true, caller)
     case 'show':
       return store.show(args[0] as string, caller)
     case 'details':
@@ -279,6 +282,9 @@ export class LoginClient {
   }
   edit(name: string, patch: LoginEdit, caller: LoginCaller) {
     return this.request<Login>('edit', [name, patch], caller)
+  }
+  huntersOk(name: string, on: boolean, caller: LoginCaller) {
+    return this.request<Login>('huntersOk', [name, on], caller)
   }
   show(name: string, caller: LoginCaller) {
     return this.request<Login>('show', [name], caller)

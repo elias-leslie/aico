@@ -11,8 +11,9 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  type Login,
   type LoginCaller,
   LoginStore,
   labChildProgram,
@@ -797,8 +798,8 @@ it('lists every login to an agent: unusable ones with what is missing and the co
   })
   expect(JSON.stringify(listed)).not.toContain('fixture-')
   expect(JSON.stringify(listed)).not.toContain('me@example.test')
-  // A restricted role is not shown the owner's own logins it can never use.
-  expect(store.catalog(hunter).map((e) => e.name)).toEqual([identity.name])
+  // A restricted role is not shown the owner's own logins it can't use.
+  expect(store.catalog(hunter).map((e) => e.name)).toEqual([])
 })
 it('names what is missing in the refusal, with the one self-service command', () => {
   const identity = account()
@@ -812,11 +813,310 @@ it('names what is missing in the refusal, with the one self-service command', ()
   store.grant('sample', 'machine', loginMachine(), false, owner)
   expect(() => store.value('sample', agent)).toThrow(`machine ${loginMachine()} is not allowed`)
 })
-it('an account login opens through All roles for unrestricted roles; restricted roles still need a target', () => {
+it('an account login opens through All roles for unrestricted roles; restricted roles stay out unless marked', () => {
   account()
   const agent = { role: 'school-check', machine: loginMachine() }
   expect(store.show('canvas-pcsb', agent).lab?.target).toBe('canvas-pcsb')
-  expect(() => store.show('canvas-pcsb', hunter)).toThrow('not assigned target canvas-pcsb')
+  expect(() => store.show('canvas-pcsb', hunter)).toThrow("does not use the owner's real accounts")
+  expect(() => store.show('canvas-pcsb', hunter)).toThrow('Ask your coordinator, never the owner')
+})
+describe('the owner real accounts and restricted roles', () => {
+  const agent: LoginCaller = { role: 'school-check', machine: loginMachine(), session: 'a1b2c3d4' }
+  const coordinator: LoginCaller = {
+    role: 'coordinator',
+    machine: loginMachine(),
+    session: 'coord-one',
+  }
+  // Tether's coordinator flag, with whatever work role the session started under.
+  const huntCoordinator: LoginCaller = {
+    role: 'implementation',
+    machine: loginMachine(),
+    session: 'coord-two',
+    coordinator: true,
+  }
+  const testLogin = (target: string) => {
+    const identity = labIdentity(target, 'default')
+    store.set(
+      identity.name,
+      JSON.stringify({
+        schema_version: 1,
+        reference: identity.reference,
+        kind: 'synthetic',
+        expires_at: null,
+        values: { username: 'fixture-user', password: 'fixture-password' },
+      }),
+      {
+        kind: 'lab login',
+        lab: { target, actor: 'default', kind: 'synthetic', expires_at: null, fields: [] },
+      },
+      owner,
+    )
+    return identity
+  }
+  it('refuses an assigned hunter on an unmarked account, at the moment of use', () => {
+    const identity = account()
+    store.assign('hunt-one', ['canvas-pcsb'], owner)
+    expect(() => store.show('canvas-pcsb', hunter)).toThrow(
+      "does not use the owner's real accounts",
+    )
+    expect(() =>
+      store.resolveLab(
+        'canvas-pcsb',
+        [{ reference: identity.reference, fields: ['username'] }],
+        hunter,
+        adapter,
+      ),
+    ).toThrow("does not use the owner's real accounts")
+    expect(store.catalog(hunter).map((e) => e.name)).not.toContain(identity.name)
+    // Naming the role on the login opens nothing either.
+    store.grant(identity.name, 'role', 'hunting', true, owner)
+    expect(() => store.show('canvas-pcsb', hunter)).toThrow(
+      "does not use the owner's real accounts",
+    )
+  })
+  it('lets an agent rename an account onto a hunter site; the hunter stays out', () => {
+    account()
+    store.assign('hunt-one', ['shop-local'], coordinator)
+    const renamed = store.edit('canvas-pcsb', { target: 'shop-local' }, agent)
+    expect(renamed.lab?.target).toBe('shop-local')
+    expect(store.assignments(owner)['hunt-one']).toEqual(['shop-local'])
+    expect(() => store.show('shop-local', hunter)).toThrow("does not use the owner's real accounts")
+  })
+  it('opens a marked account only to a hunter who is assigned it, and closes it again', () => {
+    const identity = account()
+    expect(store.huntersOk('canvas-pcsb', true, owner).lab?.huntersOk).toBe(true)
+    expect(() => store.show('canvas-pcsb', hunter)).toThrow('not assigned target canvas-pcsb')
+    expect(() => store.show('canvas-pcsb', hunter)).toThrow('Ask your coordinator, never the owner')
+    store.assign('hunt-one', ['canvas-pcsb'], coordinator)
+    expect(store.show('canvas-pcsb', hunter).name).toBe(identity.name)
+    expect(
+      store.resolveLab(
+        'canvas-pcsb',
+        [{ reference: identity.reference, fields: ['username'] }],
+        hunter,
+        adapter,
+      ),
+    ).toMatchObject({ schema_version: 1 })
+    expect(store.audit(owner).at(-3)).toMatchObject({
+      action: 'hunters OK',
+      name: identity.name,
+      actor: 'owner',
+      detail: 'on',
+    })
+    store.huntersOk('canvas-pcsb', false, owner)
+    expect(store.audit(owner).at(-1)).toMatchObject({ action: 'hunters OK', detail: 'off' })
+    expect(store.show('canvas-pcsb', agent).lab?.huntersOk).toBeUndefined()
+    expect(() => store.show('canvas-pcsb', hunter)).toThrow(
+      "does not use the owner's real accounts",
+    )
+  })
+  it('keeps the mark across a rename and a change of notes, page or programs', () => {
+    account()
+    store.huntersOk('canvas-pcsb', true, owner)
+    store.edit('canvas-pcsb', { notes: 'x', login_url: 'https://other.example.test/' }, agent)
+    store.edit('canvas-pcsb', { program: adapter }, agent)
+    expect(store.edit('canvas-pcsb', { target: 'renamed' }, agent).lab?.huntersOk).toBe(true)
+    const identity = labIdentity('renamed', 'default')
+    // The owner replacing or patching it keeps the mark too.
+    store.set(identity.name, store.value(identity.name, owner).toString(), {}, owner, true)
+    expect(store.show('renamed', agent).lab?.huntersOk).toBe(true)
+    store.patchLab('renamed', 'default', { set: { totp_secret: 'fixture-totp' } }, owner)
+    expect(store.show('renamed', agent).lab?.huntersOk).toBe(true)
+  })
+  it('the mark opens an account to use, never to change', () => {
+    const identity = account()
+    store.huntersOk('canvas-pcsb', true, owner)
+    store.assign('hunt-one', ['canvas-pcsb'], coordinator)
+    const before = store.value(identity.name, owner).toString()
+    expect(() =>
+      store.patchLab('canvas-pcsb', 'default', { set: { totp_secret: 'x' } }, hunter),
+    ).toThrow("hunters use it and don't change it")
+    expect(() => store.set(identity.name, before, {}, hunter, true)).toThrow(
+      "hunters use it and don't change it",
+    )
+    expect(store.value(identity.name, owner).toString()).toBe(before)
+  })
+  it('a refusal names the step that fixes it, not an assignment that changes nothing', () => {
+    const identity = testLogin('shop-local')
+    store.assign('hunt-one', ['shop-local'], coordinator)
+    store.grant(identity.name, 'role', '*', false, owner)
+    expect(() => store.show('shop-local', hunter)).toThrow(
+      'A coordinator runs: aico logins grant shop-local --role hunting',
+    )
+    store.grant(identity.name, 'role', '*', true, owner)
+    store.grant(identity.name, 'machine', loginMachine(), false, owner)
+    expect(() => store.show('shop-local', hunter)).toThrow(
+      `A coordinator runs: aico logins grant shop-local --machine ${loginMachine()}`,
+    )
+    store.grant(identity.name, 'machine', loginMachine(), true, coordinator)
+    store.assign('hunt-one', [], coordinator)
+    expect(() => store.show('shop-local', hunter)).toThrow(
+      'A coordinator runs: aico logins assign hunt-one --target shop-local',
+    )
+    expect(() => store.show('nothing-here', hunter)).toThrow(
+      'No login named nothing-here. Ask your coordinator, never the owner',
+    )
+    expect(() => store.set('other', 'x', {}, hunter)).toThrow('Ask your coordinator')
+    expect(() => store.set('other', 'x', {}, hunter)).not.toThrow('tether ask')
+  })
+  it('the mark reaches other machines, on and off', () => {
+    const identity = account()
+    store.grant(identity.name, 'machine', 'worker-one', true, owner)
+    store.assign('hunt-one', ['canvas-pcsb'], owner)
+    const peerHome = mkdtempSync(join(tmpdir(), 'aico-logins-peer-'))
+    try {
+      const peer = new LoginStore({ HOME: peerHome }, undefined, 'worker-one')
+      const there = { ...hunter, machine: 'worker-one' }
+      peer.mergeSnapshot(store.snapshot('worker-one', false), 'worker-one')
+      expect(() => peer.show('canvas-pcsb', there)).toThrow(
+        "does not use the owner's real accounts",
+      )
+      store.huntersOk('canvas-pcsb', true, owner)
+      peer.mergeSnapshot(store.snapshot('worker-one', false), 'worker-one')
+      expect(peer.show('canvas-pcsb', there).name).toBe(identity.name)
+      store.huntersOk('canvas-pcsb', false, owner)
+      peer.mergeSnapshot(store.snapshot('worker-one', false), 'worker-one')
+      expect(() => peer.show('canvas-pcsb', there)).toThrow(
+        "does not use the owner's real accounts",
+      )
+    } finally {
+      rmSync(peerHome, { recursive: true, force: true })
+    }
+  })
+  it('only the owner sets or clears the mark, and only on an account', () => {
+    const identity = account()
+    for (const caller of [agent, coordinator, huntCoordinator, hunter])
+      expect(() => store.huntersOk('canvas-pcsb', true, caller)).toThrow('Only the owner')
+    store.huntersOk('canvas-pcsb', true, owner)
+    expect(() => store.huntersOk('canvas-pcsb', false, coordinator)).toThrow('Only the owner')
+    testLogin('shop-local')
+    expect(() => store.huntersOk('shop-local', true, owner)).toThrow('account login')
+    store.set('sample', 'fixture-private-value', {}, owner)
+    expect(() => store.huntersOk('sample', true, owner)).toThrow('account login')
+    // The mark comes through this one door: not through a save, and not through a replacement.
+    store.huntersOk('canvas-pcsb', false, owner)
+    const entry = store.show('canvas-pcsb', agent)
+    const value = store.value(identity.name, owner).toString()
+    store.set(
+      identity.name,
+      value,
+      { lab: { ...entry.lab, huntersOk: true } as Login['lab'] },
+      owner,
+      true,
+    )
+    expect(store.show('canvas-pcsb', agent).lab?.huntersOk).toBeUndefined()
+  })
+  it('refuses a peer snapshot whose mark is not plainly on', () => {
+    const identity = account()
+    store.huntersOk('canvas-pcsb', true, owner)
+    const snapshot = store.snapshot(loginMachine(), true)
+    const item = snapshot.entries.find((e) => e.entry.name === identity.name)
+    if (!item?.entry.lab) throw new Error('no entry')
+    expect(item.entry.lab.huntersOk).toBe(true)
+    ;(item.entry.lab as { huntersOk?: unknown }).huntersOk = 'yes'
+    expect(() => store.mergeSnapshot(snapshot)).toThrow('Invalid login snapshot')
+  })
+  it('coordinators and hunter coordinators give a hunter a test login, no owner step', () => {
+    for (const [caller, session] of [
+      [coordinator, 'hunt-one'],
+      [huntCoordinator, 'hunt-one'],
+    ] as const) {
+      const target = `shop-${caller.session}`
+      const identity = testLogin(target)
+      store.assign(session, [target], caller)
+      expect(store.show(target, { ...hunter, session }).name).toBe(identity.name)
+      store.assign(session, [], caller)
+      expect(store.allow(target, { session }, caller).changed).toEqual([`session ${session}`])
+      expect(store.show(target, { ...hunter, session }).name).toBe(identity.name)
+      // A test login that names its roles: the coordinator can name the hunter's too.
+      store.grant(identity.name, 'role', '*', false, owner)
+      expect(() => store.show(target, { ...hunter, session })).toThrow('role hunting')
+      store.grant(identity.name, 'role', 'hunting', true, caller)
+      expect(store.show(target, { ...hunter, session }).name).toBe(identity.name)
+    }
+  })
+  it('a coordinator cannot hand a hunter role an unmarked account', () => {
+    const named = account()
+    expect(() => store.grant(named.name, 'role', 'hunting', true, coordinator)).toThrow(
+      "does not use the owner's real accounts",
+    )
+    expect(() => store.allow('canvas-pcsb', { role: 'hunting' }, coordinator)).toThrow(
+      "does not use the owner's real accounts",
+    )
+    expect(() => store.allow('canvas-pcsb', { role: 'hunting' }, coordinator)).toThrow('test login')
+  })
+  it('a restricted role never counts as a coordinator, flag or no flag', () => {
+    testLogin('shop-local')
+    const flagged = { ...hunter, coordinator: true }
+    expect(() => store.assign('hunt-one', ['shop-local'], flagged)).toThrow('Only a coordinator')
+    expect(() => store.assignments(flagged)).toThrow('Only a coordinator')
+    expect(() => store.allow('shop-local', { session: 'other' }, flagged)).toThrow('coordinator')
+    const plain = { ...agent, coordinator: false }
+    expect(() => store.assign('hunt-one', ['shop-local'], plain)).toThrow('Only a coordinator')
+  })
+  it('the command line refuses an agent the mark, and asks Tether who coordinates', async () => {
+    account()
+    const lines: string[] = []
+    const io = (caller: LoginCaller, coordinates: LoginsIo['coordinates'] = () => false) => ({
+      out: () => {},
+      err: (text: string) => void lines.push(text),
+      caller,
+      coordinates,
+    })
+    expect(await runLogins(['hunters-ok', 'canvas-pcsb', 'on'], env, io(agent))).toBe(1)
+    expect(lines.at(-1)).toContain('Only the owner')
+    expect(store.show('canvas-pcsb', owner).lab?.huntersOk).toBeUndefined()
+    expect(await runLogins(['hunters-ok', 'canvas-pcsb', 'maybe'], env, io(owner))).toBe(1)
+    expect(await runLogins(['hunters-ok', 'canvas-pcsb', 'on'], env, io(owner))).toBe(0)
+    expect(store.show('canvas-pcsb', owner).lab?.huntersOk).toBe(true)
+    testLogin('shop-local')
+    const assign = ['assign', 'hunt-one', '--target', 'shop-local']
+    expect(await runLogins(assign, env, io(agent))).toBe(1)
+    expect(lines.at(-1)).toContain('Only a coordinator')
+    const asked = vi.fn<LoginsIo['coordinates']>(() => true)
+    expect(await runLogins(assign, env, io(agent, asked))).toBe(0)
+    expect(asked).toHaveBeenCalledWith('a1b2c3d4', env)
+    expect(store.assignments(owner)['hunt-one']).toEqual(['shop-local'])
+    // Tether's flag does nothing for a restricted role.
+    expect(
+      await runLogins(
+        ['unassign', 'hunt-one'],
+        env,
+        io(hunter, () => true),
+      ),
+    ).toBe(1)
+    // Plain self-service doesn't ask Tether at all.
+    const unasked = vi.fn<LoginsIo['coordinates']>(() => true)
+    expect(await runLogins(['allow', 'canvas-pcsb'], env, io(agent, unasked))).toBe(0)
+    expect(unasked).not.toHaveBeenCalled()
+  })
+  it('regular agent fixes stay unblocked', () => {
+    const identity = account()
+    store.grant(identity.name, 'role', '*', false, owner)
+    store.grant(identity.name, 'machine', loginMachine(), false, owner)
+    expect(store.allow('canvas-pcsb', {}, agent).changed.length).toBe(3)
+    expect(store.edit('canvas-pcsb', { notes: 'fixed' }, agent).notes).toBe('fixed')
+    expect(
+      store.edit('canvas-pcsb', { login_url: 'https://other.example.test/' }, agent).lab?.login_url,
+    ).toBe('https://other.example.test/')
+    store.grant(identity.name, 'role', 'review', true, agent)
+    expect(store.show('canvas-pcsb', agent).name).toBe(identity.name)
+  })
+  it('hunters are told to ask their coordinator; only a missing key or a bad secret goes to the owner', () => {
+    const identity = account()
+    store.huntersOk('canvas-pcsb', true, owner)
+    expect(() => store.allow('canvas-pcsb', {}, hunter)).toThrow(
+      'Ask your coordinator, never the owner',
+    )
+    expect(() => store.edit('canvas-pcsb', { notes: 'x' }, hunter)).toThrow(
+      'Ask your coordinator, never the owner',
+    )
+    store.set('sample', 'fixture-private-value', {}, owner)
+    expect(() => store.grant('sample', 'role', 'review', true, agent)).toThrow(
+      "Ask the owner only if a key you need doesn't exist yet",
+    )
+    expect(store.show('canvas-pcsb', agent).name).toBe(identity.name)
+  })
 })
 it('lets any agent give itself what is missing, logged on the login with who and what', () => {
   const identity = account()
@@ -910,8 +1210,9 @@ it('keeps hunters and other sessions a coordinator call, and the saved site the 
   ])
   // A hunter is pointed at its coordinator, not at a command that refuses it.
   store.assign('hunt-one', [], owner)
+  store.huntersOk('canvas-pcsb', true, owner)
   expect(() => store.show('canvas-pcsb', hunter)).toThrow(
-    'A coordinator runs: aico logins assign hunt-one --target canvas-pcsb',
+    'Ask your coordinator, never the owner. A coordinator runs: aico logins assign hunt-one --target canvas-pcsb',
   )
   // An agent never changes an account login's username, password or site through the lab patch.
   expect(() =>
@@ -1053,7 +1354,7 @@ it('leaves backup keys, API keys, passwords and tool logins to the owner', () =>
     () => store.edit('key', { notes: 'x' }, agent),
     () => store.edit('key', { kind: 'password' }, agent),
   ])
-    expect(change).toThrow(/Only the owner changes this login, on the Logins page/)
+    expect(change).toThrow(/only the owner changes it, on the Logins page/)
   expect(store.list().find((entry) => entry.name === 'key')).toMatchObject({
     machines: ['elsewhere'],
     roles: ['job'],
@@ -1062,9 +1363,9 @@ it('leaves backup keys, API keys, passwords and tool logins to the owner', () =>
   // The list says who fixes it, and so does a refusal to use it.
   expect(store.catalog(agent).find((entry) => entry.name === 'key')).toMatchObject({
     available: false,
-    fix: expect.stringContaining('Only the owner'),
+    fix: expect.stringContaining('only the owner changes it'),
   })
-  expect(() => store.value('key', agent)).toThrow(/Only the owner changes this login/)
+  expect(() => store.value('key', agent)).toThrow(/only the owner changes it/)
   // The owner still can.
   expect(store.grant('key', 'machine', 'other', true, owner).machines).toContain('other')
   expect(store.edit('key', { notes: 'y' }, owner).notes).toBe('y')
@@ -1078,7 +1379,7 @@ it('leaves saving and replacing anything but a site login to the owner', () => {
     () => store.set('new-key', 'value', {}, agent),
     () => store.set('key', 'other', { lab: lab('x', 'y').metadata.lab }, agent, true),
   ])
-    expect(save).toThrow(/Only the owner changes this login/)
+    expect(save).toThrow(/only the owner changes it/)
   expect(store.list().find((entry) => entry.name === 'new-key')).toBeUndefined()
 })
 

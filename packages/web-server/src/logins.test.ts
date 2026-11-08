@@ -3,7 +3,7 @@ import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { contextDbPath, openContext } from '@aico/context'
-import { LoginStore, loginMachine } from '@aico/fleet/logins'
+import { LoginStore, labIdentity, loginMachine } from '@aico/fleet/logins'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { Router } from './http'
 import { registerLoginRoutes } from './logins'
@@ -93,9 +93,51 @@ it('supports lab partial edits and assignments without returning field values', 
     (await post('/api/logins/assign', { session: 'hunt-one', targets: ['example-local'] })).status,
   ).toBe(200)
   const store = new LoginStore({ HOME: home })
+  // An account stays closed to a hunter however it is assigned; the owner's mark opens it.
+  const hunter = { session: 'hunt-one', role: 'hunting', machine: loginMachine() }
+  expect(store.list(hunter)).toHaveLength(0)
+  store.huntersOk(labIdentity('example-local', 'viewer').name, true, {
+    owner: true,
+    role: 'owner',
+    machine: loginMachine(),
+  })
+  expect(store.list(hunter)).toHaveLength(1)
+})
+it('the page sets and clears hunters OK on an account login, logged; a client value is refused', async () => {
+  const name = labIdentity('hunters-site', 'default').name
+  await post('/api/logins/lab', {
+    target: 'hunters-site',
+    actor: 'default',
+    kind: 'account',
+    values: {
+      username: 'fixture-user',
+      password: 'fixture-password',
+      login_url: 'https://hunters.example.test/login',
+    },
+  })
+  const hunter = { session: 'hunt-mark', role: 'hunting', machine: loginMachine() }
+  const store = new LoginStore({ HOME: home })
+  store.assign('hunt-mark', ['hunters-site'], {
+    owner: true,
+    role: 'owner',
+    machine: loginMachine(),
+  })
+  expect(store.list(hunter)).toHaveLength(0)
+  expect((await post(`/api/logins/${name}/hunters-ok`, { on: 'yes' })).status).toBe(400)
+  const on = await post(`/api/logins/${name}/hunters-ok`, { on: true })
+  expect(on.status).toBe(200)
+  const body = await on.text()
+  expect(body).toContain('"huntersOk":true')
+  expect(body).not.toContain('fixture-password')
+  expect(store.list(hunter).map((e) => e.name)).toEqual([name])
+  expect((await post(`/api/logins/${name}/hunters-ok`, { on: false })).status).toBe(200)
+  expect(store.list(hunter)).toHaveLength(0)
   expect(
-    store.list({ session: 'hunt-one', role: 'hunting', machine: loginMachine() }),
-  ).toHaveLength(1)
+    store
+      .audit({ owner: true, role: 'owner', machine: loginMachine() })
+      .filter((e) => e.action === 'hunters OK')
+      .map((e) => e.detail),
+  ).toEqual(['on', 'off'])
 })
 it('lists the registered work roles for the access checklist, none when no data folder is given', async () => {
   expect(await (await fetch(`${base}/api/logins/roles`)).json()).toEqual({ roles: [] })

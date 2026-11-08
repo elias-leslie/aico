@@ -238,6 +238,15 @@ export function registerLoginRoutes(
       return { entry, warning: client.warning }
     })(),
   )
+  // The owner's mark on a real account; the store refuses every other caller.
+  router.on('POST', '/api/logins/:name/hunters-ok', (ctx) =>
+    safe(async (client) => {
+      const body = objectBody(await ctx.body())
+      if (typeof body.on !== 'boolean') throw new LoginError('Choose on or off')
+      const entry = await client.huntersOk(ctx.params.name, body.on, owner)
+      return { entry, warning: client.warning }
+    })(),
+  )
   router.on('POST', '/api/logins/:name/remove', (ctx) =>
     safe(async (client) => {
       const body = objectBody(await ctx.body())

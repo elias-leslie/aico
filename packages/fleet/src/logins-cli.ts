@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { fstatSync, readFileSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
 import { probeLoginPage } from './login-probe'
@@ -62,8 +62,10 @@ Logins live in Aico's private secrets folder. Values enter through hidden input 
   get NAME                            only to an owner-only file; never a session log
   run --with NAME[=ENV] ... -- CMD      inject into one command's environment
   grant|revoke NAME --machine NAME | --role ROLE     logged on the login
-  assign SESSION --target TARGET ...  coordinator: replaces a session's targets; logged
+  assign SESSION --target TARGET ...  coordinator or hunter coordinator: replaces a session's test
+                                      logins; logged; no owner step
   unassign SESSION                    removes all target access
+  hunters-ok NAME on|off              owner only: opens or closes a real account to hunters; logged
   assignments                        list assignments
   remove NAME                         owner only; type the name to confirm
   lab refs [--target TARGET]           assigned target references, no values
@@ -73,10 +75,15 @@ Logins live in Aico's private secrets folder. Values enter through hidden input 
       selected fields through AGENT_HUB_LAB_CREDENTIAL_FD; no child output. Only to the
       shared adapters and the login's own programs (edit --program); PYTHON -I SCRIPT
       counts as SCRIPT
-On a saved site login only the username and password are the owner's: a wrong or missing one is
-one plain ask (tether ask create). Everything else on it agents fix themselves, logged in the login's
-activity. Backup keys, API keys, passwords and tool logins stay the owner's, on the Logins page
-(restricted roles get lab targets from a coordinator).`
+Who does what:
+  Owner: saves usernames and passwords, removes logins, owns API, backup and tool keys.
+  Agents: fix everything else on a saved site login themselves, logged in its activity.
+  Coordinators and hunter coordinators: also give hunters test logins (assign), no owner step.
+  Hunters (restricted roles): use test logins for their sites; a missing one is asked of their
+  coordinator, never the owner. The owner's real accounts stay closed to them unless the owner
+  marked that login hunters OK on the Logins page.
+Ask the owner (one tether ask create) only for a wrong or missing username or password, or a key
+that doesn't exist yet.`
 
 /** One command's lines of the usage above, so `aico logins edit --help` answers about edit. */
 function commandUsage(command: string): string {
@@ -182,7 +189,28 @@ export interface LoginsIo {
   execute(command: string[], env: NodeJS.ProcessEnv, bundle?: string): Promise<number>
   /** Checks a login page for a password field (login-probe.ts). */
   probe(url: string): Promise<{ warning: string }>
+  /** Whether Tether lists this session as a coordinator. */
+  coordinates(session: string, env: NodeJS.ProcessEnv): boolean
 }
+/** A hunter coordinator is often the session that started the hunt, listed as a coordinator by Tether
+ * with some other work role. Unreadable means no: the refusal says who can do it. */
+function tetherCoordinates(session: string, env: NodeJS.ProcessEnv) {
+  const answer = spawnSync('tether', ['--json', 'sessions', 'get', session], {
+    env,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  })
+  try {
+    return JSON.parse(answer.stdout).coordinator === true
+  } catch {
+    return false
+  }
+}
+/** Commands that do something only a coordinator may do. */
+const coordinatorWork = (command: string, rest: string[]) =>
+  ['assign', 'unassign', 'assignments'].includes(command) ||
+  (['allow', 'grant', 'revoke'].includes(command) &&
+    (rest.includes('--session') || rest.includes('--role')))
 export async function commandEnvironment(
   store: { value(name: string, caller: LoginCaller): Buffer | Promise<Buffer> },
   bindings: string[],
@@ -244,6 +272,7 @@ function defaultIo(env: NodeJS.ProcessEnv): LoginsIo {
     caller: loginCaller(env),
     input: secretInput,
     probe: probeLoginPage,
+    coordinates: tetherCoordinates,
     outputSafe: () => {
       if (process.stdout.isTTY) return false
       const stat = fstatSync(1)
@@ -309,7 +338,9 @@ async function listLogins({ rest, io, store, output }: LoginRun): Promise<number
   const found = text ? logins.filter((l) => l.name.toLowerCase().includes(text)) : logins
   // Stdout stays JSON for scripts; the plain words go beside it.
   if (text && !found.length)
-    io.err(`No login has "${words[0]}" in its name. aico logins list shows every saved login.\n`)
+    io.err(
+      `No login has "${words[0]}" in its name. aico logins list shows every login you can use or be given.\n`,
+    )
   if (text || rest.includes('--json')) output(found)
   else {
     io.out(loginLines(found))
@@ -462,6 +493,14 @@ async function grantLogin({ command, rest, io, store, output }: LoginRun): Promi
       io.caller,
     ),
   )
+  return 0
+}
+
+async function markHuntersOk({ rest, io, store, output }: LoginRun): Promise<number> {
+  const [name, state, ...extra] = rest
+  if (!name || (state !== 'on' && state !== 'off') || extra.length)
+    throw new LoginError('hunters-ok needs a login name, then on or off')
+  output(await store.huntersOk(name, state === 'on', io.caller))
   return 0
 }
 
@@ -635,6 +674,7 @@ const COMMANDS = new Map<string, (run: LoginRun) => Promise<number>>([
   ['assignments', listAssignments],
   ['assign', assignTargets],
   ['unassign', assignTargets],
+  ['hunters-ok', markHuntersOk],
   ['remove', removeLogin],
   ['lab', runLab],
 ])
@@ -657,6 +697,14 @@ export async function runLogins(
       io.out(commandUsage(command))
       return 0
     }
+    // Work role coordinator already qualifies; a restricted role never does.
+    if (
+      io.caller.session &&
+      !io.caller.owner &&
+      ![...loginPolicy.coordinatorRoles, ...loginPolicy.restrictedRoles].includes(io.caller.role) &&
+      coordinatorWork(command, rest)
+    )
+      io.caller = { ...io.caller, coordinator: io.coordinates(io.caller.session, env) }
     const store = new LoginClient(env)
     const handler = COMMANDS.get(command)
     if (!handler) throw new LoginError(UNKNOWN_COMMAND)

@@ -1,5 +1,6 @@
 'use client'
 
+import { Crosshair } from 'lucide-react'
 import { type ReactNode, useEffect, useState } from 'react'
 import {
   api,
@@ -31,8 +32,11 @@ import {
   sessionsOf,
 } from './LoginAccess'
 import { SecretField } from './LoginSecretField'
-import { Actions, Form, Quiet, Row } from './settings/kit'
+import { Actions, Form, Quiet, Row, Switch } from './settings/kit'
 import kit from './settings/kit.module.css'
+
+const HUNTERS_TIP =
+  'Hunters a coordinator gives this site can use this account. Off: closed to them, whatever they are given.'
 
 export function LoginRow({
   entry,
@@ -108,7 +112,21 @@ export function LoginRow({
   return (
     <Row
       name={shownName}
-      meta={<span title={metaTip(entry)}>{meta(entry)}</span>}
+      meta={
+        <>
+          <span title={metaTip(entry)}>{meta(entry)}</span>
+          {entry.lab?.huntersOk && (
+            <span
+              className={kit.huntersOk}
+              role="img"
+              aria-label="Hunters OK"
+              title={HUNTERS_TIP}
+            >
+              <Crosshair strokeWidth={1.7} aria-hidden="true" />
+            </span>
+          )}
+        </>
+      }
       chip={chipOf(entry.state)}
       chipText={entry.state}
       chipTitle={STATE_TIP[entry.state]}
@@ -118,6 +136,25 @@ export function LoginRow({
       {check}
       {entry.notes && <p>{entry.notes}</p>}
       {entry.lab && <small>Last used: {when(entry.lastUsed)}</small>}
+      {account && (
+        <Switch
+          label="Hunters OK"
+          title={HUNTERS_TIP}
+          showLabel
+          checked={entry.lab?.huntersOk === true}
+          busy={busy}
+          disabled={readOnly}
+          onChange={(on) =>
+            void run(async () => {
+              const result = await api(`${path}/hunters-ok`, { on })
+              await onChanged(
+                result.warning ||
+                  `${shownName} ${on ? 'open to' : 'closed to'} hunters.`,
+              )
+            })
+          }
+        />
+      )}
       <Actions>
         {!entry.verifierOnly && (
           <>
