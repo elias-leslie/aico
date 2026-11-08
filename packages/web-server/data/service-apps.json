@@ -89,7 +89,7 @@
           "free_tier": true
         },
         "jobs-tailor": {
-          "model": "gemini-3.8-flash",
+          "model": "gemini-4-argon",
           "prompts": ["jobs-tailor-system-prompt"],
           "free_tier": true
         },
