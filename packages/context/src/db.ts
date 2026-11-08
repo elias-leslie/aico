@@ -225,6 +225,12 @@ const MIGRATIONS = [
        'full = Agent Hub delivery in the project', 'full = Aico''s context delivery in the project'),
        'Agent Hub agent sessions with a denied work role', 'Aico agent sessions with a denied work role')
      WHERE key = 'launch';`,
+  // Owner 2026-11-08: routine agent work runs on the Antigravity subscription. Aico launches it
+  // under the limits in native/hook/data/leash.json.
+  `UPDATE launch_tools SET
+     note = 'Owner 2026-11-08: routine maintenance and small fixes. Runs under Aico''s limits (no tmux, kill, root, deploys, sessions, credentials or changes outside its project), so never coordinators, hunting, or hook, guard, root, secrets or deletion code. Check its work before relying on it.',
+     default_row = '{"model":"gemini-3.8-flash-high","effort":null,"alternates":[{"model":"gemini-4-argon-high","effort":null,"when":"Flash got lost, or the job takes more thought than a small well-scoped fix"}],"why":"Owner 2026-11-08: routine agent work uses the Antigravity subscription. Flash did small fixes and a service diagnosis correctly in trials."}'
+     WHERE name = 'antigravity';`,
 ]
 
 /** The context DB file in a data directory. */

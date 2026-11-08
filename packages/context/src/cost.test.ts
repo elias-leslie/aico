@@ -83,7 +83,7 @@ describe('context inventory and use', () => {
       old.close()
       const upgraded = openContext(path)
       try {
-        expect(upgraded.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 6 })
+        expect(upgraded.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 7 })
         expect(
           upgraded.prepare('SELECT count(*) AS n FROM role_context_overrides').get(),
         ).toMatchObject({ n: 0 })
