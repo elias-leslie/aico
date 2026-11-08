@@ -186,6 +186,23 @@ const CHIP: Record<string, Chip> = {
   Unavailable: 'failed',
 }
 const chipOf = (state: string): Chip => CHIP[state] ?? 'off'
+const STATE_TIP: Record<string, string> = {
+  'In use': 'An agent has used this login.',
+  Unused: 'Saved, but no agent has used it yet.',
+  Expired: 'Past its end date: agents can no longer use it.',
+  'Needs sign-in': 'Its tool is signed out on this computer: sign in again.',
+  Unavailable: 'Its saved value is missing on this computer: replace it.',
+  'Held on VM 180':
+    'The login itself lives on VM 180; this computer keeps only a way to check it.',
+}
+const metaTip = (entry: Entry) =>
+  entry.lab
+    ? `For the ${entry.lab.actor === 'default' ? 'default' : `“${entry.lab.actor}”`} user of ${entry.lab.target}; ${
+        entry.lab.kind === 'account'
+          ? 'an account login (username and password)'
+          : `a ${entry.lab.kind}`
+      }`
+    : undefined
 const meta = (entry: Entry) =>
   entry.lab
     ? `${entry.lab.actor} · ${entry.lab.kind}${
@@ -747,9 +764,10 @@ function LoginRow({
   return (
     <Row
       name={shownName}
-      meta={meta(entry)}
+      meta={<span title={metaTip(entry)}>{meta(entry)}</span>}
       chip={chipOf(entry.state)}
       chipText={entry.state}
+      chipTitle={STATE_TIP[entry.state]}
     >
       {entry.lab?.username && <small>Username: {entry.lab.username}</small>}
       {entry.lab?.login_url && <small>Login page: {entry.lab.login_url}</small>}
