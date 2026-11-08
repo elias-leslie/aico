@@ -339,7 +339,7 @@ export class NotesStore {
 
   /** Moves the clock past a stamp seen from a peer (sync), and remembers it. */
   observe(remote: number): void {
-    this.clock.observe(remote)
+    this.transaction(() => this.clock.observe(remote))
   }
 
   /** What the sync engine needs to read and write this file. */

@@ -248,8 +248,9 @@ describe('NotesStore', () => {
       row.updated_at,
     )
     // A peer stamp seen by the server never saves a clock older than the importer's.
+    importer.observe(wall + 20_000_000)
     server.observe(wall)
-    expect(Number(server.meta('hlc_last'))).toBeGreaterThan(row.updated_at)
+    expect(Number(server.meta('hlc_last'))).toBe(wall + 20_000_000)
     importer.close()
     server.close()
   })
