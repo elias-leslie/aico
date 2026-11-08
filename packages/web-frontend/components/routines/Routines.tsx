@@ -24,6 +24,7 @@ import {
   type RoutineGroup,
   scheduleText,
   soonIn,
+  timerDelay,
   whenIn,
 } from '@/lib/routines'
 import { plural } from '@/lib/status'
@@ -101,9 +102,11 @@ function whenTip(routine: Routine): string {
 /** "Daily at 03:30 UTC · next Nov 8, 3:30 AM UTC": the schedule and the next run in one zone. */
 function scheduleLine(routine: Routine): string {
   const schedule = scheduleText(routine)
-  return routine.started && !routine.paused && routine.nextRun !== null
-    ? `${schedule} · next ${whenIn(routine, routine.nextRun)}`
-    : schedule
+  if (!routine.started || routine.paused || routine.nextRun === null)
+    return schedule
+  const delay = timerDelay(routine)
+  const delayed = delay ? ` (${delay} min random delay)` : ''
+  return `${schedule} · next ${whenIn(routine, routine.nextRun)}${delayed}`
 }
 
 /** What the last run said, or why there is nothing to say. */

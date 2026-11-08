@@ -172,7 +172,7 @@ describe('NewSessionDialog', () => {
     renderDialog()
     const pi = within(agent()).getByRole('button', { name: /^Pi/ })
     expect(pi).toHaveTextContent('used up')
-    expect(pi).toHaveAttribute('title', 'opencode-go answer')
+    expect(pi).toHaveAttribute('title', 'opencode-go: opencode-go answer')
     usage.report = null
   })
 

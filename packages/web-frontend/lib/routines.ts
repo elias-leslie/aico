@@ -106,32 +106,32 @@ export function scheduleText(routine: Routine): string {
   const named = `${text} ${zoneLabel(routine.tz, at)}`
   return routine.nextRun === null
     ? named
-    : `${named} (${timeOfDay(routine.source === 'systemd' ? scheduledAt(text, routine.tz, routine.nextRun) : routine.nextRun)} here)`
+    : `${named} (${timeOfDay(routine.nextRun - timerDelay(routine) * 60_000)} here)`
 }
 
 const DAY_MIN = 24 * 60
 
-/** The scheduled time behind a systemd timer's next run, which its random delay can put minutes after it. */
-function scheduledAt(text: string, tz: string, nextRun: number): number {
-  const [, hour, minute] = text.match(/(\d{1,2}):(\d\d)/) ?? []
+/** Minutes a systemd timer's next run falls after its set time: its random delay. */
+export function timerDelay(routine: Routine): number {
+  const set = routine.schedule.match(/(\d{1,2}):(\d\d)/)
+  if (routine.source !== 'systemd' || routine.nextRun === null || !set) return 0
   let clock: Intl.DateTimeFormatPart[]
   try {
     clock = new Intl.DateTimeFormat('en-US', {
-      timeZone: tz,
+      timeZone: routine.tz ?? undefined,
       hourCycle: 'h23',
       hour: 'numeric',
       minute: 'numeric',
-    }).formatToParts(nextRun)
+    }).formatToParts(routine.nextRun)
   } catch {
-    return nextRun // A zone this browser doesn't know.
+    return 0 // A zone this browser doesn't know.
   }
   const part = (type: string) =>
     Number(clock.find((item) => item.type === type)?.value)
   const late =
-    part('hour') * 60 + part('minute') - (Number(hour) * 60 + Number(minute))
+    part('hour') * 60 + part('minute') - (Number(set[1]) * 60 + Number(set[2]))
   // The shorter way round the clock: a run at 00:10 for 23:50 is 20 minutes late.
-  const wrapped = ((late + DAY_MIN + DAY_MIN / 2) % DAY_MIN) - DAY_MIN / 2
-  return nextRun - wrapped * 60_000
+  return Math.max(0, ((late + DAY_MIN + DAY_MIN / 2) % DAY_MIN) - DAY_MIN / 2)
 }
 
 /** Where it runs, in words: one machine, or whichever of several is online. */

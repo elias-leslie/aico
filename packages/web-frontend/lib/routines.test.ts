@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { type Routine, scheduleText, soonIn } from './routines'
+import { type Routine, scheduleText, soonIn, timerDelay } from './routines'
 
 const routine = {} as Routine
 const at = (day: number, hour: number, minute = 0) =>
@@ -65,5 +65,29 @@ describe('scheduleText', () => {
         nextRun: delayed,
       }),
     ).toContain(`(${here('2026-11-14T09:50:00Z')} here)`)
+  })
+})
+
+describe('timerDelay', () => {
+  const timer = {
+    schedule: 'sundays at 05:15',
+    tz: 'UTC',
+    source: 'systemd',
+  } as Routine
+
+  it('gives the minutes a timer runs after its set time', () => {
+    const nextRun = Date.parse('2026-11-15T05:38:00Z')
+    expect(timerDelay({ ...timer, nextRun })).toBe(23)
+  })
+
+  it('is nothing for a run on time, a scheduler’s own run or a schedule with no time', () => {
+    const nextRun = Date.parse('2026-11-15T05:38:00Z')
+    const onTime = Date.parse('2026-11-15T05:15:00Z')
+    expect(timerDelay({ ...timer, nextRun: onTime })).toBe(0)
+    expect(timerDelay({ ...timer, nextRun, source: 'built-in' })).toBe(0)
+    expect(
+      timerDelay({ ...timer, nextRun, schedule: 'every 10 minutes' }),
+    ).toBe(0)
+    expect(timerDelay({ ...timer, nextRun, tz: 'Mars/Olympus' })).toBe(0)
   })
 })

@@ -196,6 +196,10 @@ export function pickerSuffix(glance: QuotaGlance): string | null {
   return glance.partly || glance.left === null ? null : `${glance.left}% left`
 }
 
+/** The picker's tooltip; it names a subscription the tool doesn't share a name with. */
+export const pickerTip = (glance: QuotaGlance) =>
+  glance.tools.length ? `${glance.name}: ${glance.answer}` : glance.answer
+
 /** Every subscription's glance, in the order the report lists them. */
 export function quotaGlances(
   report: UsageReport | null,
