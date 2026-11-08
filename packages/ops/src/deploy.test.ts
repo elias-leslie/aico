@@ -540,6 +540,22 @@ describe('deploy', () => {
     expect(readFileSync(join(deps.systemdDir, 'demo-web.service'), 'utf8')).toContain(newer)
   })
 
+  it('a full deploy restarts a unit that is down, with nothing changed for it', async () => {
+    const { root, deps, calls } = setup()
+    expect(await deploy(request(), root, deps)).toBe(0)
+    calls.length = 0
+    const original = deps.run
+    let restarted = false
+    deps.run = (cmd, args, opts) => {
+      if (cmd === 'systemctl' && args[1] === 'restart') restarted = true
+      if (cmd === 'systemctl' && args[1] === 'is-active' && !restarted)
+        return { code: 3, out: 'failed\n', err: '' }
+      return original(cmd, args, opts)
+    }
+    expect(await deploy(request(), root, deps)).toBe(0)
+    expect(restarted).toBe(true)
+  })
+
   it('refuses a commit beside the running one, as a refusal that changed nothing', async () => {
     const { root, git, deps, rows, head } = setup()
     const commit = (text: string) => {

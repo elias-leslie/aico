@@ -38,7 +38,8 @@ function setup(projects: string[] = []) {
   dirs.push(top)
   const out: string[] = []
   const calls: string[][] = []
-  const fails = { restart: false }
+  const fails = { restart: false, stopCode: 0 }
+  const cwds = new Map<string, string | undefined>()
   const deps = {
     env: { AICO_HOOK_BIN: 'fake-hook', AICO_BIN: 'fake-aico' },
     releasesDir: join(top, 'releases'),
@@ -48,20 +49,22 @@ function setup(projects: string[] = []) {
     out: (line: string) => out.push(line),
     err: (line: string) => out.push(line),
     sleep: async () => {},
-    run: (cmd: string, args: string[]) => {
+    run: (cmd: string, args: string[], opts?: { cwd?: string }) => {
       calls.push([cmd, ...args])
+      cwds.set(cmd, opts?.cwd)
       if (cmd === 'fake-aico')
         return {
           code: 0,
-          out: JSON.stringify(projects.map((root_path) => ({ root_path }))),
+          out: JSON.stringify(projects.map((root_path) => ({ id: 'aico', root_path }))),
           err: '',
         }
+      if (args[1] === 'stop') return { code: fails.stopCode, out: '', err: 'not loaded' }
       if (fails.restart && args[1] === 'restart') return { code: 1, out: '', err: 'failed' }
       return { code: 0, out: '', err: '' }
     },
   } as unknown as DeployDeps
   for (const dir of [deps.releasesDir, deps.jobsDir, deps.systemdDir]) mkdirSync(dir)
-  return { top, out, calls, fails, deps }
+  return { top, out, calls, fails, cwds, deps }
 }
 
 const job = (id: string, state: string) => ({ id, state, sha: 'a'.repeat(40), argv: [] })
@@ -90,6 +93,15 @@ describe('deploy records', () => {
     expect(readRecord(deps, ids.c).state).toBe('running')
     expect(existsSync(broken)).toBe(false)
     expect(out.filter((line) => line.includes(ids.a))).toHaveLength(1)
+  })
+
+  it('a record with no id is still cleared, and a bad one does not stop the rest', async () => {
+    const { deps } = setup()
+    written(join(deps.jobsDir, `${ids.a}.json`), JSON.stringify({ state: 'running' }))
+    const lock = written(join(deps.releasesDir, '.deploy.pid'), '1 x\n')
+    await bootClean(deps, { bootMs })
+    expect(readRecord(deps, ids.a)).toMatchObject({ id: ids.a, state: 'failed' })
+    expect(existsSync(lock)).toBe(false)
   })
 
   it('a dry run says the same and changes nothing, and an empty one says so', async () => {
@@ -154,6 +166,41 @@ describe('a half-finished unit swap', () => {
     await bootClean(deps, { bootMs })
     expect(existsSync(journal(deps))).toBe(false)
     expect(out.join('\n')).toMatch(/did not restart/)
+  })
+
+  it('a unit the swap was adding, never loaded, does not block anything', async () => {
+    const { deps, fails } = setup()
+    written(
+      journal(deps),
+      JSON.stringify({ sha: 'a'.repeat(40), previous: { 'new.service': null } }),
+    )
+    fails.stopCode = 5
+    await bootClean(deps, { bootMs })
+    expect(existsSync(journal(deps))).toBe(false)
+  })
+
+  it('a unit that really would not stop keeps the journal, and is tried once per boot', async () => {
+    const { deps, fails, calls, out } = setup()
+    written(
+      journal(deps),
+      JSON.stringify({ sha: 'a'.repeat(40), previous: { 'new.service': null } }),
+    )
+    fails.stopCode = 1
+    await bootClean(deps, { bootMs })
+    expect(existsSync(journal(deps))).toBe(true)
+    expect(out.join('\n')).toMatch(/the next deploy tries again/)
+    expect(out.join('\n')).not.toMatch(/nothing left over/)
+    const tries = () => calls.filter((call) => call.includes('stop')).length
+    expect(tries()).toBe(1)
+    await bootClean(deps, { bootMs })
+    expect(tries()).toBe(1)
+  })
+
+  it('checks holds from the Aico project, where they mean something', async () => {
+    const { deps, cwds } = setup(['/srv/fake-aico-root'])
+    swapped(deps)
+    await bootClean(deps, { bootMs })
+    expect(cwds.get('fake-hook')).toBe('/srv/fake-aico-root')
   })
 
   it('a page build that cannot be put back does not keep the journal', async () => {

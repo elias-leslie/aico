@@ -863,6 +863,17 @@ async function chooseWork(selection: ReturnType<typeof selectUnits>, d: LockedDe
   for (const unit of selected)
     if (await placed(unit, runningSha(view.live(unit), deps.releasesDir), 'runs'))
       restart.push(unit)
+  // A unit that is down (a recovered swap could not start it) needs this deploy even with nothing changed for it.
+  if (!req.scope || req.scope === 'full')
+    for (const unit of [project.backend, ...project.defaultWorkers]) {
+      if (!unit || restart.includes(unit)) continue
+      const state = deps.run('systemctl', ['--user', 'is-active', unit], { env: deps.env })
+      const down = ['failed', 'activating'].includes(state.out.trim())
+      if (down && (await placed(unit, runningSha(view.live(unit), deps.releasesDir), 'runs'))) {
+        deps.out(`[deploy] ${unit} is ${state.out.trim()}; restarting it`)
+        restart.push(unit)
+      }
+    }
   // A server left running whose frontend build changed gets the new build without a restart.
   const manualDeploy = req.workers.some((unit) => project.manualWorkers.includes(canonical(unit)))
   const swaps: string[] = []
@@ -1373,7 +1384,9 @@ function restoreUnits(
     try {
       if (text === null) {
         const stopped = systemctl('stop', unit)
-        if (stopped.code !== 0) problems.push(`${unit} did not stop: ${tail(stopped, 1)}`)
+        // 5: not loaded, so already stopped (the cut came before its file was written, or an earlier try removed it).
+        if (stopped.code !== 0 && stopped.code !== 5)
+          problems.push(`${unit} did not stop: ${tail(stopped, 1)}`)
         rmSync(join(deps.systemdDir, unit), { force: true })
       } else writeFileDurable(join(deps.systemdDir, unit), text) // a cut must not leave an empty unit, which systemd takes as masked
     } catch (error) {
@@ -1393,7 +1406,7 @@ function restoreUnits(
  * A swap a killed deploy or a power cut left unfinished: its units go back to what they ran before
  * it. The journal stays only while unit files could not be put back. A journal that can't be read,
  * or a unit that is back but won't start, has nothing more to undo: refusing every deploy over it
- * would also refuse the fix, and the next deploy replaces and checks those units anyway.
+ * would also refuse the fix, and the next full deploy restarts what is down (chooseWork).
  */
 export function recoverSwap(deps: DeployDeps) {
   const text = readFileSafe(journalPath(deps))
