@@ -58,11 +58,16 @@ it('the scheduled drill says when it is next due; one run by hand does not', asy
   vi.stubGlobal('fetch', fetcher)
   const fail = async () => ({ code: 1, out: '', err: '' })
   const next = '2026-11-09T11:00:00.000Z'
-  const scheduled = { AICO_JOB_KIND: 'backups-drill', AICO_JOB_NEXT_RUN: next }
+  const scheduled = {
+    AICO_JOB_KIND: 'backups-drill',
+    AICO_JOB_NEXT_RUN: next,
+    AICO_JOB_RUN_ID: 'drill-execution',
+  }
   await recovery(['drill', '--scheduled'], config({}), scheduled, fail)
   expect(JSON.parse(fetcher.mock.calls[0][1].body)[0]).toMatchObject({
     next_run: next,
     run_by: 'jobs/backups-drill',
+    run_id: 'drill-execution',
   })
   await recovery(['drill'], config({}), {}, fail)
   expect(JSON.parse(fetcher.mock.calls[1][1].body)[0]).not.toHaveProperty('next_run')

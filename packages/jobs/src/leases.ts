@@ -46,6 +46,8 @@ const MIGRATIONS = [
   `ALTER TABLE routines ADD COLUMN tz TEXT`,
   // The day a timed routine runs on (weekly, nth weekday of the month, day of the month).
   `ALTER TABLE routines ADD COLUMN on_day TEXT`,
+  // The completed execution's identity, independent of the lease a restarted scheduler adopts.
+  `ALTER TABLE jobs ADD COLUMN last_run_id TEXT`,
 ]
 
 export function jobsDbPath(dataDir: string): string {
@@ -61,6 +63,8 @@ export interface JobState {
   holderMachine: string | null
   leaseExpires: number | null
   lastRun: number | null
+  /** Absent on old peers; only an identified completed execution can correct its writers' deadlines. */
+  lastRunId?: string | null
   lastState: string | null
   lastMeaning: string | null
   lastMachine: string | null
@@ -85,6 +89,8 @@ export interface JobResult {
   busy?: true
   /** This machine shut down during the run: it says nothing about the job, so nothing is recorded or alerted. */
   cut?: true
+  /** The original unit's execution id, retained when another scheduler adopts that unit. */
+  runId?: string
 }
 
 /** A routine another project registered: the data behind one job (routines table). */
@@ -144,6 +150,7 @@ function state(row: Raw): JobState {
     holderMachine: row.holder_machine as string | null,
     leaseExpires: row.lease_expires as number | null,
     lastRun: row.last_run as number | null,
+    lastRunId: row.last_run_id as string | null,
     lastState: row.last_state as string | null,
     lastMeaning: row.last_meaning as string | null,
     lastMachine: row.last_machine as string | null,
@@ -221,7 +228,7 @@ export class JobStore {
   complete(lease: Lease, result: JobResult, ranAt: number, nextRun: number): void {
     const changes = this.db
       .prepare(
-        `UPDATE jobs SET next_run = ?, last_run = ?, last_state = ?, last_meaning = ?,
+        `UPDATE jobs SET next_run = ?, last_run = ?, last_run_id = ?, last_state = ?, last_meaning = ?,
            last_machine = ?, lease_id = NULL, holder = NULL, holder_machine = NULL,
            lease_expires = NULL, run_now = 0
          WHERE kind = ? AND lease_id = ? AND fence = ?`,
@@ -229,6 +236,7 @@ export class JobStore {
       .run(
         nextRun,
         ranAt,
+        result.runId ?? null,
         result.state,
         result.meaning,
         lease.machine,
@@ -255,13 +263,23 @@ export class JobStore {
     return (
       this.db
         .prepare(
-          `UPDATE jobs SET fence = fence + 1, next_run = ?, last_run = ?, last_state = ?,
+          `UPDATE jobs SET fence = fence + 1, next_run = ?, last_run = ?, last_run_id = ?, last_state = ?,
              last_meaning = ?, last_machine = ?, lease_id = NULL, holder = NULL,
              holder_machine = NULL, lease_expires = NULL, run_now = 0
            WHERE kind = ? AND next_run <= ? AND run_now = 0
              AND (lease_id IS NULL OR lease_expires <= ?)`,
         )
-        .run(nextRun, ranAt, result.state, result.meaning, machine, kind, ranAt, now).changes > 0
+        .run(
+          nextRun,
+          ranAt,
+          result.runId ?? null,
+          result.state,
+          result.meaning,
+          machine,
+          kind,
+          ranAt,
+          now,
+        ).changes > 0
     )
   }
 

@@ -322,9 +322,9 @@ export function nextRun(
  * A command job as it runs on `machine`: on its home machine it is told its schedule, for the rows it
  * writes itself (@aico/status jobEnv). A stand-in's run isn't, nor is a POST job (the server writes).
  */
-export function withSchedule(job: JobDef, machine: string, now: number): JobDef {
+export function withSchedule(job: JobDef, machine: string, now: number, runId?: string): JobDef {
   if (job.home !== machine || !('command' in job.run)) return job
-  const told = Object.entries(jobEnv(job.kind, nextRun(job, now), job.every_min))
+  const told = Object.entries(jobEnv(job.kind, nextRun(job, now), job.every_min, runId))
   return {
     ...job,
     run: { command: ['env', ...told.map(([key, value]) => `${key}=${value}`), ...job.run.command] },

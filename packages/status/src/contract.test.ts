@@ -25,6 +25,7 @@ describe('row.ts matches the schema', () => {
       'next_run',
       'project',
       'run_by',
+      'run_id',
       'state',
       'what',
     ])
@@ -43,6 +44,8 @@ describe('row.ts matches the schema', () => {
     expect(props.meaning.maxLength).toBe(LIMITS.meaning.max)
     expect(props.run_by.pattern).toBe(LIMITS.id.pattern.source)
     expect(props.run_by.maxLength).toBe(LIMITS.id.max)
+    expect(props.run_id.pattern).toBe(LIMITS.id.pattern.source)
+    expect(props.run_id.maxLength).toBe(LIMITS.id.max)
     expect(schema.dependentRequired).toEqual({ run_by: ['next_run'] })
   })
 })

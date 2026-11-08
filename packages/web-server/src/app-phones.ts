@@ -6,7 +6,7 @@
 // phone app's protocol, unchanged): METHOD \n PATH \n TS \n b64u(sha256(body)), ECDSA P-256
 // SHA-256, DER signature, the timestamp within 5 minutes of this clock.
 
-import { createHash, createPublicKey, verify } from 'node:crypto'
+import { createHash, createPublicKey, randomUUID, verify } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { withFileLock, writeFileDurable } from '@aico/shared/durable-file'
@@ -37,6 +37,8 @@ export interface Phone {
   name?: string
   app_version?: string
   added_at?: number
+  /** One local pairing event; a re-pair is distinct even when its device id and second are unchanged. */
+  pairing_id?: string
   last_ack?: number
   last_message_ack?: { id: string; received_at: number; shown: boolean }
   last_probe?: number
@@ -172,7 +174,7 @@ export class PhoneRegistry {
         const phones = current.filter(
           (p) => p.id !== phone.id && !(phone.fcm_token && p.fcm_token === phone.fcm_token),
         )
-        phones.push(phone)
+        phones.push({ ...phone, pairing_id: randomUUID() })
         mkdirSync(dirname(this.path), { recursive: true, mode: 0o700 })
         writeFileDurable(this.path, JSON.stringify(phones), { mode: 0o600 })
       }),
@@ -348,6 +350,7 @@ export function mergePhones(
   ours: Phone[],
   lastSync: number,
   confirmedIds?: ReadonlySet<string>,
+  knownPairs?: ReadonlyMap<string, string | null>,
 ): Phone[] {
   const mine = new Map(ours.map((phone) => [phone.id, phone]))
   const merged = theirs.map((sent) => {
@@ -384,12 +387,18 @@ export function mergePhones(
   const sentIds = new Set(theirs.map((phone) => phone.id))
   return [
     ...merged,
-    ...ours.filter(
-      (phone) =>
-        !sentIds.has(phone.id) &&
-        ((phone.added_at ?? 0) > lastSync ||
-          (confirmedIds !== undefined && !confirmedIds.has(phone.id))),
-    ),
+    ...ours.filter((phone) => {
+      if (sentIds.has(phone.id)) return false
+      const pairing = phone.pairing_id ?? null
+      // A received or confirmed pairing is already known to the sender. A genuinely new local
+      // registration has another generation, even for the same device in the same second.
+      if (knownPairs?.has(phone.id)) return knownPairs.get(phone.id) !== pairing
+      return (
+        pairing !== null ||
+        (phone.added_at ?? 0) > lastSync ||
+        (confirmedIds !== undefined && !confirmedIds.has(phone.id))
+      )
+    }),
   ]
 }
 
@@ -402,21 +411,36 @@ export async function mergePhonesFile(path: string, sent: Phone[], now: number):
   return withFileLock(path, () => {
     const syncFile = `${path}.sync.json`
     const cursor = readSync(syncFile)
+    // Phones received from the sender are governed by its list immediately, even if the reply
+    // never arrives there. Only a phone paired on this receiver gets the unconfirmed-pairing rule.
+    const knownPairs = new Map(Object.entries(cursor.known_pairs ?? {}))
+    for (const phone of sent) knownPairs.set(phone.id, phone.pairing_id ?? null)
     const merged = mergePhones(
       sent,
       readPhones(path) ?? [],
       cursor.at,
       cursor.ids === undefined ? undefined : new Set(cursor.ids),
+      knownPairs,
     )
     mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
-    writeFileDurable(path, JSON.stringify(merged), { mode: 0o600 })
+    // Save origin before copying sender phones: a cut between writes must not turn a received
+    // phone into a locally paired one when the sender retries with that phone removed.
     writeFileDurable(
       syncFile,
-      JSON.stringify({ ...cursor, pending: now, pending_ids: merged.map((phone) => phone.id) }),
+      JSON.stringify({
+        ...cursor,
+        known_pairs: Object.fromEntries(knownPairs),
+        pending: now,
+        pending_ids: merged.map((phone) => phone.id),
+        pending_pairs: Object.fromEntries(
+          merged.map((phone) => [phone.id, phone.pairing_id ?? null]),
+        ),
+      }),
       {
         mode: 0o600,
       },
     )
+    writeFileDurable(path, JSON.stringify(merged), { mode: 0o600 })
     return merged
   })
 }
@@ -425,13 +449,24 @@ export async function mergePhonesFile(path: string, sent: Phone[], now: number):
 export async function confirmPhonesMerge(path: string): Promise<void> {
   return withFileLock(path, () => {
     const syncFile = `${path}.sync.json`
-    const { at, pending, pending_ids } = readSync(syncFile)
+    const { at, pending, pending_ids, known_pairs, pending_pairs } = readSync(syncFile)
     if (pending === undefined || pending < at) return
     // Confirm only phones in that reply. A pairing after the merge, even in the same second,
     // stays new until a later reply actually carries it. Old cursors retain their time fallback.
     writeFileDurable(
       syncFile,
-      JSON.stringify({ at: pending, ...(pending_ids === undefined ? {} : { ids: pending_ids }) }),
+      JSON.stringify({
+        at: pending,
+        ...(pending_ids === undefined ? {} : { ids: pending_ids }),
+        ...(known_pairs === undefined && pending_pairs === undefined
+          ? {}
+          : {
+              known_pairs: Object.fromEntries([
+                ...Object.entries(known_pairs ?? {}),
+                ...Object.entries(pending_pairs ?? {}),
+              ]),
+            }),
+      }),
       { mode: 0o600 },
     )
   })
@@ -442,6 +477,8 @@ interface PhoneSync {
   ids?: string[]
   pending?: number
   pending_ids?: string[]
+  known_pairs?: Record<string, string | null>
+  pending_pairs?: Record<string, string | null>
 }
 
 function readSync(file: string): PhoneSync {
@@ -450,11 +487,18 @@ function readSync(file: string): PhoneSync {
     const pending = Number(raw.pending)
     const ids = (value: unknown): value is string[] =>
       Array.isArray(value) && value.every((id) => typeof id === 'string')
+    const pairs = (value: unknown): value is Record<string, string | null> =>
+      value !== null &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      Object.values(value).every((pairing) => pairing === null || typeof pairing === 'string')
     return {
       at: Number(raw.at) || 0,
       ...(pending > 0 ? { pending } : {}),
       ...(ids(raw.ids) ? { ids: raw.ids } : {}),
       ...(ids(raw.pending_ids) ? { pending_ids: raw.pending_ids } : {}),
+      ...(pairs(raw.known_pairs) ? { known_pairs: raw.known_pairs } : {}),
+      ...(pairs(raw.pending_pairs) ? { pending_pairs: raw.pending_pairs } : {}),
     }
   } catch {
     /* First sync: nothing has been paired here since. */

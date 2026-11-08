@@ -37,16 +37,18 @@ it('reports the caretaker and route-check deadlines from its scheduled interval'
     baseUrl: 'http://local',
     dataDir,
     repoRoot: dataDir,
-    env: jobEnv('caretaker', now + 5 * 60_000, 5),
+    env: jobEnv('caretaker', now + 5 * 60_000, 5, 'caretaker-execution'),
   }
   expect(await runCaretakerCli(['run'], io)).toBe(0)
   expect(rows.find((row) => row.id.endsWith('/caretaker'))).toMatchObject({
     next_run: new Date(now + 5 * 60_000).toISOString(),
     run_by: 'jobs/caretaker',
+    run_id: 'caretaker-execution',
   })
   expect(rows.find((row) => row.id.endsWith('/model-routes'))).toMatchObject({
     next_run: new Date(now + 5 * 60_000 + POLICY.route_check_hours * 3600_000).toISOString(),
     run_by: 'jobs/caretaker',
+    run_id: 'caretaker-execution',
   })
   rows.length = 0
   expect(await runCaretakerCli(['run'], { ...io, env: {} })).toBe(0)

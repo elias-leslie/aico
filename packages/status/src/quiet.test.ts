@@ -197,8 +197,13 @@ describe('rows a job writes, with its next run', () => {
         job({ next_run: iso(T0 + 30 * HOUR), last_run: iso(T0) }),
       ])
       w.clock.now = T0 + 26 * HOUR
-      const report = written(T0 + 24 * HOUR, { last_run: iso(w.clock.now) })
-      const complete = job({ next_run: iso(T0 + 48 * HOUR), last_run: iso(w.clock.now) })
+      const report = written(T0 + 24 * HOUR, { last_run: iso(w.clock.now), run_id: 'first-run' })
+      // Runner records when it STARTED, whereas the writer records when it finished reporting.
+      const complete = job({
+        next_run: iso(T0 + 48 * HOUR),
+        last_run: iso(T0),
+        run_id: 'first-run',
+      })
       // A writer's delayed outbox can reach Status after the scheduler has already completed.
       if (order === 'writer first') {
         w.store.upsert(report)
@@ -213,10 +218,26 @@ describe('rows a job writes, with its next run', () => {
       quiet(w)
       // A later run that omits these reports must not keep extending their deadline.
       w.clock.now = T0 + 49 * HOUR
-      w.store.upsert([job({ next_run: iso(T0 + 72 * HOUR), last_run: iso(w.clock.now) })])
+      w.store.upsert([
+        job({ next_run: iso(T0 + 72 * HOUR), last_run: iso(T0 + 48 * HOUR), run_id: 'second-run' }),
+      ])
       expect(shown(w)['publish:one']).toBe('late')
     },
   )
+
+  it('an omitted report is not extended by the next completed job when its expired deadline was never corrected', () => {
+    const w = world('always')
+    w.store.upsert([machine(T0 + 900 * HOUR)])
+    w.clock.now = T0 + 26 * HOUR
+    w.store.upsert(written(T0 + 24 * HOUR, { last_run: iso(w.clock.now) }))
+    w.store.upsert([job({ next_run: iso(T0 + 48 * HOUR), last_run: iso(T0) })])
+    w.clock.now = T0 + 49 * HOUR
+    w.store.upsert([job({ next_run: iso(T0 + 72 * HOUR), last_run: iso(T0 + 48 * HOUR) })])
+    expect(shown(w)['publish:one']).toBe('late')
+    expect(w.store.read().rows.find((r) => r.id === 'publish:one')?.next_run).toBe(
+      iso(T0 + 24 * HOUR),
+    )
+  })
 
   it('a job without a next deadline cannot hold a due report forever', () => {
     const w = world('always')
@@ -276,6 +297,7 @@ describe('what a job tells the rows it writes', () => {
       { AICO_JOB_EVERY_MIN: '-5' },
       { AICO_JOB_EVERY_MIN: 'Infinity' },
       { AICO_JOB_EVERY_MIN: 'NaN' },
+      { AICO_JOB_RUN_ID: 'bad execution id' },
     ]) {
       expect(jobSchedule('nightly', { ...jobEnv('nightly', NEXT), ...fields })).toEqual({})
     }

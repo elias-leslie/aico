@@ -53,9 +53,14 @@ it('the scheduled publication posts its real next deadline; a manual pass has no
       ...env,
       AICO_JOB_KIND: 'github-publish',
       AICO_JOB_NEXT_RUN: next,
+      AICO_JOB_RUN_ID: 'publication-execution',
     }),
   ).toBe(1)
-  expect(rows[0]).toMatchObject({ next_run: next, run_by: 'jobs/github-publish' })
+  expect(rows[0]).toMatchObject({
+    next_run: next,
+    run_by: 'jobs/github-publish',
+    run_id: 'publication-execution',
+  })
   expect(await publishCli(['--source', 'example', '--no-accept'], env)).toBe(1)
   expect(rows[1]).not.toHaveProperty('next_run')
 })

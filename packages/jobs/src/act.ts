@@ -13,6 +13,7 @@ import { mkdirSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs'
 import { request } from 'node:http'
 import { uptime } from 'node:os'
 import { join } from 'node:path'
+import { LIMITS } from '@aico/status'
 import type { JobDef } from './jobs'
 import type { JobResult } from './leases'
 
@@ -207,14 +208,15 @@ export const unitName = (kind: string) => `aico-job-${kind}`
 // "$@" runs the job; its exit code is written last and moved into place whole, so a code file
 // is never half-written. SIGKILL of the wrapper leaves no code file: that run reads as stopped.
 const WRAPPER =
-  'cat /proc/sys/kernel/random/boot_id >"$0.boot.tmp" 2>/dev/null; mv "$0.boot.tmp" "$0.boot"; "$@" >"$0.log" 2>&1; echo $? >"$0.code.tmp"; mv "$0.code.tmp" "$0.code"'
+  'cat /proc/sys/kernel/random/boot_id >"$0.boot.tmp" 2>/dev/null; mv "$0.boot.tmp" "$0.boot"; printf "%s\\n" "$1" >"$0.run"; shift; "$@" >"$0.log" 2>&1; echo $? >"$0.code.tmp"; mv "$0.code.tmp" "$0.code"'
 
 /** The unit's command line: the wrapper shell, then the job's argv. */
-export const unitArgv = (base: string, argv: readonly string[]) => [
+export const unitArgv = (base: string, argv: readonly string[], runId = '') => [
   '/bin/sh',
   '-c',
   WRAPPER,
   base,
+  runId,
   ...argv,
 ]
 
@@ -296,6 +298,7 @@ export async function unitJob(
   options: UnitJobOptions,
   read: (code: number, tail: string) => JobResult = (code, tail) => exitResult(code, null, tail),
   where?: UnitWhere,
+  runId?: string,
 ): Promise<JobResult> {
   const { host, dir } = options
   const unit = unitName(kind)
@@ -305,7 +308,7 @@ export async function unitJob(
     // No log cleanup here: the wrapper truncates it as the run begins, and a second caller racing this
     // start would otherwise delete the log the first caller's run is already writing.
     try {
-      await host.start(unit, unitArgv(base, argv), where)
+      await host.start(unit, unitArgv(base, argv, runId), where)
     } catch (error) {
       // A concurrent start (or a scheduler racing us) won: join its run rather than failing.
       if (!(await host.active(unit, where)))
@@ -317,8 +320,10 @@ export async function unitJob(
   const code = readIf(`${base}.code`)
   const codeAt = writtenAt(`${base}.code`)
   const resultBoot = readIf(`${base}.boot`)?.trim() || null
+  const originalRun = readIf(`${base}.run`)?.trim()
   const log = readIf(`${base}.log`) ?? ''
   rmSync(`${base}.code`, { force: true })
+  rmSync(`${base}.run`, { force: true })
   // The last run's output stays for `aico routines log KIND`; the next run writes a fresh .log.
   try {
     renameSync(`${base}.log`, `${base}.last.log`)
@@ -326,7 +331,10 @@ export async function unitJob(
   const exit = code === null ? null : Number(code.trim())
   if (await endedWithMachine(host, exit, codeAt, resultBoot, where)) return CUT_SHORT
   if (exit === null) return { state: 'failed', meaning: 'It was stopped before it left a result.' }
-  return read(exit, log.slice(-TAIL_BYTES))
+  const result = read(exit, log.slice(-TAIL_BYTES))
+  return originalRun && originalRun.length <= LIMITS.id.max && LIMITS.id.pattern.test(originalRun)
+    ? { ...result, runId: originalRun }
+    : result
 }
 
 /** A POST job unit's result: the JSON line `aico jobs post` printed last; else its exit as a command's. */
@@ -383,11 +391,11 @@ export function selfArgv(
 export function act(
   self: readonly string[],
   units: UnitJobOptions,
-): (job: JobDef) => Promise<JobResult> {
-  return (job) => {
+): (job: JobDef, runId?: string) => Promise<JobResult> {
+  return (job, runId) => {
     const where = whereOf(job)
     return 'post' in job.run
-      ? unitJob(job.kind, [...self, 'post', job.run.post], units, postedResult, where)
-      : unitJob(job.kind, job.run.command, units, undefined, where)
+      ? unitJob(job.kind, [...self, 'post', job.run.post], units, postedResult, where, runId)
+      : unitJob(job.kind, job.run.command, units, undefined, where, runId)
   }
 }

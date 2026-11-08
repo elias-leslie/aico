@@ -218,7 +218,8 @@ describe('signed calls', () => {
     expect(reply.status).toBe(200)
     expect(reply.body).toEqual({ removed: true })
     expect(phones.get(device)).toBeNull()
-    expect(phones.get(other.id)).toEqual(other)
+    expect(phones.get(other.id)).toMatchObject(other)
+    expect(phones.get(other.id)?.pairing_id).toEqual(expect.any(String))
     expect((await call('DELETE', `/api/phone-app/${device}`)).body).toEqual({ removed: false })
   })
 

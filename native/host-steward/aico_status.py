@@ -38,13 +38,14 @@ ACTION_KINDS = ("run", "log", "detail", "look", "session")
 TEXT_LIMITS: dict[str, tuple[int, re.Pattern[str] | None]] = {
     "id": (200, re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@-]*$")),
     "run_by": (200, re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@-]*$")),
+    "run_id": (200, re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@-]*$")),
     "what": (120, None),
     "machine": (100, re.compile(r"^[a-z0-9][a-z0-9._-]*$")),
     "project": (100, re.compile(r"^[a-z0-9][a-z0-9_-]*$")),
     "meaning": (800, None),
 }
 REQUIRED = ("id", "what", "kind", "machine", "state", "meaning")
-FIELDS = frozenset(REQUIRED + ("project", "last_run", "next_run", "run_by", "actions"))
+FIELDS = frozenset(REQUIRED + ("project", "last_run", "next_run", "run_by", "run_id", "actions"))
 MAX_ACTIONS = 4
 MAX_ACTION_REF = 500
 
@@ -161,6 +162,7 @@ def check_row(row: Any) -> dict[str, Any]:
         "last_run": _time(row, "last_run"),
         "next_run": _time(row, "next_run"),
         "run_by": _text(row, "run_by", False),
+        "run_id": _text(row, "run_id", False),
         "actions": _actions(row.get("actions")),
     }
     if checked["kind"] == "machine" and optional["next_run"] is None:

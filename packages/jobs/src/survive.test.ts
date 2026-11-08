@@ -1,7 +1,8 @@
 import { spawn } from 'node:child_process'
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { parseRow, type StatusRow, StatusStore } from '@aico/status'
 import { describe, expect, it } from 'vitest'
 import {
   act,
@@ -15,7 +16,7 @@ import {
   unitJob,
   unitName,
 } from './act'
-import type { JobDef } from './jobs'
+import { type JobDef, withSchedule } from './jobs'
 import { JobStore } from './leases'
 import { type Act, jobRow, Runner } from './runner'
 
@@ -80,6 +81,121 @@ const runnerFor = (
     log: (line) => logs.push(line),
   })
 
+it.each(['writer first', 'scheduler first', 'after next completion'])(
+  'correlates real Runner/Act reports across a crossed slot and an omitted later report (%s)',
+  async (order) => {
+    const dir = scratch()
+    const start = Date.parse('2026-11-07T00:00:00Z')
+    const hour = 3600_000
+    const clock = { now: start - 1 }
+    const reportPath = join(dir, 'report.json')
+    const rowModule = new URL('../../status/src/row.ts', import.meta.url).href
+    const writer = `import {writeFileSync} from 'node:fs'; import {jobSchedule} from ${JSON.stringify(rowModule)};
+      writeFileSync(process.argv[1], JSON.stringify({id:'publish:long', what:'Publication', kind:'job', machine:'a', state:'ok', meaning:'Published.', last_run:new Date(${start + 26 * hour}).toISOString(), ...jobSchedule('long', process.env, ${start + 26 * hour})}));`
+    const definition: JobDef = {
+      ...job,
+      kind: 'long',
+      at: '00:00',
+      tz: 'UTC',
+      every_min: undefined,
+      lease_s: 48 * 3600,
+      run: {
+        command: [
+          process.execPath,
+          '--experimental-transform-types',
+          '--input-type=module',
+          '-e',
+          writer,
+          reportPath,
+        ],
+      },
+    }
+    const { host } = fakeUnits()
+    const perform = act(['unused'], { host, dir, pollMs: 5 })
+    const jobs = new JobStore(join(dir, 'jobs.db'))
+    const status = new StatusStore(join(dir, 'status.db'), () => clock.now)
+    status.upsert([
+      parseRow({
+        id: 'a/machine',
+        what: 'a',
+        kind: 'machine',
+        machine: 'a',
+        state: 'ok',
+        meaning: 'Running.',
+        next_run: new Date(start + 900 * hour).toISOString(),
+      }),
+    ])
+    let count = 0
+    let pending: StatusRow | undefined
+    const runner = new Runner({
+      store: jobs,
+      jobs: [definition],
+      machine: 'a',
+      holder: 'a:1',
+      now: () => clock.now,
+      log: () => {},
+      act: async (def, runId) => {
+        const run =
+          ++count === 1
+            ? def
+            : {
+                ...def,
+                run: { command: [process.execPath, '-e', 'console.log("No report this run.")'] },
+              }
+        const result = await perform(withSchedule(run, 'a', clock.now, runId), runId)
+        clock.now = count === 1 ? start + 26 * hour : start + 49 * hour
+        if (count === 1) {
+          const report = parseRow(JSON.parse(readFileSync(reportPath, 'utf8')))
+          if (order === 'writer first') status.upsert([report])
+          else pending = report
+        }
+        return result
+      },
+      postRows: async (rows) => {
+        status.upsert(rows)
+        if (
+          pending &&
+          (order === 'after next completion'
+            ? rows.some((row) => row.last_run === new Date(start + 48 * hour).toISOString())
+            : rows.some((row) => row.run_id === pending?.run_id))
+        ) {
+          status.upsert([pending])
+          pending = undefined
+        }
+      },
+    })
+    try {
+      runner.start()
+      clock.now = start
+      await runner.tick()
+      await runner.idle()
+      const first = status.read().rows.find((row) => row.id === 'publish:long')
+      const owner = status.read().rows.find((row) => row.id === 'jobs/long')
+      expect(owner?.last_run).toBe(new Date(start).toISOString())
+      if (order === 'after next completion') expect(first).toBeUndefined()
+      else {
+        expect(first?.last_run).toBe(new Date(start + 26 * hour).toISOString())
+        expect(first?.run_id).toBeTruthy()
+        expect(first?.run_id).toBe(owner?.run_id)
+        expect(first?.next_run).toBe(new Date(start + 48 * hour).toISOString())
+        expect(first?.shown).toBe('ok')
+      }
+      clock.now = start + 48 * hour
+      await runner.tick()
+      await runner.idle()
+      const omitted = status.read().rows.find((row) => row.id === 'publish:long')
+      expect(omitted?.next_run).toBe(
+        new Date(start + (order === 'after next completion' ? 24 : 48) * hour).toISOString(),
+      )
+      expect(omitted?.shown).toBe('late')
+    } finally {
+      jobs.close()
+      status.close()
+      rmSync(dir, { recursive: true, force: true })
+    }
+  },
+)
+
 it('a failed job keeps its failure while an active retry explains what is happening now', () => {
   const store = new JobStore(':memory:')
   store.ensure(job.kind, 0)
@@ -103,6 +219,22 @@ it('a failed job keeps its failure while an active retry explains what is happen
     state: 'failed',
     meaning: '2 sources failed: Jobinator, Dadbot.',
   })
+})
+
+it('does not associate an active lease deadline with the prior completed execution', () => {
+  const store = new JobStore(':memory:')
+  store.ensure(job.kind, 0)
+  const prior = store.claim(job.kind, { holder: 'a:1', machine: 'a' }, 0, 60_000)
+  if (!prior) throw new Error('no prior lease')
+  store.complete(prior, { state: 'ok', meaning: 'Finished.', runId: prior.leaseId }, 0, 1000)
+  const completed = store.get(job.kind)
+  if (!completed) throw new Error('no completed job')
+  expect(jobRow(job, completed, 1000).run_id).toBe(prior.leaseId)
+  store.claim(job.kind, { holder: 'a:2', machine: 'a' }, 1000, 60_000)
+  const active = store.get(job.kind)
+  if (!active) throw new Error('no active job')
+  expect(jobRow(job, active, 1000)).not.toHaveProperty('run_id')
+  store.close()
 })
 
 it('publishes the active retry when it starts, before waiting for its result', async () => {
@@ -192,8 +324,8 @@ describe('a run survives a scheduler restart', () => {
     const first = runnerFor(
       store,
       'a:1',
-      async (j) => {
-        await host.start(unitName(j.kind), unitArgv(join(dir, j.kind), command))
+      async (j, runId) => {
+        await host.start(unitName(j.kind), unitArgv(join(dir, j.kind), command, runId))
         return new Promise(() => {})
       },
       units,
@@ -203,9 +335,16 @@ describe('a run survives a scheduler restart', () => {
     await first.tick()
     expect(started).toEqual(['aico-job-backup'])
     expect(store.get('backup')?.holder).toBe('a:1')
+    const originalRun = store.get('backup')?.leaseId
 
     // The next scheduler finds the lease held by a dead holder and the unit live: it adopts.
-    const second = runnerFor(store, 'a:2', (j) => unitJob(j.kind, command, units), units, logs)
+    const second = runnerFor(
+      store,
+      'a:2',
+      (j, runId) => unitJob(j.kind, command, units, undefined, undefined, runId),
+      units,
+      logs,
+    )
     second.start()
     await second.tick()
     release(dir)
@@ -220,6 +359,7 @@ describe('a run survives a scheduler restart', () => {
       lastState: 'ok',
       lastMeaning: 'copied 3 files',
       fence: 2,
+      lastRunId: originalRun,
     })
   })
 

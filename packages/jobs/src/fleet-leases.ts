@@ -5,6 +5,7 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, unlinkSync }
 import { createServer, request } from 'node:http'
 import { createServer as createCarrier, createConnection, type Server, type Socket } from 'node:net'
 import { dirname, join } from 'node:path'
+import { LIMITS } from '@aico/status'
 import type { JobDef } from './jobs'
 import { nextRun, resumeAt } from './jobs'
 import {
@@ -140,7 +141,18 @@ function validResult(call: LeaseCall): JobResult {
     !Number.isSafeInteger(call.ranAt)
   )
     throw new Error('Invalid job result')
-  return { state: result.state, meaning: result.meaning }
+  if (
+    result.runId !== undefined &&
+    (typeof result.runId !== 'string' ||
+      result.runId.length > LIMITS.id.max ||
+      !LIMITS.id.pattern.test(result.runId))
+  )
+    throw new Error('Invalid job execution id')
+  return {
+    state: result.state,
+    meaning: result.meaning,
+    ...(result.runId === undefined ? {} : { runId: result.runId }),
+  }
 }
 
 /** Lines of a run's output `aico routines log` shows. */

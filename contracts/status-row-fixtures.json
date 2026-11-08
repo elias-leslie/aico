@@ -23,7 +23,8 @@
         "state": "ok",
         "meaning": "Published main.",
         "next_run": "2026-11-09T08:05:00Z",
-        "run_by": "jobs/github-publish"
+        "run_by": "jobs/github-publish",
+        "run_id": "b1234567890abcde"
       }
     },
     {
@@ -114,6 +115,19 @@
     }
   ],
   "invalid": [
+    {
+      "name": "an execution id with spaces",
+      "row": {
+        "id": "publish:aico",
+        "what": "Publication",
+        "kind": "job",
+        "machine": "m",
+        "state": "ok",
+        "meaning": "Published.",
+        "run_id": "a run"
+      },
+      "field": "run_id"
+    },
     {
       "name": "a job writer without its deadline",
       "row": {

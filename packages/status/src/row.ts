@@ -44,6 +44,8 @@ export interface StatusRow {
   next_run?: string
   /** The job row whose run writes this one: not late while that job is paused or hasn't had its turn. */
   run_by?: string
+  /** The exact scheduler execution, shared with the owning job's completed report. */
+  run_id?: string
   actions?: Action[]
 }
 
@@ -67,6 +69,7 @@ const FIELDS = new Set([
   'last_run',
   'next_run',
   'run_by',
+  'run_id',
   'actions',
 ])
 
@@ -196,6 +199,8 @@ export function parseRow(value: unknown): StatusRow {
     if (nextRun === undefined) throw new RowError('run_by', 'run_by needs next_run')
     row.run_by = runBy
   }
+  const runId = text(body, 'run_id', LIMITS.id, false)
+  if (runId !== undefined) row.run_id = runId
   const list = actions(body.actions)
   if (list !== undefined) row.actions = list
   return row
@@ -210,10 +215,12 @@ export const jobEnv = (
   kind: string,
   nextRun: number,
   everyMin?: number,
+  runId?: string,
 ): Record<string, string> => ({
   AICO_JOB_KIND: kind,
   AICO_JOB_NEXT_RUN: new Date(nextRun).toISOString(),
   ...(everyMin === undefined ? {} : { AICO_JOB_EVERY_MIN: String(everyMin) }),
+  ...(runId === undefined ? {} : { AICO_JOB_RUN_ID: runId }),
 })
 
 /**
@@ -225,10 +232,13 @@ export function jobSchedule(
   kind: string,
   env: NodeJS.ProcessEnv,
   now = Date.now(),
-): Pick<StatusRow, 'next_run' | 'run_by'> {
+): Pick<StatusRow, 'next_run' | 'run_by' | 'run_id'> {
   if (env.AICO_JOB_KIND !== kind || !env.AICO_JOB_NEXT_RUN) return {}
   const next = parseTime(env.AICO_JOB_NEXT_RUN)
   if (next === null || !LIMITS.id.pattern.test(`jobs/${kind}`)) return {}
+  const runId = env.AICO_JOB_RUN_ID
+  if (runId !== undefined && (!LIMITS.id.pattern.test(runId) || runId.length > LIMITS.id.max))
+    return {}
   const every = env.AICO_JOB_EVERY_MIN === undefined ? undefined : Number(env.AICO_JOB_EVERY_MIN)
   if (every !== undefined && (!Number.isFinite(every) || every <= 0)) return {}
   const due = every === undefined ? next : now + every * 60_000
@@ -236,5 +246,6 @@ export function jobSchedule(
   return {
     next_run: new Date(due).toISOString(),
     run_by: `jobs/${kind}`,
+    ...(runId === undefined ? {} : { run_id: runId }),
   }
 }

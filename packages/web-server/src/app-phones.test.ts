@@ -1,8 +1,9 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import * as durableFile from '@aico/shared/durable-file'
 import { withFileLock } from '@aico/shared/durable-file'
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import {
   confirmPhonesMerge,
   mergePhones,
@@ -13,6 +14,7 @@ import {
 
 const dirs: string[] = []
 afterEach(() => {
+  vi.restoreAllMocks()
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true })
 })
 
@@ -175,6 +177,53 @@ it('keeps a phone paired after the merge in its same second, until a reply actua
   // Once a confirmed reply contains it, a removal on the sender is authoritative again.
   await confirmPhonesMerge(file)
   expect((await mergePhonesFile(file, sender, 400)).map((p) => p.id)).toEqual(['old'])
+})
+
+it('keeps sender origin and the last whole list when the list write fails after its cursor was saved', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'aico-phone-merge-cut-'))
+  dirs.push(dir)
+  const file = join(dir, 'phones.json')
+  const ours = [phone('kept', { added_at: 1 }), phone('paired-here', { added_at: 150 })]
+  writeFileSync(file, JSON.stringify(ours))
+  writeFileSync(`${file}.sync.json`, JSON.stringify({ at: 100, ids: ['kept'] }))
+  const write = durableFile.writeFileDurable
+  const failed = vi
+    .spyOn(durableFile, 'writeFileDurable')
+    .mockImplementation((path, data, options) => {
+      if (path === file) throw new Error('list write interrupted')
+      write(path, data, options)
+    })
+  await expect(
+    mergePhonesFile(file, [phone('kept'), phone('sent-new', { added_at: 150 })], 200),
+  ).rejects.toThrow('list write interrupted')
+  expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual(ours)
+  expect(JSON.parse(readFileSync(`${file}.sync.json`, 'utf8')).known_pairs).toEqual({
+    kept: null,
+    'sent-new': null,
+  })
+  failed.mockRestore()
+  // No reply was produced, so there is no confirm. A retry with the sender phone removed is safe.
+  expect((await mergePhonesFile(file, [phone('kept')], 300)).map((phone) => phone.id)).toEqual([
+    'kept',
+    'paired-here',
+  ])
+})
+
+it('distinguishes a fresh local pairing of a known phone from the pairing the sender already knew', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'aico-phone-repairing-'))
+  dirs.push(dir)
+  const file = join(dir, 'phones.json')
+  await mergePhonesFile(file, [phone('same-phone', { added_at: 1 })], 200)
+  await confirmPhonesMerge(file)
+  // The sender removed its old pairing, but this receiver paired that installation again afterward,
+  // in the same second as the last reply. The next reply must carry this new pairing first.
+  await new PhoneRegistry(file).register(
+    phone('same-phone', { added_at: 200, auth: 'new-pairing-auth' }),
+  )
+  expect((await mergePhonesFile(file, [], 300)).map((phone) => phone.id)).toEqual(['same-phone'])
+  await confirmPhonesMerge(file)
+  // Once that exact pairing was acknowledged, a later sender removal wins again.
+  expect(await mergePhonesFile(file, [], 400)).toEqual([])
 })
 
 it('an empty or broken phone list refuses pairing and never reads as no phones', async () => {

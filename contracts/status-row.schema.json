@@ -76,6 +76,13 @@
       "maxLength": 200,
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@-]*$"
     },
+    "run_id": {
+      "description": "The exact scheduler execution that wrote this report. A job's own row carries the id of its last completed execution. Together with run_by this lets the server correct an expired next_run only from that execution, including after scheduler adoption; older reports without it are never extended by guessing from timestamps.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@-]*$"
+    },
     "actions": {
       "description": "What a person or agent can do about it, as data; the screen and CLI decide how to offer each. run: the command that runs it now. log: the command or path that shows its log; a command should print its last lines and end (for journalctl, -n 200 --no-pager), since Aico stops it after 10 seconds and shows what it printed by then as cut off. detail: an Aico app path with more. look: where a session looking into it should start (a path, project or hint). session: the id of a session the row is about; the screen offers Resume when Aico holds it after a crash, else Open.",
       "type": "array",

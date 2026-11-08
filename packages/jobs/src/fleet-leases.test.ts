@@ -78,8 +78,17 @@ it('carries fenced claims, renewals and late result refusal over two real TLS pe
     every_min: 1,
     run: { command: ['true'] },
   }
+  const identified = { ...job, kind: 'identified' }
+  const fallbackIdentity = { ...job, kind: 'fallback-identified', fallback: [home.name] }
   store.ensure(job.kind, Date.now())
-  const server = await serveLeases(ps.jobsSocket as string, store, [job], peer.name)
+  store.ensure(identified.kind, Date.now())
+  store.ensure(fallbackIdentity.kind, Date.now())
+  const server = await serveLeases(
+    ps.jobsSocket as string,
+    store,
+    [job, identified, fallbackIdentity],
+    peer.name,
+  )
   try {
     await hf.start()
     const peerHome = ps.peers[0]
@@ -90,6 +99,38 @@ it('carries fenced claims, renewals and late result refusal over two real TLS pe
     homePeer.endpoint.port = boundPort(pf)
     await vi.waitFor(() => expect(hf.status()[0]?.connected).toBe(true))
     const remote = remoteAuthority(join(hs.peerRoot, peer.name, 'jobs.sock'))
+    const identifiedLease = await remote.claim(
+      identified.kind,
+      { holder: 'identified-runner', machine: home.name },
+      0,
+      0,
+    )
+    if (!identifiedLease) throw new Error('No identified lease')
+    await expect(
+      remote.complete(
+        identifiedLease,
+        { state: 'ok', meaning: 'Finished.', runId: 'invalid id' },
+        Date.now(),
+        0,
+      ),
+    ).rejects.toThrow('Invalid job execution id')
+    await remote.complete(
+      identifiedLease,
+      { state: 'ok', meaning: 'Finished.', runId: 'original-unit-run' },
+      Date.now(),
+      0,
+    )
+    expect(await remote.get(identified.kind)).toMatchObject({ lastRunId: 'original-unit-run' })
+    expect(
+      await remote.report(
+        fallbackIdentity.kind,
+        { state: 'ok', meaning: 'Fallback finished.', runId: 'fallback-unit-run' },
+        Date.now(),
+      ),
+    ).toBe(true)
+    expect(await remote.get(fallbackIdentity.kind)).toMatchObject({
+      lastRunId: 'fallback-unit-run',
+    })
     await expect(
       remote.claim(job.kind, { holder: 'forged', machine: peer.name }, 0, 0),
     ).rejects.toThrow('pinned machine')

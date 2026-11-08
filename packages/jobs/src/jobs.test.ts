@@ -1,9 +1,10 @@
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { StatusRow } from '@aico/status'
+import { openDatabase } from '@aico/store'
 import { describe, expect, it, vi } from 'vitest'
 import { answerResult, commandJob, postJob, selfArgv, startBootClean } from './act'
 import {
@@ -25,6 +26,35 @@ const B = { holder: 'b:2', machine: 'b' }
 const TTL = 60_000
 
 describe('the lease', () => {
+  it('migrates an existing jobs database without inventing execution identities', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'jobs-identity-migration-'))
+    const path = join(dir, 'jobs.db')
+    try {
+      const store = new JobStore(path)
+      store.ensure('old', 1000)
+      const lease = store.claim('old', A, 1000, TTL)
+      if (!lease) throw new Error('no lease')
+      store.complete(lease, { state: 'ok', meaning: 'Old result.' }, 1000, 2000)
+      store.close()
+      // This is already at v6; open through the shared SQLite boundary before recreating v5.
+      const legacy = openDatabase(
+        path,
+        Array.from({ length: 6 }, () => ''),
+      )
+      legacy.exec('ALTER TABLE jobs DROP COLUMN last_run_id; PRAGMA user_version = 5')
+      legacy.close()
+      const migrated = new JobStore(path)
+      expect(migrated.get('old')).toMatchObject({
+        lastRun: 1000,
+        lastMeaning: 'Old result.',
+        lastRunId: null,
+        nextRun: 2000,
+      })
+      migrated.close()
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
   it('fences a holder whose lease expired and was taken over: its writes are refused', () => {
     const store = new JobStore(':memory:')
     store.ensure('export', 1000)
@@ -674,15 +704,15 @@ describe('a command job is told its schedule', () => {
         command: [
           process.execPath,
           '-e',
-          'console.log(process.env.AICO_JOB_KIND + " " + process.env.AICO_JOB_NEXT_RUN)',
+          'console.log(process.env.AICO_JOB_KIND + " " + process.env.AICO_JOB_NEXT_RUN + " " + process.env.AICO_JOB_RUN_ID)',
         ],
       },
     }
-    const scheduled = withSchedule(print, 'home', now)
+    const scheduled = withSchedule(print, 'home', now, 'original-run')
     if (!('command' in scheduled.run)) throw new Error('not a command')
     expect(await commandJob(scheduled.run.command)).toEqual({
       state: 'ok',
-      meaning: `nightly ${new Date(nextRun(job, now)).toISOString()}`,
+      meaning: `nightly ${new Date(nextRun(job, now)).toISOString()} original-run`,
     })
   })
   it('never on a stand-in, whose rows would go late once the home took the job back', () => {

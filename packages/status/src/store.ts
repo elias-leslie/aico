@@ -205,16 +205,16 @@ export class StatusStore {
         const byId = new Map(all.map(({ row }) => [row.id, row]))
         const correct = this.db.prepare('UPDATE status_rows SET doc = ? WHERE id = ?')
         for (const { row } of all) {
-          if (!row.run_by || !row.next_run || !row.last_run) continue
+          if (!row.run_by || !row.run_id || !row.next_run || !row.last_run) continue
           const reported = Date.parse(row.last_run)
           if (reported < Date.parse(row.next_run)) continue
           const job = byId.get(row.run_by)
           if (
             job?.kind !== 'job' ||
             job.machine !== row.machine ||
+            job.run_id !== row.run_id ||
             !job.last_run ||
             !job.next_run ||
-            Date.parse(job.last_run) < reported ||
             Date.parse(job.next_run) <= reported
           )
             continue

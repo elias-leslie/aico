@@ -221,13 +221,14 @@ async function checkRoutes(io: CaretakerIo, policy: Policy, state: CaretakerStat
   state.routesAt = now
   const { state: shown, meaning } = await routeCheck(policy, routes(policy, io))
   // Due with the first pass after route_check_hours: a pass from now, then that long.
-  const { next_run, run_by } = jobSchedule('caretaker', io.env)
+  const { next_run, run_by, run_id } = jobSchedule('caretaker', io.env)
   const due = next_run
     ? {
         next_run: new Date(
           Date.parse(next_run) + policy.route_check_hours * 3600_000,
         ).toISOString(),
         run_by,
+        ...(run_id === undefined ? {} : { run_id }),
       }
     : {}
   await postStatusRows(

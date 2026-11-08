@@ -172,6 +172,58 @@ it('releases both locks when the fleet request throws, so the next sync can fini
   expect((await syncPhones(peers, aico, env, answer as never)).failed).toBe(false)
 })
 
+it('never resurrects a newly sent phone removed while its unconfirmed reply is in flight', async () => {
+  const { dir, env } = setup()
+  const source = join(dir, 'phones.json')
+  const receiver = join(dir, 'receiver.json')
+  const phone = (id: string, added_at: number) => ({
+    id,
+    added_at,
+    sig_pub: 'sig',
+    enc_pub: 'enc',
+    auth: 'auth',
+  })
+  const kept = phone('kept', 1)
+  writeFileSync(source, JSON.stringify([kept, phone('new-at-source', 150)]))
+  writeFileSync(receiver, JSON.stringify([kept, phone('new-at-receiver', 150)]))
+  writeFileSync(`${receiver}.sync.json`, JSON.stringify({ at: 100, ids: ['kept'] }))
+  // Execute the real answering side in its own process, just as a fleet command does.
+  const moduleUrl = new URL('../../web-server/src/app-phones.ts', import.meta.url).href
+  const script = `import {mergePhonesFile, confirmPhonesMerge} from ${JSON.stringify(moduleUrl)};
+    let input = ''; for await (const chunk of process.stdin) input += chunk;
+    const {path, verb, phones, now} = JSON.parse(input);
+    const result = verb === 'merge' ? await mergePhonesFile(path, phones, now) : await confirmPhonesMerge(path);
+    console.log(JSON.stringify(result ?? null));`
+  let calls = 0
+  const exec = async (_s: string, argv: string[], input: Buffer): Promise<Answer> => {
+    const verb = argv.at(-1)?.endsWith('phones merge-done') ? 'confirm' : 'merge'
+    const result = spawnSync(
+      process.execPath,
+      ['--experimental-transform-types', '--input-type=module', '-e', script],
+      {
+        input: JSON.stringify({
+          path: receiver,
+          verb,
+          phones: input.length ? JSON.parse(input.toString()) : [],
+          now: 200 + calls,
+        }),
+        encoding: 'utf8',
+      },
+    )
+    expect(result.status, result.stderr).toBe(0)
+    if (++calls === 1)
+      await withFileLock(source, () => writeFileSync(source, JSON.stringify([kept])))
+    return { code: result.status ?? 1, stdout: result.stdout, output: result.stderr, ended: true }
+  }
+  await syncPhones(peers, aico, env, exec as never)
+  expect(calls).toBe(1) // The changed source refused that first reply and sent no confirmation.
+  await syncPhones(peers, aico, env, exec as never)
+  const ids = (path: string) =>
+    (JSON.parse(readFileSync(path, 'utf8')) as { id: string }[]).map((p) => p.id)
+  expect(ids(source)).toEqual(['kept', 'new-at-receiver'])
+  expect(ids(receiver)).toEqual(['kept', 'new-at-receiver'])
+})
+
 it('sends the canary cursor and keeps the newer time per token from both sides', async () => {
   const { dir, env } = setup()
   const file = join(dir, 'canary', 'poll.json')

@@ -213,7 +213,7 @@ export async function main(argv: string[], env = process.env): Promise<number> {
         job.kind,
         TICK_MS,
       ),
-    act: (job) => run(withSchedule(job, machine, Date.now())),
+    act: (job, runId) => run(withSchedule(job, machine, Date.now(), runId), runId),
     inFlight: (job) => unitInFlight(job.kind, units, whereOf(job)),
     drain: async () => void (await drainOutbox(rowsUrl, outbox)),
     postRows: (rows) => postRows(webUrl, rows),

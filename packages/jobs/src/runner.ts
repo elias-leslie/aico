@@ -34,7 +34,7 @@ export interface LeaseAuthority {
   report?(kind: string, result: JobResult, ranAt: number): MaybePromise<boolean>
 }
 
-export type Act = (job: JobDef) => Promise<JobResult>
+export type Act = (job: JobDef, runId: string) => Promise<JobResult>
 
 export interface RunnerOptions {
   store: JobStore
@@ -236,6 +236,7 @@ export class Runner {
       const result = {
         state: here.lastState as JobResult['state'],
         meaning: here.lastMeaning ?? '',
+        ...(here.lastRunId ? { runId: here.lastRunId } : {}),
       }
       if (await remote.report(job.kind, result, here.lastRun)) {
         this.log(`${job.kind}: handed the run made here to ${job.lease_host}`)
@@ -288,6 +289,7 @@ export class Runner {
       const result = {
         state: seen.lastState as JobResult['state'],
         meaning: seen.lastMeaning ?? '',
+        ...(seen.lastRunId ? { runId: seen.lastRunId } : {}),
       }
       if (!store.record(job.kind, result, seen.lastRun, other, nextRun(job, now), now)) continue
       this.log(`${job.kind}: ${other} ran it while this machine was down; took its result`)
@@ -331,7 +333,7 @@ export class Runner {
     const startedAt = this.now()
     let result: JobResult
     try {
-      result = await this.options.act(job)
+      result = await this.options.act(job, lease.leaseId)
     } catch (error) {
       result = { state: 'failed', meaning: `It stopped: ${(error as Error).message}` }
     } finally {
@@ -427,6 +429,7 @@ const rowSignature = (state: JobState, now: number) =>
   [
     state.paused,
     state.lastRun,
+    state.lastRunId,
     state.lastState,
     state.lastMeaning,
     state.lastMachine,
@@ -461,6 +464,7 @@ export function jobRow(job: JobDef, state: JobState, now = Date.now()): StatusRo
         ? cut(`Paused. Last run ${state.lastState}: ${state.lastMeaning || 'Finished.'}`)
         : `Paused. ${schedule(job)} on ${job.home} once resumed.`,
       ...(ran ? { last_run: iso(state.lastRun as number) } : {}),
+      ...(state.lastRunId && !state.leaseId ? { run_id: state.lastRunId } : {}),
       actions: actionsOf(job),
     }
   return {
@@ -478,6 +482,8 @@ export function jobRow(job: JobDef, state: JobState, now = Date.now()): StatusRo
         )
       : `Not run yet. Runs ${schedule(job)} on ${job.home}.`,
     ...(ran ? { last_run: iso(state.lastRun as number) } : {}),
+    // An active lease's next_run is its expiry, not the last completed execution's deadline.
+    ...(state.lastRunId && !state.leaseId ? { run_id: state.lastRunId } : {}),
     // While it runs the scheduler still holds the due time it started at, so a long run would read
     // late; it is due when its lease runs out instead (a dead worker's row goes late from there).
     // It isn't due until its stand-in's turn has passed too: the home being off is not a late run.
