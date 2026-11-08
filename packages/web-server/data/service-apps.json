@@ -74,7 +74,7 @@
         "risk-manager-system-prompt",
         "workspace-search-discipline"
       ],
-      "machine": "apps"
+      "machine": "portfolio-ai"
     },
     "jobinator-4000": {
       "agents": {
