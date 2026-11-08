@@ -26,6 +26,7 @@ const routine = (over: Partial<Routine> = {}): Routine => ({
 })
 
 let list: Routine[] | 'down'
+let logLines: string[] = []
 const posts: { url: string; body: unknown }[] = []
 
 beforeEach(() => {
@@ -44,6 +45,7 @@ beforeEach(() => {
     routine({ kind: 'old', what: 'Old thing', paused: true, nextRun: null }),
   ]
   posts.length = 0
+  logLines = ['line one', 'line two']
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
@@ -52,7 +54,7 @@ beforeEach(() => {
         return new Response(
           JSON.stringify(
             url.endsWith('/log')
-              ? { ok: true, truncated: false, lines: ['line one', 'line two'] }
+              ? { ok: true, truncated: false, lines: logLines }
               : { message: 'done' },
           ),
         )
@@ -142,6 +144,23 @@ describe('Routines', () => {
         body: { kind: 'old' },
       }),
     )
+  })
+
+  it('says so when the last run printed nothing', async () => {
+    logLines = ['']
+    view()
+    const school = (await screen.findByTestId(
+      'routine-school-check',
+    )) as HTMLElement
+    fireEvent.click(school.querySelector('button') as HTMLElement)
+    fireEvent.click(
+      Array.from(school.querySelectorAll('button')).find((b) =>
+        b.textContent?.includes('Show log'),
+      ) as HTMLElement,
+    )
+    expect(
+      await screen.findByText('Its last run printed nothing.'),
+    ).toBeTruthy()
   })
 
   it('says it could not load, not that there are none', async () => {

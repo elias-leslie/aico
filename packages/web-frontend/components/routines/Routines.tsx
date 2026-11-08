@@ -101,10 +101,13 @@ function Row({ routine }: { routine: Routine }) {
     setReading(true)
     try {
       const result = await readRoutineLog(routine.kind)
+      const text = result.lines.join('\n').trim()
       setLog({
-        text: result.lines.length
-          ? result.lines.join('\n')
-          : 'Nothing saved from its last run yet.',
+        text:
+          text ||
+          (result.ok
+            ? 'Its last run printed nothing.'
+            : 'Nothing saved from its last run yet.'),
         bad: !result.ok,
       })
     } catch (failure) {
