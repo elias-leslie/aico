@@ -232,6 +232,29 @@ function runnerFor(
 }
 
 describe('the runner', () => {
+  it('a running job stays due until its lease runs out, so a long run never reads late', () => {
+    const job = { kind: 'k', what: 'K', project: 'p', home: 'h' } as unknown as JobDef
+    const base = {
+      kind: 'k',
+      nextRun: 1000,
+      fence: 1,
+      leaseId: 'l',
+      holder: 'w',
+      holderMachine: 'h',
+      leaseExpires: 9000,
+      lastRun: 500,
+      lastState: 'failed',
+      lastMeaning: 'Exited 1',
+      lastMachine: 'h',
+      paused: false,
+    } as unknown as Parameters<typeof jobRow>[1]
+    expect(jobRow(job, base).next_run).toBe(new Date(9000).toISOString())
+    expect(jobRow(job, { ...base, leaseId: null, leaseExpires: null }).next_run).toBe(
+      new Date(1000).toISOString(),
+    )
+    expect(jobRow(job, { ...base, nextRun: 20000 }).next_run).toBe(new Date(20000).toISOString())
+  })
+
   it('runs a job on its home machine when due and writes its one row with next_run', async () => {
     const clock = { now: new Date(2026, 10, 3, 3, 0).getTime() }
     const store = new JobStore(':memory:')

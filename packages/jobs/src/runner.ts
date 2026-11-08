@@ -417,6 +417,7 @@ const rowSignature = (state: JobState) =>
     state.lastMeaning,
     state.lastMachine,
     state.nextRun,
+    state.leaseExpires,
   ].join('|')
 
 /** The job's one Status row: where and how it last ran, and when it is due next. */
@@ -448,7 +449,9 @@ export function jobRow(job: JobDef, state: JobState): StatusRow {
       ? cut(state.lastMeaning || 'Finished.')
       : `Not run yet. Runs ${schedule(job)} on ${job.home}.`,
     ...(ran ? { last_run: iso(state.lastRun as number) } : {}),
-    next_run: iso(state.nextRun),
+    // While it runs the scheduler still holds the due time it started at, so a long run would read
+    // late; it is due when its lease runs out instead (a dead worker's row goes late from there).
+    next_run: iso(Math.max(state.nextRun, state.leaseExpires ?? 0)),
     actions: actionsOf(job),
   }
 }
