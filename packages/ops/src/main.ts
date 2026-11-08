@@ -17,6 +17,7 @@ import {
 } from './deploy'
 import { journalArgs, otherProjectLogs, parseLogsArgs, statusPointer } from './logs'
 import { plug, plugDeps } from './plug'
+import { power, powerDeps } from './power'
 import { run } from './sh'
 import { snapDeps, snapshots } from './snapshots'
 import { routeOp, vm } from './vm'
@@ -90,7 +91,7 @@ export async function main(argv: string[], env = process.env): Promise<number> {
     if (verb === 'context-sync') return await contextSync(rest, env)
     // Help before anything reads the project, git or a host: `aico deploy --help` works anywhere.
     if (
-      ['deploy', 'logs', 'snapshots', 'vm', 'plug', 'away'].includes(verb as string) &&
+      ['deploy', 'logs', 'snapshots', 'vm', 'plug', 'away', 'power'].includes(verb as string) &&
       (HELP.has(rest[0] ?? '') || rest.includes('--help'))
     ) {
       console.log(verbUsage(verb as string))
@@ -150,6 +151,11 @@ export async function main(argv: string[], env = process.env): Promise<number> {
       return await away(
         rest,
         awayDeps((line) => console.log(line)),
+      )
+    if (verb === 'power')
+      return await power(
+        rest,
+        powerDeps((line) => console.log(line), env),
       )
     if (verb === 'help' || verb === '--help' || verb === '-h' || !verb) {
       console.log(USAGE)

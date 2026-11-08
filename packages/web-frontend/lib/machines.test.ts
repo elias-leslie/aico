@@ -244,6 +244,44 @@ describe('buildMachines', () => {
   })
 })
 
+describe('served from the standby', () => {
+  const FROM_STANDBY: HostChoice[] = [
+    {
+      name: 'davion-sidarli',
+      state: 'powered_off',
+      sessions: 0,
+      canSleep: false,
+    } as HostChoice,
+  ]
+  const rows = (machine: string) => ({ ...view(ROWS), machine })
+
+  it('the Workstation is the linked machine, the Standby is the one serving the page', () => {
+    const list = buildMachines(rows('aico'), FROM_STANDBY, NOW)
+    const by = Object.fromEntries(list.machines.map((m) => [m.key, m]))
+    expect(by['davion-sidarli']).toMatchObject({
+      name: 'Workstation',
+      isWorkstation: true,
+      here: false,
+      up: 'off',
+      power: 'on',
+      guest: null,
+    })
+    expect(by.aico).toMatchObject({
+      name: 'Standby',
+      isWorkstation: false,
+      here: true,
+      sessionHost: true,
+    })
+  })
+
+  it('finds the Workstation by its link even while Status cannot be read', () => {
+    const list = buildMachines(null, FROM_STANDBY, NOW)
+    expect(
+      list.machines.filter((m) => m.isWorkstation).map((m) => m.key),
+    ).toEqual(['davion-sidarli'])
+  })
+})
+
 describe('sessionHostLabel', () => {
   it('names this computer and the Proxmox link the same as Machines', () => {
     expect(sessionHostLabel(null)).toBe('Workstation')

@@ -240,7 +240,12 @@ function Row({ routine }: { routine: Routine }) {
             <button
               type="button"
               className="lantern-btn small"
-              disabled={busy || routine.running}
+              disabled={busy || routine.running || !!routine.unreadable}
+              title={
+                routine.unreadable
+                  ? `Can’t run from here: ${routine.unreadable}`
+                  : undefined
+              }
               onClick={() => act(routine.kind, 'run')}
             >
               <Play

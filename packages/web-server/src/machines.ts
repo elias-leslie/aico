@@ -3,11 +3,14 @@
 //   GET  /api/machines/guests                  the guests and when Proxmox was read (or why not)
 //   POST /api/machines/:machine/power          {action: on | off | restart, force?}
 //   POST /api/machines/:machine/autostart      {on: true | false}
+//   GET  /api/machines/services                each full Aico's services and their state (aico power units)
+//   POST /api/machines/:machine/restart-service {unit}
 // Power goes through Places (Proxmox, the same path as the Projects page), except on / off of a
 // machine Tether links to as a session host: Tether ends its sessions first and follows the start
 // (powering on, connecting, checking services), which Places cannot. A guest is found by the
 // machine a project declares for it, else by its Proxmox name (agent-work, neri-hunters).
 
+import { spawn } from 'node:child_process'
 import type { Guest } from '@aico/fleet/power'
 import type { Place, Project } from '@aico/tasks'
 import { hostPower, type TetherClient } from '@aico/tether-client'
@@ -159,13 +162,68 @@ export class MachinesService {
 }
 
 const MACHINE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
+const UNIT = /^[A-Za-z0-9][A-Za-z0-9@._-]*\.service$/
+/** The page polls and a reading asks the other machine too. */
+const SERVICES_FRESH_MS = 4000
 
-export function registerMachineRoutes(router: Router, service: MachinesService) {
+export type PowerCommand = (args: string[]) => Promise<string>
+
+/** The installed `aico power`, so the page and the CLI do the same thing. */
+const powerCommand: PowerCommand = (args) =>
+  new Promise((resolve, reject) => {
+    const child = spawn('aico', ['power', ...args], { stdio: ['ignore', 'pipe', 'pipe'] })
+    let out = ''
+    let err = ''
+    child.stdout.on('data', (data) => {
+      out += String(data)
+    })
+    child.stderr.on('data', (data) => {
+      err = (err + String(data)).slice(-2000)
+    })
+    child.on('error', () => reject(new HttpError(503, 'Couldn’t ask this machine.')))
+    child.on('close', (code) => {
+      if (code === 0) return resolve(out.trim())
+      const said = err
+        .trim()
+        .split('\n')
+        .pop()
+        ?.replace(/^aico power:\s*/, '')
+      reject(new HttpError(code === 2 ? 422 : 502, said || 'The machine didn’t answer.'))
+    })
+  })
+
+export function registerMachineRoutes(
+  router: Router,
+  service: MachinesService,
+  power: PowerCommand = powerCommand,
+  now: () => number = Date.now,
+) {
   const machineName = (value: string) => {
     if (!MACHINE.test(value)) throw new HttpError(422, 'Unknown machine')
     return value
   }
   router.on('GET', '/api/machines/guests', () => service.guestsNow())
+  let services: { value: unknown; at: number } | null = null
+  router.on('GET', '/api/machines/services', async () => {
+    if (services && now() - services.at <= SERVICES_FRESH_MS) return services.value
+    let machines: unknown
+    try {
+      machines = JSON.parse(await power(['units', '--json']))
+    } catch (error) {
+      if (error instanceof HttpError) throw error
+      throw new HttpError(502, 'The services came back unreadable.')
+    }
+    services = { value: { machines }, at: now() }
+    return services.value
+  })
+  router.on('POST', '/api/machines/:machine/restart-service', async (ctx) => {
+    const machine = machineName(ctx.params.machine)
+    const unit = objectBody(await ctx.body()).unit
+    if (typeof unit !== 'string' || !UNIT.test(unit)) throw new HttpError(422, 'Unknown service')
+    const message = await power(['restart', unit, '--on', machine])
+    services = null
+    return { message }
+  })
   router.on('POST', '/api/machines/:machine/power', async (ctx) => {
     const machine = machineName(ctx.params.machine)
     const body = objectBody(await ctx.body())

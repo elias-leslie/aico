@@ -106,6 +106,70 @@ export const setAutostart = (machine: string, on: boolean) =>
     `Couldn’t turn autostart ${on ? 'on' : 'off'} for ${machine}`,
   )
 
+/** Starts the workstation's clean shutdown; a refusal that comes at once is thrown with its reason. */
+export async function shutDownMachine(machine: string): Promise<void> {
+  const res = await fetch(machineUrl(machine, 'shut-down'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  })
+  if (res.ok) return
+  const parsed = (await res.json().catch(() => null)) as {
+    detail?: string
+  } | null
+  throw new HostCallError(
+    parsed?.detail || `Couldn’t shut down ${machine}.`,
+    res.status,
+  )
+}
+
+/** One of Aico's services on a machine. */
+export interface MachineService {
+  unit: string
+  label: string
+  state: string
+  reloadsPage: boolean
+}
+
+interface MachineServices {
+  machine: string
+  /** Null when that machine didn't answer. */
+  units: MachineService[] | null
+  error?: string
+}
+
+/** Each full Aico's services; null until read or when this server can't say. */
+export function useMachineServices() {
+  const query = useQuery({
+    queryKey: ['machine-services'],
+    queryFn: () =>
+      apiFetch<{ machines: MachineServices[] }>(
+        '/api/machines/services',
+        undefined,
+        'Couldn’t read the services',
+      ),
+    staleTime: 5_000,
+    refetchInterval: POLL_MS,
+  })
+  return { machines: query.data?.machines ?? null, refetch: query.refetch }
+}
+
+export async function restartService(
+  machine: string,
+  unit: string,
+): Promise<void> {
+  const res = await fetch(machineUrl(machine, 'restart-service'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ unit }),
+  })
+  if (res.ok) return
+  const parsed = (await res.json().catch(() => null)) as {
+    detail?: string
+  } | null
+  throw new HostCallError(parsed?.detail || 'It didn’t restart.', res.status)
+}
+
 /** Shuts down the machines for leaving (`aico away --all` on the Workstation). Resolves once it has started; a refusal is thrown in the server's words. */
 export async function awayAll(): Promise<void> {
   const res = await fetch('/api/machines/away', {

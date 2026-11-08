@@ -292,3 +292,39 @@ describe('machine routes', () => {
     expect((await post('/api/machines/nope/power', { action: 'on' })).status).toBe(404)
   })
 })
+
+describe('services', () => {
+  it('reads and restarts through aico power, and refuses a name that is no service', async () => {
+    const calls: string[][] = []
+    const router = new Router()
+    registerMachineRoutes(
+      router,
+      {} as MachinesService,
+      async (args) => {
+        calls.push(args)
+        return args[0] === 'units' ? '[{"machine":"aico","units":[]}]' : 'ok'
+      },
+      () => T0,
+    )
+    const server = createServer((req, res) => {
+      void router.handle(req, res, new URL(req.url ?? '/', 'http://x'))
+    })
+    await new Promise<void>((done) => server.listen(0, '127.0.0.1', done))
+    const base = `http://127.0.0.1:${(server.address() as { port: number }).port}/api/machines`
+    const post = (unit: string) =>
+      fetch(`${base}/davion-sidarli/restart-service`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ unit }),
+      })
+    expect(await (await fetch(`${base}/services`)).json()).toEqual({
+      machines: [{ machine: 'aico', units: [] }],
+    })
+    await fetch(`${base}/services`)
+    expect(calls).toHaveLength(1)
+    expect((await post('tether@default.service')).status).toBe(200)
+    expect(calls[1]).toEqual(['restart', 'tether@default.service', '--on', 'davion-sidarli'])
+    expect((await post('../../x; rm')).status).toBe(422)
+    await new Promise((done) => server.close(done))
+  })
+})

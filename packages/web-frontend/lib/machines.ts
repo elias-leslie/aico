@@ -4,7 +4,11 @@
 import { spanText } from '@aico/shared/time'
 import type { HostChoice } from './hooks/use-hosts'
 import type { MachineGuest } from './hooks/use-machine-guests'
-import { MACHINE_LABEL, WORKSTATION_LABEL } from './machine-name'
+import {
+  MACHINE_LABEL,
+  thisMachineLabel,
+  WORKSTATION_LABEL,
+} from './machine-name'
 import {
   ago,
   at,
@@ -15,7 +19,8 @@ import {
   type StatusView,
 } from './status'
 
-/** The session host that is this computer: `New session` and the hosts list name it only by omission. */
+/** The computer the main Aico runs on. */
+const WORKSTATION_MACHINE = 'davion-sidarli'
 
 /** Session hosts whose Tether name is not the machine's own name (data, from the Tether hosts
  * file). None now: the `aico` link reaches CT 190 (the aico-gem ssh alias), which is its own machine. */
@@ -78,7 +83,7 @@ function standbyOf(rows: readonly StatusRow[], up: Up): Standby {
 
 /** What a session host is called in lists of places to start a session. */
 export function sessionHostLabel(name: string | null): string {
-  if (name === null) return WORKSTATION_LABEL
+  if (name === null) return thisMachineLabel()
   const machine = SESSION_HOST_MACHINE[name] ?? name
   return MACHINE_LABEL[machine] ?? name
 }
@@ -144,6 +149,8 @@ export interface Machine {
   /** The one power action offered when Proxmox can't be asked, if any. */
   power: 'on' | 'off' | 'trust' | null
   isWorkstation: boolean
+  /** The machine serving this page. */
+  here: boolean
   /** Its Proxmox guest (power, autostart); null for the two computers and while Proxmox can't be read. */
   guest: MachineGuest | null
   /** Up since, size and projects, from Proxmox and the project registry; empty when not known. */
@@ -328,7 +335,12 @@ export function buildMachines(
   now: number,
   guests: readonly MachineGuest[] | null = null,
 ): Machines {
-  const workstationKey = view?.machine ?? WORKSTATION_LABEL
+  const hostNames = new Set((hosts ?? []).map((host) => host.name))
+  // On the standby, the Workstation is a machine it links to, not the one serving the page.
+  const workstationKey =
+    view?.machine === STANDBY.machine || hostNames.has(WORKSTATION_MACHINE)
+      ? WORKSTATION_MACHINE
+      : (view?.machine ?? WORKSTATION_LABEL)
   const rows = (view?.rows ?? []).filter((row) => row.kind === 'machine')
   const own = new Map<string, StatusRow>()
   const links = new Map<string, StatusRow>()
@@ -356,6 +368,7 @@ export function buildMachines(
     if (host?.state === 'connected' && host.wake?.state !== 'starting')
       up = 'on'
     else if (host?.wake?.state === 'starting') up = 'starting'
+    else if (host?.state === 'powered_off') up = 'off'
     else if (row) up = upFromRow(row)
     else if (host) up = upFromHost(host)
     else if (link) up = upFromRow(link)
@@ -371,7 +384,9 @@ export function buildMachines(
         host?.state === 'connected',
         host?.state === 'powered_off',
       )
-    const sessionHost = isWorkstation || !!host || (!!link && hosts === null)
+    const here = key === (view?.machine ?? workstationKey)
+    const sessionHost =
+      isWorkstation || here || !!host || (!!link && hosts === null)
     const sessionHostName = host?.name ?? null
     const note =
       guest?.state === 'down' && up === 'off'
@@ -390,6 +405,7 @@ export function buildMachines(
       host: sessionHostName,
       power: powerFor(host),
       isWorkstation,
+      here,
       guest,
       facts: guest ? guestFacts(guest, now) : '',
       standby:

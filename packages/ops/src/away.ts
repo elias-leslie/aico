@@ -4,6 +4,7 @@
 // Start again later with the Kasa app (socket on); the BIOS powers a host on when power returns.
 // Which hosts, their sockets and how each is shut down are data/ops.json (`away`, `plug`).
 
+import syncConfig from '../data/context-sync.json' with { type: 'json' }
 import ops from '../data/ops.json' with { type: 'json' }
 import { Refusal } from './deploy'
 import {
@@ -84,7 +85,7 @@ interface Step {
   plugName: string
 }
 
-const sshArgs = (alias: string) => ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', alias]
+export const sshArgs = (alias: string) => ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', alias]
 
 /** The command that shuts the host down, as program and arguments. */
 export function shutdownCommand(host: AwayHost): [string, string[]] {
@@ -214,7 +215,7 @@ function markPeer(
 ): void {
   const result = deps.run('ssh', [
     ...sshArgs(peer),
-    'aico',
+    syncConfig.peerAico,
     'away',
     'mark',
     ...(options.clear ? ['--clear'] : []),
@@ -225,14 +226,20 @@ function markPeer(
 }
 
 /** Marks everywhere it can; where it cannot, says so and goes on (a stray page costs less than staying). */
-async function mark(deps: AwayDeps, step: Step, clear: boolean): Promise<void> {
-  const options = { guests: step.host.coversGuests === true, clear }
+export async function markEverywhere(
+  deps: AwayDeps,
+  machine: string,
+  names: string[],
+  clear: boolean,
+  guests = false,
+): Promise<void> {
+  const options = { guests, clear }
   const word = clear ? 'unmark' : 'mark'
   const tries: [string, () => void | Promise<void>][] = [
-    ['here', () => markHere(deps, step.names, options)],
+    ['here', () => markHere(deps, names, options)],
     ...deps.cfg.peers.map((peer): [string, () => void] => [
       peer,
-      () => markPeer(deps, peer, step.names, options),
+      () => markPeer(deps, peer, names, options),
     ]),
   ]
   for (const [where, call] of tries) {
@@ -240,11 +247,14 @@ async function mark(deps: AwayDeps, step: Step, clear: boolean): Promise<void> {
       await call()
     } catch (error) {
       deps.out(
-        `Could not ${word} ${step.machine} on ${where} (${(error as Error).message}); that Aico may page about it`,
+        `Could not ${word} ${machine} on ${where} (${(error as Error).message}); that Aico may page about it`,
       )
     }
   }
 }
+
+const mark = (deps: AwayDeps, step: Step, clear: boolean) =>
+  markEverywhere(deps, step.machine, step.names, clear, step.host.coversGuests === true)
 
 /** `aico away mark [--clear] [--guests] NAME...`: the planned-outage mark on this Aico only (what `away` asks of each peer). */
 async function markCommand(deps: AwayDeps, argv: string[]): Promise<number> {
@@ -271,10 +281,8 @@ export async function away(argv: string[], deps: AwayDeps): Promise<number> {
     )
     return 0
   }
-  if (argv[0] === 'mark') {
-    if (!deps.cfg.enabled) throw new Refusal(NOT_SET_UP)
-    return await markCommand(deps, argv.slice(1))
-  }
+  // Only a Status mark, no shutdown: `aico power off` needs it with `away.enabled` off too.
+  if (argv[0] === 'mark') return await markCommand(deps, argv.slice(1))
   const flags = new Set(['--all', '--dry-run'])
   const bad = argv.find((a) => a.startsWith('--') && !flags.has(a))
   if (bad) throw new Refusal(`unknown option ${bad}; aico away --help shows how`, 2)

@@ -98,6 +98,10 @@
           "leaving: shut the hosts down cleanly and cut their power; start again from the Kasa app"
         ],
         [
+          "power",
+          "the workstation's power from either Aico: state, on, off; restart Aico's services"
+        ],
+        [
           "wip",
           "copies of the active repos, uncommitted work too, on the other full machines: run, restore"
         ],

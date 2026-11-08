@@ -136,3 +136,32 @@ it('takes the last line of the output as the reason', () => {
   expect(refusalOf('Away: x\naico away: nope\n')).toBe('nope')
   expect(refusalOf('')).toBe('The shutdown did not start.')
 })
+
+describe('POST /api/machines/:machine/shut-down', () => {
+  it('starts without the away setting, and gives a refusal that comes at once', async () => {
+    const asked: string[] = []
+    let answer: { code: number; output: string } | null = null
+    const router = new Router()
+    registerAwayRoutes(router, {
+      status,
+      guestMachines: async () => [],
+      setup: async () => ({ enabled: false, reason: 'no' }),
+      shutDown: async (machine) => {
+        asked.push(machine)
+        return answer
+      },
+    })
+    const own = createServer((req, res) => {
+      void router.handle(req, res, new URL(req.url ?? '/', 'http://x'))
+    })
+    await new Promise<void>((done) => own.listen(0, '127.0.0.1', done))
+    const url = `http://127.0.0.1:${(own.address() as { port: number }).port}/api/machines/davion-sidarli/shut-down`
+    expect((await fetch(url, { method: 'POST' })).status).toBe(200)
+    expect(asked).toEqual(['davion-sidarli'])
+    answer = { code: 1, output: 'aico power: davion-sidarli is already off.' }
+    const refused = await fetch(url, { method: 'POST' })
+    expect(refused.status).toBe(502)
+    expect(await refused.text()).toContain('davion-sidarli is already off.')
+    await new Promise((done) => own.close(done))
+  })
+})

@@ -4,6 +4,8 @@
 //   POST /api/machines/away     the page's button: runs `aico away --all` here. A refusal that comes
 //                               at once (a plug that does not answer, a shutdown that cannot run)
 //                               is the answer; otherwise it answers 202 and the shutdown goes on.
+//   POST /api/machines/:machine/shut-down   the page's button for the workstation: `aico power off`,
+//                               from either Aico. A clean shutdown; no plug, no `away.enabled`.
 //   POST /api/machines/outage   {machines, guests?, clear?, settleSeconds?}: marks (or, with clear,
 //                               unmarks) a planned outage in this Aico's Status, so the machines
 //                               show off and nobody is paged. Only programs on this machine may
@@ -40,10 +42,10 @@ const awayStatus = (): Promise<AwayStatus> =>
 
 export type AwayStart = () => Promise<{ code: number; output: string } | null>
 
-/** Runs `aico away --all` apart from this server (the shutdown ends the server too). Null: still going after EARLY_MS. */
-const startAway: AwayStart = () =>
+/** Runs an aico command apart from this server (a shutdown ends the server too). Null: still going after EARLY_MS. */
+const startApart = (args: string[]): ReturnType<AwayStart> =>
   new Promise((done) => {
-    const child = spawn('aico', ['away', '--all'], {
+    const child = spawn('aico', args, {
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
     })
@@ -72,7 +74,7 @@ const startAway: AwayStart = () =>
 /** The refusal in plain words: the last line the command printed, without its `aico away:` prefix. */
 export function refusalOf(output: string): string {
   const last = output.trim().split('\n').pop() ?? ''
-  return last.replace(/^aico away:\s*/, '') || 'The shutdown did not start.'
+  return last.replace(/^aico (away|power):\s*/, '') || 'The shutdown did not start.'
 }
 
 export interface AwayRoutes {
@@ -80,6 +82,8 @@ export interface AwayRoutes {
   /** The machine names of the Proxmox guests this Aico lists. */
   guestMachines: () => Promise<string[]>
   start?: AwayStart
+  /** The clean shutdown of one machine (`aico power off`). */
+  shutDown?: (machine: string) => ReturnType<AwayStart>
   setup?: () => Promise<AwayStatus>
   now?: () => number
 }
@@ -94,9 +98,23 @@ export function registerAwayRoutes(router: Router, options: AwayRoutes): void {
     if (going) throw new HttpError(409, 'Already shutting down.')
     going = true
     try {
-      const result = await (options.start ?? startAway)()
+      const result = await (options.start ?? (() => startApart(['away', '--all'])))()
       if (result && result.code !== 0) throw new HttpError(502, refusalOf(result.output))
       return { started: result === null }
+    } finally {
+      going = false
+    }
+  })
+  router.on('POST', '/api/machines/:machine/shut-down', async (ctx) => {
+    const machine = ctx.params.machine ?? ''
+    if (!MACHINE.test(machine)) throw new HttpError(422, 'Unknown machine')
+    if (going) throw new HttpError(409, 'Already shutting down.')
+    going = true
+    try {
+      const shutDown = options.shutDown ?? ((name) => startApart(['power', 'off', name]))
+      const result = await shutDown(machine)
+      if (result && result.code !== 0) throw new HttpError(502, refusalOf(result.output))
+      return { started: true }
     } finally {
       going = false
     }

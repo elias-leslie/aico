@@ -4,7 +4,11 @@ import { type ReactNode, useState } from 'react'
 import { ConfirmationDialog } from '@/components/ConfirmationDialog'
 import { Switch } from '@/components/settings/kit'
 import { HostCallError, powerHost, trustHost } from '@/lib/hooks/use-host-admin'
-import { powerMachine, setAutostart } from '@/lib/hooks/use-machine-guests'
+import {
+  powerMachine,
+  setAutostart,
+  shutDownMachine,
+} from '@/lib/hooks/use-machine-guests'
 import type { Machine } from '@/lib/machines'
 import { plural } from '@/lib/status'
 import mine from './MachinesPage.module.css'
@@ -37,17 +41,22 @@ export function useMachineControls(machine: Machine, onChanged: () => void) {
   const [error, setError] = useState<string | null>(null)
   const [confirm, setConfirm] = useState<Confirm | null>(null)
   const [confirmError, setConfirmError] = useState<string | null>(null)
+  const [goingDown, setGoingDown] = useState(false)
   const host = machine.host
   const guest = machine.guest
   const name = machine.name
 
   async function run(action: Action, force: boolean, inDialog: boolean) {
-    if (!host && !guest) return
+    const shutsWorkstation = machine.isWorkstation && action === 'off'
+    if (!host && !guest && !shutsWorkstation) return
     setBusy(action)
     setError(null)
     setConfirmError(null)
     try {
-      if (action === 'trust' && host) await trustHost(host)
+      if (shutsWorkstation) {
+        await shutDownMachine(machine.key)
+        setGoingDown(true)
+      } else if (action === 'trust' && host) await trustHost(host)
       else if (guest && action !== 'trust')
         await powerMachine(machine.key, action, force)
       else if (host && (action === 'on' || action === 'off'))
@@ -99,12 +108,36 @@ export function useMachineControls(machine: Machine, onChanged: () => void) {
     const sessions = sessionsNow
       ? `${plural(machine.sessions ?? 0, 'session')} running on ${name} will end.`
       : ''
+    if (machine.isWorkstation) {
+      setConfirm({
+        kind,
+        message: [
+          `${name} shuts down cleanly. Sessions save their place and come back when it starts.`,
+          machine.here ? 'Aico carries on from the Standby.' : '',
+          'Power on here starts it again, using Wake-on-LAN or its plug. Neither has been tried yet with it really off.',
+        ]
+          .filter(Boolean)
+          .join(' '),
+        confirmText: ACTION_LABEL[kind],
+      })
+      return
+    }
     setConfirm({
       kind,
       message:
         kind === 'restart'
-          ? `${sessions || `${name} restarts.`} It is back in a minute or two.`
+          ? [
+              machine.here
+                ? 'This is the Aico you’re using: this page stops.'
+                : '',
+              `${sessions || `${name} restarts.`} It is back in a minute or two.`,
+            ]
+              .filter(Boolean)
+              .join(' ')
           : [
+              machine.here
+                ? 'This is the Aico you’re using: this page stops, and only Proxmox can start it again.'
+                : '',
               sessions,
               `${name} stays off until someone starts it.`,
               keepsOn ? 'Status won’t flag it while you have it off.' : '',
@@ -159,6 +192,7 @@ export function useMachineControls(machine: Machine, onChanged: () => void) {
     canStop,
     working,
     progress,
+    goingDown,
     run,
     ask,
     askTrust,
@@ -180,8 +214,17 @@ export function PowerButtons({
   controls: MachineControls
   small?: boolean
 }) {
-  const { machine, busy, canStart, canStop, working, progress, run, ask } =
-    controls
+  const {
+    machine,
+    busy,
+    canStart,
+    canStop,
+    goingDown,
+    working,
+    progress,
+    run,
+    ask,
+  } = controls
   const guest = machine.guest
   const size = small ? 'lantern-btn small' : 'lantern-btn'
   return (
@@ -239,6 +282,19 @@ export function PowerButtons({
               {busy === 'off' ? 'Shutting down…' : 'Shut down'}
             </button>
           )}
+          {machine.isWorkstation &&
+            machine.power !== 'off' &&
+            machine.up === 'on' && (
+              <button
+                type="button"
+                className={size}
+                disabled={busy !== null || goingDown}
+                title="Shut the Workstation down cleanly"
+                onClick={() => ask('off')}
+              >
+                {busy === 'off' || goingDown ? 'Shutting down…' : 'Shut down'}
+              </button>
+            )}
         </>
       )}
       {machine.power === 'trust' && (

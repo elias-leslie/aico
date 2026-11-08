@@ -71,6 +71,7 @@ export const NATIVE = new Set([
   'vm',
   'plug',
   'away',
+  'power',
   'wip',
   'context-sync',
   'backups',

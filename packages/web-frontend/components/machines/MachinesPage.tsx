@@ -25,6 +25,7 @@ import {
   PowerConfirm,
   useMachineControls,
 } from './machine-controls'
+import { ServiceList } from './ServiceList'
 import { StandbyTag } from './StandbyTag'
 
 /** Machines: every machine once, whether it is up, what it is for, and power where it applies. */
@@ -309,6 +310,7 @@ function MachineRow({
           hint={hint}
           lineClass={styles.line}
         />
+        <ServiceList machine={machine} />
       </div>
       <div className={styles.actions}>
         <PowerButtons controls={controls} />

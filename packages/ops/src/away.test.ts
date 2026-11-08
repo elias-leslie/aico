@@ -147,9 +147,9 @@ it('marks everything first, then per host: countdown, then shutdown; this comput
     'sudo -n true',
     // marks: here and the other Aico, gem then this computer
     'POST http://127.0.0.1:3002/api/machines/outage',
-    `${ssh} aico-gem aico away mark --guests davion-gem aico`,
+    `${ssh} aico-gem $HOME/.local/bin/aico away mark --guests davion-gem aico`,
     'POST http://127.0.0.1:3002/api/machines/outage',
-    `${ssh} aico-gem aico away mark davion-sidarli`,
+    `${ssh} aico-gem $HOME/.local/bin/aico away mark davion-sidarli`,
     // gem: plug countdown, then the clean shutdown
     'shed/ID01 delete_all_rules {}',
     'shed/ID01 add_rule {"enable":1,"delay":300,"act":0,"name":"aico"}',
@@ -268,13 +268,14 @@ it('names a machine by its own name and the hostnames the plug settings give it'
   ])
 })
 
-it('while remote power is not set up, refuses to shut anything down or mark, but dry run and status still work', async () => {
+it('while remote power is not set up, refuses to shut anything down, but a Status mark, dry run and status still work', async () => {
   const h = harness({ disabled: true })
   const reason =
     "Remote power isn't set up yet: the plugs and BIOS power-on aren't confirmed. See docs/power-off-test.md."
   await expect(away(['--all'], h.deps)).rejects.toThrow(reason)
-  await expect(away(['mark', 'davion-gem'], h.deps)).rejects.toThrow(reason)
   expect(h.events).toEqual([])
+  expect(await away(['mark', 'davion-gem'], h.deps)).toBe(0)
+  expect(h.events.every((e) => e.startsWith('POST'))).toBe(true)
   expect(await away(['--all', '--dry-run'], h.deps)).toBe(0)
   expect(h.lines.at(-1)).toBe('Dry run: nothing was changed.')
   h.lines.length = 0

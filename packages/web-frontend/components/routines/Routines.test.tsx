@@ -108,7 +108,7 @@ describe('Routines', () => {
     fireEvent.click(rows[1]?.querySelector('button') as HTMLElement)
     expect(rows[1]?.textContent).toContain('Nothing new.')
     expect(rows[1]?.textContent).toContain(
-      'runs on either davion-sidarli or Standby',
+      'runs on either Workstation or Standby',
     )
     expect(rows[1]?.textContent).toContain('Daily at 19:00')
     expect(rows[1]?.textContent).toContain('Last run')
@@ -306,7 +306,7 @@ describe('Routines', () => {
       .filter((b) => b.className.includes('groupHead'))
     expect(heads.map((b) => b.textContent)).toEqual([
       'Proxmox host1 routine1 not known',
-      'davion-sidarli2 routines1 failed',
+      'Workstation2 routines1 failed',
       'Standby1 routine',
     ])
     const rows = screen.getAllByRole('listitem')
@@ -324,7 +324,7 @@ describe('Routines', () => {
       routine({ kind: `r${i}`, what: `Routine ${i}` }),
     )
     view()
-    const head = await screen.findByRole('button', { name: /davion-sidarli/ })
+    const head = await screen.findByRole('button', { name: /Workstation/ })
     expect(head.getAttribute('aria-expanded')).toBe('false')
     expect(screen.queryAllByRole('listitem')).toHaveLength(0)
     fireEvent.click(head)

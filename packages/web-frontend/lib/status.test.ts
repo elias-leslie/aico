@@ -58,7 +58,7 @@ describe('rowButtons', () => {
     expect(unknown.primary).toBe('hosts')
     const silent = rowButtons(row({ shown: 'unknown' }), here)
     expect(silent.buttons.find((b) => b.kind === 'run')?.disabled).toBe(
-      'davion-sidarli isn’t reporting, so it can’t run now',
+      'Workstation isn’t reporting, so it can’t run now',
     )
   })
 

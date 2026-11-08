@@ -26,3 +26,44 @@
 .autostart {
   margin-top: 6px;
 }
+
+.services {
+  margin-top: 6px;
+  color: var(--mist);
+  font-size: 12.5px;
+}
+
+.services summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  cursor: pointer;
+}
+
+.serviceList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.serviceList li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.serviceName {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .services summary,
+  .serviceList :global(.lantern-btn) {
+    min-height: 44px;
+  }
+}

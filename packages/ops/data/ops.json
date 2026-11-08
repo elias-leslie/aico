@@ -83,6 +83,37 @@
       }
     ]
   },
+  "power": {
+    "answerSeconds": 3,
+    "peerSeconds": 6,
+    "hosts": {
+      "davion-sidarli": {
+        "address": "192.168.86.128",
+        "port": 22,
+        "ssh": "workstation",
+        "wake": { "mac": "10:ff:e0:35:51:f1", "broadcast": "192.168.86.255", "port": 9 },
+        "shutdown": ["systemctl", "poweroff", "--no-ask-password"],
+        "prepareSeconds": 120
+      }
+    },
+    "units": [
+      { "unit": "aico-web.service", "label": "Aico", "scope": "user", "reloadsPage": true },
+      { "unit": "aico-jobs.service", "label": "Routines", "scope": "user" },
+      { "unit": "tether@default.service", "label": "Sessions", "scope": "user" },
+      {
+        "unit": "cloudflared-aico.service",
+        "label": "Aico address",
+        "scope": "system",
+        "reloadsPage": true
+      },
+      {
+        "unit": "cloudflared.service",
+        "label": "Other addresses",
+        "scope": "system",
+        "machines": ["davion-sidarli"]
+      }
+    ]
+  },
   "away": {
     "enabled": false,
     "countdownSeconds": 120,

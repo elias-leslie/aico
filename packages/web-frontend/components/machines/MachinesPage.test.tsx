@@ -14,6 +14,9 @@ const data = vi.hoisted(() => ({
   autostart: vi.fn(async () => ({})),
   away: vi.fn(async () => {}),
   awayStatus: { enabled: true } as { enabled: boolean; reason?: string } | null,
+  services: null as unknown,
+  restartService: vi.fn(async () => {}),
+  shutDown: vi.fn(async () => {}),
 }))
 vi.mock('@/lib/hooks/use-status', () => ({ useStatus: () => data.status }))
 vi.mock('@/lib/hooks/use-hosts', () => ({
@@ -31,6 +34,11 @@ vi.mock('@/lib/hooks/use-host-admin', () => ({
 }))
 
 vi.mock('@/lib/hooks/use-machine-guests', () => ({
+  useMachineServices: () => ({ machines: data.services, refetch: vi.fn() }),
+  restartService: (...args: unknown[]) =>
+    (data.restartService as (...a: unknown[]) => unknown)(...args),
+  shutDownMachine: (...args: unknown[]) =>
+    (data.shutDown as (...a: unknown[]) => unknown)(...args),
   useMachineGuests: () => data.guests,
   powerMachine: (...args: unknown[]) =>
     (data.machinePower as (...a: unknown[]) => unknown)(...args),
@@ -192,6 +200,66 @@ describe('MachinesPage', () => {
       await screen.findByText('The power plug at 192.168.87.217 didn’t answer'),
     ).toBeInTheDocument()
     expect(screen.getByText('Shut down all machines?')).toBeInTheDocument()
+  })
+
+  it('shuts the Workstation down from its row, saying how it comes back', async () => {
+    data.status = ok(view(ROWS))
+    data.hosts = { hosts: [], isError: false, refetch: vi.fn() }
+    data.shutDown.mockClear()
+    renderPage()
+    const workstation = screen.getByTestId('machine-davion-sidarli')
+    fireEvent.click(
+      within(workstation).getByRole('button', { name: 'Shut down' }),
+    )
+    expect(screen.getByText('Shut down Workstation?')).toBeInTheDocument()
+    expect(screen.getByText(/Sessions save their place/)).toBeInTheDocument()
+    expect(screen.getByText(/Neither has been tried yet/)).toBeInTheDocument()
+    fireEvent.click(
+      screen
+        .getAllByRole('button', { name: 'Shut down' })
+        .at(-1) as HTMLElement,
+    )
+    await vi.waitFor(() =>
+      expect(data.shutDown).toHaveBeenCalledWith('davion-sidarli'),
+    )
+  })
+
+  it('lists a machine’s services and restarts one after asking once', async () => {
+    data.status = ok(view(ROWS))
+    data.hosts = { hosts: [], isError: false, refetch: vi.fn() }
+    data.services = [
+      {
+        machine: 'davion-sidarli',
+        units: [
+          {
+            unit: 'aico-jobs.service',
+            label: 'Routines',
+            state: 'failed',
+            reloadsPage: false,
+          },
+        ],
+      },
+    ]
+    data.restartService.mockClear()
+    renderPage()
+    const workstation = screen.getByTestId('machine-davion-sidarli')
+    expect(within(workstation).getByText('Failed')).toBeTruthy()
+    fireEvent.click(
+      within(workstation).getByRole('button', { name: 'Restart' }),
+    )
+    expect(
+      screen.getByText('Restart Routines on Workstation?'),
+    ).toBeInTheDocument()
+    fireEvent.click(
+      screen.getAllByRole('button', { name: 'Restart' }).at(-1) as HTMLElement,
+    )
+    await vi.waitFor(() =>
+      expect(data.restartService).toHaveBeenCalledWith(
+        'davion-sidarli',
+        'aico-jobs.service',
+      ),
+    )
+    data.services = null
   })
 
   it('offers Power on for a host that is off', () => {
