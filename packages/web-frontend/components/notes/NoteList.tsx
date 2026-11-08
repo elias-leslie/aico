@@ -19,14 +19,13 @@ import {
   NO_SCOPE,
   type NoteSummary,
   type NotesScope,
-  newNoteHref,
-  noteHref,
 } from '@/lib/api/notes'
 import { formatAge } from '@/lib/attention'
 import { formatWhen } from '@/lib/capture-format'
 import { useNoteProjects } from '@/lib/hooks/use-note-projects'
 import { useNoteLabels, useNotes } from '@/lib/hooks/use-notes'
 import { NoteScope, ProjectTag } from './NoteScope'
+import { useNoteLinks } from './note-links'
 
 const MUTED = { color: 'var(--mist)' } as const
 
@@ -156,12 +155,13 @@ function Card({
   /** The list is All: say which project each note belongs to. */
   showProject: boolean
 }) {
+  const links = useNoteLinks()
   const isList = note.kind === 'list' || note.unchecked + note.checked > 0
   const count = counts(note)
   return (
     <li>
       <Link
-        href={noteHref(note.id, scope)}
+        href={links.note(note.id, scope)}
         data-testid="note-card"
         className="flex flex-col gap-1 rounded-lg px-3 py-2.5 outline-none focus-visible:outline-2 focus-visible:outline-[var(--lantern)]"
         style={{ background: 'var(--paper)', color: 'var(--bone)' }}
@@ -232,6 +232,7 @@ function GroceriesShortcut({
   known: boolean
   scope: NotesScope
 }) {
+  const links = useNoteLinks()
   const photos = note?.attachmentCount ?? 0
   const text = !known
     ? ''
@@ -242,7 +243,7 @@ function GroceriesShortcut({
         : 'Nothing on it yet'
   return (
     <Link
-      href={noteHref(GROCERIES_ID, scope)}
+      href={links.note(GROCERIES_ID, scope)}
       data-testid="groceries-shortcut"
       className="flex items-center gap-3 rounded-lg px-3 py-3 outline-none focus-visible:outline-2 focus-visible:outline-[var(--lantern)]"
       style={{
@@ -292,6 +293,7 @@ export function NoteList({
   scope?: NotesScope
   onScope?: (all: boolean) => void
 }) {
+  const links = useNoteLinks()
   const [text, setText] = useState('')
   const [archived, setArchived] = useState(false)
   const [label, setLabel] = useState<string | null>(null)
@@ -342,7 +344,7 @@ export function NoteList({
       <div className="flex gap-2">
         {/* Nothing is saved until something is put in it. */}
         <Link
-          href={newNoteHref('note', scope)}
+          href={links.fresh('note', scope)}
           className="lantern-btn primary min-h-11 flex-1"
           data-testid="new-note"
         >
@@ -350,7 +352,7 @@ export function NoteList({
           New note
         </Link>
         <Link
-          href={newNoteHref('list', scope)}
+          href={links.fresh('list', scope)}
           className="lantern-btn min-h-11 flex-1"
           data-testid="new-list"
         >

@@ -6,8 +6,8 @@ import { memo, useCallback, useState } from 'react'
 import { useAgentTools } from '@/lib/hooks/use-agent-tools'
 import { useTerminalPanes } from '@/lib/hooks/use-terminal-panes'
 import { useTerminalSessions } from '@/lib/hooks/use-terminal-sessions'
-import { openNotes } from '@/lib/notes-window'
 import { getSlotPanelId, getSlotSessionId, isPaneSlot } from '@/lib/utils/slot'
+import { openNotes, workbenchTip } from '@/lib/workbench'
 import { CaptureLauncher } from '../capture/CaptureLauncher'
 import { useFrame } from '../frame/FrameContext'
 import { SideEdgeButton } from '../frame/SideEdgeButton'
@@ -154,7 +154,7 @@ export const UnifiedTerminalHeaderContent = memo(
             <button
               type="button"
               onClick={() => openNotes(notesProject)}
-              title="Notes: open this project's notes in their own window"
+              title={workbenchTip()}
               aria-label="Notes"
               data-testid="header-notes"
               className="lantern-btn ghost"
@@ -181,7 +181,7 @@ export const UnifiedTerminalHeaderContent = memo(
               <button
                 type="button"
                 onClick={onFiles}
-                title="Files: this session's project folder and what agents shared"
+                title={workbenchTip()}
                 aria-label="Files"
                 className="lantern-btn ghost"
                 style={{ height: 34, padding: '0 10px' }}

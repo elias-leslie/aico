@@ -13,9 +13,11 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import type { ComponentType } from 'react'
+import { shownProject } from '@/lib/frame/shown-project'
+import { useMediaQuery } from '@/lib/hooks/use-media-query'
 import { useStatus } from '@/lib/hooks/use-status'
-import { openNotes } from '@/lib/notes-window'
 import { plural } from '@/lib/status'
+import { openFilesWindow, openNotes, workbenchTip } from '@/lib/workbench'
 import styles from './Frame.module.css'
 
 const MACHINES_HREF = '/machines'
@@ -95,6 +97,8 @@ export function SideList({
   query: URLSearchParams
 }) {
   const { view } = useStatus()
+  // Files opens in a window beside Aico; a phone has none, and Files is in its session bar.
+  const sideWindows = useMediaQuery('(pointer: fine)')
   const problems = view?.summary.problems
   const glance: Record<string, string | undefined> = {
     Status:
@@ -138,10 +142,21 @@ export function SideList({
               type="button"
               className={styles.sideItem}
               onClick={() => openNotes()}
-              title="Notes open in their own window"
+              title={workbenchTip()}
             >
               <StickyNote className="h-4 w-4" strokeWidth={1.7} />
               Notes
+            </button>
+          )}
+          {index === 1 && sideWindows && (
+            <button
+              type="button"
+              className={styles.sideItem}
+              onClick={() => openFilesWindow({ project: shownProject() })}
+              title={workbenchTip()}
+            >
+              <Folder className="h-4 w-4" strokeWidth={1.7} />
+              Files
             </button>
           )}
         </div>

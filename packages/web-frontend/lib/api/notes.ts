@@ -101,7 +101,7 @@ export function readScope(params: URLSearchParams): NotesScope {
   }
 }
 
-function scopeQuery(
+function scopeParams(
   scope: Partial<NotesScope> | undefined,
   first: string[] = [],
 ) {
@@ -110,23 +110,34 @@ function scopeQuery(
   )
   if (scope?.project) params.set('project', scope.project)
   if (scope?.project && scope.all) params.set('scope', 'all')
-  const text = params.toString()
-  return text ? `?${text}` : ''
+  return params
 }
-
-/** The Notes list. */
-export const notesHref = (scope?: Partial<NotesScope>) =>
-  `/notes${scopeQuery(scope)}`
-
-export const noteHref = (id: string, scope?: Partial<NotesScope>) =>
-  `/notes${scopeQuery(scope, [`id=${id}`])}`
 
 /** A New note (or list) screen: nothing is saved until something is put in it. */
 export type NewNoteKind = 'note' | 'list'
-export const newNoteHref = (
-  kind: NewNoteKind = 'note',
-  scope?: Partial<NotesScope>,
-) => `/notes${scopeQuery(scope, [`new=${kind}`])}`
+
+/** The links between the Notes screens under `base`: the Notes page (`/notes`) or the Notes tab of
+ * the Workbench (`/workbench?tab=notes`). */
+export function noteLinks(base: string) {
+  const at = (params: URLSearchParams) => {
+    const text = params.toString()
+    return !text ? base : `${base}${base.includes('?') ? '&' : '?'}${text}`
+  }
+  return {
+    /** The Notes list. */
+    list: (scope?: Partial<NotesScope>) => at(scopeParams(scope)),
+    note: (id: string, scope?: Partial<NotesScope>) =>
+      at(scopeParams(scope, [`id=${id}`])),
+    fresh: (kind: NewNoteKind = 'note', scope?: Partial<NotesScope>) =>
+      at(scopeParams(scope, [`new=${kind}`])),
+  }
+}
+export type NoteLinks = ReturnType<typeof noteLinks>
+
+const pageLinks = noteLinks('/notes')
+export const notesHref = pageLinks.list
+export const noteHref = pageLinks.note
+export const newNoteHref = pageLinks.fresh
 export const newNoteKind = (value: string | null): NewNoteKind | null =>
   value === 'note' || value === 'list' ? value : null
 

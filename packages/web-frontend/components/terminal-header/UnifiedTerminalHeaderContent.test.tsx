@@ -75,7 +75,10 @@ vi.mock('./HeaderIconButton', () => ({
 }))
 
 const openNotes = vi.hoisted(() => vi.fn())
-vi.mock('@/lib/notes-window', () => ({ openNotes }))
+vi.mock('@/lib/workbench', () => ({
+  openNotes,
+  workbenchTip: () => 'Workbench: Notes, Files',
+}))
 vi.mock('../capture/CaptureLauncher', () => ({
   CaptureLauncher: ({ variant }: { variant: string }) => (
     <button type="button" data-testid="capture-mock" data-variant={variant}>
@@ -313,7 +316,11 @@ describe('UnifiedTerminalHeaderContent', () => {
     )
     const button = screen.getByRole('button', { name: 'Files' })
     expect(button).toHaveTextContent('Files')
-    expect(button).toHaveAttribute('title')
+    expect(button).toHaveAttribute('title', 'Workbench: Notes, Files')
+    expect(screen.getByRole('button', { name: 'Notes' })).toHaveAttribute(
+      'title',
+      'Workbench: Notes, Files',
+    )
   })
 
   it('shows the connection beside the tool switcher', () => {

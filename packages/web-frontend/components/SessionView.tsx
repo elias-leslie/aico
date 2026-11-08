@@ -33,6 +33,7 @@ import {
   getSlotWorkingDir,
   isPaneSlot,
 } from '@/lib/utils/slot'
+import { openFilesWindow } from '@/lib/workbench'
 
 /** How long "Now sized for this window" stays after Use here. */
 const SIZE_CLAIMED_MS = 6000
@@ -135,8 +136,28 @@ export function SessionView({
         : null
   // Shares and clicked paths open in this view's Files.
   // With no session open they open on Home and Shared.
+  // Files opens in the Workbench window; where that can't be (a phone, a blocked window,
+  // a session on another host, whose files are not here) it opens in this view.
+  const showFiles = (request: FilesRequest | null) => {
+    const remote = !!slot?.host
+    const project = slot
+      ? (slot.projectKey ?? (slot.type === 'project' ? slot.projectId : null))
+      : null
+    const opened =
+      !remote &&
+      openFilesWindow({
+        project,
+        session: sessionId,
+        path: request?.kind === 'path' ? request.path : undefined,
+        shared:
+          request?.kind === 'shared' ? (request.showId ?? true) : undefined,
+      })
+    if (!opened) setFiles({ request })
+  }
+  const showFilesRef = useRef(showFiles)
+  showFilesRef.current = showFiles
   useEffect(() => {
-    setFilesOpener((request) => setFiles({ request }))
+    setFilesOpener((request) => showFilesRef.current(request))
     return () => setFilesOpener(null)
   }, [])
   const sessionName = (session: string) => {
@@ -208,7 +229,7 @@ export function SessionView({
           slots={slots}
           onOpen={onSwitch}
           onNewSession={onNewSession}
-          onFiles={() => setFiles({ request: null })}
+          onFiles={() => showFiles(null)}
         />
         {filesDialog}
       </>
@@ -263,9 +284,7 @@ export function SessionView({
               : undefined
           }
           onRefresh={chat ? undefined : refresh}
-          onFiles={
-            sessionId && !chat ? () => setFiles({ request: null }) : undefined
-          }
+          onFiles={sessionId && !chat ? () => showFiles(null) : undefined}
           onUpload={
             onUpload && !chat
               ? () => onUpload(sessionId ?? undefined)

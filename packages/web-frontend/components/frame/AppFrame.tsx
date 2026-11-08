@@ -10,9 +10,9 @@ import { FrameProvider } from './FrameContext'
 import { OfflineStrip } from './OfflineStrip'
 import { settingsPlaceAt } from './settings-places'
 
-/** Pages that stand alone: the popped-out notes window and the phone's
+/** Pages that stand alone: the Workbench window and the notes page and the phone's
  * offline captures and mockups (they work from the saved copy). */
-const STANDALONE = ['/notes', '/captures', '/mockups']
+const STANDALONE = ['/notes', '/workbench', '/captures', '/mockups']
 
 function isStandalone(pathname: string): boolean {
   return STANDALONE.some(

@@ -138,6 +138,14 @@ vi.mock('@/components/terminal-header', () => ({
   },
 }))
 
+const workbench = vi.hoisted(() => ({
+  openFilesWindow: vi.fn((_options: Record<string, unknown>) => false),
+}))
+vi.mock('@/lib/workbench', async (original) => ({
+  ...(await original<typeof import('@/lib/workbench')>()),
+  openFilesWindow: workbench.openFilesWindow,
+}))
+
 const filesProps = vi.hoisted(() => [] as Array<Record<string, unknown>>)
 vi.mock('@/components/files/FilesDialog', () => ({
   FilesDialog: (props: Record<string, unknown>) => {
@@ -368,6 +376,31 @@ describe('SessionView', () => {
       { kind: 'pane', paneId: 'pane-1' },
       { kind: 'session', sessionId: 'ab12cd34' },
     ])
+  })
+
+  it("opens Files in the Workbench window on the session's project, and only falls back to the dialog where that can't be", () => {
+    const slot = sessionToSlot(
+      session('ab12cd34', { mode: 'pi', project_id: 'aico' }),
+      { as: 'project', place: 'free' },
+    )
+    filesProps.length = 0
+    workbench.openFilesWindow.mockReturnValueOnce(true)
+    renderView({ slots: [slot], activeSessionId: 'ab12cd34' })
+    const onFiles = headerProps[headerProps.length - 1]?.onFiles as () => void
+    act(() => onFiles())
+    expect(workbench.openFilesWindow).toHaveBeenLastCalledWith(
+      expect.objectContaining({ project: 'aico', session: 'ab12cd34' }),
+    )
+    expect(filesProps).toHaveLength(0)
+    // A clicked path opens its folder there too.
+    workbench.openFilesWindow.mockReturnValueOnce(true)
+    act(() => {
+      openFiles({ kind: 'path', path: '/tmp/out.txt' })
+    })
+    expect(workbench.openFilesWindow).toHaveBeenLastCalledWith(
+      expect.objectContaining({ path: '/tmp/out.txt' }),
+    )
+    expect(filesProps).toHaveLength(0)
   })
 
   it('opens Files on Home and Shared with no session open', () => {

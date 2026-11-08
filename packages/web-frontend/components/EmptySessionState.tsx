@@ -6,8 +6,8 @@ import { newChat } from '@/lib/chat'
 import { useServerReach } from '@/lib/frame/server-reach'
 import { useSessionAttention } from '@/lib/hooks/use-session-attention'
 import { usePaneListError } from '@/lib/hooks/use-terminal-panes'
-import { openNotes } from '@/lib/notes-window'
 import type { PaneSlot, TerminalSlot } from '@/lib/utils/slot'
+import { openNotes, workbenchTip } from '@/lib/workbench'
 import { CaptureLauncher } from './capture/CaptureLauncher'
 import { useFrame } from './frame/FrameContext'
 import { SideEdgeButton, sideIsAway } from './frame/SideEdgeButton'
@@ -104,7 +104,7 @@ export function EmptySessionState({
                 type="button"
                 className="lantern-btn ghost"
                 onClick={() => openNotes(null)}
-                title="Notes: open all notes in their own window"
+                title={workbenchTip()}
               >
                 <StickyNote className="h-4 w-4" strokeWidth={1.7} />
                 Notes
@@ -115,7 +115,7 @@ export function EmptySessionState({
                   type="button"
                   className="lantern-btn ghost"
                   onClick={onFiles}
-                  title="Files: Home and what agents shared"
+                  title={workbenchTip()}
                 >
                   <Folder className="h-4 w-4" strokeWidth={1.7} />
                   Files

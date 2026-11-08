@@ -21,7 +21,10 @@ vi.mock('@/lib/hooks/use-terminal-panes', () => ({
   usePaneListError: () => ({ isError: false, retry: () => undefined }),
 }))
 const openNotes = vi.hoisted(() => vi.fn())
-vi.mock('@/lib/notes-window', () => ({ openNotes }))
+vi.mock('@/lib/workbench', () => ({
+  openNotes,
+  workbenchTip: () => 'Workbench: Notes, Files',
+}))
 vi.mock('./capture/CaptureLauncher', () => ({
   CaptureLauncher: () => <button type="button">Capture</button>,
 }))
