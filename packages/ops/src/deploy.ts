@@ -788,6 +788,18 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
     )
     finished = true
   }
+  // Records the failed deploy's Status (message, the units it did restart), then throws `error`.
+  // Only a Refusal marked unchanged shows as a refusal: a failed swap recovery or build is a real failure.
+  const fail = async (message: string, error: Error, units: string[] = []): Promise<never> => {
+    await finish(
+      'failed',
+      message,
+      units,
+      error instanceof Refusal ? error.code : 1,
+      error instanceof Refusal && error.unchanged,
+    )
+    throw error
+  }
   try {
     deps.out(`[deploy] ${project.id} at ${sha.slice(0, 12)}: accepting that commit`)
     const aico = deps.env.AICO_BIN || 'aico'
@@ -834,17 +846,13 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
             `[deploy] ${unit} already ${what} ${from?.slice(0, 12)}, which contains ${sha.slice(0, 12)}; left as is`,
           )
         else {
-          await finish(
-            'failed',
+          await fail(
             `Deploy of ${sha.slice(0, 10)} refused: ${unit} ${what} ${from?.slice(0, 10)}, not an ancestor`,
-            [],
-            1,
-            true,
-          )
-          throw new Refusal(
-            `${unit} ${what} ${from?.slice(0, 12)}, which ${sha.slice(0, 12)} does not contain; deploy a newer commit or pass --rollback.`,
-            1,
-            true,
+            new Refusal(
+              `${unit} ${what} ${from?.slice(0, 12)}, which ${sha.slice(0, 12)} does not contain; deploy a newer commit or pass --rollback.`,
+              1,
+              true,
+            ),
           )
         }
         return false
@@ -923,44 +931,43 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
             },
           )
         } catch (error) {
-          await finish(
-            'failed',
+          await fail(
             `Deploy of ${sha.slice(0, 10)} failed: ${(error as Error).message.split('\n')[0]}`,
+            error as Error,
           )
-          throw error
         }
       if (restart.length || swaps.length || installRoot || hookTree) {
         // A hold taken while this deploy waited (queued, or behind another deploy) still refuses it.
         const refused = holdRefusal()
-        if (refused) {
-          await finish('failed', `Deploy of ${sha.slice(0, 10)} refused: ${refused}`, [], 2, true)
-          throw new Refusal(refused, 2, true)
-        }
-        if (!held()) {
-          await finish('failed', `Deploy of ${sha.slice(0, 10)} lost the deploy lock`, [], 1, true)
-          throw new Refusal('Another deploy took the deploy lock; nothing was restarted.', 1, true)
-        }
+        if (refused)
+          await fail(
+            `Deploy of ${sha.slice(0, 10)} refused: ${refused}`,
+            new Refusal(refused, 2, true),
+          )
+        if (!held())
+          await fail(
+            `Deploy of ${sha.slice(0, 10)} lost the deploy lock`,
+            new Refusal('Another deploy took the deploy lock; nothing was restarted.', 1, true),
+          )
       }
       if (restart.length && release) {
         const failed = await swapUnits(project, restart, release, sha, deps, installOps, cfg)
         if (failed) {
-          await finish(
-            'failed',
+          await fail(
             `Deploy of ${sha.slice(0, 10)} failed (${failed.failure}); ${failed.outcome}`,
+            new Refusal(`Deploy failed: ${failed.failure}. ${capital(failed.outcome)}.`),
             restart,
           )
-          throw new Refusal(`Deploy failed: ${failed.failure}. ${capital(failed.outcome)}.`)
         }
       }
       if (swaps.length && release) {
         const failed = await swapFrontends(project, swaps, release, cfg, deps)
         if (failed) {
-          await finish(
-            'failed',
+          await fail(
             `Deploy of ${sha.slice(0, 10)} failed (${failed.failure}); ${failed.outcome}`,
+            new Refusal(`Deploy failed: ${failed.failure}. ${capital(failed.outcome)}.`),
             restart,
           )
-          throw new Refusal(`Deploy failed: ${failed.failure}. ${capital(failed.outcome)}.`)
         }
         swapped = swaps
       }
@@ -969,12 +976,11 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
         const problem = installRootSources(root, sha, cfg, deps)
         if (problem) {
           const done = restart.length ? `${restart.join(', ')} deployed; ` : ''
-          await finish(
-            'failed',
+          await fail(
             `Deploy of ${sha.slice(0, 10)}: ${done}the host-steward root install failed (${problem})`,
+            new Refusal(`The host-steward root install failed: ${problem}`),
             restart,
           )
-          throw new Refusal(`The host-steward root install failed: ${problem}`)
         }
       }
       if (release) {
@@ -987,12 +993,11 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
         const problem = installHook(root, sha, hookTree, cfg, deps)
         if (problem) {
           const done = restart.length ? `${restart.join(', ')} deployed; ` : ''
-          await finish(
-            'failed',
+          await fail(
             `Deploy of ${sha.slice(0, 10)}: ${done}the aico-hook install failed (${problem})`,
+            new Refusal(`The aico-hook install failed: ${problem}`),
             restart,
           )
-          throw new Refusal(`The aico-hook install failed: ${problem}`)
         }
       }
       const seconds = Math.round((Date.now() - started) / 1000)
@@ -1010,15 +1015,7 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
       return 0
     })
   } catch (error) {
-    if (!finished)
-      await finish(
-        'failed',
-        (error as Error).message,
-        [],
-        error instanceof Refusal ? error.code : 1,
-        // A failed swap recovery or build is a real failure, not a refusal.
-        error instanceof Refusal && error.unchanged,
-      )
+    if (!finished) await fail((error as Error).message, error as Error)
     throw error
   }
 }
