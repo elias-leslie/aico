@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseRow } from './row'
-import { type StoredRow, view } from './show'
+import { LATE_GRACE_MS, type StoredRow, view } from './show'
 
 const NOW = Date.parse('2026-11-03T12:00:00Z')
 
@@ -62,10 +62,11 @@ describe('view', () => {
     expect(result.generated_at).toBe('2026-11-03T12:00:00.000Z')
   })
 
-  it('a row is late only after its next run has passed', () => {
+  it('a row is late only once its next run and the grace have passed', () => {
     const due = [stored({ id: 'a/x', what: 'X', next_run: '2026-11-03T12:00:00Z' }), machine('a')]
     expect(view(due, NOW).rows[0]?.shown).toBe('ok')
-    expect(view(due, NOW + 1).rows[0]).toMatchObject({
+    expect(view(due, NOW + LATE_GRACE_MS).rows[0]?.shown).toBe('ok')
+    expect(view(due, NOW + LATE_GRACE_MS + 1).rows[0]).toMatchObject({
       shown: 'late',
       shown_since: '2026-11-03T12:00:00.000Z',
     })

@@ -119,10 +119,14 @@ function dueAt(stored: StoredRow): number | null {
   return state === 'off' || next_run === undefined ? null : Date.parse(next_run)
 }
 
-/** Since when a row is overdue, or null. */
+/** How long past its next run a row may still report before it shows late: a scheduler starts a
+ * due run on its next tick and the run reports when it ends, so a row seconds past due is on time. */
+export const LATE_GRACE_MS = 2 * 60_000
+
+/** Since when a row is overdue (its next run, once the grace has passed), or null. */
 function lateSince(stored: StoredRow, now: number): number | null {
   const due = dueAt(stored)
-  return due !== null && now > due ? due : null
+  return due !== null && now > due + LATE_GRACE_MS ? due : null
 }
 
 /** A row's own interval: from its last run (else its last report) to its next. */
