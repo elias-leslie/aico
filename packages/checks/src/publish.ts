@@ -5,7 +5,7 @@ import { createWriteStream, existsSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { parseArgs } from 'node:util'
-import { machineId, outboxDir, postOrKeep, type StatusRow } from '@aico/status'
+import { machineId, outboxDir, postOrKeep, type StatusRow, statusRowsUrl } from '@aico/status'
 import {
   openTasksDb,
   type Project,
@@ -324,7 +324,7 @@ async function postPublicationRow(row: StatusRow, env = process.env): Promise<vo
   const base = webUrl(env)
   if (!base) throw new Error('Publication Status address is unavailable')
   // aico-web restarting keeps the row waiting instead of dropping it.
-  await postOrKeep(base, [row], {
+  await postOrKeep(statusRowsUrl(base), [row], {
     dir: outboxDir(dataDir(env)),
   })
 }

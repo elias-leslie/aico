@@ -11,6 +11,7 @@ import {
   postOrKeep,
   postStatusRows,
   type StatusRow,
+  statusRowsUrl,
 } from '@aico/status'
 import { backupJob, driveBackup, stageSqlite } from './backup-drive'
 import { observeExternal } from './backup-external'
@@ -235,7 +236,7 @@ async function post(cfg: BackupConfig, url: string, rows: unknown[]): Promise<vo
         (error as { code?: string }).code
       if (code !== 'ECONNREFUSED' || attempt >= cfg.statusPublish.attempts) {
         // Out of tries (aico-web restarting): keep the rows to send later instead of losing them.
-        const waiting = await postOrKeep(url, rows as StatusRow[], {
+        const waiting = await postOrKeep(statusRowsUrl(url), rows as StatusRow[], {
           dir: outboxDir(process.env.AICO_DATA_DIR || homePath(cfg.sqlite.dataDir)),
           timeoutMs: cfg.statusPublish.timeoutMs,
         })
