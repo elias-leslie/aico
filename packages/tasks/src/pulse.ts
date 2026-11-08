@@ -83,6 +83,16 @@ function minutesSince(stamp: unknown, now: number): number {
   return Number.isFinite(t) ? Math.max(0, Math.floor((now - t) / 60_000)) : 0
 }
 
+/** The ledger's own retention (native/hook/lease/ledger.go): an older row only lingers until the next save. */
+const HANDSHAKE_KEPT_MINUTES = 24 * 60
+
+/** As the ledger reads it: an ETA ack is the recipient's to finish, and reopens once its time runs out. */
+function handshakeState(m: Row, now: number): string {
+  const state = text(m.state)
+  if (state !== 'acked' || m.intent !== 'eta' || typeof m.eta_min !== 'number') return state
+  return minutesSince(m.acked_at, now) >= m.eta_min ? 'open' : 'eta'
+}
+
 export async function collect(src: PulseSources, cfg: Policy = policy): Promise<Pulse> {
   const now = src.now()
   let leases: Lease[] | null = null
@@ -116,12 +126,16 @@ export async function collect(src: PulseSources, cfg: Policy = policy): Promise<
     const coord = await src.doc('_coord')
     if (coord) {
       handshakes = ((Array.isArray(coord.messages) ? coord.messages : []) as Row[])
-        .filter((m) => m.state === 'open' || m.state === 'acked')
+        .filter(
+          (m) =>
+            (m.state === 'open' || m.state === 'acked') &&
+            minutesSince(m.created, now) <= HANDSHAKE_KEPT_MINUTES,
+        )
         .map((m) => ({
           id: text(m.id),
           from: text(m.from),
           to: text(m.to),
-          state: text(m.state),
+          state: handshakeState(m, now),
           ageMinutes: minutesSince(m.created, now),
         }))
     }
@@ -177,11 +191,14 @@ export function render(p: Pulse): string[] {
     out.push('Handshakes: Tether did not answer; open requests are unknown.')
   else if (p.handshakes.length === 0) out.push('Handshakes: none open.')
   else {
-    const acked = p.handshakes.filter((h) => h.state === 'acked').length
-    const open = p.handshakes.length - acked
-    out.push(
-      `Handshakes: ${[open ? `${open} open` : '', acked ? `${acked} acked, waiting on their sender` : ''].filter(Boolean).join(', ')}`,
-    )
+    const count = (state: string) => p.handshakes?.filter((h) => h.state === state).length ?? 0
+    const parts = [
+      [count('open'), 'open'],
+      [count('acked'), 'acked, waiting on their sender'],
+      [count('eta'), 'with an ETA, waiting on the recipient'],
+    ] as const
+    const shown = parts.filter(([n]) => n > 0).map(([n, label]) => `${n} ${label}`)
+    out.push(`Handshakes: ${shown.join(', ')}`)
     for (const h of p.handshakes)
       out.push(`  ${h.id} ${h.state} ${h.from}->${h.to} ${age(h.ageMinutes)}`)
   }

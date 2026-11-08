@@ -57,7 +57,8 @@ aico_checks() {
       [ "$arg" != --quick ] || class=light
     done
   fi
-  exec st tools run --label "aico ${1:-checks}" --class "$class" -- "$node" --disable-warning=ExperimentalWarning "$checks_bundle" "$@"
+  # st sets its own name on the way through; errors keep the name that was typed.
+  exec st tools run --label "aico ${1:-checks}" --class "$class" -- env AICO_CLI_NAME="${AICO_CLI_NAME:-st}" "$node" --disable-warning=ExperimentalWarning "$checks_bundle" "$@"
 }
 
 

@@ -1,6 +1,6 @@
 // `aico check` and `aico commit`.
-// Exit codes: 0 passed or committed, 1 failed or refused, 2 usage, 3 this repo's checks are not
-// run by aico (no [native] gate, or a tool it does not run): `st check` then keeps the repo.
+// Exit codes: 0 passed or committed, 1 failed or refused, 2 usage, 3 nothing to check here
+// (not in a git repository).
 
 import { existsSync } from 'node:fs'
 import { relative, resolve } from 'node:path'
@@ -181,10 +181,7 @@ async function checkCli(argv: string[], io: CliIo): Promise<number> {
   }
   const { root, config } = load(io)
   if ('unsupported' in config) {
-    if (!io.env.AICO_CHECKS_CALLER)
-      io.err(
-        `aico check: this repo's gate is not run by aico (${config.unsupported}); use st check`,
-      )
+    io.err(usage(`aico check: ${config.unsupported}`, io))
     return 3
   }
   const jobs = args.values.has('--jobs') ? Number(args.values.get('--jobs')) : undefined
@@ -250,10 +247,7 @@ async function commitCli(argv: string[], io: CliIo): Promise<number> {
   if (io.env.AICO_CHECKS_ARGS_ONLY) return 0
   const { root, config } = load(io)
   if ('unsupported' in config) {
-    if (!io.env.AICO_CHECKS_CALLER)
-      io.err(
-        `aico commit: this repo's gate is not run by aico (${config.unsupported}); use st commit`,
-      )
+    io.err(usage(`aico commit: ${config.unsupported}`, io))
     return 3
   }
   const result = await commit(config, {

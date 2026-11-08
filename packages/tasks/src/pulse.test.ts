@@ -144,6 +144,35 @@ describe('aico pulse', () => {
     )
   })
 
+  it('reads handshakes as the ledger does: ETA acks, a lapsed ETA, rows past retention', async () => {
+    const now = Date.parse('2026-11-08T12:00:00Z')
+    const row = (id: string, state: string, extra: object = {}) => ({
+      id,
+      from: 'a',
+      to: 'b',
+      state,
+      created: '2026-11-08T11:00:00Z',
+      ...extra,
+    })
+    const messages = [
+      row('plain', 'acked', { intent: 'yes' }),
+      row('running', 'acked', { intent: 'eta', eta_min: 90, acked_at: '2026-11-08T11:30:00Z' }),
+      row('lapsed', 'acked', { intent: 'eta', eta_min: 10, acked_at: '2026-11-08T11:30:00Z' }),
+      row('old', 'acked', { created: '2026-11-07T10:00:00Z' }),
+    ]
+    const pulse = await collect({
+      now: () => now,
+      sessions: async () => null,
+      docNames: async () => ['_coord'],
+      doc: async () => ({ messages }),
+      findings: () => [],
+    } as unknown as PulseSources)
+    expect(render(pulse)).toContain(
+      'Handshakes: 1 open, 1 acked, waiting on their sender, 1 with an ETA, waiting on the recipient',
+    )
+    expect(render(pulse).join('\n')).not.toContain('old')
+  })
+
   it('says unknown, not zero, when a source does not answer', async () => {
     const { sources } = setup(null)
     const lines = render(
