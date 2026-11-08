@@ -498,6 +498,31 @@ describe('commit', () => {
     expect(git(root, 'status', '--porcelain')).toBe('')
   })
 
+  it('untracks a file kept on disk after git rm --cached', async () => {
+    const root = repo('')
+    write(root, 'src/keep.ts', 'keep\n')
+    write(root, 'src/edit.ts', 'one\n')
+    write(root, 'src/other.ts', 'other\n')
+    git(root, 'add', '-A')
+    git(root, 'commit', '-qm', 'files')
+    git(root, 'rm', '-q', '--cached', 'src/keep.ts')
+    write(root, 'src/edit.ts', 'two\n')
+    write(root, 'src/new.ts', 'new\n')
+    write(root, 'src/other.ts', 'staged elsewhere\n')
+    git(root, 'add', 'src/other.ts')
+    await commit(config(root), {
+      message: 'm',
+      paths: ['src/keep.ts', 'src/edit.ts', 'src/new.ts'],
+      noCheck: true,
+      coordination: coordination(),
+    })
+    expect(git(root, 'show', '--name-status', '--format=', 'HEAD')).toBe(
+      'M\tsrc/edit.ts\nD\tsrc/keep.ts\nA\tsrc/new.ts',
+    )
+    expect(readFileSync(join(root, 'src/keep.ts'), 'utf8')).toBe('keep\n')
+    expect(git(root, 'status', '--porcelain')).toBe('M  src/other.ts\n?? src/keep.ts')
+  })
+
   it('keeps spaces in an explicitly named CLI path', async () => {
     const root = repo('')
     write(root, 'src/with space.ts', 'new\n')

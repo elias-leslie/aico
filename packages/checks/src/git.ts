@@ -8,10 +8,16 @@ import { isAbsolute, join, relative, resolve } from 'node:path'
 
 export class GitError extends Error {}
 
-export function git(cwd: string, args: string[], input?: string | Buffer): string {
+export function git(
+  cwd: string,
+  args: string[],
+  input?: string | Buffer,
+  env?: NodeJS.ProcessEnv,
+): string {
   const result = spawnSync('git', args, {
     cwd,
     input,
+    env,
     encoding: 'utf8',
     maxBuffer: 256 * 1024 * 1024,
   })

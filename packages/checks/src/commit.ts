@@ -5,7 +5,7 @@
 // or glob when anyone else did) and yields to another agent's hold or a live deploy.
 
 import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { type CheckReport, runCheck } from './check'
 import { blobIds, changedFiles, commonDir, git, gitOk } from './git'
 import type { Coordination } from './hook'
@@ -187,13 +187,48 @@ export async function commit(config: Config, options: CommitOptions): Promise<Co
         .split('\0')
         .filter(Boolean),
     )
-    const stage = files.filter((file) => indexed.has(file) || present(join(root, file)))
-    if (stage.length) git(root, ['add', '-A', '--', ...stage.map((file) => `:(literal)${file}`)])
-    git(
-      root,
-      ['commit', '--only', '-q', '-F', '-', '--', ...files.map((file) => `:(literal)${file}`)],
-      shortSubject(options.message),
+    const literal = (paths: string[]) => paths.map((file) => `:(literal)${file}`)
+    // Untracked with git rm --cached but kept on disk: in HEAD, not in the index, still present.
+    const inHead = gitOk(root, ['rev-parse', '-q', '--verify', 'HEAD'])
+      ? new Set(
+          git(root, ['ls-tree', '-r', '-z', '--name-only', 'HEAD', '--', ...literal(files)])
+            .split('\0')
+            .filter(Boolean),
+        )
+      : new Set<string>()
+    const untrack = files.filter(
+      (file) => inHead.has(file) && !indexed.has(file) && present(join(root, file)),
     )
+    const stage = files.filter(
+      (file) => !untrack.includes(file) && (indexed.has(file) || present(join(root, file))),
+    )
+    if (stage.length) git(root, ['add', '-A', '--', ...literal(stage)])
+    if (!untrack.length) {
+      git(
+        root,
+        ['commit', '--only', '-q', '-F', '-', '--', ...literal(files)],
+        shortSubject(options.message),
+      )
+    } else {
+      // git commit --only would take an untracked file back from the working tree, so the
+      // commit is built in a scratch index: HEAD, plus these paths as the real index has them.
+      const index = resolve(
+        root,
+        git(root, ['rev-parse', '--git-path', 'aico-commit-index']).trim(),
+      )
+      const env = { ...process.env, GIT_INDEX_FILE: index }
+      try {
+        git(root, ['read-tree', 'HEAD'], undefined, env)
+        const take = files.filter(
+          (file) => !untrack.includes(file) && (inHead.has(file) || present(join(root, file))),
+        )
+        if (take.length) git(root, ['add', '-A', '--', ...literal(take)], undefined, env)
+        git(root, ['rm', '-q', '--cached', '--', ...literal(untrack)], undefined, env)
+        git(root, ['commit', '-q', '-F', '-'], shortSubject(options.message), env)
+      } finally {
+        rmSync(index, { force: true })
+      }
+    }
     return git(root, ['rev-parse', 'HEAD']).trim()
   })
   const tree = git(root, ['rev-parse', `${sha}^{tree}`]).trim()
