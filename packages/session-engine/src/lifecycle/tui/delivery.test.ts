@@ -202,9 +202,18 @@ describe('a tool whose limits are its hook', () => {
     expect((await withContextDelivery(spec, 'abcd1234', deps)).command).toEqual(['agy'])
   })
 
+  it('with the hook listed but its program gone, loses the flag too', async () => {
+    rmSync(join(home, how.binary), { force: true })
+    mkdirSync(dirname(join(home, how.hooks)), { recursive: true })
+    writeFileSync(join(home, how.hooks), `{"aico":{"PreToolUse":"${how.marker}"}}`)
+    expect((await withContextDelivery(spec, 'abcd1234', deps)).command).toEqual(['agy'])
+  })
+
   it('with the hook, keeps it', async () => {
     mkdirSync(dirname(join(home, how.hooks)), { recursive: true })
     writeFileSync(join(home, how.hooks), `{"aico":{"PreToolUse":"${how.marker}"}}`)
+    mkdirSync(dirname(join(home, how.binary)), { recursive: true })
+    writeFileSync(join(home, how.binary), '')
     expect((await withContextDelivery(spec, 'abcd1234', deps)).command).toEqual(spec.command)
   })
 })

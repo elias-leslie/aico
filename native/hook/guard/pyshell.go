@@ -50,13 +50,10 @@ func (l *shlexer) read() rune {
 	return c
 }
 
+// readline skips a comment up to its newline; the newline still ends the command it follows.
 func (l *shlexer) readline() {
-	for l.pos < len(l.src) {
-		c := l.src[l.pos]
+	for l.pos < len(l.src) && l.src[l.pos] != '\n' {
 		l.pos++
-		if c == '\n' {
-			return
-		}
 	}
 }
 
@@ -135,7 +132,8 @@ func (l *shlexer) next() (tok string, ok bool, err error) {
 				if len(token) > 0 || quoted {
 					return emit()
 				}
-			case l.comments && c == '#':
+			// Mid-word (`done#1`, `x/#/a`) a # is just a character; after punctuation it starts a comment.
+			case l.comments && c == '#' && state == 'c':
 				l.readline()
 				state = ' '
 				if len(token) > 0 || quoted {

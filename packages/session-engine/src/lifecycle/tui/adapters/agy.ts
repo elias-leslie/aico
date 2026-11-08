@@ -366,6 +366,7 @@ export const agy: TuiAdapter = {
       file: 'AGENTS.md',
       hooks: '.gemini/config/hooks.json',
       marker: 'aico-hook agy PreToolUse',
+      binary: '.local/bin/aico-hook',
       needsHook: ['--dangerously-skip-permissions'],
     },
     modelSelection: { model: ['--model'], reasoningEffort: { arguments: ['--effort'] } },

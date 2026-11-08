@@ -211,6 +211,8 @@ func onlySeparators(t string) bool {
 
 // segments splits on ; & && || | and unquoted newlines and strips ( { ) } grouping.
 func segments(command string) [][]string {
+	// A backslash at a line's end joins the lines: `rm -rf \<newline> dir` is one command.
+	command = strings.ReplaceAll(command, "\\\n", "")
 	tokens, err := newShlexer(command, ";&|\n", " \t\r", true).all()
 	if err != nil {
 		return splitShellSegments(command)

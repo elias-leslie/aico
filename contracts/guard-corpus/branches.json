@@ -787,7 +787,11 @@
     {
       "command": "ls #\ngit reset --hard",
       "cwd": "/srv/workspaces/projects/summitflow",
-      "expect": "allow"
+      "expect": "allow",
+      "exception": {
+        "rule": "A comment ends at its newline: the shell runs the next line, so this is judged as git reset --hard",
+        "got": "BLOCKED:git reset --hard:Discards every agent's uncommitted work in this shared checkout; restore only your files with 'git restore -- <path>' or checkpoint with 'st commit --paths <path>'."
+      }
     },
     { "command": "ls #\ngit reset --hard", "cwd": "/tmp", "expect": "allow" },
     {

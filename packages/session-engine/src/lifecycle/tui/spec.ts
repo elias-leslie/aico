@@ -93,9 +93,11 @@ export interface TuiSpec {
     | {
         kind: 'hook'
         file: string
-        /** The tool's hook file, under home, and what shows Aico's hook is in it. */
+        /** The tool's hook file, under home, what shows Aico's hook is in it, and the hook's
+         * program, also under home: a hook that can't run lets everything through. */
         hooks: string
         marker: string
+        binary: string
         /** Without that hook the session has no limits: these words come off its command. */
         needsHook: string[]
       }

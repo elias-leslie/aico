@@ -160,11 +160,12 @@ function projectActivity(
 /** The spec with what needs the tool's hook taken off when the hook isn't there. */
 function hookOrAsk<T extends TuiSpec>(spec: T, how: ContextDelivery, env: NodeJS.ProcessEnv): T {
   if (how.kind !== 'hook') return spec
+  const home = env.HOME || homedir()
   let body = ''
   try {
-    body = readFileSync(join(env.HOME || homedir(), how.hooks), 'utf8')
+    body = readFileSync(join(home, how.hooks), 'utf8')
   } catch {}
-  if (body.includes(how.marker)) return spec
+  if (body.includes(how.marker) && existsSync(join(home, how.binary))) return spec
   return { ...spec, command: spec.command.filter((word) => !how.needsHook.includes(word)) }
 }
 

@@ -170,12 +170,8 @@ func agyCall(in map[string]any) guard.Call {
 	call, _ := in["toolCall"].(map[string]any)
 	args, _ := call["args"].(map[string]any)
 	name := str(call["name"])
-	text := str(args["Content"])
-	if text == "" {
-		text = str(args["Replacement"])
-	}
 	return guard.Call{Tool: name, Command: str(args["CommandLine"]), Path: str(args["Path"]),
-		Writes: name == "write_file" || name == "edit_file", Text: text, Cwd: agyCwd(in), Roots: agyRoots(in)}
+		Writes: name == "write_file" || name == "edit_file", Cwd: agyCwd(in), Roots: agyRoots(in)}
 }
 
 func agyDispatch(event string, in map[string]any) {
@@ -215,6 +211,9 @@ func agyLaunched() bool {
 // agyDelivered is the context the launch wrote for this session (delivery.ts, kind hook).
 func agyDelivered() string {
 	dir := os.Getenv("AICO_DATA_DIR")
+	if dir == "" && os.Getenv("AICO_WEB_DB") != "" {
+		dir = filepath.Dir(os.Getenv("AICO_WEB_DB"))
+	}
 	if dir == "" {
 		dir = os.Getenv("XDG_STATE_HOME")
 		if dir == "" {

@@ -124,7 +124,6 @@ func TestAgyLeashRefuses(t *testing.T) {
 		{"write_file", map[string]any{"Path": filepath.Join(home, ".gemini/config/hooks.json"), "Content": "{}"}},
 		{"write_file", map[string]any{"Path": filepath.Join(home, "x"), "Content": "x"}},
 		{"edit_file", map[string]any{"Path": "/srv/elsewhere/a.go", "Target": "a", "Replacement": "b"}},
-		{"write_file", map[string]any{"Path": filepath.Join(root, "k.py"), "Content": "import os\nos.kill(1, 9)\n"}},
 		{"schedule", map[string]any{}},
 		{"browser_subagent", map[string]any{}},
 		{"some_new_tool", map[string]any{}},
@@ -136,9 +135,56 @@ func TestAgyLeashRefuses(t *testing.T) {
 	}
 }
 
+// What a careless agent does by accident: the shapes a review found getting through.
+func TestAgyLeashSeesThroughShellShapes(t *testing.T) {
+	root := agySetup(t)
+	home, _ := os.UserHomeDir()
+	if err := os.WriteFile(filepath.Join(root, "c.sh"), []byte("#!/bin/bash\ntmux kill-server\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "d.sh"), []byte("rm -rf /srv/elsewhere\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cases := []string{
+		"cd /srv/elsewhere/ # x\nrm -rf dist", "ls # list\nkill -9 1234", "echo start # begin\ntmux kill-server",
+		"git status # check\ngit commit -am x",
+		"rm -rf \\\n  /srv/elsewhere", "mv a.txt \\\n  /srv/elsewhere/a.txt",
+		"echo done#1; rm -rf /srv/elsewhere", "curl -s http://x/#/a && kill -9 1",
+		"find /srv/elsewhere -name '*.db' | xargs rm -f", "cat list | xargs -I{} rm -rf {}", "ls | xargs -n 1 rm",
+		"bash c.sh", "sh c.sh", "./c.sh", "source d.sh", ". d.sh", "bash d.sh",
+		"cd ~ && cat .ssh/id_ed25519", "cd ~/.ssh && ls",
+		"cp a.txt /srv/elsewhere/a.txt 2>/dev/null", "cp a.txt /srv/elsewhere/a.txt 2>&1 | tail -2",
+		"sed -i 's/a/b/' /srv/elsewhere/x 2>/dev/null", "sed --in-place=.bak 's/a/b/' /srv/elsewhere/x",
+		"perl -pi -e 's/a/b/' /srv/elsewhere/x",
+		"cat .env;", "cat .env|head", "echo $(cat .env)", "source .env; npm test", "cat .env*", "cat .env.local.bak-2a-20261029",
+		"cat ~/.kube/config", "cat ~/.npmrc", "cat ~/.docker/config.json",
+		"pushd /srv/elsewhere && rm -rf dist; popd", "cd \"$OTHER\" && rm -rf dist", "popd; rm -rf dist",
+		"git rm -rf .", "git -C /srv/elsewhere rm -rf .", "mv .git /tmp/x", "mv . /tmp/x",
+		"tar -xf a.tar -C /srv/elsewhere", "curl -o /srv/elsewhere/x http://a", "wget -O /srv/elsewhere/x http://a",
+		"unzip a.zip -d /srv/elsewhere", "npx kill-port 3000", "systemctl --user reload aico-web",
+		"timeout 5 tmux ls", "env X=1 tmux ls", "xargs tmux", "find . -name x -exec tmux ls ;",
+		"python3 -c 'import os; os.remove(\"x\")'", "rm *",
+	}
+	for _, command := range cases {
+		if why := agyCheck(t, root, "run_command", map[string]any{"CommandLine": command}); why == "" {
+			t.Errorf("let through %q", command)
+		}
+	}
+	for _, cwd := range []string{filepath.Join(home, ".ssh"), "~/.ssh", "/srv/workspaces/projects/neri-hunters"} {
+		if why := agyCheck(t, root, "run_command", map[string]any{"CommandLine": "ls", "Cwd": cwd}); why == "" {
+			t.Errorf("let a command start in %q", cwd)
+		}
+	}
+}
+
 func TestAgyLeashAllowsTheJob(t *testing.T) {
 	root := agySetup(t)
 	cases := []string{
+		// Words about things aren't the things.
+		"rg 'shutil.rmtree' .", "rg 'fs.rmSync(' packages", "cat packages/a/mnt/x.md", "rg -n timeout docker/", "rg env gh/",
+		"st commit -m 'load .env first' --paths a.txt", "st commit -m 'fix `tmux` call' --paths a.txt",
+		"tether ask create 'May I read /mnt/x?' --option A", "cat .env.example",
+		"echo done#1", "rm -f *.log", "mv sub/a.txt .",
 		"pwd", "ls -la", "git status --short", "git diff", "git log -5 --oneline", "git add a.txt",
 		"st check --quick --changed-only", "st commit -m 'fix the thing' --paths a.txt",
 		"tether ask list", "tether ask create 'One line?' --option A --option B --recommend 1",
@@ -160,6 +206,8 @@ func TestAgyLeashAllowsTheJob(t *testing.T) {
 		args map[string]any
 	}{
 		{"finish", map[string]any{}},
+		{"send_message", map[string]any{}},
+		{"write_file", map[string]any{"Path": filepath.Join(root, "c.py"), "Content": "import os\nos.remove('x')  # /mnt/x\n"}},
 		{"read_file", map[string]any{"Path": "/etc/hostname"}},
 		{"read_file", map[string]any{"Path": filepath.Join(root, "a.go")}},
 		{"write_file", map[string]any{"Path": filepath.Join(root, "b.go"), "Content": "package b\n"}},
