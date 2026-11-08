@@ -5,6 +5,16 @@ import { useHosts } from '@/lib/hooks/use-hosts'
 import { shortWhen } from '@/lib/short-when'
 import { HostSignIn } from './HostsSheet'
 import {
+  type Access,
+  AccessChecklist,
+  type AccessChoices,
+  accessOf,
+  applyAccess,
+  defaultAccess,
+  knownRoles,
+  planAccess,
+} from './LoginAccess'
+import {
   Actions,
   type Chip,
   Find,
@@ -59,6 +69,8 @@ interface Entry {
 }
 interface Data {
   entries: Entry[]
+  /** This computer's name: where a new login is allowed until changed. */
+  machine?: string
   assignments: Record<string, string[]>
   revealSeconds: number
   readOnly?: boolean
@@ -186,6 +198,8 @@ export function LoginsPage() {
   const [sessions, setSessions] = useState<{ id: string; label: string }[]>([]),
     [sessionError, setSessionError] = useState('')
   const { hosts, ...hostState } = useHosts()
+  const [registered, setRegistered] = useState<string[]>([]),
+    [registeredFailed, setRegisteredFailed] = useState(false)
   const load = useCallback(async () => {
     try {
       setData(await api<Data>('/api/logins'))
@@ -201,6 +215,9 @@ export function LoginsPage() {
       .catch(() =>
         setSessionError('Sessions could not load. Try reloading the page.'),
       )
+    api<{ roles: string[] }>('/api/logins/roles')
+      .then((r) => setRegistered(r.roles ?? []))
+      .catch(() => setRegisteredFailed(true))
   }, [load])
   const changed = async (text: string) => {
     setMessage(text)
@@ -211,6 +228,24 @@ export function LoginsPage() {
       data?.entries.flatMap((e) => (e.lab ? [e.lab.target] : [])) || [],
     ),
   ]
+  const choices: AccessChoices = {
+    sources: (data?.entries ?? []).map((e) => ({
+      name: e.name,
+      label: e.lab ? e.lab.target : e.name,
+      machines: e.machines,
+      roles: e.roles,
+      deniedRoles: e.deniedRoles,
+    })),
+    hosts: hosts.map((h) => h.name),
+    hostsStatus: hostState.isLoading
+      ? 'loading'
+      : hostState.isError
+        ? 'error'
+        : 'ready',
+    registered,
+    registeredFailed,
+    machine: data?.machine ?? '',
+  }
   const shown = data
     ? data.entries.filter((e) =>
         `${e.name} ${e.kind}`.toLowerCase().includes(search.toLowerCase()),
@@ -261,6 +296,7 @@ export function LoginsPage() {
       {message && <Notice>{message}</Notice>}
       {adding && (
         <AddLogin
+          choices={choices}
           onSaved={(saved, warning) => {
             setAdding(false)
             void changed(warning ? `${saved}. ${warning}` : saved)
@@ -297,6 +333,7 @@ export function LoginsPage() {
                     <LoginRow
                       key={entry.name}
                       entry={entry}
+                      choices={choices}
                       onChanged={changed}
                       revealSeconds={data.revealSeconds}
                       readOnly={data.readOnly}
@@ -384,13 +421,17 @@ export function LoginsPage() {
   )
 }
 function AddLogin({
+  choices,
   onSaved,
 }: {
+  choices: AccessChoices
   onSaved(saved: string, warning?: string): void
 }) {
   const [kind, setKind] = useState<Choice>('API key'),
     [error, setError] = useState(''),
-    [busy, setBusy] = useState(false)
+    [busy, setBusy] = useState(false),
+    [edited, setEdited] = useState<Access | null>(null)
+  const access = edited ?? defaultAccess(choices)
   return (
     <div className={kit.panel}>
       <Form
@@ -401,7 +442,7 @@ function AddLogin({
           setBusy(true)
           setError('')
           try {
-            let result: { warning?: string }
+            let result: { warning?: string; entry?: Entry }
             const secret = String(f.get('value') ?? '')
             if (kind === ACCOUNT)
               result = await api('/api/logins/lab', {
@@ -432,7 +473,19 @@ function AddLogin({
                 notes: f.get('notes'),
               })
             form.reset()
-            onSaved(savedChars(secret), result.warning)
+            const made = result.entry
+            const failed = made
+              ? await applyAccess(
+                  `/api/logins/${encodeURIComponent(made.name)}`,
+                  planAccess(made, access, knownRoles(choices)),
+                  api,
+                )
+              : []
+            onSaved(
+              savedChars(secret),
+              [result.warning, ...failed].filter(Boolean).join('. ') ||
+                undefined,
+            )
           } catch (error) {
             setError(
               error instanceof SyntaxError
@@ -534,6 +587,12 @@ function AddLogin({
           Notes
           <input name="notes" autoComplete="off" />
         </label>
+        <AccessChecklist
+          choices={choices}
+          value={access}
+          onChange={setEdited}
+          disabled={busy}
+        />
         {error && <Quiet role="alert">{error}</Quiet>}
         <button type="submit" disabled={busy} className="lantern-btn small">
           {busy ? 'Saving…' : 'Save login'}
@@ -544,11 +603,13 @@ function AddLogin({
 }
 function LoginRow({
   entry,
+  choices,
   onChanged,
   revealSeconds,
   readOnly,
 }: {
   entry: Entry
+  choices: AccessChoices
   onChanged(text: string): Promise<void>
   revealSeconds: number
   readOnly?: boolean
@@ -725,52 +786,13 @@ function LoginRow({
         />
       )}
       {panel === 'grants' && (
-        <Form
-          onSubmit={(event) => {
-            event.preventDefault()
-            const f = new FormData(event.currentTarget)
-            void run(async () => {
-              const result = await api(`${path}/grants`, {
-                type: f.get('type'),
-                value: f.get('value'),
-                granted: f.get('action') === 'grant',
-              })
-              await onChanged(result.warning || 'Access saved.')
-            })
-          }}
-        >
-          <small>
-            Machines: {entry.machines.join(', ') || 'None'}
-            <br />
-            Roles: {entry.roles.join(', ') || 'None'}
-            {entry.deniedRoles?.length
-              ? `; blocked: ${entry.deniedRoles.join(', ')}`
-              : ''}
-            <br />
-            Created: {when(entry.created)} · Replaced: {when(entry.rotated)}
-          </small>
-          <label>
-            Access type
-            <select name="type">
-              <option value="machine">Machine</option>
-              <option value="role">Role</option>
-            </select>
-          </label>
-          <label>
-            Name
-            <input name="value" required autoComplete="off" />
-          </label>
-          <label>
-            Action
-            <select name="action">
-              <option value="grant">Allow</option>
-              <option value="revoke">Remove access</option>
-            </select>
-          </label>
-          <button type="submit" className="lantern-btn small" disabled={busy}>
-            Save access
-          </button>
-        </Form>
+        <AccessPanel
+          entry={entry}
+          choices={choices}
+          path={path}
+          onSaved={onChanged}
+          onCancel={() => setPanel(null)}
+        />
       )}
       {panel === 'remove' && (
         <Form
@@ -807,6 +829,73 @@ function LoginRow({
         </Form>
       )}
     </Row>
+  )
+}
+function AccessPanel({
+  entry,
+  choices,
+  path,
+  onSaved,
+  onCancel,
+}: {
+  entry: Entry
+  choices: AccessChoices
+  path: string
+  onSaved(text: string): Promise<void>
+  onCancel(): void
+}) {
+  const known = knownRoles(choices),
+    current = accessOf(entry, known)
+  const [edited, setEdited] = useState<Access | null>(null),
+    [busy, setBusy] = useState(false),
+    [failed, setFailed] = useState<string[]>([])
+  const access = edited ?? current
+  const ops = planAccess(entry, access, known)
+  return (
+    <Form
+      onSubmit={(event) => {
+        event.preventDefault()
+        setBusy(true)
+        setFailed([])
+        void applyAccess(path, ops, api)
+          .then(async (errors) => {
+            setFailed(errors)
+            setEdited(null)
+            await onSaved(
+              errors.length ? 'Access partly saved.' : 'Access saved.',
+            )
+          })
+          .finally(() => setBusy(false))
+      }}
+    >
+      <small>
+        Created: {when(entry.created)} · Replaced: {when(entry.rotated)}
+      </small>
+      <AccessChecklist
+        choices={choices}
+        value={access}
+        onChange={setEdited}
+        exclude={entry.name}
+        disabled={busy}
+      />
+      {failed.map((text) => (
+        <Quiet role="alert" key={text}>
+          {text}
+        </Quiet>
+      ))}
+      <Actions>
+        <button type="button" className="lantern-btn small" onClick={onCancel}>
+          Cancel
+        </button>
+        <button
+          type="submit"
+          className="lantern-btn small"
+          disabled={busy || ops.length === 0}
+        >
+          {busy ? 'Saving…' : 'Save access'}
+        </button>
+      </Actions>
+    </Form>
   )
 }
 function LabEdit({

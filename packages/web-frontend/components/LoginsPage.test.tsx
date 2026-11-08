@@ -2,9 +2,12 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { LoginsPage } from './LoginsPage'
 
+const machines = vi.hoisted(() => ({
+  list: [] as { name: string; state: string }[],
+}))
 vi.mock('@/lib/hooks/use-hosts', () => ({
   useHosts: () => ({
-    hosts: [],
+    hosts: machines.list,
     isLoading: false,
     isError: false,
     refetch: vi.fn(),
@@ -251,4 +254,146 @@ it('adds an account login with a username and login page, and lists it under Acc
       login_url: 'https://school.example.test/',
     },
   })
+})
+
+const focus = {
+  ...entry,
+  name: 'focus-pcsb',
+  machines: ['aico', 'neri'],
+  roles: ['review', 'implementation'],
+}
+const canvas = {
+  ...entry,
+  name: 'canvas-pcsb',
+  machines: ['aico'],
+  roles: ['*'],
+  deniedRoles: ['review'],
+}
+const accessApi = () =>
+  vi.fn(async (path: string, options?: { method?: string; body?: string }) =>
+    Response.json(
+      path.endsWith('/roles')
+        ? { roles: ['coordinator', 'review', 'implementation'] }
+        : options?.method
+          ? {}
+          : path.endsWith('/sessions')
+            ? { sessions: [] }
+            : path.endsWith('/audit')
+              ? { events: [] }
+              : {
+                  entries: [focus, canvas],
+                  machine: 'aico',
+                  assignments: {},
+                  revealSeconds: 30,
+                },
+    ),
+  )
+const openAccess = async (name: string) => {
+  await screen.findByText(name)
+  fireEvent.click(screen.getByRole('button', { name: new RegExp(name) }))
+  fireEvent.click(screen.getByRole('button', { name: 'Access' }))
+}
+it('copies another login access with one choice and saves only the difference', async () => {
+  machines.list = [
+    { name: 'aico', state: 'connected' },
+    { name: 'neri', state: 'connected' },
+  ]
+  const fetcher = accessApi()
+  vi.stubGlobal('fetch', fetcher)
+  render(<LoginsPage />)
+  await openAccess('canvas-pcsb')
+  expect(screen.getByLabelText('aico')).toBeChecked()
+  expect(screen.getByLabelText('neri')).not.toBeChecked()
+  expect(screen.getByLabelText('All roles')).toBeChecked()
+  expect(screen.getByLabelText('review')).not.toBeChecked()
+  expect(screen.getByLabelText('coordinator')).toBeChecked()
+  expect(screen.getByRole('button', { name: 'Save access' })).toBeDisabled()
+  fireEvent.change(screen.getByLabelText('Same access as'), {
+    target: { value: 'focus-pcsb' },
+  })
+  expect(screen.getByLabelText('neri')).toBeChecked()
+  expect(screen.getByLabelText('All roles')).not.toBeChecked()
+  expect(screen.getByLabelText('review')).toBeChecked()
+  expect(screen.getByLabelText('coordinator')).not.toBeChecked()
+  fireEvent.click(screen.getByRole('button', { name: 'Save access' }))
+  await screen.findByText('Access saved.')
+  const sent = fetcher.mock.calls
+    .filter(([, o]) => o?.method === 'POST')
+    .map(([path, o]) => [path, JSON.parse(String(o?.body))])
+  expect(sent).toEqual([
+    [
+      '/api/logins/canvas-pcsb/grants',
+      { type: 'machine', value: 'neri', granted: true },
+    ],
+    [
+      '/api/logins/canvas-pcsb/grants',
+      { type: 'role', value: '*', granted: false },
+    ],
+    [
+      '/api/logins/canvas-pcsb/grants',
+      { type: 'role', value: 'review', granted: true },
+    ],
+    [
+      '/api/logins/canvas-pcsb/grants',
+      { type: 'role', value: 'implementation', granted: true },
+    ],
+  ])
+})
+it('names each grant that failed and keeps going', async () => {
+  machines.list = [
+    { name: 'aico', state: 'connected' },
+    { name: 'neri', state: 'connected' },
+  ]
+  const fetcher = accessApi()
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (path: string, options?: { method?: string; body?: string }) =>
+      options?.method && JSON.parse(String(options.body)).value === 'neri'
+        ? Response.json({ detail: 'Invalid grant' }, { status: 400 })
+        : fetcher(path, options),
+    ),
+  )
+  render(<LoginsPage />)
+  await openAccess('canvas-pcsb')
+  fireEvent.click(screen.getByLabelText('neri'))
+  fireEvent.click(screen.getByLabelText('coordinator'))
+  fireEvent.click(screen.getByRole('button', { name: 'Save access' }))
+  expect(
+    await screen.findByText('Could not allow neri (machine): Invalid grant'),
+  ).toBeInTheDocument()
+  expect(screen.getByText('Access partly saved.')).toBeInTheDocument()
+  expect(
+    fetcher.mock.calls.some(([, o]) => o?.body?.includes('coordinator')),
+  ).toBe(true)
+})
+it('sets access in the Add login form and saves it with the login', async () => {
+  machines.list = [{ name: 'aico', state: 'connected' }]
+  const fetcher = vi.fn(
+    async (path: string, options?: { method?: string; body?: string }) =>
+      path === '/api/logins' && options?.method
+        ? Response.json({
+            entry: { ...entry, name: 'site', machines: ['aico'], roles: ['*'] },
+          })
+        : accessApi()(path, options),
+  )
+  vi.stubGlobal('fetch', fetcher)
+  render(<LoginsPage />)
+  await screen.findByText('focus-pcsb')
+  fireEvent.click(screen.getByRole('button', { name: 'Add login' }))
+  fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'site' } })
+  fireEvent.change(screen.getByLabelText('Value (hidden)'), {
+    target: { value: 'fixture-only' },
+  })
+  expect(screen.getByLabelText('aico')).toBeChecked()
+  expect(screen.getByLabelText('All roles')).toBeChecked()
+  fireEvent.click(screen.getByLabelText('implementation'))
+  fireEvent.click(screen.getByRole('button', { name: 'Save login' }))
+  await screen.findByText('Saved, 12 characters')
+  const grants = fetcher.mock.calls.filter(([p]) => p.endsWith('/grants'))
+  expect(grants.map(([p, o]) => [p, JSON.parse(String(o?.body))])).toEqual([
+    [
+      '/api/logins/site/grants',
+      { type: 'role', value: 'implementation', granted: false },
+    ],
+  ])
 })

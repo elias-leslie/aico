@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { contextDbPath, openContext } from '@aico/context'
 import { LoginStore, loginMachine } from '@aico/fleet/logins'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { Router } from './http'
@@ -83,4 +84,33 @@ it('supports lab partial edits and assignments without returning field values', 
   expect(
     store.list({ session: 'hunt-one', role: 'hunting', machine: loginMachine() }),
   ).toHaveLength(1)
+})
+it('lists the registered work roles for the access checklist, none when no data folder is given', async () => {
+  expect(await (await fetch(`${base}/api/logins/roles`)).json()).toEqual({ roles: [] })
+  const dir = mkdtempSync(join(tmpdir(), 'aico-logins-roles-'))
+  const db = openContext(contextDbPath(dir))
+  db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('launch', ?)").run(
+    JSON.stringify({
+      version: 5,
+      about: '',
+      usage_providers: [],
+      work_roles: ['coordinator', 'review'],
+    }),
+  )
+  db.close()
+  const router = new Router()
+  registerLoginRoutes(router, { HOME: home }, undefined, dir)
+  const other = createServer((req, res) => {
+    void router.handle(req, res, new URL(req.url || '/', 'http://localhost'))
+  })
+  await new Promise<void>((resolve) => other.listen(0, '127.0.0.1', resolve))
+  const address = other.address()
+  if (!address || typeof address === 'string') throw new Error('No address')
+  try {
+    const answer = await fetch(`http://127.0.0.1:${address.port}/api/logins/roles`)
+    expect(await answer.json()).toEqual({ roles: ['coordinator', 'review'] })
+  } finally {
+    await new Promise<void>((resolve) => other.close(() => resolve()))
+    rmSync(dir, { recursive: true, force: true })
+  }
 })

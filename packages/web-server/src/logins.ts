@@ -1,5 +1,6 @@
 // The owner page uses the same authority and read-copy rules as agents.
 
+import { contextDbPath, loadPolicy, openContext } from '@aico/context'
 import {
   LoginError,
   type LoginKind,
@@ -13,7 +14,12 @@ import type { TetherClient } from '@aico/tether-client'
 import { objectBody, type Router, requiredString } from './http'
 import { HttpError } from './tether'
 
-export function registerLoginRoutes(router: Router, env = process.env, tether?: TetherClient) {
+export function registerLoginRoutes(
+  router: Router,
+  env = process.env,
+  tether?: TetherClient,
+  dataDir?: string,
+) {
   const owner = { owner: true, role: 'owner', machine: loginMachine() }
   const safe =
     <T>(fn: (client: LoginClient) => T | Promise<T>) =>
@@ -37,6 +43,7 @@ export function registerLoginRoutes(router: Router, env = process.env, tether?: 
       const assignments = await client.assignments(owner)
       return {
         entries,
+        machine: loginMachine(),
         assignments,
         revealSeconds: loginPolicy.revealSeconds,
         warning: warning || client.warning,
@@ -44,6 +51,16 @@ export function registerLoginRoutes(router: Router, env = process.env, tether?: 
       }
     }),
   )
+  // The work roles Aico registers (the launch policy's list), so the page offers real names to tick.
+  router.on('GET', '/api/logins/roles', () => {
+    if (!dataDir) return { roles: [] as string[] }
+    const db = openContext(contextDbPath(dataDir))
+    try {
+      return { roles: loadPolicy(db)?.workRoles ?? [] }
+    } finally {
+      db.close()
+    }
+  })
   router.on(
     'GET',
     '/api/logins/audit',

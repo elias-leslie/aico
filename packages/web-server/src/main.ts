@@ -253,7 +253,7 @@ function serve(): void {
     dataDir: config.dataDir,
     projects: () => registry.list().map((project) => ({ id: project.id, name: project.name })),
   })
-  registerLoginRoutes(api, process.env, tether)
+  registerLoginRoutes(api, process.env, tether, config.dataDir)
   registerMockupRoutes(api, { dataDir: config.dataDir, tether, publicHost: config.publicHost })
   registerSharedPageRoutes(api, { shares: () => shows.list('here') })
   // The tray alert rule: checked on every write of rows. aico-web's own heartbeat writes every
