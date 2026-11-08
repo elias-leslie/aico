@@ -10,7 +10,7 @@ export interface HubMachine {
   intent: Intent | null
   /** null: Aico cannot tell right now. */
   up: boolean | null
-  /** It sends Aico its own machine row, so it counts as a fleet machine that should have an agent. */
+  /** It sends Aico its own machine row (not only a link row a watcher writes), so it counts as a fleet machine that should have an agent. */
   reports: boolean
 }
 
@@ -30,7 +30,8 @@ export function hubMachines(guests: readonly MachineGuest[], status: StatusStore
       machine: row.machine,
       intent: intents.get(row.machine) ?? null,
       up: merged,
-      reports: true,
+      // A fleet/ link row is a watcher's reading of the machine, not the machine reporting.
+      reports: (seen?.reports ?? false) || !row.id.startsWith('fleet/'),
     })
   }
   // The hypervisor's reading beats a machine's own reports, when it has one.

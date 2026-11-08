@@ -49,11 +49,19 @@ describe('hubMachines', () => {
     ])
 
   it('says a reporting machine is up and counts it as a fleet machine', () => {
-    report('fleet/here', 'here')
+    report('here/machine', 'here')
     status.syncIntents([{ machine: 'here', intent: 'always' }])
     expect(hubMachines([], status)).toMatchObject([
       { machine: 'here', intent: 'always', up: true, reports: true },
     ])
+  })
+
+  it('does not count a machine only a watcher writes a link row for as reporting', () => {
+    report('fleet/here/peer', 'peer')
+    expect(hubMachines([], status)).toMatchObject([{ machine: 'peer', up: true, reports: false }])
+    // Its own row as well: it reports.
+    report('peer/machine', 'peer')
+    expect(hubMachines([], status)).toMatchObject([{ machine: 'peer', up: true, reports: true }])
   })
 
   it('leaves out the hub row: it says nothing about a machine to watch', () => {
@@ -86,7 +94,7 @@ describe('hubMachines', () => {
   })
 
   it('keeps the machine row when the hypervisor has no reading', () => {
-    report('fleet/here', 'here')
+    report('here/machine', 'here')
     expect(hubMachines([guest('here', 'unknown')], status)).toMatchObject([
       { machine: 'here', up: true, reports: true },
     ])
@@ -99,7 +107,7 @@ describe('hubMachines', () => {
   })
 
   it('lets the hypervisor win over a machine row, keeping that the machine reports', () => {
-    report('fleet/both', 'both')
+    report('both/machine', 'both')
     expect(hubMachines([guest('both', 'stopped')], status)).toMatchObject([
       { machine: 'both', up: false, reports: true },
     ])
