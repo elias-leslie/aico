@@ -301,6 +301,22 @@ describe('statusNotice', () => {
     })
   })
 
+  it('a late machine says it went quiet, not its last good report', () => {
+    const row: ShownRow = {
+      ...shown({
+        id: 'ominull.machine',
+        kind: 'machine',
+        what: 'ominull-hub',
+        meaning: 'The OmniNull hub is up and pushing its checks',
+      }),
+      shown: 'late',
+    }
+    const since = Date.parse('2026-11-08T16:16:57Z')
+    const { title, body } = parseNotice(sustainedNotice({ row, major: 'outage', since }, null))
+    expect(title).toBe('ominull-hub is still down')
+    expect(body).toMatch(/^ominull-hub didn’t report when due\. Since Nov \d+, \d+:\d\d [AP]M\.$/)
+  })
+
   it('keys a batch by what changed, hashed when the list is long', () => {
     const two = statusKey(batchOf(shown({ id: 'b/two' }), shown({ id: 'a/one' })))
     expect(two).toBe('status:a/one=failed,b/two=failed')

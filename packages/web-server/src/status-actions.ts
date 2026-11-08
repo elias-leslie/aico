@@ -300,13 +300,21 @@ export function sustainedNotice(
   publicHost: string | null,
 ): Record<string, unknown> {
   const { row, major } = item
+  // A late row's meaning is its last good report ("up and pushing its checks"), not what's wrong now.
+  const now = row.shown === 'late' ? `${row.what} didn’t report when due.` : row.meaning || row.what
+  const since = new Date(item.since).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
   return {
     v: 1,
     source: 'aico',
     kind: 'alert',
     severity: 'critical',
     title: `${row.what} ${SUSTAINED_REASON[major]}`.slice(0, 200),
-    body: `${row.meaning || row.what} Since ${new Date(item.since).toISOString()}.`.slice(0, 1000),
+    body: `${now} Since ${since}.`.slice(0, 1000),
     key: sustainedKey(row.id),
     cooldown: 7 * 24 * 3600,
     push: 'phone',
