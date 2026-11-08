@@ -380,12 +380,23 @@ it('CLI answers questions without acting: help for one command, no match in word
   expect(printed().trim()).toBe('[]')
 
   expect(await runLogins(['set', 'sample', '--notes', 'first'], env, io)).toBe(0)
-  expect(await runLogins(['edit', 'sample', '--notes', 'second'], env, io)).toBe(0)
+  out.mockClear()
+  expect(
+    await runLogins(['edit', 'sample', '--notes', 'second', '--kind', 'backup key'], env, io),
+  ).toBe(0)
+  expect(JSON.parse(printed())).toMatchObject({
+    kind: 'backup key',
+    state: 'Unused',
+    usable: true,
+    activity: expect.any(Array),
+  })
+  await expect(runLogins(['edit', 'sample', '--kind', 'lab login'], env, io)).resolves.not.toBe(0)
   out.mockClear()
   expect(await runLogins(['show', 'sample'], env, io)).toBe(0)
   const shown = JSON.parse(printed())
   expect(shown.notes).toBe('second')
   expect(shown.state).toBe('Unused')
+  expect(shown.usable).toBe(true)
   expect(shown.activity.at(-1).action).toBeTruthy()
   expect(printed()).not.toContain('fixture-private-value')
 })

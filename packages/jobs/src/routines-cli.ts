@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import { peerDir } from '@aico/fleet/hosts'
 import type { StatusRow } from '@aico/status'
 import { LOG_LINES, remoteAuthority } from './fleet-leases'
-import { type JobDef, localZone, resumeAt, schedule } from './jobs'
+import { type JobDef, resumeAt, runTime, schedule } from './jobs'
 import type { JobState, JobStore } from './leases'
 import { type EitherHosts, newRoutine, type RoutineInput } from './routines'
 import { jobRow, type LeaseAuthority } from './runner'
@@ -217,11 +217,7 @@ function timerView(status: TimerStatus, file: TimersFile | null | undefined): Ro
   }
 }
 
-/** A time in the routine's zone, with the zone's name when it is not this machine's. */
-const time = (ms: number | null, tz?: string) =>
-  ms === null
-    ? '-'
-    : `${new Date(ms).toLocaleString('sv-SE', tz ? { timeZone: tz } : {})}${tz && tz !== localZone() ? ` ${tz}` : ''}`
+const time = runTime
 
 /** Flags of `add`, parsed; `--command` takes the rest of the line. */
 export function parseAdd(args: readonly string[]): RoutineInput {

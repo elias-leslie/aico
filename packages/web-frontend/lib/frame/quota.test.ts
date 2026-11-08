@@ -134,7 +134,7 @@ describe('quota glance', () => {
           name: 'Codex',
           status: 'on_credits',
           answer:
-            'Running on credits until the Nov 11 reset; 4.6K credits left, enough at the recent pace',
+            'Available on credits until the Nov 11 reset; 4.6K credits left, enough at the recent pace',
           credits: { balance: 4571.7, lasts_days: 2.9, text: '4.6K credits' },
           windows: [
             win({
@@ -169,13 +169,13 @@ describe('quota glance', () => {
     ])
     // Not used up and credits both lead with the one answer, not a window's 0%.
     expect(glances[1]?.line).toBe(
-      'Running on credits until the Nov 11 reset; 4.6K credits left, enough at the recent pace',
+      'Available on credits until the Nov 11 reset; 4.6K credits left, enough at the recent pace',
     )
     expect(glances[2]?.line).toBe('Used up until Nov 8, 7:00 PM EST (weekly)')
     expect(quotaLine(glances)).toBe(
       'Claude 80% left · Codex on credits until Nov 11 · OpenCode Go used up until Nov 8',
     )
-    expect(quotaTitle(glances)).toContain('Codex: Running on credits until')
+    expect(quotaTitle(glances)).toContain('Codex: Available on credits until')
     expect(quotaTitle(glances)).toContain('Windows: weekly used up')
     expect(quotaTitle(glances)).toContain('Bar: how much is left')
   })

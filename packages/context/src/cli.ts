@@ -102,7 +102,11 @@ function commandUsage(command: string): string {
     if (/^ {2}aico \S/.test(line)) mine = line.startsWith(`  aico ${command} `)
     if (mine && line.trim()) lines.push(line)
   }
-  return lines.length ? `Usage: aico ${command} <command>\n\n${lines.join('\n')}\n` : USAGE
+  const text = lines.length ? `Usage: aico ${command} <command>\n\n${lines.join('\n')}\n` : USAGE
+  // The name typed: `st models --help` says st, `aico models --help` says aico.
+  return process.env.AICO_CLI_NAME === 'aico'
+    ? text
+    : text.replace(/\baico (memory|prompt|models|context|<)/g, 'st $1')
 }
 
 class UsageError extends Error {}

@@ -75,13 +75,13 @@ describe('Quota page copy', () => {
         name: 'Codex',
         status: 'on_credits',
         answer:
-          'Running on credits until the Nov 11 reset; 4.5K credits left, enough at the recent pace',
+          'Available on credits until the Nov 11 reset; 4.5K credits left, enough at the recent pace',
         windows: [],
       }),
     ])
     expect(
       screen.getByText(
-        'Running on credits until the Nov 11 reset; 4.5K credits left, enough at the recent pace.',
+        'Available on credits until the Nov 11 reset; 4.5K credits left, enough at the recent pace.',
       ),
     ).toBeInTheDocument()
   })

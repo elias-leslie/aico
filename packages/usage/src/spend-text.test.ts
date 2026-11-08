@@ -64,7 +64,7 @@ it('answers can-I-use-it first: credits carry past the reset', () => {
     NOW,
   )
   expect(text).toBe(
-    'Running on credits until the Nov 11 reset; 4.6K credits left, enough at the recent pace',
+    'Available on credits until the Nov 11 reset; 4.6K credits left, enough at the recent pace',
   )
 })
 
@@ -78,7 +78,7 @@ it('answers can-I-use-it first: credits that run out before the reset say when',
     NOW,
   )
   expect(text).toBe(
-    'Running on credits until the Nov 11 reset; 4.6K credits left, not enough at the recent pace (runs out about Nov 9)',
+    'Available on credits until the Nov 11 reset; 4.6K credits left, not enough at the recent pace (runs out about Nov 9)',
   )
 })
 

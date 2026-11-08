@@ -77,6 +77,16 @@ const ordinal = (n: number) =>
 /** The zone this machine's clock runs in (what built-in jobs' `at` means here). */
 export const localZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone
 
+/** A run's time as the job lists print it, in the zone given (else this machine's), its zone named. */
+export function runTime(ms: number | null, tz: string = localZone()): string {
+  if (ms === null) return '-'
+  const at = new Date(ms)
+  const name = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'short' })
+    .formatToParts(at)
+    .find((part) => part.type === 'timeZoneName')?.value
+  return `${at.toLocaleString('sv-SE', { timeZone: tz })} ${name}`
+}
+
 function fail(where: string, message: string): never {
   throw new Error(`jobs file: ${where}: ${message}`)
 }

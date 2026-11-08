@@ -37,16 +37,16 @@ Logins live in Aico's private secrets folder. Values enter through hidden input 
   list [TEXT] [--json]                every login, one line each: name, kind, then "usable" or the
                                       command that makes it usable. With TEXT (part of a name) or
                                       --json: the matching ones in full as JSON, no values, with
-                                      state (Unused means no session has used it yet, usable or not) and what is missing
+                                      state (Unused: no session has yet), usable and what is missing
   show NAME                           metadata and recent activity, no value (NAME or an account
                                       login's site name)
   allow NAME [--role ROLE | --session ID] [--machine NAME]
                                       give yourself (or ROLE; a coordinator: session ID) what is missing
                                       to use NAME: machine, role or session. Logged; no owner step
-  edit NAME [--notes TEXT] [--login-url URL] [--site NAME] [--program PATH] [--no-program PATH]
-                                      fix notes, the login page (same site), the site name or the
-                                      programs lab run may hand it to; the login page is checked
-                                      for a password field. Logged
+  edit NAME [--notes TEXT] [--kind KIND] [--login-url URL] [--site NAME] [--program PATH] [--no-program PATH]
+                                      fix notes, the kind, the login page (same site), the site name
+                                      or the programs lab run may hand it to; the login page is
+                                      checked for a password field. Logged; prints what show prints
   set NAME [--kind KIND] [--notes TEXT] hidden prompt or piped stdin. KIND: ${SETTABLE_KINDS}
   set NAME --account --username USER --login-url URL [--notes TEXT]
                                       account login (username, password, login page); the
@@ -348,29 +348,37 @@ export async function runLogins(
     }
     if (command === 'edit') {
       const [name, ...options] = rest,
-        f = flags(options, ['--notes', '--login-url', '--site', '--program', '--no-program'])
+        f = flags(options, [
+          '--notes',
+          '--kind',
+          '--login-url',
+          '--site',
+          '--program',
+          '--no-program',
+        ])
       const notes = one(f, '--notes'),
+        kind = one(f, '--kind'),
         loginUrl = one(f, '--login-url'),
         site = one(f, '--site'),
         program = one(f, '--program'),
         dropProgram = one(f, '--no-program')
-      if (!name || (notes === undefined && !loginUrl && !site && !program && !dropProgram))
+      if (!name || (notes === undefined && !kind && !loginUrl && !site && !program && !dropProgram))
         throw new LoginError(
-          'edit needs a login and --notes, --login-url, --site, --program or --no-program',
+          'edit needs a login and --notes, --kind, --login-url, --site, --program or --no-program',
         )
-      output(
-        await store.edit(
-          name,
-          {
-            ...(notes !== undefined ? { notes } : {}),
-            ...(loginUrl ? { login_url: loginUrl } : {}),
-            ...(site ? { target: site } : {}),
-            ...(program ? { program } : {}),
-            ...(dropProgram ? { dropProgram } : {}),
-          },
-          io.caller,
-        ),
+      const edited = await store.edit(
+        name,
+        {
+          ...(notes !== undefined ? { notes } : {}),
+          ...(kind ? { kind: kind as LoginKind } : {}),
+          ...(loginUrl ? { login_url: loginUrl } : {}),
+          ...(site ? { target: site } : {}),
+          ...(program ? { program } : {}),
+          ...(dropProgram ? { dropProgram } : {}),
+        },
+        io.caller,
       )
+      output(await store.details(edited.name, io.caller))
       if (loginUrl) await probe(loginUrl)
       return 0
     }

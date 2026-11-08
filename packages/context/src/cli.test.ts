@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { expect, it } from 'vitest'
+import { expect, it, vi } from 'vitest'
 import { type ContextCliIo, runContextCli } from './cli'
 import { openContext } from './db'
 import { addMemory, getMemories } from './memory'
@@ -125,12 +125,16 @@ it.each(['memory', 'prompt', 'models', 'context'])(
       out: (s) => lines.push(s),
       err: (s) => lines.push(s),
     }
-    for (const flag of ['--help', '-h']) {
-      expect(await runContextCli(command, [flag], io)).toBe(0)
-      const text = lines.pop() ?? ''
-      expect(text).toMatch(new RegExp(`^Usage: aico ${command} `))
-      for (const other of ['memory', 'prompt', 'models', 'context'].filter((c) => c !== command))
-        expect(text).not.toContain(`aico ${other} `)
-    }
+    for (const name of ['aico', 'st'])
+      for (const flag of ['--help', '-h']) {
+        vi.stubEnv('AICO_CLI_NAME', name)
+        expect(await runContextCli(command, [flag], io)).toBe(0)
+        vi.unstubAllEnvs()
+        const text = lines.pop() ?? ''
+        expect(text).toMatch(new RegExp(`^Usage: ${name} ${command} `))
+        expect(text).not.toContain(`${name === 'st' ? 'aico' : 'st'} ${command} `)
+        for (const other of ['memory', 'prompt', 'models', 'context'].filter((c) => c !== command))
+          expect(text).not.toContain(`${name} ${other} `)
+      }
   },
 )

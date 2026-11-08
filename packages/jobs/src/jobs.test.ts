@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import type { StatusRow } from '@aico/status'
 import { describe, expect, it, vi } from 'vitest'
 import { answerResult, commandJob, postJob, selfArgv } from './act'
-import { type JobDef, nextAt, nextRun, parseJobs, readJobs, schedule } from './jobs'
+import { type JobDef, nextAt, nextRun, parseJobs, readJobs, runTime, schedule } from './jobs'
 import { JobStore, StaleLease } from './leases'
 import { main } from './main'
 import { jobRow, Runner } from './runner'
@@ -484,4 +484,11 @@ describe('a POST job unit', () => {
       }),
     ).toEqual(['/usr/bin/node', '--disable-warning=ExperimentalWarning', '/x/aico-jobs.mjs'])
   })
+})
+
+it('a printed run time names its zone', () => {
+  const at = Date.UTC(2026, 10, 8, 12, 30)
+  expect(runTime(at, 'America/New_York')).toBe('2026-11-08 07:30:00 EST')
+  expect(runTime(at, 'UTC')).toBe('2026-11-08 12:30:00 UTC')
+  expect(runTime(null)).toBe('-')
 })

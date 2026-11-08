@@ -299,6 +299,16 @@ describe('st status', () => {
     expect(answered.urls).toEqual([
       'http://127.0.0.1:3002/api/status?state=late%2Cfailed&machine=here',
     ])
+    const summed = () =>
+      io(async () =>
+        Response.json({ generated_at: '', rows: [], rollup: {}, summary: { rows: 99 } }),
+      )
+    const filtered = summed()
+    expect(await runStatusCli(['--search', 'x', '--json'], filtered)).toBe(0)
+    expect(filtered.text).not.toContain('summary')
+    const whole = summed()
+    expect(await runStatusCli(['--sort', 'what', '--json'], whole)).toBe(0)
+    expect(whole.text).toContain('summary')
     const down = io(async () => {
       throw new TypeError('fetch failed')
     })

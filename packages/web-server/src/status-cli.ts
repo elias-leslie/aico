@@ -19,7 +19,8 @@ Options:
   --search TEXT     text in the name, meaning, id, machine or project
   --sort ORDER      problems (default), what, updated, next
   --all             list the healthy rows too
-  --json            the API answer as JSON
+  --json            the rows and their counts as JSON, after any filter (unfiltered: with the
+                    whole machine's summary too)
 `
 
 const FILTERS: Readonly<Record<string, string>> = {
@@ -199,8 +200,13 @@ export async function runStatusCli(argv: string[], io: StatusCliIo): Promise<num
     io.err(`${cliName()} status: ${detail}\n`)
     return response.status === 422 ? 2 : 1
   }
+  // The API's summary covers every row for the badge; beside filtered rows it reads as their count.
+  const filtered = [...query.keys()].some((key) => key !== 'sort')
+  const answer = filtered ? { ...body, summary: undefined } : body
   io.out(
-    json ? `${JSON.stringify(body, null, 2)}\n` : formatStatus(body, all, io.now(), query.size > 0),
+    json
+      ? `${JSON.stringify(answer, null, 2)}\n`
+      : formatStatus(body, all, io.now(), query.size > 0),
   )
   return 0
 }

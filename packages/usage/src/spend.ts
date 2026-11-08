@@ -79,7 +79,7 @@ function creditAnswer(credit: NonNullable<Usage['credits']>, now: string | numbe
 
 /**
  * The one plain answer to "can I use it now?", ahead of any window: "Available now",
- * "Used up until Nov 8, 7:00 PM EST (weekly)", "Running on credits until the Nov 11 reset;
+ * "Used up until Nov 8, 7:00 PM EST (weekly)", "Available on credits until the Nov 11 reset;
  * 4.5K credits left, enough at the recent pace". The windows follow it as detail.
  */
 export function answerText(usage: Usage, now: string | number = Date.now()): string {
@@ -89,7 +89,7 @@ export function answerText(usage: Usage, now: string | number = Date.now()): str
     case 'on_credits': {
       const reset = usage.credits?.reset_at ?? last?.resets_at
       const until = reset ? ` until the ${day(reset)} reset` : ''
-      return `Running on credits${until}${usage.credits ? `; ${creditAnswer(usage.credits, now)}` : ''}`
+      return `Available on credits${until}${usage.credits ? `; ${creditAnswer(usage.credits, now)}` : ''}`
     }
     case 'used_up': {
       const labels = out.map((w) => w.label).join(', ')

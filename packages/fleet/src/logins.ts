@@ -93,6 +93,7 @@ export interface LoginUnavailable {
 /** What an agent may change on a login it did not save: everything but the username and password. */
 export interface LoginEdit {
   notes?: string
+  kind?: LoginKind
   login_url?: string
   target?: string
   /** Add or drop a program (absolute path) `lab run` may hand this lab login's values to. */
@@ -432,7 +433,7 @@ export class LoginStore {
             ? 'lab login'
             : tool
               ? 'tool login'
-              : name.includes('key')
+              : name.includes('key') || /\.(ed25519|pub)$/.test(name)
                 ? 'backup key'
                 : 'API key',
           notes: name.endsWith('.sha256')
@@ -554,7 +555,14 @@ export class LoginStore {
                 : {}),
             },
       )
-    return { ...structuredClone(entry), state: this.state(entry), activity }
+    const state = this.state(entry)
+    // The word `list` uses: Unused says no session has yet, not that one can't.
+    return {
+      ...structuredClone(entry),
+      state,
+      usable: state === 'In use' || state === 'Unused',
+      activity,
+    }
   }
   state(entry: Login) {
     if (entry.lab?.expires_at && Date.parse(entry.lab.expires_at) <= Date.now()) return 'Expired'
@@ -874,6 +882,12 @@ export class LoginStore {
       if (patch.notes !== undefined && patch.notes !== entry.notes) {
         entry.notes = patch.notes
         changed.push('notes')
+      }
+      if (patch.kind !== undefined && patch.kind !== entry.kind) {
+        if (!LOGIN_KINDS.includes(patch.kind) || patch.kind === 'lab login' || entry.lab)
+          throw new LoginError('Choose tool login, API key, password or backup key')
+        entry.kind = patch.kind
+        changed.push('kind')
       }
       for (const [path, add] of [
         [patch.program, true],

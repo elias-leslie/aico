@@ -16,7 +16,7 @@ import {
 } from '@aico/status'
 import { act, postJob, selfArgv, systemdUnits, unitInFlight, whereOf } from './act'
 import { remoteAuthority, serveLeases } from './fleet-leases'
-import type { JobDef } from './jobs'
+import { type JobDef, runTime } from './jobs'
 import { type JobState, JobStore, jobsDbPath } from './leases'
 import { loadJobs, readEither } from './routines'
 import { routinesCommand } from './routines-cli'
@@ -68,7 +68,7 @@ async function removeRow(webUrl: string, id: string): Promise<void> {
   await deleteStatusRow(webUrl, id, { timeoutMs: 10_000 })
 }
 
-const time = (ms: number | null) => (ms === null ? '-' : new Date(ms).toLocaleString('sv-SE'))
+const time = (ms: number | null) => runTime(ms)
 
 async function list(
   jobs: readonly JobDef[],

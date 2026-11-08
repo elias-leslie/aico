@@ -20,7 +20,7 @@ export interface QuotaGlance {
   left: number | null
   /** How much of that window's time is gone (0..100), or null. */
   gone: number | null
-  /** The plain answer to "can I use it now?": "Running on credits until the Nov 11 reset; 4.5K credits left, enough at the recent pace". */
+  /** The plain answer to "can I use it now?": "Available on credits until the Nov 11 reset; 4.5K credits left, enough at the recent pace". */
   answer: string
   /** The day it is usable again when used up or on credits ("Nov 8"), or null. */
   back: string | null
