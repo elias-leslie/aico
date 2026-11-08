@@ -4,6 +4,7 @@ import { homedir, hostname, loadavg, uptime } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
+import { aicoDataDir } from '@aico/shared/data-dir'
 import { nearest } from '@aico/shared/suggest'
 import { readQuery } from '@aico/store'
 import { registryProjects } from '@aico/tasks'
@@ -366,9 +367,7 @@ async function dbCommand(cli: Cli, rest: string[]): Promise<number> {
   const store = values.store || 'tasks'
   const filename = config.stores[store as keyof typeof config.stores]
   if (!filename) throw new Error(`Unknown store ${store}`)
-  const dir =
-    env.AICO_DATA_DIR ||
-    join(env.XDG_STATE_HOME || join(env.HOME || homedir(), '.local/state'), 'aico')
+  const dir = aicoDataDir(env)
   const table = positionals[1]
   const identifier = () => {
     if (!table || !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(table))

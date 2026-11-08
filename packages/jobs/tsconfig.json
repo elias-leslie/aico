@@ -7,6 +7,9 @@
   "exclude": ["node_modules", "dist", ".tsbuild"],
   "references": [
     {
+      "path": "../shared"
+    },
+    {
       "path": "../store"
     },
     {

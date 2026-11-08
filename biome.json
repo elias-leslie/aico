@@ -361,8 +361,6 @@
                       "@aico/ops/**",
                       "@aico/session-engine",
                       "@aico/session-engine/**",
-                      "@aico/shared",
-                      "@aico/shared/**",
                       "@aico/tasks",
                       "@aico/tasks/**",
                       "@aico/tether",
@@ -382,7 +380,7 @@
                       "@aico/webtools",
                       "@aico/webtools/**"
                     ],
-                    "message": "@aico/jobs (layer 5): import only @aico/store, @aico/status, @aico/fleet (package.json aico.imports; depcruise is the gate)"
+                    "message": "@aico/jobs (layer 5): import only @aico/shared, @aico/store, @aico/status, @aico/fleet (package.json aico.imports; depcruise is the gate)"
                   }
                 ]
               }

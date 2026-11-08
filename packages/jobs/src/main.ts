@@ -1,10 +1,10 @@
 // aico-jobs: the scheduler service and its CLI (`aico jobs ...`).
 
 import { readFileSync } from 'node:fs'
-import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { peerDir } from '@aico/fleet/hosts'
+import { aicoDataDir } from '@aico/shared/data-dir'
 import {
   deleteStatusRow,
   drainOutbox,
@@ -40,10 +40,7 @@ function here(path: string): string {
 }
 
 function settings(env: NodeJS.ProcessEnv) {
-  const dataDir = resolve(
-    env.AICO_DATA_DIR?.trim() ||
-      join(env.XDG_STATE_HOME?.trim() || join(homedir(), '.local', 'state'), 'aico'),
-  )
+  const dataDir = aicoDataDir(env)
   let webUrl = env.AICO_WEB_URL?.trim()
   if (!webUrl) {
     const identity = JSON.parse(readFileSync(here('../../../project.identity.json'), 'utf8'))
