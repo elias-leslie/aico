@@ -899,8 +899,8 @@ export class LoginStore {
       return { name: loginLabel(entry), changed }
     })
   }
-  /** Changes what an agent may change itself: notes, the login page (same site; another site needs the
-   * owner's password again), and an account or lab login's site name. Never a username or password. */
+  /** Changes what an agent may change itself: notes, the login page (any site, logged with the old and
+   * new page) and an account or lab login's site name. Never a username or password. */
   edit(name: string, patch: LoginEdit, caller: LoginCaller): Login {
     this.selfService(caller)
     if (patch.notes !== undefined && (typeof patch.notes !== 'string' || patch.notes.length > 4000))
@@ -947,23 +947,9 @@ export class LoginStore {
         const bundle = labPayload(privateFile(file).toString(), lab.target, lab.actor, true)
         if (patch.login_url !== undefined && patch.login_url !== bundle.values.login_url) {
           const next = loginPage(patch.login_url)
-          const saved = (() => {
-            try {
-              return new URL(bundle.values.login_url || '')
-            } catch {
-              return undefined
-            }
-          })()
-          // The saved password goes only to the site the owner saved; the owner may move it.
-          if (
-            !caller.owner &&
-            (saved ? saved.origin !== new URL(next).origin : lab.kind === 'account')
-          )
-            throw new LoginError(
-              `That login page is on another site (${new URL(next).host}): the saved password goes only to ${saved?.host || 'the site the owner saved'}. The owner moves it on Aico's Logins page (Edit).`,
-            )
+          const from = bundle.values.login_url || 'none'
           bundle.values.login_url = next
-          changed.push(`login page ${next}`)
+          changed.push(`login page ${from} to ${next}`)
         }
         let target = lab.target
         if (patch.target !== undefined && patch.target !== lab.target) {

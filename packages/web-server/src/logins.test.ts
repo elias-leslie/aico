@@ -165,7 +165,8 @@ it('checks an account login page on save and lets the owner fix notes, page and 
   expect(audit.events.at(-1)).toMatchObject({
     action: 'edit',
     actor: 'owner',
-    detail: 'notes, login page https://canvas.example.test/login/canvas',
+    detail:
+      'notes, login page https://canvas.example.test/ to https://canvas.example.test/login/canvas',
   })
   expect(
     await (await post('/api/logins/probe', { url: 'https://canvas.example.test/' })).json(),

@@ -792,7 +792,7 @@ it('lets any agent give itself what is missing, logged on the login with who and
   store.grant(identity.name, 'role', 'review', true, agent)
   expect(store.audit(owner).at(-1)).toMatchObject({ action: 'grant', detail: 'role review' })
 })
-it('lets any agent fix notes, the login page on the same site and the site name, never the password', () => {
+it('lets any agent fix notes, the login page and the site name, never the password', () => {
   const identity = account()
   const agent = { role: 'school-check', machine: loginMachine(), session: 'a1b2c3d4' }
   store.assign('a1b2c3d4', ['canvas-pcsb', 'other'], owner)
@@ -808,9 +808,15 @@ it('lets any agent fix notes, the login page on the same site and the site name,
     password: 'fixture-password',
     login_url: 'https://canvas.example.test/login/canvas',
   })
-  expect(() =>
-    store.edit('canvas-pcsb', { login_url: 'https://evil.example.test/login' }, agent),
-  ).toThrow('another site')
+  // Another site too, shown in its activity with the old and new page.
+  expect(
+    store.edit('canvas-pcsb', { login_url: 'https://lms.example.test/login' }, agent).lab
+      ?.login_url,
+  ).toBe('https://lms.example.test/login')
+  expect(store.audit(owner).at(-1)?.detail).toContain(
+    'login page https://canvas.example.test/login/canvas to https://lms.example.test/login',
+  )
+  store.edit('canvas-pcsb', { login_url: 'https://canvas.example.test/login/canvas' }, agent)
   expect(() =>
     store.edit('canvas-pcsb', { login_url: 'http://canvas.example.test/' }, agent),
   ).toThrow('https')
@@ -827,7 +833,9 @@ it('lets any agent fix notes, the login page on the same site and the site name,
       .filter((e) => e.action === 'edit')
       .map((e) => e.detail),
   ).toEqual([
-    'notes, login page https://canvas.example.test/login/canvas',
+    'notes, login page https://canvas.example.test/ to https://canvas.example.test/login/canvas',
+    'login page https://canvas.example.test/login/canvas to https://lms.example.test/login',
+    'login page https://lms.example.test/login to https://canvas.example.test/login/canvas',
     'site name canvas-pcsb to canvas',
   ])
   expect(JSON.stringify(store.audit(owner))).not.toContain('fixture-password')
@@ -858,10 +866,6 @@ it('keeps hunters and other sessions a coordinator call, and the saved site the 
   expect(() => store.patchLab('canvas-pcsb', 'default', { remove: ['login_url'] }, agent)).toThrow(
     "owner's",
   )
-  // The owner may move the login page to another site; Edit on the page does it.
-  expect(
-    store.edit('canvas-pcsb', { login_url: 'https://lms.example.test/' }, owner).lab?.login_url,
-  ).toBe('https://lms.example.test/')
 })
 it('a rename keeps the old site for sessions while another login uses it; long details are cut', () => {
   account('school')
