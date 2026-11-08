@@ -6,7 +6,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { peerDir } from '@aico/fleet/hosts'
 import type { StatusRow } from '@aico/status'
-import { remoteAuthority } from './fleet-leases'
+import { LOG_LINES, remoteAuthority } from './fleet-leases'
 import { type JobDef, localZone, resumeAt, schedule } from './jobs'
 import type { JobState, JobStore } from './leases'
 import { type EitherHosts, newRoutine, type RoutineInput } from './routines'
@@ -61,7 +61,9 @@ export interface RoutinesContext {
   /** How systemctl commands run (tests give their own). */
   runCommand?: RunCommand
   /** The lease link to another machine (tests give their own). */
-  peer?: (name: string) => Pick<ReturnType<typeof remoteAuthority>, 'register' | 'unregister'>
+  peer?: (
+    name: string,
+  ) => Pick<ReturnType<typeof remoteAuthority>, 'register' | 'unregister' | 'log'>
   /** Sends Status rows to aico-web; failures are the caller's to ignore. */
   postRows: (rows: StatusRow[]) => Promise<void>
   removeRow: (id: string) => Promise<void>
@@ -431,6 +433,20 @@ export async function routinesCommand(
     return 0
   }
   if (verb === 'log') {
+    // A job another machine holds keeps its output there: ask that machine.
+    const holder = job.lease_host ?? job.home
+    if (holder !== ctx.machine) {
+      try {
+        const text = await peerOf(holder, ctx).log(job.kind)
+        out(text || `${job.kind} has no saved output on ${holder} yet.`)
+        return 0
+      } catch (error) {
+        err(
+          `aico routines log: ${holder} is not reachable (${(error as Error).message}); its output is kept there`,
+        )
+        return 1
+      }
+    }
     const file = join(ctx.dataDir, 'job-runs', `${job.kind}.last.log`)
     if (!existsSync(file)) {
       // No saved output (it has not run since output was kept): what the scheduler logged about it.
@@ -438,7 +454,16 @@ export async function routinesCommand(
         out(
           execFileSync(
             'journalctl',
-            ['--user', '-u', 'aico-jobs.service', '-g', job.kind, '-n', '200', '--no-pager'],
+            [
+              '--user',
+              '-u',
+              'aico-jobs.service',
+              '-g',
+              job.kind,
+              '-n',
+              String(LOG_LINES),
+              '--no-pager',
+            ],
             { encoding: 'utf8', timeout: 8_000 },
           ).trimEnd(),
         )
@@ -447,7 +472,7 @@ export async function routinesCommand(
       }
       return 0
     }
-    out(readFileSync(file, 'utf8').split('\n').slice(-200).join('\n').trimEnd())
+    out(readFileSync(file, 'utf8').trimEnd().split('\n').slice(-LOG_LINES).join('\n'))
     return 0
   }
   if (verb === 'run' || verb === 'pause' || verb === 'resume') {

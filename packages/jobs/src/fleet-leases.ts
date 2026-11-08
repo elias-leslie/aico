@@ -1,10 +1,10 @@
 // All lease writes reach one configured authority. Only a job's `fallback` workers run it on their
 // own lease, and only while that authority does not answer at all; they report the run when it is
 // back. Its own clock decides due/expiry and its durable fence rejects late results.
-import { chmodSync, existsSync, lstatSync, mkdirSync, unlinkSync } from 'node:fs'
+import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, unlinkSync } from 'node:fs'
 import { createServer, request } from 'node:http'
 import { createServer as createCarrier, createConnection, type Server, type Socket } from 'node:net'
-import { dirname } from 'node:path'
+import { dirname, join } from 'node:path'
 import type { JobDef } from './jobs'
 import { nextRun, resumeAt } from './jobs'
 import {
@@ -32,6 +32,7 @@ export interface LeaseCall {
     | 'unregister'
     | 'report'
     | 'standin'
+    | 'log'
   kind: string
   who?: { holder: string; machine: string }
   lease?: Lease
@@ -142,11 +143,33 @@ function validResult(call: LeaseCall): JobResult {
   return { state: result.state, meaning: result.meaning }
 }
 
+/** Lines of a run's output `aico routines log` shows. */
+export const LOG_LINES = 200
+
+/** The last run's output of a job this machine holds (`runsDir`/KIND.last.log), or null when none
+ * is kept: read only, for `aico routines log` on another machine. */
+export function lastRunLog(
+  runsDir: string,
+  jobs: readonly JobDef[],
+  authority: string,
+  kind: string,
+): string | null {
+  const job = jobs.find(
+    (entry) => entry.kind === kind && (entry.lease_host ?? entry.home) === authority,
+  )
+  if (!job) throw new Error('Unknown job at this lease authority')
+  const file = join(runsDir, `${job.kind}.last.log`)
+  if (!existsSync(file)) return null
+  return readFileSync(file, 'utf8').trimEnd().split('\n').slice(-LOG_LINES).join('\n')
+}
+
 export async function serveLeases(
   path: string,
   store: JobStore,
   jobs: readonly JobDef[] | (() => readonly JobDef[]),
   authority: string,
+  /** Where finished runs keep their output (job-runs); without it, `log` is refused. */
+  runsDir?: string,
 ): Promise<Server & { closeAllConnections(): void }> {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
   if (existsSync(path)) {
@@ -173,13 +196,13 @@ export async function serveLeases(
     req.on('end', () => {
       try {
         if (req.method !== 'POST' || req.url !== '/lease') throw new Error('Unknown lease route')
-        const value = leaseCall(
-          store,
-          typeof jobs === 'function' ? jobs() : jobs,
-          authority,
-          JSON.parse(text) as LeaseCall,
-          callers.get(req.socket) ?? '',
-        )
+        const call = JSON.parse(text) as LeaseCall
+        const list = typeof jobs === 'function' ? jobs() : jobs
+        if (call.op === 'log' && !runsDir) throw new Error('Run output is not kept here')
+        const value =
+          call.op === 'log' && runsDir
+            ? lastRunLog(runsDir, list, authority, call.kind)
+            : leaseCall(store, list, authority, call, callers.get(req.socket) ?? '')
         res.setHeader('content-type', 'application/json')
         res.end(JSON.stringify({ value }))
       } catch (error) {
@@ -288,6 +311,8 @@ export function remoteAuthority(socket: string): LeaseAuthority & {
   report(kind: string, result: JobResult, ranAt: number): Promise<boolean>
   /** `waitMs`: no answer by then counts as unreachable (the caller's scheduler must not stall). */
   standin(kind: string, waitMs: number): Promise<JobState | null>
+  /** The last run's output kept on that machine, or null. */
+  log(kind: string): Promise<string | null>
 } {
   return {
     claim: async (kind, who) =>
@@ -312,5 +337,6 @@ export function remoteAuthority(socket: string): LeaseAuthority & {
       (await remoteCall(socket, { op: 'report', kind, result, ranAt })) as boolean,
     standin: async (kind, waitMs) =>
       (await remoteCall(socket, { op: 'standin', kind }, waitMs)) as JobState | null,
+    log: async (kind) => (await remoteCall(socket, { op: 'log', kind })) as string | null,
   }
 }

@@ -78,18 +78,14 @@ export interface RoutineLog {
   lines: string[]
 }
 
-/** The last lines of a routine's output: its Status row's log, or a systemd timer's journal. */
-export function readRoutineLog(
-  kind: string,
-  source: Routine['source'],
-): Promise<RoutineLog> {
-  const systemd = source === 'systemd'
+/** The last lines of a routine's output (aico routines log), read on the machine that runs it. */
+export function readRoutineLog(kind: string): Promise<RoutineLog> {
   return apiFetch<RoutineLog>(
-    systemd ? '/api/routines/log' : '/api/status/log',
+    '/api/routines/log',
     {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(systemd ? { kind } : { id: `jobs/${kind}` }),
+      body: JSON.stringify({ kind }),
     },
     'Couldn’t read the log',
   )

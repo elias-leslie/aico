@@ -117,7 +117,7 @@ function Row({ routine }: { routine: Routine }) {
   async function showLog() {
     setReading(true)
     try {
-      const result = await readRoutineLog(routine.kind, routine.source)
+      const result = await readRoutineLog(routine.kind)
       const text = result.lines.join('\n').trim()
       setLog({
         text:

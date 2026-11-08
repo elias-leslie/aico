@@ -216,7 +216,7 @@ export async function main(argv: string[], env = process.env): Promise<number> {
     postRows: (rows) => postRows(webUrl, rows),
   })
   runner.start()
-  await serveLeases(socket, store, () => loadJobs(jobsFile, store), machine)
+  await serveLeases(socket, store, () => loadJobs(jobsFile, store), machine, units.dir)
   console.log(
     `[jobs] serving ${jobs.length} job(s) (routines included, read at every tick) as ${machine} from ${jobsFile}`,
   )

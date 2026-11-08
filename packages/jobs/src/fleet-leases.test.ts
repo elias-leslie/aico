@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Server } from 'node:tls'
@@ -6,7 +6,7 @@ import { Fleet } from '@aico/fleet/fleet'
 import { loadIdentity } from '@aico/fleet/identity'
 import type { FleetSettings } from '@aico/fleet/settings'
 import { expect, it, vi } from 'vitest'
-import { leaseCall, remoteAuthority, serveLeases } from './fleet-leases'
+import { lastRunLog, leaseCall, remoteAuthority, serveLeases } from './fleet-leases'
 import type { JobDef } from './jobs'
 import { JobStore, StaleLease } from './leases'
 import { Runner } from './runner'
@@ -182,4 +182,33 @@ it('uses authority configuration and clock for claims, never caller TTL or sched
   expect(lease).toMatchObject({ fence: 1 })
   expect(store.get('job')?.leaseExpires).toBe(11000)
   store.close()
+})
+
+it('gives another machine the last run output only for a job this machine holds', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'jobs-log-'))
+  try {
+    const job: JobDef = {
+      kind: 'job',
+      what: 'Job',
+      project: 'aico',
+      home: 'home',
+      lease_host: 'holder',
+      every_min: 1,
+      lease_s: 10,
+      run: { command: ['true'] },
+    }
+    expect(lastRunLog(dir, [job], 'holder', 'job')).toBeNull()
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(
+      join(dir, 'job.last.log'),
+      `${Array.from({ length: 250 }, (_, i) => `l${i}`).join('\n')}\n`,
+    )
+    const text = lastRunLog(dir, [job], 'holder', 'job')
+    expect(text?.split('\n')).toHaveLength(200)
+    expect(text?.endsWith('l249')).toBe(true)
+    expect(() => lastRunLog(dir, [job], 'home', 'job')).toThrow('Unknown job')
+    expect(() => lastRunLog(dir, [job], 'holder', '../job')).toThrow('Unknown job')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 })

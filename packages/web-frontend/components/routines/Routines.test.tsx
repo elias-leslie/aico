@@ -138,8 +138,8 @@ describe('Routines', () => {
     fireEvent.click(button('Show log'))
     expect(await screen.findByText(/line one/)).toBeTruthy()
     expect(posts.at(-1)).toEqual({
-      url: '/api/status/log',
-      body: { id: 'jobs/school-check' },
+      url: '/api/routines/log',
+      body: { kind: 'school-check' },
     })
     const old = screen.getByTestId('routine-old')
     fireEvent.click(old.querySelector('button') as HTMLElement)

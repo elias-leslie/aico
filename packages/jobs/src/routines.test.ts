@@ -456,6 +456,7 @@ describe('a routine that runs on either host', () => {
           peer: () => ({
             register: async (routine) => void call('ws')('register', routine.kind, { routine }),
             unregister: async (kind) => call('ws')('unregister', kind) as boolean,
+            log: async (kind) => `last output of ${kind} on gem`,
           }),
           postRows: async () => {},
           removeRow: async () => {},
@@ -552,6 +553,9 @@ describe('a routine that runs on either host', () => {
     expect(ran).toEqual(['ws', 'gem'])
     expect(gem.get('school-check')?.lastMachine).toBe('gem')
     // Removing it from ws removes it from gem too.
+    // Its output is kept on gem, which holds it: log asks gem.
+    expect(await run('log', 'school-check')).toBe(0)
+    expect(lines.at(-1)).toBe('last output of school-check on gem')
     expect(await run('remove', 'school-check')).toBe(0)
     expect(gem.routines()).toEqual([])
   })
