@@ -47,5 +47,16 @@ export {
 export { Notifier, type NotifierOptions } from './notifier'
 export { backoff, Outbox } from './outbox'
 export { INTERRUPTS, type Interrupt, PHONE_REASONS, popsUp } from './phone'
-export { type Accepted, NotifyStore, notifyDbPath, type StoredNotice, type Via } from './store'
+export {
+  type Accepted,
+  ANY_PHONE,
+  eventId,
+  NOTIFY_SCHEMA_VERSION,
+  NotifyStore,
+  type NotifySyncParts,
+  notifyDbPath,
+  type StoredNotice,
+  SYNC_SETTLE_MS,
+  type Via,
+} from './store'
 export { describeType, NOTICE_TYPES, type NoticeType, typeOf, validTypeId } from './types'

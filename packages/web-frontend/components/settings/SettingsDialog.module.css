@@ -124,7 +124,7 @@
   }
   /* Every place fits at 390 with its name under its icon: a touch has no tooltip to name it. */
   .item {
-    flex: 1 1 0;
+    flex: 1 1 auto;
     min-width: 0;
     flex-direction: column;
     justify-content: center;

@@ -16,6 +16,8 @@ const LAST_MAINTENANCE = 'maintenance_at'
 export interface LoopDeps {
   notes: SyncHandle
   web: SyncHandle
+  /** The notification list (notify.db), pulled like the others. */
+  notify?: SyncHandle
   blobsDir: string
   /** The peers that have a sync socket, read fresh so a hosts.json edit applies. */
   peers(): SyncPeer[]
@@ -46,6 +48,8 @@ export interface PeerStatus {
   reason: string | null
   /** The peer runs a different build than this host (both said). Sync works; update the older one. */
   buildMismatch: boolean
+  /** The peer says it stands in for a primary. */
+  standby?: boolean
 }
 
 const PAUSED: Partial<Record<PullStatus, string>> = {
@@ -60,23 +64,27 @@ export class SyncLoop {
   private dirty = false
   private timers: NodeJS.Timeout[] = []
   /** The `seq` of each file as far as this host's own pulls explain it. */
-  private known: { notes: number; web: number }
+  private known: Record<string, number>
 
   constructor(private readonly deps: LoopDeps) {
     this.known = this.seqs()
   }
 
-  private seqs(): { notes: number; web: number } {
-    return {
-      notes: Number(this.deps.notes.meta('seq') ?? 0),
-      web: Number(this.deps.web.meta('seq') ?? 0),
-    }
+  private sets(): SyncHandle[] {
+    const { notes, web, notify } = this.deps
+    return notify ? [notes, web, notify] : [notes, web]
+  }
+
+  private seqs(): Record<string, number> {
+    return Object.fromEntries(
+      this.sets().map((handle) => [handle.set, Number(handle.meta('seq') ?? 0)]),
+    )
   }
 
   /** Notices writes that did not come from a pull, and tells the peers. */
   watch(): void {
     const now = this.seqs()
-    if (now.notes === this.known.notes && now.web === this.known.web) return
+    if (this.sets().every(({ set }) => now[set] === this.known[set])) return
     this.known = now
     this.localWrite()
   }
@@ -162,15 +170,13 @@ export class SyncLoop {
   }
 
   private async pull(peer: SyncPeer, link: Peer): Promise<void> {
-    const { notes, web, maxAheadMs } = this.deps
-    const results = [
-      await pullSet(notes, link, { maxAheadMs }),
-      await pullSet(web, link, { maxAheadMs }),
-    ]
-    // Each applied row took one change number: not a local write.
-    this.known = {
-      notes: this.known.notes + (results[0]?.applied ?? 0),
-      web: this.known.web + (results[1]?.applied ?? 0),
+    const { notes, maxAheadMs } = this.deps
+    const results = []
+    for (const handle of this.sets()) {
+      const result = await pullSet(handle, link, { maxAheadMs })
+      results.push(result)
+      // Each applied row took one change number: not a local write.
+      this.known[handle.set] = (this.known[handle.set] ?? 0) + result.applied
     }
     const host = results.find((result) => result.host)?.host ?? null
     const paused = results.find((result) => PAUSED[result.status])
@@ -200,6 +206,7 @@ export class SyncLoop {
       skewMs: skew ?? before?.skewMs ?? null,
       reason,
       buildMismatch,
+      standby: results.some((result) => result.standby) || (before?.standby ?? false),
     })
     // A peer that is down is skipped quietly; say only when something changes.
     if (state !== 'down' && state !== before?.state)

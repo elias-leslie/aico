@@ -158,6 +158,10 @@ export function itemPlaintext(
   const lines = [
     ...notice.fields.map((field) => `${field.label}: ${field.value}`),
     ...(notice.if_ignored ? [`If you leave it: ${notice.if_ignored.replace(/\.$/, '')}.`] : []),
+    ...(notice.machine || notice.project
+      ? [`About: ${[notice.machine, notice.project].filter(Boolean).join(', ')}`]
+      : []),
+    ...(notice.raised_by ? [`From the Aico on ${notice.raised_by}`] : []),
   ]
   detail = [detail, ...lines].filter(Boolean).join('\n')
   const ts = Math.floor(sentAt / 1000)

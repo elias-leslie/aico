@@ -1,6 +1,6 @@
 'use client'
 
-import { Info, Lock, Monitor, Smartphone } from 'lucide-react'
+import { Info, Lock, Monitor, Radio, Smartphone } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { shortWhen } from '@/lib/short-when'
 import { Notice, Quiet, SectionHead, Switch } from './kit'
@@ -36,6 +36,9 @@ interface RecentItem {
   phone: string
   desktop: boolean
   why: string
+  machine: string | null
+  project: string | null
+  raised_by: string | null
 }
 
 const PHONE_WORD: Record<string, string> = {
@@ -56,6 +59,7 @@ function plural(count: number, word: string): string {
 
 function Recent({ type }: { type: string }) {
   const [items, setItems] = useState<RecentItem[] | null>(null)
+  const [total, setTotal] = useState(0)
   const [failed, setFailed] = useState(false)
   useEffect(() => {
     let live = true
@@ -67,7 +71,9 @@ function Recent({ type }: { type: string }) {
         return response.json()
       })
       .then((result) => {
-        if (live) setItems(result.items)
+        if (!live) return
+        setItems(result.items)
+        setTotal(result.total ?? result.items.length)
       })
       .catch(() => {
         if (live) setFailed(true)
@@ -86,6 +92,13 @@ function Recent({ type }: { type: string }) {
   if (items.length === 0) return <Quiet>None in the last 7 days.</Quiet>
   return (
     <ul className={styles.recent}>
+      {total > items.length && (
+        <li className={styles.recentMore}>
+          <span title="The newest ones from the last 7 days">
+            {items.length} of {total}
+          </span>
+        </li>
+      )}
       {items.map((item) => (
         <li key={item.id}>
           <div className={styles.recentHead}>
@@ -116,6 +129,35 @@ function Recent({ type }: { type: string }) {
               />
             </span>
             <span className={styles.why}>{item.why}</span>
+          </div>
+          <div className={styles.recentAbout}>
+            {item.machine && (
+              <span className={styles.chip} title={`About ${item.machine}`}>
+                {item.machine}
+              </span>
+            )}
+            {item.project && (
+              <span
+                className={styles.chip}
+                title={`About the project ${item.project}`}
+              >
+                {item.project}
+              </span>
+            )}
+            {item.raised_by && (
+              <span
+                className={styles.chip}
+                data-from="true"
+                title={`Raised by the Aico on ${item.raised_by}`}
+              >
+                <Radio
+                  className="h-3 w-3"
+                  strokeWidth={1.7}
+                  aria-label="Raised by the Aico on"
+                />
+                {item.raised_by}
+              </span>
+            )}
           </div>
         </li>
       ))}
@@ -208,7 +250,12 @@ export function NotificationsSection() {
       {data && (
         <div className={styles.table}>
           <div className={styles.columns} aria-hidden="true">
-            <span />
+            <span
+              className={styles.countHead}
+              title="How many in the last 7 days. Tap a count to see them."
+            >
+              <small>7 days</small>
+            </span>
             <span title="Phone push">
               <Smartphone className="h-4 w-4" strokeWidth={1.7} />
               <small>Phone</small>

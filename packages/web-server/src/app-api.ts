@@ -181,7 +181,10 @@ function noticeRow(stored: StoredNotice, nowMs: number): Row {
     title: cut(notice.title, 200),
     body: cut(notice.body, 1000),
     severity: notice.severity,
-    state: stored.answer ? `Answered: ${cut(stored.answer, 40)}` : '',
+    // The phone shows this beside the age: what it's about and which Aico raised it.
+    state: stored.answer
+      ? `Answered: ${cut(stored.answer, 40)}`
+      : [notice.machine, notice.raised_by].filter(Boolean).join(' · '),
     ts: Math.floor(stored.receivedAt / 1000),
     age: ago(stored.receivedAt, nowMs),
     url: open,

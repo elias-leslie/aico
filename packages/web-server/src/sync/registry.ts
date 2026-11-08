@@ -1,4 +1,4 @@
-// What syncs: the tables of notes.db and the view state in web.db. Adding a
+// What syncs: the tables of notes.db, the view state in web.db and the notification list in notify.db. Adding a
 // table here (with the sync columns in its migration) is all a new synced
 // table takes. A synced table has no foreign keys; the app keeps the links.
 
@@ -21,4 +21,13 @@ export const WEB_SYNC_TABLES: readonly SyncTable[] = [
   { name: 'project_settings', keys: ['project_id'], clock: 'sync_at' },
   { name: 'session_seen', keys: ['session_id'], merge: { max: 'seen_at' } },
   { name: 'notice_choices', keys: ['choice'], clock: 'sync_at' },
+]
+
+// notify.db: the one notification list on every full Aico. Each machine's outbox stays its own;
+// notice_sends says what has already gone out, whoever sent it.
+export const NOTIFY_SYNC_TABLES: readonly SyncTable[] = [
+  { name: 'notices', keys: ['id'], clock: 'sync_at' },
+  { name: 'notice_reads', keys: ['notice_id'], merge: { max: 'read_at' } },
+  { name: 'marks', keys: ['name'], merge: { max: 'at' } },
+  { name: 'notice_sends', keys: ['notice_id'], merge: { max: 'at' } },
 ]

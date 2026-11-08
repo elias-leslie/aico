@@ -91,6 +91,8 @@ export interface Hello {
   sets: Record<string, { db_id: string; schema_version: number; seq: number }>
   /** Which build the peer runs (a fingerprint of its server bundle); older peers omit it. */
   build_id?: string
+  /** This Aico stands in for a primary (AICO_PRIMARY_HOST): it sends only when none is alive. */
+  standby?: boolean
 }
 
 export interface PeerTransport {
@@ -164,6 +166,7 @@ export function serveHello(
   host: string,
   now: number,
   buildId?: string,
+  standby = false,
 ): Hello {
   const sets: Hello['sets'] = {}
   for (const handle of handles)
@@ -172,7 +175,13 @@ export function serveHello(
       schema_version: handle.schemaVersion(),
       seq: Number(handle.meta('seq') ?? 0),
     }
-  return buildId ? { host, now, sets, build_id: buildId } : { host, now, sets }
+  return {
+    host,
+    now,
+    sets,
+    ...(buildId ? { build_id: buildId } : {}),
+    ...(standby ? { standby } : {}),
+  }
 }
 
 /**
@@ -487,6 +496,8 @@ export interface PullResult {
   host?: string
   /** The peer's build, when it said. */
   buildId?: string
+  /** The peer stands in for a primary. */
+  standby?: boolean
   applied: number
   pages: number
   /** Peer clock minus ours, estimated; null when the peer was not reached. */
@@ -520,6 +531,7 @@ export async function pullSet(
   const finished = handle.now()
   result.host = hello.host
   if (hello.build_id) result.buildId = hello.build_id
+  result.standby = hello.standby === true
   result.skewMs = Math.round(hello.now - (started + finished) / 2)
   const theirs = hello.sets[handle.set]
   const remember = (state: Partial<PeerState>) =>

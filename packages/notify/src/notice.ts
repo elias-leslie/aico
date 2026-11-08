@@ -61,6 +61,12 @@ export interface Notice {
   desktop_card?: boolean
   /** The machine this is about is a lab machine (the OmniNull hub says so); it files under its own type. */
   lab?: boolean
+  /** The machine this is about; the door fills it in when the sender doesn't say. */
+  machine?: string
+  /** The project this is about; the door fills it in when the sender doesn't say. */
+  project?: string
+  /** Set by the door: the Aico that raised this entry. Not a sender field. */
+  raised_by?: string
   /** Seconds a repeat of `key` stays quiet. */
   cooldown: number
   /** Seconds after sending when it ends by itself. */
@@ -69,6 +75,7 @@ export interface Notice {
 }
 
 const DEFAULT_COOLDOWN_S = 3600
+const ABOUT = /^[A-Za-z0-9][A-Za-z0-9_.@-]{0,63}$/
 const WEEK_S = 7 * 86400
 
 export const LIMITS = {
@@ -105,6 +112,8 @@ const FIELDS = new Set([
   'expires',
   'if_ignored',
   'lab',
+  'machine',
+  'project',
 ])
 
 /** A template field nobody filled in ("old kernel {running}"); `{}` and JSON-like text pass. */
@@ -261,6 +270,13 @@ export function parseNotice(value: unknown): Notice {
   if (body.lab !== undefined && body.lab !== null) {
     if (typeof body.lab !== 'boolean') throw new NoticeError('lab', 'lab is true or false')
     if (body.lab) notice.lab = true
+  }
+  for (const field of ['machine', 'project'] as const) {
+    const value = body[field]
+    if (value === undefined || value === null) continue
+    if (typeof value !== 'string' || !ABOUT.test(value))
+      throw new NoticeError(field, `${field} is a short name`)
+    notice[field] = value
   }
   // The one rule (phone.ts): the phone is reached by a named reason (or the digest) and a sender
   // that asks for it; severity does not route. A phone request without a reason stays in the tray.

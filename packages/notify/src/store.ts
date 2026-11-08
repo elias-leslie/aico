@@ -2,7 +2,8 @@
 // which Tether ask stands for which notice or failing Status row. This package
 // owns the file (package.json aico.db); others go through aico-web.
 
-import { randomBytes } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
+import { hostname } from 'node:os'
 import { join } from 'node:path'
 import { type Database, openDatabase, transaction } from '@aico/store'
 import type { Notice } from './notice'
@@ -51,7 +52,53 @@ const MIGRATIONS = [
      name TEXT PRIMARY KEY,
      at INTEGER NOT NULL
    ) STRICT`,
+  // One list across every full Aico (the `notify` sync set): notices and read marks travel, and
+  // notice_sends says who already sent what. The outbox and row_asks stay this machine's own. Rows
+  // from before this have seq 0 and stay where they are.
+  `ALTER TABLE notices ADD COLUMN sync_at INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE notices ADD COLUMN origin TEXT NOT NULL DEFAULT '';
+   ALTER TABLE notices ADD COLUMN prev INTEGER;
+   ALTER TABLE notices ADD COLUMN prev_origin TEXT;
+   ALTER TABLE notices ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE notices ADD COLUMN seq INTEGER NOT NULL DEFAULT 0;
+   CREATE INDEX notices_seq ON notices (seq);
+   ALTER TABLE notice_reads ADD COLUMN seq INTEGER NOT NULL DEFAULT 0;
+   CREATE INDEX notice_reads_seq ON notice_reads (seq);
+   ALTER TABLE marks ADD COLUMN seq INTEGER NOT NULL DEFAULT 0;
+   CREATE INDEX marks_seq ON marks (seq);
+   CREATE TABLE notice_sends (
+     notice_id TEXT PRIMARY KEY,
+     state TEXT NOT NULL,
+     at INTEGER NOT NULL,
+     sent_by TEXT NOT NULL,
+     seq INTEGER NOT NULL DEFAULT 0
+   ) STRICT;
+   CREATE INDEX notice_sends_seq ON notice_sends (seq);
+   CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT`,
 ]
+
+/** The notify set's version: two Aicos sync it only when they agree. */
+export const NOTIFY_SCHEMA_VERSION = MIGRATIONS.length
+
+/** A notice that arrived from another Aico waits this long, so word that it was sent can catch up. */
+export const SYNC_SETTLE_MS = 5000
+/** A notice older than this never starts its way to the phone here: the outbox would give it up. */
+const QUEUE_KEPT_MS = 24 * 3600_000
+const EVENT_BUCKET_MS = 60_000
+
+/**
+ * A notice's id, the same on every Aico for the same event: its source and key (a keyed notice), or
+ * its words (one without), in the same minute. Two Aicos that raise one event make one row, not two.
+ */
+export function eventId(notice: Notice, now: number, salt = ''): string {
+  const what = notice.key
+    ? [notice.source, notice.key, notice.severity === 'ok' ? 'ok' : 'open', salt]
+    : [notice.source, notice.title, notice.body]
+  return createHash('sha256')
+    .update([...what, Math.floor(now / EVENT_BUCKET_MS)].join('\0'))
+    .digest('hex')
+    .slice(0, 12)
+}
 
 /** A read mark is kept this long: the tray looks back a week. */
 const READ_KEPT_MS = 30 * 86_400_000
@@ -107,11 +154,187 @@ interface NoticeRow {
   outcome: string | null
 }
 
+/** The file as the sync engine needs it (web-server's SyncHandle, less what names the set). */
+export interface NotifySyncParts {
+  hostName: string
+  db: Database
+  now(): number
+  meta(key: string): string | null
+  setMeta(key: string, value: string): void
+  transaction<T>(work: () => T): T
+  stamp(): { at: number; origin: string; seq: number }
+  observe(at: number): void
+}
+
 export class NotifyStore {
   private readonly db: Database
+  private readonly hostName: string
 
-  constructor(path: string) {
+  /** `hostName`: this Aico's name on what it writes (AICO_HOST_NAME). */
+  constructor(path: string, options: { hostName?: string } = {}) {
     this.db = openDatabase(path, MIGRATIONS)
+    this.hostName = options.hostName ?? hostname().toLowerCase()
+    if (this.meta('db_id') === null) this.setMeta('db_id', randomUUID())
+    if (this.meta('seq') === null) this.setMeta('seq', '0')
+  }
+
+  // -- Sync plumbing ------------------------------------------------------------------
+
+  private meta(key: string): string | null {
+    const row = this.db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as
+      | { value: string }
+      | undefined
+    return row?.value ?? null
+  }
+
+  private setMeta(key: string, value: string): void {
+    this.db
+      .prepare(
+        'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value',
+      )
+      .run(key, value)
+  }
+
+  /** One transaction; a call made inside another joins it. */
+  private tx<T>(work: () => T): T {
+    return this.db.isTransaction ? work() : transaction(this.db, work)
+  }
+
+  /** The next change number and clock value for one write (never behind a peer's). */
+  private stamp(): { at: number; origin: string; seq: number } {
+    const seq = Number(this.meta('seq') ?? 0) + 1
+    const at = Math.max(Date.now(), Number(this.meta('hlc_last') ?? 0) + 1)
+    this.setMeta('seq', String(seq))
+    this.setMeta('hlc_last', String(at))
+    return { at, origin: this.hostName, seq }
+  }
+
+  /** A change to a notice in the list; one from before the list synced stays this machine's. */
+  private touch(id: string): void {
+    const row = this.db
+      .prepare('SELECT sync_at, origin, prev, prev_origin, seq FROM notices WHERE id = ?')
+      .get(id) as
+      | {
+          sync_at: number
+          origin: string
+          prev: number | null
+          prev_origin: string | null
+          seq: number
+        }
+      | undefined
+    if (!row || Number(row.seq) === 0) return
+    // Built on another Aico's version, or carrying our own edit's base forward (engine's baseOf).
+    const base =
+      row.origin !== this.hostName
+        ? { prev: Number(row.sync_at), prev_origin: row.origin }
+        : { prev: row.prev, prev_origin: row.prev_origin }
+    const stamp = this.stamp()
+    this.db
+      .prepare(
+        'UPDATE notices SET sync_at = ?, origin = ?, prev = ?, prev_origin = ?, seq = ? WHERE id = ?',
+      )
+      .run(stamp.at, stamp.origin, base.prev, base.prev_origin, stamp.seq, id)
+  }
+
+  syncParts(): NotifySyncParts {
+    return {
+      hostName: this.hostName,
+      db: this.db,
+      now: () => Date.now(),
+      meta: (key) => this.meta(key),
+      setMeta: (key, value) => this.setMeta(key, value),
+      transaction: (work) => this.tx(work),
+      stamp: () => this.stamp(),
+      observe: (at) => {
+        if (at > Number(this.meta('hlc_last') ?? 0)) this.setMeta('hlc_last', String(at))
+      },
+    }
+  }
+
+  /**
+   * Rows that came from another Aico (inside the sync's transaction). A notice headed for the phone
+   * and sent by nobody yet gets its outbox rows here: whichever Aico is the sender then sends it, and
+   * the others hold it until word comes that it went. Word that it went, or that it no longer goes
+   * to the phone, drops the rows still waiting. The true return: rows were queued.
+   */
+  takeSynced(
+    touched: readonly { table: string; id: string }[],
+    devices: readonly string[],
+    now: number,
+  ): boolean {
+    let queued = false
+    const ids = new Set(touched.map((row) => row.id))
+    for (const id of ids) {
+      const row = this.db
+        .prepare('SELECT received_at, source, key, doc FROM notices WHERE id = ?')
+        .get(id) as
+        | { received_at: number; source: string; key: string | null; doc: string }
+        | undefined
+      const drop = () =>
+        this.db.prepare(`DELETE FROM outbox WHERE notice_id = ? AND state = 'pending'`).run(id)
+      if (this.sentByOther(id)) {
+        drop()
+        continue
+      }
+      if (!row) continue
+      const notice = JSON.parse(row.doc) as Notice
+      if (notice.push !== 'phone') {
+        drop()
+        continue
+      }
+      const queuedHere = this.db
+        .prepare('SELECT COUNT(*) AS n FROM outbox WHERE notice_id = ?')
+        .get(id) as { n: number }
+      if (
+        Number(queuedHere.n) > 0 ||
+        this.hasSend(id) ||
+        now - Number(row.received_at) > QUEUE_KEPT_MS ||
+        this.sameEventEarlier(id, row, notice)
+      )
+        continue
+      const queue = this.db.prepare(
+        `INSERT OR IGNORE INTO outbox (notice_id, device, state, next_at, updated_at)
+         VALUES (?, ?, 'pending', ?, ?)`,
+      )
+      for (const device of new Set(devices)) queue.run(id, device, now + SYNC_SETTLE_MS, now)
+      queued = devices.length > 0 || queued
+    }
+    return queued
+  }
+
+  private hasSend(id: string): boolean {
+    return !!this.db.prepare('SELECT 1 FROM notice_sends WHERE notice_id = ?').get(id)
+  }
+
+  private sentByOther(id: string): boolean {
+    return !!this.db
+      .prepare('SELECT 1 FROM notice_sends WHERE notice_id = ? AND sent_by != ?')
+      .get(id, this.hostName)
+  }
+
+  /** Two Aicos raised one keyed problem either side of a minute: only the first goes to the phone. */
+  private sameEventEarlier(
+    id: string,
+    row: { received_at: number; source: string; key: string | null },
+    notice: Notice,
+  ): boolean {
+    if (!row.key || notice.severity === 'ok') return false
+    const earlier = this.db
+      .prepare(
+        `SELECT doc FROM notices WHERE source = ? AND key = ? AND id != ? AND received_at > ?
+         AND (received_at < ? OR (received_at = ? AND id < ?))
+         ORDER BY received_at DESC, id DESC LIMIT 1`,
+      )
+      .get(
+        row.source,
+        row.key,
+        id,
+        Number(row.received_at) - notice.cooldown * 1000,
+        row.received_at,
+        row.received_at,
+        id,
+      ) as { doc: string } | undefined
+    return !!earlier && (JSON.parse(earlier.doc) as Notice).severity !== 'ok'
   }
 
   /**
@@ -121,7 +344,7 @@ export class NotifyStore {
    * never a repeat: a recovery is news, and it is what ends the earlier notice for the tray.
    */
   accept(notice: Notice, via: Via, devices: readonly string[], now: number): Accepted {
-    return transaction(this.db, () => {
+    return this.tx(() => {
       if (notice.key && notice.severity !== 'ok') {
         const earlier = this.db
           .prepare(
@@ -137,15 +360,40 @@ export class NotifyStore {
           this.db
             .prepare('UPDATE notices SET repeats = repeats + 1, repeated_at = ? WHERE id = ?')
             .run(now, earlier.id)
+          this.touch(earlier.id)
           return { id: earlier.id, repeat: true }
         }
       }
-      const id = randomBytes(6).toString('hex')
+      let id = eventId(notice, now)
+      // The same event already came in this minute (here, or from another Aico): one entry. A keyed
+      // problem that gets this far is news (it came back after its recovery, or has no cooldown).
+      if (this.db.prepare('SELECT 1 FROM notices WHERE id = ?').get(id)) {
+        if (notice.key && notice.severity !== 'ok') id = eventId(notice, now, String(now))
+      }
+      if (this.db.prepare('SELECT 1 FROM notices WHERE id = ?').get(id)) {
+        this.db
+          .prepare('UPDATE notices SET repeats = repeats + 1, repeated_at = ? WHERE id = ?')
+          .run(now, id)
+        this.touch(id)
+        return { id, repeat: true }
+      }
+      const stamp = this.stamp()
       this.db
         .prepare(
-          'INSERT INTO notices (id, received_at, via, source, key, doc) VALUES (?, ?, ?, ?, ?, ?)',
+          `INSERT INTO notices (id, received_at, via, source, key, doc, sync_at, origin, seq)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
-        .run(id, now, via, notice.source, notice.key ?? null, JSON.stringify(notice))
+        .run(
+          id,
+          now,
+          via,
+          notice.source,
+          notice.key ?? null,
+          JSON.stringify(notice),
+          stamp.at,
+          stamp.origin,
+          stamp.seq,
+        )
       const queue = this.db.prepare(
         `INSERT INTO outbox (notice_id, device, state, next_at, updated_at)
          VALUES (?, ?, 'pending', ?, ?)`,
@@ -186,6 +434,19 @@ export class NotifyStore {
         'SELECT device, state, attempts, result FROM outbox WHERE notice_id = ? ORDER BY device',
       )
       .all(row.id) as unknown as StoredNotice['deliveries']
+    // Another Aico sent it, so this one has no row of its own for it.
+    const send = deliveries.length
+      ? undefined
+      : (this.db
+          .prepare('SELECT state, sent_by FROM notice_sends WHERE notice_id = ?')
+          .get(row.id) as { state: OutboxState; sent_by: string } | undefined)
+    if (send)
+      deliveries.push({
+        device: send.sent_by,
+        state: send.state,
+        attempts: 1,
+        result: `${send.state} by ${send.sent_by}`,
+      })
     return {
       id: row.id,
       receivedAt: row.received_at,
@@ -206,14 +467,16 @@ export class NotifyStore {
    * this process or another) sends it too.
    */
   claimDue(now: number, limit = 20): OutboxRow[] {
-    return transaction(this.db, () => {
+    return this.tx(() => {
       const rows = this.db
         .prepare(
           `SELECT o.id, o.notice_id, o.device, o.attempts, n.received_at FROM outbox o
            JOIN notices n ON n.id = o.notice_id
-           WHERE o.state = 'pending' AND o.next_at <= ? ORDER BY o.next_at, o.id LIMIT ?`,
+           WHERE o.state = 'pending' AND o.next_at <= ?
+           AND NOT EXISTS (SELECT 1 FROM notice_sends s WHERE s.notice_id = o.notice_id AND s.sent_by != ?)
+           ORDER BY o.next_at, o.id LIMIT ?`,
         )
-        .all(now, limit) as {
+        .all(now, this.hostName, limit) as {
         id: number
         notice_id: string
         device: string
@@ -240,7 +503,7 @@ export class NotifyStore {
    * (none when no phone is paired).
    */
   expand(id: number, devices: readonly string[], now: number): void {
-    transaction(this.db, () => {
+    this.tx(() => {
       const row = this.db
         .prepare("SELECT notice_id FROM outbox WHERE id = ? AND state = 'sending'")
         .get(id) as { notice_id: string } | undefined
@@ -265,20 +528,44 @@ export class NotifyStore {
       | { retryAt: number; result: string },
     now: number,
   ): void {
-    if ('retryAt' in outcome)
+    if ('retryAt' in outcome) {
       this.db
         .prepare(
           `UPDATE outbox SET state = 'pending', attempts = attempts + 1, next_at = ?, result = ?,
            updated_at = ? WHERE id = ? AND state = 'sending'`,
         )
         .run(outcome.retryAt, outcome.result, now, id)
-    else
-      this.db
+      return
+    }
+    this.tx(() => {
+      const done = this.db
         .prepare(
           `UPDATE outbox SET state = ?, attempts = attempts + 1, result = ?, updated_at = ?
            WHERE id = ? AND state = 'sending'`,
         )
         .run(outcome.state, outcome.result, now, id)
+      if (done.changes !== 1) return
+      const row = this.db.prepare('SELECT notice_id FROM outbox WHERE id = ?').get(id) as {
+        notice_id: string
+      }
+      this.recordSend(row.notice_id, outcome.state, now)
+    })
+  }
+
+  /** Tells the other Aicos a notice's push is settled, so none of them sends it. Sent stays sent. */
+  private recordSend(noticeId: string, state: OutboxState, now: number): void {
+    const had = this.db
+      .prepare('SELECT state, at FROM notice_sends WHERE notice_id = ?')
+      .get(noticeId) as { state: string; at: number } | undefined
+    if (had?.state === 'sent' && state !== 'sent') return
+    const { at, seq } = this.stamp()
+    this.db
+      .prepare(
+        `INSERT INTO notice_sends (notice_id, state, at, sent_by, seq) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT (notice_id) DO UPDATE SET state = excluded.state, at = excluded.at,
+         sent_by = excluded.sent_by, seq = excluded.seq`,
+      )
+      .run(noticeId, state, Math.max(at, now), this.hostName, seq)
   }
 
   /** A claimed row the owner's Settings choice stopped: it never goes out, and it failed nothing. */
@@ -288,7 +575,10 @@ export class NotifyStore {
 
   /** What a notice says after the door changed its route (a push dropped from the queue). */
   rewriteNotice(id: string, notice: Notice): void {
-    this.db.prepare('UPDATE notices SET doc = ? WHERE id = ?').run(JSON.stringify(notice), id)
+    this.tx(() => {
+      this.db.prepare('UPDATE notices SET doc = ? WHERE id = ?').run(JSON.stringify(notice), id)
+      this.touch(id)
+    })
   }
 
   /** The notices received since `since` (epoch ms), newest first, with their deliveries. */
@@ -359,7 +649,10 @@ export class NotifyStore {
   // -- Needs you --------------------------------------------------------------------
 
   setAsk(noticeId: string, askId: string): void {
-    this.db.prepare('UPDATE notices SET ask_id = ? WHERE id = ?').run(askId, noticeId)
+    this.tx(() => {
+      this.db.prepare('UPDATE notices SET ask_id = ? WHERE id = ?').run(askId, noticeId)
+      this.touch(noticeId)
+    })
   }
 
   byAsk(askId: string): StoredNotice | null {
@@ -371,15 +664,21 @@ export class NotifyStore {
 
   /** Records the owner's answer once; false when it was already recorded. */
   answer(noticeId: string, answer: string, now: number): boolean {
-    return (
-      this.db
-        .prepare('UPDATE notices SET answer = ?, answered_at = ? WHERE id = ? AND answer IS NULL')
-        .run(answer, now, noticeId).changes === 1
-    )
+    return this.tx(() => {
+      const first =
+        this.db
+          .prepare('UPDATE notices SET answer = ?, answered_at = ? WHERE id = ? AND answer IS NULL')
+          .run(answer, now, noticeId).changes === 1
+      if (first) this.touch(noticeId)
+      return first
+    })
   }
 
   setOutcome(noticeId: string, outcome: string): void {
-    this.db.prepare('UPDATE notices SET outcome = ? WHERE id = ?').run(outcome, noticeId)
+    this.tx(() => {
+      this.db.prepare('UPDATE notices SET outcome = ? WHERE id = ?').run(outcome, noticeId)
+      this.touch(noticeId)
+    })
   }
 
   rowAsk(rowId: string): string | null {
@@ -406,23 +705,30 @@ export class NotifyStore {
 
   /** The owner read these (a notice id, or the id of an ask); the first read time stays. */
   markRead(ids: readonly string[], via: string, now: number): void {
-    transaction(this.db, () => {
+    this.tx(() => {
+      const known = this.db.prepare('SELECT 1 FROM notice_reads WHERE notice_id = ?')
       const insert = this.db.prepare(
-        'INSERT OR IGNORE INTO notice_reads (notice_id, read_at, via) VALUES (?, ?, ?)',
+        'INSERT INTO notice_reads (notice_id, read_at, via, seq) VALUES (?, ?, ?, ?)',
       )
-      for (const id of new Set(ids)) insert.run(id, now, via)
+      for (const id of new Set(ids)) if (!known.get(id)) insert.run(id, now, via, this.stamp().seq)
       this.db.prepare('DELETE FROM notice_reads WHERE read_at < ?').run(now - READ_KEPT_MS)
     })
   }
 
   /** Mark all read: everything that came at or before `at` (epoch ms) is read. Never moves back. */
   markAllRead(at: number): void {
-    this.db
-      .prepare(
-        `INSERT INTO marks (name, at) VALUES ('read_all', ?)
-         ON CONFLICT (name) DO UPDATE SET at = MAX(at, excluded.at)`,
-      )
-      .run(at)
+    this.tx(() => {
+      const had = this.db.prepare("SELECT at FROM marks WHERE name = 'read_all'").get() as
+        | { at: number }
+        | undefined
+      if (had && Number(had.at) >= at) return
+      this.db
+        .prepare(
+          `INSERT INTO marks (name, at, seq) VALUES ('read_all', ?, ?)
+           ON CONFLICT (name) DO UPDATE SET at = excluded.at, seq = excluded.seq`,
+        )
+        .run(at, this.stamp().seq)
+    })
   }
 
   /** When each marked notice was read, and the last Mark all read (0: never). */

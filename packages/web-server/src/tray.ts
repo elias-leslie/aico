@@ -34,6 +34,8 @@ const DAY_MS = 86_400_000
 const LOOKBACK_MS = 7 * DAY_MS
 /** The notices a read lists (the tray shows a few corner cards at most). */
 const LOG_MAX = 60
+/** Older than this when it isn't this Aico's own: it stays in the list without a card. */
+const LATE_CARD_MS = 10 * 60_000
 /** Words kept in the health line (the tray cuts at 200 characters). */
 const HEALTH_MAX = 200
 const ASK_TITLE = 'An agent is waiting on you'
@@ -64,6 +66,8 @@ interface Action {
 }
 
 export interface TrayInput {
+  /** This Aico's name in the shared notification list. */
+  hostName?: string
   /** Epoch ms. */
   now: number
   publicHost: string | null
@@ -328,7 +332,14 @@ export function buildTray(input: TrayInput): Record<string, unknown> {
     // (popsUp in packages/notify phone.ts). An info or ok notice, such as "nothing left to do",
     // already did its job by ending the earlier notice above; it is not a new item. One the owner
     // silenced stays in the log marked quiet: it counts as unread and never shows a card.
-    const card = desktopCard(notice, choices)
+    // One that reached this list late (another Aico raised it while this machine was off) is news
+    // for the list, not for a card: coming back on must not pop a pile of them.
+    const stale =
+      notice.raised_by !== undefined &&
+      notice.raised_by !== input.hostName &&
+      now - stored.receivedAt > LATE_CARD_MS
+    // Off when it came means no card for it, even after the switch is turned back on.
+    const card = notice.desktop_card !== false && desktopCard(notice, choices) && !stale
     if ((!card && !popsUp(notice)) || log.length >= LOG_MAX) continue
     log.push({
       ...(card ? {} : { quiet: true }),
@@ -472,6 +483,8 @@ export interface TrayDeps {
   notify: Pick<NotifyStore, 'list' | 'get' | 'readMarks' | 'rowAskIds' | 'markRead' | 'markAllRead'>
   asks: { list(): Promise<Ask[]>; approvals(): Promise<Approval[] | null> }
   publicHost: string | null
+  /** This Aico's name in the shared notification list. */
+  hostName?: string
   choices?: NoticeChoices
   now?: () => number
 }
@@ -496,6 +509,7 @@ export function registerTrayRoutes(router: Router, deps: TrayDeps): void {
     const approvals = await deps.asks.approvals().catch(() => null)
     return buildTray({
       now: now(),
+      hostName: deps.hostName,
       publicHost: deps.publicHost,
       status: deps.status.read(),
       notices: deps.notify.list(200),

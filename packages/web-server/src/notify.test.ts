@@ -40,6 +40,7 @@ beforeEach(async () => {
   tetherCalls = []
   status = new StatusStore(':memory:')
   hub = new NotifyHub({
+    hostName: 'test-host',
     config: {
       fcmTokenFile: join(dir, 'no-token.json'),
       devicesFile: join(dir, 'no-devices.json'),
@@ -316,6 +317,7 @@ describe('the pieces', () => {
     const errors: string[] = []
     const spy = vi.spyOn(console, 'error').mockImplementation((line) => errors.push(String(line)))
     const door = new NotifyHub({
+      hostName: 'test-host',
       config: {
         fcmTokenFile: join(dir, 'no-token.json'),
         devicesFile: join(dir, 'no-devices.json'),

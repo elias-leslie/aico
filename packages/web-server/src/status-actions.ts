@@ -224,6 +224,20 @@ export function registerStatusActions(router: Router, deps: StatusActionDeps): v
 /** Notice keys are at most this long (contracts/notice.schema.json). */
 const MAX_KEY = 200
 
+/** The machine and project a notice about these rows names: only what they all share. */
+function aboutRows(rows: readonly { machine?: string; project?: string }[]): {
+  machine?: string
+  project?: string
+} {
+  const shared = (field: 'machine' | 'project') => {
+    const values = new Set(rows.map((row) => row[field]))
+    const [only] = values
+    return values.size === 1 && only && NOTICE_NAME.test(only) ? { [field]: only } : {}
+  }
+  return { ...shared('machine'), ...shared('project') }
+}
+const NOTICE_NAME = /^[A-Za-z0-9][A-Za-z0-9_.@-]{0,63}$/
+
 /**
  * The batch's notice key: what changed, to what (`status:a/backup=late,a/job=failed`). The same
  * rows turning the same way again inside the cooldown is a repeat notify keeps off the phone.
@@ -263,6 +277,7 @@ export function statusNotice(
     key: statusKey(batch),
     cooldown: cooldownS,
     push: 'tray',
+    ...aboutRows(batch.changes.map((change) => change.row)),
     ...(publicHost ? { open: `https://${publicHost}/status` } : {}),
   }
 }
@@ -295,6 +310,7 @@ export function sustainedNotice(
     key: sustainedKey(row.id),
     cooldown: 7 * 24 * 3600,
     push: 'phone',
+    ...aboutRows([row]),
     interrupt: major,
     ...(publicHost ? { open: `https://${publicHost}/status` } : {}),
   }

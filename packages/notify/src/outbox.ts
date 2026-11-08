@@ -34,6 +34,11 @@ export interface OutboxOptions {
   publicHost: string | null
   /** The owner's Settings choices: a push still queued when its type goes off is dropped. */
   choices?: NoticeChoices
+  /**
+   * One sender at a time across the full Aicos: the Aico that sends right now while this one holds
+   * the list, or null when this one sends. Held rows wait; word that they went drops them.
+   */
+  holding?: () => string | null
   now?: () => number
 }
 
@@ -77,6 +82,7 @@ export class Outbox {
   /** One pass over the due rows; the number sent. */
   async pass(): Promise<number> {
     const { store, sender } = this.options
+    if (this.options.holding?.()) return 0
     const rows = store.claimDue(this.now())
     if (rows.length === 0) return 0
     const paired = sender.devices()
@@ -156,6 +162,9 @@ export class Outbox {
     const parts: string[] = []
     if (unreadable) parts.push("Can't read the paired phones, so alerts wait until it can.")
     else if (devices?.length === 0) parts.push('No phone is paired, so nothing reaches a phone.')
+    const holding = this.options.holding?.()
+    if (holding)
+      parts.push(`${holding} sends now; this Aico holds the list and takes over if it stops.`)
     parts.push(`Sent ${plural(s.sent, 'alert')} to the phone in the last day.`)
     if (s.pending)
       parts.push(`${plural(s.pending, 'alert')} waiting${stuck ? ' over 10 min' : ''}.`)

@@ -9,6 +9,7 @@ import type { WebConfig } from '../config'
 import type { WebStore } from '../db'
 import type { Router } from '../http'
 import type { NotesStore } from '../notes-db'
+import type { SyncHandle } from './engine'
 import { SyncLoop } from './loop'
 import { unixPeer } from './peer'
 import { createSyncServer, listenUnix } from './server'
@@ -23,13 +24,18 @@ export function startSync(options: {
   store: WebStore
   notes: NotesStore
   blobsDir: string
+  /** The notification list, when this Aico keeps one. */
+  notify?: SyncHandle
+  /** This Aico stands in for a primary (AICO_PRIMARY_HOST). */
+  standby?: boolean
   log?: (message: string) => void
 }): Sync {
-  const { config, store, notes, blobsDir } = options
+  const { config, store, notes, blobsDir, notify, standby } = options
   const log = options.log ?? ((message) => console.log(`[aico-web] sync ${message}`))
   const loop = new SyncLoop({
     notes: notes.syncHandle(),
     web: store.syncHandle(),
+    ...(notify ? { notify } : {}),
     blobsDir,
     peers: () => {
       try {
@@ -58,7 +64,8 @@ export function startSync(options: {
   const server: Server = createSyncServer({
     hostName: config.hostName,
     buildId: config.buildId,
-    handles: [notes.syncHandle(), store.syncHandle()],
+    handles: [notes.syncHandle(), store.syncHandle(), ...(notify ? [notify] : [])],
+    standby,
     blobsDir,
     now: Date.now,
     nudged: () => loop.nudged(),

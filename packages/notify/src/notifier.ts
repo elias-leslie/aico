@@ -12,7 +12,7 @@ import {
 } from './choices'
 import type { PhoneSender } from './fcm'
 import type { NeedsYou } from './needs-you'
-import { parseNotice } from './notice'
+import { type Notice, parseNotice } from './notice'
 import type { Outbox } from './outbox'
 import { type Accepted, ANY_PHONE, type NotifyStore, type Via } from './store'
 import { typeOf } from './types'
@@ -24,8 +24,22 @@ export interface NotifierOptions {
   needsYou: NeedsYou
   /** The owner's Settings choices; read on every notice. */
   choices?: NoticeChoices
+  /** This Aico's name on what it raises (AICO_HOST_NAME). */
+  raisedBy?: string
+  /** The machine a notice is about when nothing names one: this one. */
+  machine?: string
   now?: () => number
   log?: (line: string) => void
+}
+
+/** A machine named in a sender's fields (the hub's Host), else this one; the project, else the source. */
+function aboutOf(
+  notice: Notice,
+  machine: string | undefined,
+): { machine?: string; project: string } {
+  const named = notice.fields.find((field) => /^(host|machine)$/i.test(field.label))?.value
+  const about = notice.machine ?? named?.trim() ?? machine
+  return { ...(about ? { machine: about } : {}), project: notice.project ?? notice.source }
 }
 
 /**
@@ -62,6 +76,8 @@ export class Notifier {
         this.pushedToday(typeOf(parsed), now),
       ),
       desktop_card: desktopCard(parsed, choices),
+      ...aboutOf(parsed, this.options.machine),
+      ...(this.options.raisedBy ? { raised_by: this.options.raisedBy } : {}),
     }
     // When the paired-phones file can't be read, one row waits for any phone; the outbox
     // turns it into a row per phone once the file reads again.

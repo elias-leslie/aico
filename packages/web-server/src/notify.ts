@@ -16,17 +16,21 @@ import { closeSync, constants, fstatSync, openSync, readFileSync, readSync } fro
 import { createServer, type IncomingMessage, type Server } from 'node:http'
 import { request as httpsRequest } from 'node:https'
 import {
+  ANY_PHONE,
   type AnsweredAsk,
   type AskPort,
   FcmSender,
   NeedsYou,
+  NOTIFY_SCHEMA_VERSION,
   type NoticeChoices,
   NoticeError,
   Notifier,
   NotifyStore,
   notifyDbPath,
   Outbox,
+  type PhoneSender,
   parseNotice,
+  SYNC_SETTLE_MS,
   type VerdictPort,
 } from '@aico/notify'
 import { parseRow, RowError, type StatusRow, type StatusStore } from '@aico/status'
@@ -37,6 +41,8 @@ import { type RequestContext, Router } from './http'
 import type { HubMachine } from './hub-machines'
 import { relaySender } from './phone-relay'
 import { frontedBy, primaryUrl } from './service-primary'
+import type { SyncHandle } from './sync/engine'
+import { NOTIFY_SYNC_TABLES } from './sync/registry'
 import { HttpError } from './tether'
 
 /** The one Tether call notify makes. */
@@ -212,6 +218,55 @@ export interface NotifyDeps {
   tether: TetherRequest
   /** The owner's Settings > Notifications choices (web.db). */
   choices: NoticeChoices
+  /** This Aico's name in the shared list (AICO_HOST_NAME). */
+  hostName: string
+}
+
+/** A peer stops counting as alive after this many sync passes without a clean one. */
+export const NOTICE_PEER_ALIVE_PASSES = 2.5
+/** After a start, how long a sender waits for the first sync at most. */
+export const NOTICE_FIRST_SYNC_MS = 30_000
+
+/** How the other Aicos' state decides whether this one sends. */
+export interface SenderPeer {
+  host: string | null
+  state: string
+  lastSyncAt: number | null
+  standby?: boolean
+}
+
+export interface SenderRule {
+  hostName: string
+  standby: boolean
+  peers(): readonly SenderPeer[]
+  /** A peer that hasn't finished a sync for this long no longer counts as alive. */
+  aliveMs: number
+  /** After a start, how long to wait for the first sync before sending anyway. */
+  settleMs: number
+  startedAt: number
+  now?: () => number
+}
+
+/**
+ * One sender at a time: among the Aicos that answer and sync, a primary comes before a standby, then
+ * the lower name. A peer this one can't sync with doesn't count, so a broken link or a machine that's
+ * off never stops an alert; each Aico sends when it's alone. Returns who sends while this one holds
+ * the list, or null when it sends itself. Right after a start it waits for the first sync (a short
+ * while at most), so what another Aico sent while this one was off isn't sent again.
+ */
+export function holdingFor(rule: SenderRule): string | null {
+  const now = (rule.now ?? Date.now)()
+  const peers = rule.peers()
+  if (now - rule.startedAt < rule.settleMs && peers.some((peer) => peer.state === 'waiting'))
+    return 'The first sync'
+  const rank = (standby: boolean, host: string) => `${standby ? 1 : 0}:${host}`
+  const me = rank(rule.standby, rule.hostName)
+  for (const peer of peers) {
+    if (peer.state !== 'ok' || !peer.host || peer.lastSyncAt === null) continue
+    if (now - peer.lastSyncAt > rule.aliveMs) continue
+    if (rank(peer.standby === true, peer.host) < me) return peer.host
+  }
+  return null
 }
 
 export class NotifyHub {
@@ -223,20 +278,25 @@ export class NotifyHub {
   private door: Server | null = null
   /** Set once the machines service exists (it starts after this hub). */
   hubFleet: (() => HubMachine[]) | null = null
+  /** Set once sync runs: who sends now. Until then this Aico sends. */
+  holding: (() => string | null) | null = null
+  private readonly sender: PhoneSender
 
   constructor(private readonly deps: NotifyDeps) {
     const { config } = deps
-    this.store = new NotifyStore(notifyDbPath(deps.dataDir))
+    this.store = new NotifyStore(notifyDbPath(deps.dataDir), { hostName: deps.hostName })
     // A host without its own FCM sender (CT 190) hands each phone item to the Proxmox sender.
     const relay = process.env.AICO_PUSH_SSH?.trim()
     const sender = relay
       ? relaySender(relay)
       : new FcmSender({ tokenFile: config.fcmTokenFile, devicesFile: config.devicesFile })
+    this.sender = sender
     this.outbox = new Outbox({
       store: this.store,
       sender,
       publicHost: deps.publicHost,
       choices: deps.choices,
+      holding: () => this.holding?.() ?? null,
     })
     this.needsYou = new NeedsYou({
       store: this.store,
@@ -249,7 +309,36 @@ export class NotifyHub {
       outbox: this.outbox,
       needsYou: this.needsYou,
       choices: deps.choices,
+      raisedBy: deps.hostName,
+      machine: deps.machine,
     })
+  }
+
+  /** notify.db as a sync set: what comes from another Aico joins this one's list and outbox. */
+  syncHandle(): SyncHandle {
+    return {
+      ...this.store.syncParts(),
+      set: 'notify',
+      tables: NOTIFY_SYNC_TABLES,
+      schemaVersion: () => NOTIFY_SCHEMA_VERSION,
+      afterApply: (touched) => {
+        const rows = touched.flatMap(({ table, row }) =>
+          table === 'notices'
+            ? [{ table, id: String(row.id) }]
+            : table === 'notice_sends'
+              ? [{ table, id: String(row.notice_id) }]
+              : [],
+        )
+        if (rows.length === 0) return
+        const devices = this.sender.devices()?.map((device) => device.id) ?? [ANY_PHONE]
+        if (this.store.takeSynced(rows, devices, Date.now()))
+          setTimeout(() => {
+            this.outbox
+              .kick()
+              .catch((error) => console.error('[notify] outbox pass failed:', error))
+          }, SYNC_SETTLE_MS + 100).unref()
+      },
+    }
   }
 
   /** Recovers rows a stopped process left mid-send, then runs the outbox every pass. */

@@ -115,6 +115,16 @@ function phoneWord(stored: StoredNotice): string {
   return deliveries.length ? 'failed' : 'none'
 }
 
+/** Why a notice went where it went, in words that match what happened to it. */
+function whyWords(stored: StoredNotice): string {
+  const { phone_reason, phone_silenced } = stored.notice
+  if (phone_reason) return phone_reason
+  if (phone_silenced) return phone_silenced
+  return ['sent', 'queued', 'unsure'].includes(phoneWord(stored))
+    ? 'Sent before Aico kept a reason for each push.'
+    : 'Stays in the tray: nothing about it needed you right away.'
+}
+
 export function registerNotificationRoutes(router: Router, deps: NotificationDeps): void {
   const now = () => (deps.now ?? Date.now)()
   const list = () => ({ types: typeRows(deps, now()), fixed: FIXED_ROWS })
@@ -124,22 +134,21 @@ export function registerNotificationRoutes(router: Router, deps: NotificationDep
   router.on('GET', '/api/notifications/recent', (ctx) => {
     const type = ctx.query.get('type') ?? ''
     if (!validTypeId(type)) throw new HttpError(422, 'type: not a notification type')
-    const items = deps.notify
+    const matching = deps.notify
       .since(now() - WEEK_MS)
       .filter((stored) => fired(stored) && typeOf(stored.notice) === type)
-      .slice(0, RECENT_MAX)
-      .map((stored) => ({
-        id: stored.id,
-        at: stored.receivedAt,
-        title: stored.notice.title,
-        phone: phoneWord(stored),
-        desktop: stored.notice.desktop_card ?? popsUp(stored.notice),
-        why:
-          stored.notice.phone_reason ??
-          stored.notice.phone_silenced ??
-          'Kept off the phone: the sender gave no reason to interrupt.',
-      }))
-    return { items }
+    const items = matching.slice(0, RECENT_MAX).map((stored) => ({
+      id: stored.id,
+      at: stored.receivedAt,
+      title: stored.notice.title,
+      phone: phoneWord(stored),
+      desktop: stored.notice.desktop_card ?? popsUp(stored.notice),
+      why: whyWords(stored),
+      machine: stored.notice.machine ?? null,
+      project: stored.notice.project ?? null,
+      raised_by: stored.notice.raised_by ?? null,
+    }))
+    return { items, total: matching.length }
   })
 
   router.on('PUT', '/api/notifications/choice', async (ctx) => {

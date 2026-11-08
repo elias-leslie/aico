@@ -135,3 +135,29 @@
   font-size: 12px;
   line-height: 1.35;
 }
+.recent li.recentMore {
+  padding: 2px 0 6px;
+  border-top: 0;
+  color: var(--mist);
+  font-size: 11px;
+}
+.recentAbout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--mist);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.columns .countHead {
+  align-items: flex-start;
+}

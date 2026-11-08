@@ -17,6 +17,8 @@ export interface SyncServerDeps {
   /** This build's fingerprint, told to peers in `hello`. */
   buildId?: string
   handles: readonly SyncHandle[]
+  /** This Aico stands in for a primary; peers read it to agree who sends. */
+  standby?: boolean
   blobsDir: string
   now(): number
   /** The peer wrote something: pull soon. */
@@ -33,7 +35,7 @@ export function createSyncServer(deps: SyncServerDeps): Server {
     return handle
   }
   router.on('GET', '/sync/hello', () =>
-    serveHello(deps.handles, deps.hostName, deps.now(), deps.buildId),
+    serveHello(deps.handles, deps.hostName, deps.now(), deps.buildId, deps.standby),
   )
   router.on('GET', '/sync/changes', (ctx) =>
     serveChanges(handleOf(ctx.query.get('set')), {
