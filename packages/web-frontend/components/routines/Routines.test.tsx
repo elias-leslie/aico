@@ -70,7 +70,9 @@ const view = (ui = <RoutinesBody />) =>
   render(
     <QueryClientProvider
       client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        new QueryClient({
+          defaultOptions: { queries: { retry: false, retryDelay: 0 } },
+        })
       }
     >
       {ui}

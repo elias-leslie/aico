@@ -103,7 +103,9 @@ const show = (project = '') =>
   render(
     <QueryClientProvider
       client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        new QueryClient({
+          defaultOptions: { queries: { retry: false, retryDelay: 0 } },
+        })
       }
     >
       <StatusPage project={project} />

@@ -145,7 +145,7 @@ afterEach(() => vi.unstubAllGlobals())
 
 function show(selected = '', onSelect = vi.fn()) {
   const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+    defaultOptions: { queries: { retry: false, retryDelay: 0 } },
   })
   render(
     <QueryClientProvider client={client}>

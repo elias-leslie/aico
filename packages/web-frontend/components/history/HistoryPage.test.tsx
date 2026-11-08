@@ -87,7 +87,7 @@ const session = (over: object = {}) => ({
 
 const renderPage = (id = '', at: number | null = null, search = '') => {
   const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+    defaultOptions: { queries: { retry: false, retryDelay: 0 } },
   })
   return render(
     <QueryClientProvider client={client}>
@@ -245,7 +245,7 @@ describe('row names', () => {
       ],
     }
     const client = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
+      defaultOptions: { queries: { retry: false, retryDelay: 0 } },
     })
     render(
       <QueryClientProvider client={client}>

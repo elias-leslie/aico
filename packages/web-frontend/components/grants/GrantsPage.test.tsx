@@ -44,7 +44,7 @@ const request = (id: string, state: string, expires: number) => ({
 
 function renderPage() {
   const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+    defaultOptions: { queries: { retry: false, retryDelay: 0 } },
   })
   return render(
     <QueryClientProvider client={client}>
