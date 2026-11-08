@@ -16,6 +16,8 @@ export interface QuotaGlance {
   /** Agent tools that usually run on it under another name (`pi`); they can run elsewhere too. */
   tools: string[]
   state: QuotaState
+  /** The numbers can't be trusted (collection failed or too old): choosers don't lean on them. */
+  stale: boolean
   /** Percent left in its tightest window; 0 when used up, null when not known. */
   left: number | null
   /** How much of that window's time is gone (0..100), or null. */
@@ -51,14 +53,20 @@ function shortDay(iso: string): string {
   })
 }
 
-/** When the last used-up window resets: the day the provider is usable on its own again. */
-function backOn(windows: readonly UsageWindow[]): string | null {
+/** The used-up window that resets last. */
+function lastOut(windows: readonly UsageWindow[]): UsageWindow | null {
   let latest: UsageWindow | null = null
   for (const window of windows) {
     if (window.state !== 'used_up' || !window.resets_at) continue
     if (!latest || (window.resets_at as string) > (latest.resets_at as string))
       latest = window
   }
+  return latest
+}
+
+/** The day the provider is usable on its own again. */
+function backOn(windows: readonly UsageWindow[]): string | null {
+  const latest = lastOut(windows)
   return latest?.resets_at ? shortDay(latest.resets_at) : null
 }
 
@@ -114,8 +122,16 @@ function shortLine(
   }
   if (state === 'used_up') {
     if (!back) return 'used up'
-    // A longer window running low limits what comes back: "back Nov 8 with 5%".
-    const after = tightest(windows.filter((item) => item.state !== 'used_up'))
+    // A longer window running low limits what comes back: "back Nov 8 with 5%". One that
+    // resets before then will be full again, so it says nothing about that day.
+    const outUntil = lastOut(windows)?.resets_at as string
+    const after = tightest(
+      windows.filter(
+        (item) =>
+          item.state !== 'used_up' &&
+          (!item.resets_at || item.resets_at > outUntil),
+      ),
+    )
     const afterLeft = after ? leftOf(after) : null
     return afterLeft !== null && afterLeft < 100
       ? `used up · back ${back} with ${afterLeft}%`
@@ -150,6 +166,7 @@ function glanceOf(provider: UsageProvider, now: number): QuotaGlance {
     name: provider.name,
     tools: provider.tools ?? [],
     state,
+    stale: Boolean(provider.unreadable),
     left,
     gone: gone === null ? null : Math.round(gone * 100),
     answer: provider.answer,
@@ -189,9 +206,10 @@ export function pickerGlance(
   )
 }
 
-/** The agent picker's few words: "73% left", "on credits", "used up"; nothing when not known.
+/** The agent picker's few words: "73% left", "on credits", "used up"; nothing when not known or too old to trust.
  * A subscription the tool doesn't share a name with is named: "OpenCode Go used up". */
 export function pickerSuffix(glance: QuotaGlance): string | null {
+  if (glance.stale) return null
   const words =
     glance.state === 'credits'
       ? 'on credits'

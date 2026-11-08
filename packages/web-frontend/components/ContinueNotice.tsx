@@ -34,7 +34,11 @@ export function continueTargets(
   if (own?.state !== 'used_up') return []
   const open = new Set(
     glances
-      .filter((glance) => glance.state === 'left' || glance.state === 'credits')
+      .filter(
+        (glance) =>
+          !glance.stale &&
+          (glance.state === 'left' || glance.state === 'credits'),
+      )
       .map((glance) => glance.id),
   )
   return tools.filter(

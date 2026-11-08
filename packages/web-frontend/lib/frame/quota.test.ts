@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { UsageProvider, UsageReport, UsageWindow } from '../quota-usage'
-import { quotaGlances, quotaLine, quotaTitle } from './quota'
+import { pickerSuffix, quotaGlances, quotaLine, quotaTitle } from './quota'
 
 const win = (over: Partial<UsageWindow>): UsageWindow => ({
   label: 'weekly',
@@ -89,6 +89,34 @@ describe('quota glance short line', () => {
       now,
     )
     expect(low?.short).toBe('used up · back Nov 11 with 5%')
+    // A shorter window will have reset by then, so its 40% says nothing about Nov 11.
+    const fiveHour = win({
+      left_percent: 40,
+      resets_at: '2026-11-08T14:00:00Z',
+    })
+    const [soon] = quotaGlances(
+      report(provider({ status: 'used_up', windows: [fiveHour, used] })),
+      now,
+    )
+    expect(soon?.short).toBe('used up · back Nov 11')
+    const [both] = quotaGlances(
+      report(
+        provider({ status: 'used_up', windows: [fiveHour, used, monthly] }),
+      ),
+      now,
+    )
+    expect(both?.short).toBe('used up · back Nov 11 with 5%')
+  })
+
+  it('leaves a number too old to trust off the agent picker', () => {
+    const [fresh] = quotaGlances(report(provider({})), now)
+    expect(fresh && pickerSuffix(fresh)).toBe('80% left')
+    const [old] = quotaGlances(
+      report(provider({ unreadable: 'last collected 90 minutes ago' })),
+      now,
+    )
+    expect(old && pickerSuffix(old)).toBeNull()
+    expect(old?.left).toBe(80)
   })
 
   it('says not reported when no window can be read', () => {

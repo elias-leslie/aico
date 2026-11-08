@@ -43,13 +43,15 @@ export interface ReportProvider {
   status: Usage['status']
   /** The plain answer to "can I use it now?", ahead of the windows: "Used up until Nov 8, 7:00 PM EST (weekly)". */
   answer: string
-  /** The agent tools that run on this subscription when their name differs from its id. */
+  /** The agent tools that usually run on this subscription when their name differs from its id. */
   tools: string[]
   plan: string | null
   windows: ReportWindow[]
   credits: { balance: number; lasts_days: number | null; text: string } | null
   /** Why this provider could not be read on the last collection. */
   problem: string | null
+  /** Why routing can't trust this provider's numbers (collection failed or too old), else null. */
+  unreadable: string | null
   spend: {
     /** What the bars count: credits when the provider draws them, else tokens, else nothing recorded. */
     unit: 'credits' | 'tokens' | null
@@ -166,6 +168,7 @@ export function usageReport(
             }
           : null,
         problem: saved.problems?.[provider.id] ?? facts.unreadable?.[provider.id] ?? null,
+        unreadable: facts.unreadable?.[provider.id] ?? null,
         spend,
         by_project: projectSplit(db as Database, provider.id, spend.unit, splitDays, projects),
       }

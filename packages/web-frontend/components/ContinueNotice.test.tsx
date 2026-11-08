@@ -89,6 +89,12 @@ describe('continueTargets', () => {
   it('counts credits as room and skips a tool that is used up or not known', () => {
     const credits = [glance('claude', 'used_up'), glance('codex', 'credits')]
     expect(continueTargets('claude', credits, [CLAUDE, CODEX])).toEqual([CODEX])
+    // Numbers too old to trust don't send anyone there.
+    const stale = [
+      glance('claude', 'used_up'),
+      { ...glance('codex', 'left'), stale: true },
+    ]
+    expect(continueTargets('claude', stale, [CLAUDE, CODEX])).toEqual([])
     const none = [glance('claude', 'used_up'), glance('codex', 'unknown')]
     expect(continueTargets('claude', none, [CLAUDE, CODEX])).toEqual([])
   })

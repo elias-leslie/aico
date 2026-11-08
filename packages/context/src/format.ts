@@ -2,6 +2,7 @@
 // `st prompt` and `st models route` print today, so agents read them unchanged.
 
 import { localTime } from '@aico/shared/time'
+import { lastToReset } from '@aico/usage'
 import type { Found, Memory } from './memory'
 import type { Prompt } from './prompts'
 import type { LaunchRow, Refusal, RoutePayload, Usage, Window } from './route'
@@ -143,8 +144,8 @@ const STATUS: Record<string, string> = {
 
 function statusText(usage: Partial<Usage>): string {
   // A used-up subscription names the window that is out ("weekly used up"), not a bare "used up"
-  // beside a 5h window with room.
-  const out = usage.windows?.find((window) => window.state === 'used_up')
+  // beside a 5h window with room; of two, the one that keeps it out longest.
+  const out = lastToReset(usage.windows ?? [])
   if (usage.status === 'used_up' && out) return `${out.label} used up`
   if (usage.status === 'partly_unknown')
     return `has room in one window, ${usage.unknown_windows?.join(', ') || 'another window'} unknown`

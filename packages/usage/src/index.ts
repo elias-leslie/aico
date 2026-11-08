@@ -32,6 +32,7 @@ export { type ProjectRef, type ProjectShare, type ProjectSplit, projectSplit } f
 export {
   type Credit,
   type Facts,
+  lastToReset,
   micros,
   optionUsage,
   type Reading,

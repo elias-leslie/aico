@@ -171,6 +171,29 @@ describe('route', () => {
     expect(codex(failed).usage?.status).toBe('ok')
   })
 
+  it('names the used-up window that resets last when two are out', () => {
+    const now = '2026-11-06T12:00:00.000Z'
+    const reading = (window_minutes: number, resets_at: string) => ({
+      provider: 'opencode-go',
+      window_minutes,
+      observed_at: now,
+      used_percent: 100,
+      resets_at,
+      source: 'opencode_go_usage',
+    })
+    const facts: Facts = {
+      readings: [
+        reading(300, '2026-11-06T14:00:00.000Z'),
+        reading(10080, '2026-11-08T19:00:00.000Z'),
+      ],
+      credits: {},
+      refusals: [],
+      collected_at: now,
+    }
+    const payload = route(policy, catalog, { role: 'testing', tool: 'pi' }, facts, now)
+    expect(formatOptions(payload, 'testing')).toContain('weekly used up  |')
+  })
+
   it('names the window that is used up, shows local times with a zone, and no reset for an untouched window', () => {
     const now = '2026-11-06T12:00:00.000Z'
     const reading = (window_minutes: number, used_percent: number, resets_at: string) => ({
