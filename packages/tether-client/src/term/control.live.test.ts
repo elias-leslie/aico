@@ -3,12 +3,13 @@
 // attached before the output, in the middle of it, under a full-screen
 // program, or after a resize. Skipped where tmux is not installed.
 
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Terminal } from '@xterm/headless'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { ControlTerminal, type ControlTerminalOptions, type ReseedReport } from './control'
+import { PAUSE_AFTER_SECONDS } from './protocol'
 
 const hasTmux = (() => {
   try {
@@ -354,10 +355,19 @@ describe.skipIf(!hasTmux)('ControlTerminal against tmux', () => {
     const reasons: string[] = []
     const fast = view(80, 24)
     await settle(fast)
+    // tmux pauses the pane after it falls 1 s behind here instead of the link's 5 s: the
+    // pause, not how long tmux waits for it, is what this test checks.
+    const pauseAfter = 1
     const slow = view(80, 24, {
       sized: false,
       creditBytes: credit,
       onReseed: (r) => reasons.push(r.reason),
+      spawn: (argv, env) => {
+        const at = argv.indexOf(`pause-after=${PAUSE_AFTER_SECONDS}`)
+        expect(at).toBeGreaterThan(0)
+        const args = argv.with(at, `pause-after=${pauseAfter}`)
+        return spawn(args[0] as string, args.slice(1), { env, stdio: 'pipe' })
+      },
     })
     let held: string[] = []
     let delivering = false
@@ -382,7 +392,7 @@ describe.skipIf(!hasTmux)('ControlTerminal against tmux', () => {
       await sleep(100)
       peak = Math.max(peak, slow.link.backlog)
       if (!stalledAt && slow.link.backlog >= credit) stalledAt = Date.now()
-      if (stalledAt && Date.now() - stalledAt > 6500) break
+      if (stalledAt && Date.now() - stalledAt > pauseAfter * 1000 + 1500) break
     }
     expect(stalledAt).toBeGreaterThan(0)
     // Credit plus at most one read from tmux beyond it.
