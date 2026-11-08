@@ -3,7 +3,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { addMemory, listMemories, type Memory, openContext } from '@aico/context'
 import { afterEach, expect, it } from 'vitest'
-import { syncCanaryCursor, syncPhones, takeStandbyMemories } from './context-sync'
+import {
+  syncCanaryCursor,
+  syncPhones,
+  takeStandbyAppRows,
+  takeStandbyMemories,
+} from './context-sync'
 
 type Answer = { code: number; stdout: string; output: string; ended: boolean }
 const dirs: string[] = []
@@ -132,4 +137,71 @@ it('takes memories saved on the standby once, keeps this side on a clash, and a 
   expect(all.map((m) => m.content).sort()).toEqual(['edited here', 'saved while away'])
   const off = await takeStandbyMemories(peer, aico, mainDb, (async () => gone) as never)
   expect(off).toEqual({ added: 0, failed: false, line: null })
+})
+
+it('takes back only the app reports the standby heard newer, as plain rows', async () => {
+  const row = (id: string, project: string, last_run: string) => ({
+    id,
+    what: id,
+    kind: 'job',
+    machine: 'apps',
+    state: 'ok',
+    meaning: 'Last run completed.',
+    project,
+    last_run,
+    next_run: '2026-11-08T22:00:00.000Z',
+    shown: 'ok',
+    updated_at: last_run,
+  })
+  const standby = [
+    row('portfolio-ai/fg-inputs', 'portfolio-ai', '2026-11-08T17:15:21.000Z'),
+    row('portfolio-ai/same', 'portfolio-ai', '2026-11-08T10:00:00.000Z'),
+    row('portfolio-ai/older', 'portfolio-ai', '2026-11-08T09:00:00.000Z'),
+    row('jobinator-4000/new-here', 'jobinator-4000', '2026-11-08T12:00:00.000Z'),
+    row('aico/backup/x', 'aico', '2026-11-08T18:00:00.000Z'),
+  ]
+  const here = [
+    { id: 'portfolio-ai/fg-inputs', last_run: '2026-11-08T15:49:34.000Z' },
+    { id: 'portfolio-ai/same', last_run: '2026-11-08T10:00:00.000Z' },
+    { id: 'portfolio-ai/older', last_run: '2026-11-08T11:00:00.000Z' },
+    { id: 'aico/backup/x', last_run: '2026-11-08T01:00:00.000Z' },
+  ]
+  const exec = async () => ({
+    code: 0,
+    stdout: JSON.stringify({ rows: standby }),
+    output: '',
+    ended: true,
+  })
+  let posted: Record<string, unknown>[] = []
+  const http = (async (url: URL, init?: RequestInit) => {
+    if (!init?.body) return new Response(JSON.stringify({ rows: here }))
+    expect(String(url)).toContain('/api/status/rows')
+    posted = JSON.parse(String(init.body))
+    return new Response('{}')
+  }) as typeof fetch
+  const lines = await takeStandbyAppRows(peers, aico, {}, exec as never, http)
+  expect(posted.map((r) => r.id)).toEqual(['portfolio-ai/fg-inputs', 'jobinator-4000/new-here'])
+  // A row that went out with reader fields would be refused (contracts/status-row.schema.json).
+  expect(Object.keys(posted[0] as object)).not.toContain('shown')
+  expect(Object.keys(posted[0] as object)).not.toContain('updated_at')
+  expect(lines).toEqual(['standby: 2 app reports only it had heard'])
+})
+
+it('says and fails nothing when the standby is off or this Aico web is restarting', async () => {
+  const down = (async () => {
+    throw new Error('fetch failed')
+  }) as typeof fetch
+  expect(await takeStandbyAppRows(peers, aico, {}, (async () => gone) as never, down)).toEqual([])
+  const answers = async () => ({ code: 0, stdout: '{"rows":[]}', output: '', ended: true })
+  expect(await takeStandbyAppRows(peers, aico, {}, answers as never, down)).toEqual([])
+})
+
+it('names the projects that report through the standby, as the service apps do', () => {
+  const apps = JSON.parse(
+    readFileSync(new URL('../../web-server/data/service-apps.json', import.meta.url), 'utf8'),
+  ).apps as Record<string, unknown>
+  const projects = JSON.parse(
+    readFileSync(new URL('../data/context-sync.json', import.meta.url), 'utf8'),
+  ).appRowProjects as string[]
+  expect([...projects].sort()).toEqual(Object.keys(apps).sort())
 })

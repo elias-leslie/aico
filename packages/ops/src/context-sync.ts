@@ -21,6 +21,7 @@ import { fullPeers } from '@aico/fleet/peers'
 import { readSettings } from '@aico/fleet/settings'
 import { readPins } from '@aico/fleet/trust'
 import { writeFileDurable } from '@aico/shared/durable-file'
+import { postStatusRows, statusRowsUrl } from '@aico/status'
 import config from '../data/context-sync.json' with { type: 'json' }
 import { Refusal } from './deploy'
 import { expandHome } from './sh'
@@ -125,8 +126,77 @@ export async function contextSync(argv: string[], env = process.env): Promise<nu
   const canary = await syncCanaryCursor(peers, aico, env)
   if (canary.failed) failed = true
   lines.push(...canary.lines)
+  const rows = await takeStandbyAppRows(peers, aico, env)
+  lines.push(...rows)
   console.log(lines.join('; '))
   return failed ? 1 : 0
+}
+
+/** The fields of a reader's row that make up the row itself (contracts/status-row.schema.json). */
+const ROW_FIELDS = [
+  'id',
+  'what',
+  'kind',
+  'machine',
+  'state',
+  'meaning',
+  'project',
+  'last_run',
+  'next_run',
+  'actions',
+] as const
+type AppRow = { id: string; project?: string; last_run?: string } & Record<string, unknown>
+
+/**
+ * An app's report goes to the standby, which passes it to this machine and keeps it too. While this machine
+ * can't be reached (off, restarting, link down) only the standby has it, and the app won't say it again until
+ * its next run: this machine's row sits stale and reads Unknown, for up to a week on a weekly job. So the
+ * app rows the standby heard newer come over here. Quietly: nobody has lost anything if the next run does it.
+ */
+export async function takeStandbyAppRows(
+  peers: { name: string; exec: string }[],
+  aico: (args: string) => string[],
+  env: NodeJS.ProcessEnv,
+  exec = requestExec,
+  http: typeof fetch = fetch,
+): Promise<string[]> {
+  const lines: string[] = []
+  const base = env.AICO_WEB_URL || config.webUrl
+  const appRows = (rows: AppRow[]) =>
+    rows.filter((row) => config.appRowProjects.includes(row.project ?? ''))
+  for (const peer of peers) {
+    try {
+      const asked = await exec(peer.exec, aico('status --all --json'), Buffer.alloc(0))
+      if (asked.code !== 0) continue
+      const theirs = appRows((JSON.parse(asked.stdout) as { rows: AppRow[] }).rows)
+      const answer = await http(new URL('/api/status', base), {
+        signal: AbortSignal.timeout(config.webTimeoutMs),
+      })
+      if (!answer.ok) continue
+      const ours = new Map(
+        ((await answer.json()) as { rows: AppRow[] }).rows.map((row) => [row.id, row.last_run]),
+      )
+      const newer = theirs.filter((row) => {
+        const here = ours.get(row.id)
+        return row.last_run && (!here || Date.parse(row.last_run) > Date.parse(here))
+      })
+      if (!newer.length) continue
+      const rows = newer.map((row) =>
+        Object.fromEntries(ROW_FIELDS.filter((key) => key in row).map((key) => [key, row[key]])),
+      )
+      const posted = await postStatusRows(statusRowsUrl(base), rows, {
+        fetch: http,
+        timeoutMs: config.webTimeoutMs,
+      })
+      if (posted.ok)
+        lines.push(
+          `${peer.name}: ${rows.length} app report${rows.length === 1 ? '' : 's'} only it had heard`,
+        )
+    } catch {
+      /* Link down, Aico web restarting or a bad answer: the next run looks again. */
+    }
+  }
+  return lines
 }
 
 /**

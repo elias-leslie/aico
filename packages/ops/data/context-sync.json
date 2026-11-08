@@ -1,4 +1,7 @@
 {
   "dataDir": "~/.local/state/aico",
-  "peerAico": "$HOME/.local/bin/aico"
+  "peerAico": "$HOME/.local/bin/aico",
+  "webUrl": "http://127.0.0.1:3002",
+  "webTimeoutMs": 10000,
+  "appRowProjects": ["portfolio-ai", "jobinator-4000"]
 }
