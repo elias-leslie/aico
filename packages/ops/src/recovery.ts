@@ -1,5 +1,6 @@
 // Fresh-machine recovery stays runnable with Python even when Node or Aico is unavailable.
 import { fileURLToPath } from 'node:url'
+import { aicoDataDir } from '@aico/shared/data-dir'
 import { machineId, outboxDir, postOrKeep, type StatusRow, statusRowsUrl } from '@aico/status'
 import { type BackupConfig, homePath } from './backup-plan'
 import { type Execute, execute } from './backup-runtime'
@@ -90,7 +91,7 @@ export async function recovery(
     const row = drillRow(receipt, env.AICO_BACKUP_MACHINE || machineId())
     // aico-web restarting must not lose the drill's row: it waits and goes out on a later post.
     const waiting = await postOrKeep(statusRowsUrl(env.AICO_WEB_URL || cfg.webUrl), [row], {
-      dir: outboxDir(env.AICO_DATA_DIR || homePath(cfg.sqlite.dataDir)),
+      dir: outboxDir(aicoDataDir(env)),
       timeoutMs: cfg.statusPublish.timeoutMs,
     })
     if (waiting !== null) console.error(`Restore drill Status will go out later: ${waiting}`)

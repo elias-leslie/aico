@@ -2,6 +2,7 @@
 import { existsSync, mkdirSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import { backupTargetName } from '@aico/shared/backup-targets'
+import { aicoDataDir } from '@aico/shared/data-dir'
 import { nearest } from '@aico/shared/suggest'
 import { localTime } from '@aico/shared/time'
 import {
@@ -237,7 +238,7 @@ async function post(cfg: BackupConfig, url: string, rows: unknown[]): Promise<vo
       if (code !== 'ECONNREFUSED' || attempt >= cfg.statusPublish.attempts) {
         // Out of tries (aico-web restarting): keep the rows to send later instead of losing them.
         const waiting = await postOrKeep(statusRowsUrl(url), rows as StatusRow[], {
-          dir: outboxDir(process.env.AICO_DATA_DIR || homePath(cfg.sqlite.dataDir)),
+          dir: outboxDir(aicoDataDir()),
           timeoutMs: cfg.statusPublish.timeoutMs,
         })
         if (waiting !== null) console.error(`Backup Status rows will go out later: ${waiting}`)
