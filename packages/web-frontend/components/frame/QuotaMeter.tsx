@@ -9,37 +9,50 @@ import { RailPopover } from './RailPopover'
 /** At or under this much left, the meter turns amber. */
 const LOW_PERCENT = 15
 
-/** The lowest amount left across subscriptions as a few characters, and in words for the label. */
+/** The lowest amount left among subscriptions that still have quota, as a few characters. One that is
+ * used up is not a 0% to read past the others: it turns the meter's dot red and leads the tooltip. */
 function useMeter() {
   const { report, loading, failed } = useUsage()
   const glances = quotaGlances(report)
   const head = useQuotaGlance()
+  const usedUp = glances.filter((glance) => glance.state === 'used_up')
   const lefts = glances.flatMap((glance) =>
-    glance.left === null ? [] : [glance.left],
+    glance.state === 'left' && glance.left !== null && glance.left > 0
+      ? [glance.left]
+      : [],
   )
   const low = lefts.length ? Math.min(...lefts) : null
   const credits = glances.some((glance) => glance.state === 'credits')
   const text =
     low !== null
       ? `${low}%`
-      : glances.length === 0
-        ? loading
-          ? '…'
-          : failed
-            ? '!'
-            : '–'
-        : credits
-          ? 'cr'
-          : '?'
+      : usedUp.length > 0 && !credits
+        ? '0%'
+        : glances.length === 0
+          ? loading
+            ? '…'
+            : failed
+              ? '!'
+              : '–'
+          : credits
+            ? 'cr'
+            : '?'
   const label =
     glances.length > 0
-      ? `Quota: ${quotaLine(glances)}`
+      ? `Quota: ${quotaLine([...usedUp, ...glances.filter((glance) => glance.state !== 'used_up')])}`
       : loading
         ? 'Quota: checking'
         : failed
           ? 'Quota: couldn’t be read'
           : 'Quota: no reports yet'
-  return { low, text, label, head, warn: low !== null && low <= LOW_PERCENT }
+  return {
+    low,
+    text,
+    label,
+    head,
+    danger: usedUp.length > 0,
+    warn: low !== null && low <= LOW_PERCENT,
+  }
 }
 
 /** A small battery-like meter: filled to how much is left. */
@@ -89,12 +102,25 @@ export function QuotaMeter({ icon = false }: { icon?: boolean }) {
       className={
         icon
           ? 'lantern-icon-btn compact relative flex-col gap-0.5'
-          : 'lantern-btn ghost small'
+          : 'lantern-btn ghost small relative'
       }
       extra={{ 'data-testid': 'quota-meter' }}
       icon={
         <>
           <MeterIcon low={meter.low} warn={meter.warn} />
+          {meter.danger && (
+            <span
+              aria-hidden="true"
+              className="lantern-mark"
+              data-testid="quota-danger"
+              style={{
+                position: 'absolute',
+                top: icon ? 6 : 3,
+                right: icon ? 8 : 4,
+                background: 'var(--ember)',
+              }}
+            />
+          )}
           <span
             style={{
               font: icon

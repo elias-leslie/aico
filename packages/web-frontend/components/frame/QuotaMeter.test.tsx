@@ -15,13 +15,15 @@ const window = (left: number) => ({
   resets_in_seconds: 400,
   text: `weekly ${left}% left`,
 })
-const provider = (id: string, name: string, left: number) => ({
+const provider = (id: string, name: string, left: number, used = false) => ({
   id,
   name,
-  status: 'ok',
+  status: used ? 'used_up' : 'ok',
   answer: 'Available',
   plan: 'Max',
-  windows: [window(left)],
+  windows: [
+    used ? { ...window(0), state: 'used_up', left_percent: 0 } : window(left),
+  ],
   credits: null,
   problem: null,
   spend: { unit: null, recorded_since: null, days: [] },
@@ -54,6 +56,36 @@ describe('QuotaMeter', () => {
     ])
     view()
     expect(screen.getByTestId('quota-meter').textContent).toBe('12%')
+  })
+
+  it('reads the lowest among subscriptions that still have quota, and flags one used up', () => {
+    state.usage = usage([
+      provider('claude', 'Claude', 69),
+      provider('opencode', 'OpenCode Go', 0, true),
+    ])
+    view()
+    const meter = screen.getByTestId('quota-meter')
+    expect(meter.textContent).toBe('69%')
+    expect(meter.getAttribute('aria-label')).toMatch(
+      /^Quota: OpenCode Go used up/,
+    )
+    expect(screen.getByTestId('quota-danger')).toBeInTheDocument()
+    fireEvent.click(meter)
+    expect(screen.getByRole('dialog', { name: 'Quota' }).textContent).toContain(
+      'OpenCode Go',
+    )
+  })
+
+  it('has no danger dot while every subscription has quota', () => {
+    view()
+    expect(screen.queryByTestId('quota-danger')).toBeNull()
+  })
+
+  it('reads 0% only when every subscription is used up', () => {
+    state.usage = usage([provider('opencode', 'OpenCode Go', 0, true)])
+    view()
+    expect(screen.getByTestId('quota-meter').textContent).toBe('0%')
+    expect(screen.getByTestId('quota-danger')).toBeInTheDocument()
   })
 
   it('pops out the full quota breakdown', () => {
