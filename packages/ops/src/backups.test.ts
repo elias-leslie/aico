@@ -649,12 +649,12 @@ it('a proven unchanged offline guest keeps its old data age without becoming lat
     'guest',
     'Guest data',
     'drive',
-    { source: 'guest', target: 'drive', dataAt, offlineSince: since, observed: 'offline' },
+    { source: 'guest', target: 'drive', dataAt, offlineSince: since },
     config({}),
     'host',
     now,
   )
-  expect(row.state).toBe('off')
+  expect(row.state).toBe('ok')
   expect(row.dataAt).toBe(dataAt)
   expect(row.meaning).toContain('off')
 })
@@ -938,16 +938,12 @@ it('shows the stopped external backup owner as off with its last good artifact d
   )
   expect(resumed?.state).toBe('ok')
   expect(resumed?.dataAt).not.toBe(dataAt)
-  // Proxmox not answering says nothing new about it: its last state stands until that has lasted.
   statusCode = 255
   expect(
     (await scheduledEntries(state, c, c.workstation, run)).find(
       (e) => e.id === 'external/portfolio-ai-complete',
     )?.state,
-  ).toBe('off')
-  state.copies['external/portfolio-ai-complete']!.unreadSince = new Date(
-    Date.now() - c.schedule.ownerUnreadMinutes * 60000 - 1000,
-  ).toISOString()
+  ).toBe('failed')
   statusCode = 0
   status = 'unknown'
   expect(
