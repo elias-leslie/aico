@@ -67,6 +67,11 @@
   -webkit-line-clamp: 2;
   line-clamp: 2;
 }
+/* An open row shows its whole name: a phone has no tooltip to read the rest in. */
+.head[aria-expanded="true"] .name {
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+}
 .when {
   display: inline-flex;
   align-items: center;

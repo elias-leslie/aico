@@ -76,8 +76,6 @@ export function whenIn(_routine: Routine, at: number): string {
   return shortWhen(at)
 }
 
-const DAY_MS = 24 * 3_600_000
-
 const timeOfDay = (at: number) =>
   new Date(at).toLocaleTimeString('en-US', {
     hour: 'numeric',
@@ -87,11 +85,14 @@ const timeOfDay = (at: number) =>
 /** The same for a row's one line: a run due later today is just its time of day, one due tomorrow
  * names the day ("Mon 3:05 AM"), so it can't read as a time already gone by. */
 export function soonIn(routine: Routine, at: number, now = Date.now()): string {
-  if (at - now >= DAY_MS || at < now) return whenIn(routine, at)
-  const day = new Date(at)
-  return day.toDateString() === new Date(now).toDateString()
-    ? timeOfDay(at)
-    : `${day.toLocaleDateString('en-US', { weekday: 'short' })} ${timeOfDay(at)}`
+  if (at < now) return whenIn(routine, at)
+  const day = new Date(at).toDateString()
+  if (day === new Date(now).toDateString()) return timeOfDay(at)
+  const tomorrow = new Date(now)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  return day === tomorrow.toDateString()
+    ? `${new Date(at).toLocaleDateString('en-US', { weekday: 'short' })} ${timeOfDay(at)}`
+    : whenIn(routine, at)
 }
 
 /** "daily at 03:30" as a sentence start. A time of day in another zone than the viewer's names its
