@@ -1,6 +1,7 @@
 // Routines: every scheduled routine Aico knows (its own jobs and those other projects register),
 // as GET /api/routines gives them, and the words the list uses for them.
 
+import { machineLabel } from './machine-name'
 import { shortWhen } from './short-when'
 import { plural } from './status'
 
@@ -111,42 +112,123 @@ export function scheduleText(routine: Routine): string {
 
 const DAY_MIN = 24 * 60
 
-/** Minutes a systemd timer's next run falls after its set time: its random delay. */
-export function timerDelay(routine: Routine): number {
+/** The zone's clock at a moment: minutes into its day, minutes ahead of UTC, and its date. Throws
+ * on a zone this browser doesn't know. */
+function zoneClock(tz: string, at: number) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+  }).formatToParts(at)
+  const part = (type: string) =>
+    Number(parts.find((item) => item.type === type)?.value)
+  const day = Date.UTC(part('year'), part('month') - 1, part('day'))
+  const minutes = part('hour') * 60 + part('minute')
+  return {
+    minutes,
+    offset:
+      (day + minutes * 60_000 - Math.floor(at / 60_000) * 60_000) / 60_000,
+    day: new Date(day),
+  }
+}
+
+/** The one time of day a schedule names, in minutes and as written; null with none or several. */
+function setTime(routine: Routine) {
   const times = [...routine.schedule.matchAll(/(\d{1,2}):(\d\d)/g)]
   const set = times[0]
+  return set && times.length === 1
+    ? { minutes: Number(set[1]) * 60 + Number(set[2]), text: set[0] }
+    : null
+}
+
+/** Minutes a systemd timer's next run falls after its set time: its random delay. */
+export function timerDelay(routine: Routine): number {
+  const set = setTime(routine)
   if (
     routine.source !== 'systemd' ||
     routine.nextRun === null ||
     !routine.tz ||
-    !set ||
-    times.length > 1
+    !set
   )
     return 0
-  let clock: Intl.DateTimeFormatPart[]
   try {
-    clock = new Intl.DateTimeFormat('en-US', {
-      timeZone: routine.tz,
-      hourCycle: 'h23',
-      hour: 'numeric',
-      minute: 'numeric',
-    }).formatToParts(routine.nextRun)
+    const next = zoneClock(routine.tz, routine.nextRun)
+    // The shorter way round the clock: a run at 00:10 for 23:50 is 20 minutes late.
+    const late =
+      ((next.minutes - set.minutes + DAY_MIN + DAY_MIN / 2) % DAY_MIN) -
+      DAY_MIN / 2
+    // A clock change in between moved the clock, not the run.
+    const from = zoneClock(
+      routine.tz,
+      routine.nextRun - Math.abs(late) * 60_000,
+    )
+    return Math.max(0, late - (next.offset - from.offset))
   } catch {
     return 0 // A zone this browser doesn't know.
   }
-  const part = (type: string) =>
-    Number(clock.find((item) => item.type === type)?.value)
-  const late =
-    part('hour') * 60 + part('minute') - (Number(set[1]) * 60 + Number(set[2]))
-  // The shorter way round the clock: a run at 00:10 for 23:50 is 20 minutes late.
-  return Math.max(0, ((late + DAY_MIN + DAY_MIN / 2) % DAY_MIN) - DAY_MIN / 2)
+}
+
+const SCHEDULE_DAY = /^(?:every )?(sun|mon|tue|wed|thu|fri|sat)[a-z]* at /i
+
+/** Whether a schedule in words would have run on that day. Only daily and weekly ones can say. */
+function runsOn(routine: Routine, day: Date): boolean {
+  if (/^daily at /i.test(routine.schedule)) return true
+  const named = SCHEDULE_DAY.exec(routine.schedule)?.[1]
+  return (
+    named?.toLowerCase() ===
+    day
+      .toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' })
+      .toLowerCase()
+  )
+}
+
+/** When the clocks go forward over a routine's set time before its next run, what that does: a
+ * built-in job runs later that day (the new clock's time), a systemd timer misses the day. */
+export function clockSkip(routine: Routine, now = Date.now()): string | null {
+  const set = setTime(routine)
+  if (routine.nextRun === null || routine.nextRun <= now || !routine.tz || !set)
+    return null
+  const tz = routine.tz
+  try {
+    const offset = (at: number) => zoneClock(tz, at).offset
+    let before = now
+    let after = routine.nextRun
+    const start = offset(before)
+    const gap = offset(after) - start
+    if (gap <= 0) return null
+    while (after - before > 60_000) {
+      const middle = Math.floor((before + after) / 2)
+      if (offset(middle) === start) before = middle
+      else after = middle
+    }
+    const change = zoneClock(tz, after)
+    const skipped =
+      (set.minutes - change.minutes + gap + DAY_MIN) % DAY_MIN < gap
+    if (!skipped) return null
+    const next = zoneClock(tz, routine.nextRun)
+    const sameDay = next.day.getTime() === change.day.getTime()
+    if (sameDay) return `the clock change skips ${set.text}`
+    if (!runsOn(routine, change.day)) return null
+    const date = change.day.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      timeZone: 'UTC',
+    })
+    return `no run ${date}: the clock change skips ${set.text}`
+  } catch {
+    return null // A zone this browser doesn't know.
+  }
 }
 
 /** Where it runs, in words: one machine, or whichever of several is online. */
 export const hostsText = (routine: Routine) =>
   routine.hosts.length > 1
-    ? `either ${routine.hosts.join(' or ')}`
-    : routine.home
+    ? `either ${routine.hosts.map(machineLabel).join(' or ')}`
+    : machineLabel(routine.home)
 
 const rank = (r: Routine) =>
   r.unreadable || r.lastState === 'failed' ? 0 : r.lastState === 'warn' ? 1 : 2
