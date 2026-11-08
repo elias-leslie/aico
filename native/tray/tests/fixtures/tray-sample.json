@@ -225,7 +225,8 @@
    [
     "a00000000001"
    ]
-  ]
+  ],
+  "approval_cards_off": false
  },
  "read_marks": {
   "read_all_at": 0,

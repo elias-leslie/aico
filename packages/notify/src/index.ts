@@ -3,6 +3,15 @@
 // asks. aico-web accepts notices and runs the outbox.
 
 export {
+  CHANNELS,
+  desktopCard,
+  desktopOff,
+  headedToPhone,
+  NO_CHOICES,
+  type NoticeChannel,
+  type NoticeChoices,
+} from './choices'
+export {
   b64u,
   channelOf,
   type Device,
@@ -39,3 +48,4 @@ export { Notifier, type NotifierOptions } from './notifier'
 export { backoff, Outbox } from './outbox'
 export { INTERRUPTS, type Interrupt, PHONE_REASONS, popsUp } from './phone'
 export { type Accepted, NotifyStore, notifyDbPath, type StoredNotice, type Via } from './store'
+export { describeType, NOTICE_TYPES, type NoticeType, typeOf, validTypeId } from './types'

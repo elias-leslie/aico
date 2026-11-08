@@ -21,6 +21,20 @@ def payload(status: dict, cfg: dict) -> dict:
             "floor_failed": any(r.get("state") == "failed" or r.get("shown") in ("failed", "late") for r in floor)}
 
 
+def phone_off(cfg: dict) -> list[str] | None:
+    """The types the owner keeps off the phone (Aico's Settings), for Proxmox's own sender; None: unread."""
+    status_url = cfg.get("status_url")
+    if not status_url:
+        return None
+    url = status_url.removesuffix("/api/status") + "/api/notifications/phone-off"
+    try:
+        with OPENER.open(url, timeout=5) as response:
+            off = json.load(response).get("phone_off")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return off if isinstance(off, list) else None
+
+
 def sync_route(cfg: dict, execute) -> bool:
     if not cfg.get("route"):
         return True
@@ -37,6 +51,9 @@ def sync_route(cfg: dict, execute) -> bool:
                   for dev in devices if dev.get("fcm_token") and not dev.get("token_gone")
                   and dev.get("enc_pub") and dev.get("auth")]
         wire = {"fcm": {"service_account": account, "devices": phones, "base": route["base"]}}
+        off = phone_off(cfg)
+        if off is not None:
+            wire["phone_off"] = off
         token = json.loads(Path(route["token"]).read_text())
         wire["token_cache"] = {**token, "key_id": account.get("private_key_id")}
         sync_cmd = cfg["ssh"][:-3] + cfg["sync_command"]

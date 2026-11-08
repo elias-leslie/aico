@@ -41,6 +41,7 @@ import { registerReminderRoutes } from './note-reminders'
 import { NotesStore } from './notes-db'
 import { registerExportRoutes } from './notes-export'
 import { resolveNotice } from './notice'
+import { registerNotificationRoutes } from './notifications'
 import { NotifyHub } from './notify'
 import { NotesOwner } from './owners/notes'
 import { PortfolioAiOwner } from './owners/portfolio-ai'
@@ -74,14 +75,19 @@ function serve(): void {
     hostName: config.hostName,
     revisionWindowMs: config.notes.revisionWindowMs,
   })
-  const status = new StatusStore(statusDbPath(config.dataDir))
+  const status = new StatusStore(statusDbPath(config.dataDir), Date.now, {
+    server: true,
+    settleMs: config.status.settleMs,
+  })
   // Status rows name the machine by its short host name, as every other writer does.
   const machine = machineId()
 
   const tether = new TetherClient(config.tetherSocket)
   // The paired phones: the sender and the app's API share the file.
   const phones = new PhoneRegistry(config.notify.devicesFile)
+  const noticeChoices = { choice: store.noticeChoice.bind(store) }
   const notify = new NotifyHub({
+    choices: noticeChoices,
     config: config.notify,
     dataDir: config.dataDir,
     publicHost: config.publicHost,
@@ -94,7 +100,12 @@ function serve(): void {
     historyLines: HISTORY_LINES,
     touched: (id) => store.touchLink(id),
   })
-  const shows = new Shows({ tether, publicHost: config.publicHost, notices: notify.notifier })
+  const shows = new Shows({
+    tether,
+    publicHost: config.publicHost,
+    notices: notify.notifier,
+    choices: noticeChoices,
+  })
   const blobsDir = join(config.dataDir, 'blobs')
   const asks = new Asks({
     tether,
@@ -195,6 +206,7 @@ function serve(): void {
     tether,
     asks,
     status,
+    notify: notify.store,
     notifier: notify.notifier,
   })
   registerReminderRoutes(api, {
@@ -276,7 +288,20 @@ function serve(): void {
       void resolveNotice(notify.notifier, sustainedKey(id), 'Back to normal.')
   })
   notify.register(api)
-  registerTrayRoutes(api, { status, notify: notify.store, asks, publicHost: config.publicHost })
+  registerTrayRoutes(api, {
+    status,
+    notify: notify.store,
+    asks,
+    publicHost: config.publicHost,
+    choices: noticeChoices,
+  })
+  registerNotificationRoutes(api, {
+    notify: notify.store,
+    choices: {
+      noticeChoices: () => store.noticeChoices(),
+      setNoticeChoice: (type, channel, value) => store.setNoticeChoice(type, channel, value),
+    },
+  })
   const app = new AppApi({
     pairing: config.pairing,
     phones,

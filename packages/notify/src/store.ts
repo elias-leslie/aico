@@ -281,6 +281,24 @@ export class NotifyStore {
         .run(outcome.state, outcome.result, now, id)
   }
 
+  /** A claimed row the owner's Settings choice stopped: it never goes out, and it failed nothing. */
+  dropOutboxRow(id: number): void {
+    this.db.prepare(`DELETE FROM outbox WHERE id = ? AND state = 'sending'`).run(id)
+  }
+
+  /** What a notice says after the door changed its route (a push dropped from the queue). */
+  rewriteNotice(id: string, notice: Notice): void {
+    this.db.prepare('UPDATE notices SET doc = ? WHERE id = ?').run(JSON.stringify(notice), id)
+  }
+
+  /** The notices received since `since` (epoch ms), newest first, with their deliveries. */
+  since(since: number): StoredNotice[] {
+    const rows = this.db
+      .prepare('SELECT * FROM notices WHERE received_at >= ? ORDER BY received_at DESC, rowid DESC')
+      .all(since) as unknown as NoticeRow[]
+    return rows.map((row) => this.present(row))
+  }
+
   /**
    * Rows left `sending` by a process that stopped mid-send: FCM may have taken them, so they turn
    * `unsure` and are never sent again (a notice goes out at most once). Run before the first pass.

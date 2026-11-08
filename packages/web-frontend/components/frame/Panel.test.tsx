@@ -84,8 +84,17 @@ describe('Panel', () => {
       within(menu)
         .getAllByRole('menuitem')
         .map((item) => item.textContent),
-    ).toEqual(['Logins', 'Grants', 'Recovery', 'Context', 'Phone app'])
-    expect(screen.getByRole('menuitem', { name: 'Logins' })).toHaveFocus()
+    ).toEqual([
+      'Notifications',
+      'Logins',
+      'Grants',
+      'Recovery',
+      'Context',
+      'Phone app',
+    ])
+    expect(
+      screen.getByRole('menuitem', { name: 'Notifications' }),
+    ).toHaveFocus()
     fireEvent.click(within(menu).getByRole('menuitem', { name: 'Recovery' }))
     expect(state.open).toHaveBeenCalledWith('/recovery')
     expect(screen.queryByRole('menu')).toBeNull()
@@ -106,7 +115,7 @@ describe('Panel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
     expect(screen.queryByRole('navigation', { name: 'Sessions' })).toBeNull()
     const places = screen.getByRole('navigation', { name: 'Settings places' })
-    expect(within(places).getAllByRole('link')).toHaveLength(5)
+    expect(within(places).getAllByRole('link')).toHaveLength(6)
     expect(within(places).getByText('agent sign-ins')).toBeVisible()
     fireEvent.click(screen.getByRole('button', { name: 'Back' }))
     expect(screen.getByRole('navigation', { name: 'Sessions' })).toBeVisible()

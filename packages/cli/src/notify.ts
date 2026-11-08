@@ -12,6 +12,8 @@ const NOTIFY_HELP = `Usage: aico notify --title T --body B [--severity critical|
 Sends a notice to the owner through Aico web (this machine only). It goes to the tray and the morning digest.
 It reaches the phone only with --interrupt (a warning or critical): an agent truly needs the owner, a security event,
 a backup failing, or an always-on host or service down. Anything else is not a phone matter.
+The owner's Settings > Notifications choice for the notice's type beats all of this. An agent's test stays off the phone;
+to test the phone use --interrupt needs-you with a title starting 'Test: ', which still obeys the Tests switch.
 A repeat of the same key from the same source stays quiet for the cooldown. Exits 2 when the notice breaks the contract and 1 when Aico web refuses or is down, with the server's reason.`
 
 export interface NotifyContext {

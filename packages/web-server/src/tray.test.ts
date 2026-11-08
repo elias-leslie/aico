@@ -3,7 +3,7 @@ import { request, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { NotifyStore, parseNotice } from '@aico/notify'
+import { type NoticeChoices, NotifyStore, parseNotice } from '@aico/notify'
 import { type StatusRow, StatusStore } from '@aico/status'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Approval, Ask } from './asks'
@@ -91,7 +91,12 @@ function send(fields: Record<string, unknown>, at = NOW - 60_000): string {
 }
 
 function read(
-  extra: { asks?: Ask[] | null; approvals?: Approval[] | null; rowAsks?: string[] } = {},
+  extra: {
+    asks?: Ask[] | null
+    approvals?: Approval[] | null
+    rowAsks?: string[]
+    choices?: NoticeChoices
+  } = {},
 ) {
   return buildTray({
     now: NOW,
@@ -103,6 +108,7 @@ function read(
     askError: extra.asks === null ? 'refused' : null,
     rowAsks: new Set(extra.rowAsks ?? []),
     approvals: extra.approvals === undefined ? [] : extra.approvals,
+    ...(extra.choices ? { choices: extra.choices } : {}),
     // biome-ignore lint/suspicious/noExplicitAny: the tray's JSON is read by field in these tests
   }) as any
 }
@@ -341,6 +347,57 @@ describe('questions and approvals', () => {
       key: `approve:elevate:${id}`,
       title: 'Open GitHub admin for 30 min?',
     })
+  })
+})
+
+describe('a type switched off for the desktop', () => {
+  const switched = (...types: string[]): NoticeChoices => ({
+    choice: (type, channel) => (channel === 'desktop' && types.includes(type) ? false : null),
+  })
+  const waiting = {
+    severity: 'warning',
+    interrupt: 'needs-you',
+    source: 'aico',
+    title: 'Waiting',
+    body: 'x',
+    key: 'aico-waiting:a',
+  }
+  const entry = (
+    tray: { read_marks: { pushes: { id: string; push: { quiet?: boolean } }[] } },
+    id: string,
+  ) => tray.read_marks.pushes.find((one) => one.id === id)?.push
+
+  it('marks the log line quiet: it stays on the list and pops no card', () => {
+    const id = send(waiting)
+    expect(entry(read({ choices: switched('agent-waiting') }), id)?.quiet).toBe(true)
+    expect(entry(read(), id)?.quiet).toBeUndefined()
+  })
+
+  it('keeps a question listed but pops no card for it', () => {
+    const asks = [ask('q1', { blocking: true })]
+    const tray = read({ asks, choices: switched('agent-question') })
+    expect(tray.questions).toHaveLength(1)
+    expect(entry(tray, 'q1')?.quiet).toBe(true)
+    expect(entry(read({ asks }), 'q1')?.quiet).toBeUndefined()
+  })
+
+  it('tells the tray to skip the approval card, and still lists the approval', () => {
+    const id = 'e'.repeat(32)
+    const approval = {
+      id,
+      title: 'Open GitHub admin for 30 min?',
+      url: `https://approve.example/grants?request=${id}`,
+      expiresInS: 600,
+    }
+    const tray = read({ approvals: [approval], choices: switched('approval') })
+    expect(tray.summary.approval_cards_off).toBe(true)
+    expect(tray.approvals).toHaveLength(1)
+    expect(read({ approvals: [approval] }).summary.approval_cards_off).toBe(false)
+  })
+
+  it('leaves alone what the switch does not name', () => {
+    const id = send(waiting)
+    expect(entry(read({ choices: switched('digest') }), id)?.quiet).toBeUndefined()
   })
 })
 

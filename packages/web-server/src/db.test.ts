@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { describe, expect, it } from 'vitest'
 import { SCHEMA_VERSION, WebStore } from './db'
-import { changesSince } from './sync/engine'
+import { applyPage, changesSince } from './sync/engine'
 
 describe('WebStore', () => {
   it('keeps the file owner-only', () => {
@@ -13,6 +13,25 @@ describe('WebStore', () => {
     new WebStore(path).close()
     expect(statSync(path).mode & 0o777).toBe(0o600)
     expect(statSync(join(dir, 'state')).mode & 0o777).toBe(0o700)
+  })
+
+  it('keeps the owner notice choices per switch, and two doors flipping different switches both stick', () => {
+    const here = new WebStore(':memory:')
+    const there = new WebStore(':memory:')
+    expect(here.noticeChoice('tests', 'phone')).toBeNull()
+    here.setNoticeChoice('source:new-sender', 'phone', false)
+    here.setNoticeChoice('tests', 'phone', false)
+    there.setNoticeChoice('tests', 'desktop', true)
+    expect(here.noticeChoice('tests', 'phone')).toBe(false)
+    expect(here.noticeChoices().get('source:new-sender')).toEqual({ phone: false, desktop: null })
+    applyPage(there.syncHandle(), changesSince(here.syncHandle(), 0, 100).rows)
+    applyPage(here.syncHandle(), changesSince(there.syncHandle(), 0, 100).rows)
+    for (const store of [here, there])
+      expect(store.noticeChoices().get('tests')).toEqual({ phone: false, desktop: true })
+    here.setNoticeChoice('tests', 'phone', true)
+    expect(here.noticeChoice('tests', 'phone')).toBe(true)
+    here.close()
+    there.close()
   })
 
   it('keeps tabs, links and settings', () => {

@@ -2,6 +2,7 @@
 
 import { type ReactNode, useState } from 'react'
 import { ConfirmationDialog } from '@/components/ConfirmationDialog'
+import { Switch } from '@/components/settings/kit'
 import { HostCallError, powerHost, trustHost } from '@/lib/hooks/use-host-admin'
 import { powerMachine, setAutostart } from '@/lib/hooks/use-machine-guests'
 import type { Machine } from '@/lib/machines'
@@ -272,27 +273,16 @@ export function AutostartSwitch({
         <p className={lineClass}>Autostart: Proxmox didn’t say.</p>
       ) : (
         <>
-          <label
-            className={mine.switch}
+          <Switch
+            label={
+              controls.busy === 'autostart' ? 'Saving autostart…' : 'Autostart'
+            }
             title="Autostart: starts when the Proxmox host boots"
-          >
-            <input
-              type="checkbox"
-              role="switch"
-              aria-checked={guest.autostart}
-              checked={guest.autostart}
-              disabled={controls.busy !== null}
-              onChange={(event) =>
-                void controls.toggleAutostart(event.target.checked)
-              }
-            />
-            <span className={mine.track} aria-hidden="true" />
-            <span>
-              {controls.busy === 'autostart'
-                ? 'Saving autostart…'
-                : 'Autostart'}
-            </span>
-          </label>
+            showLabel
+            checked={guest.autostart}
+            disabled={controls.busy !== null}
+            onChange={(on) => void controls.toggleAutostart(on)}
+          />
           {hint && <p className={lineClass}>{hint}</p>}
         </>
       )}

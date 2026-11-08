@@ -112,6 +112,10 @@
       "enum": ["needs-you", "security", "data-risk", "outage", "reminder"],
       "description": "why the owner is interrupted on the phone: an agent or approval truly waits on them (needs-you), a security event, a backup failing or long overdue (data-risk), an always-on host or service down for a while (outage), or a reminder they set. Severity does not route to the phone; everything without a reason stays in the tray and the morning digest. The stored notice carries phone_reason, one line saying why it reached the phone"
     },
+    "lab": {
+      "type": "boolean",
+      "description": "the machine this is about is a lab machine (the OmniNull hub's rule); it files under its own type in Settings"
+    },
     "cooldown": {
       "type": "number",
       "minimum": 0,

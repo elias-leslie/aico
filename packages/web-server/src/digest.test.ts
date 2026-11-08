@@ -149,9 +149,29 @@ describe('buildDigest', () => {
       tether: fakeTether({}),
       asks: asks(),
       status: status(),
+      notify: { since: () => [] },
       ...over,
     }
   }
+
+  it("tells how many notices Settings kept off the phone, agents' tests aside", async () => {
+    const stored = (fields: object) =>
+      ({ notice: { source: 'aico', kind: 'alert', title: 'T', ...fields } }) as never
+    const digest = await buildDigest(
+      deps({
+        notify: {
+          since: () => [
+            stored({ key: 'aico-waiting:a', phone_silenced: 'off' }),
+            stored({ key: 'zz-toast-test:a', phone_silenced: 'off' }),
+            stored({ key: 'aico-waiting:b' }),
+          ],
+        },
+      }),
+      NOW - 3_600_000,
+      NOW,
+    )
+    expect(digest.keptOffPhone).toBe(1)
+  })
 
   it('counts finished and failed, leaving out test runs, old ones and running conversations', async () => {
     const since = NOW - 8 * 3_600_000
@@ -289,6 +309,7 @@ describe('digest routes', () => {
       status: {
         read: () => ({ summary: { problems, counts: { failed: 0 } }, rows: [] }),
       } as never,
+      notify: { since: () => [] },
       notifier: { receive: (n: unknown) => notices.push(n as Record<string, unknown>) } as never,
       now: () => now,
     })

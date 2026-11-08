@@ -48,7 +48,7 @@ describe('the last three days of notices', () => {
     for (const item of pushNow) {
       const title = item.notice.title as string
       expect(title).not.toMatch(/^\d+ (late|failed):/)
-      expect(item.notice.source).toBe('aico')
+      if (!title.startsWith('Test: ')) expect(item.notice.source).toBe('aico')
       expect(String(item.notice.key ?? '')).not.toMatch(
         /^(status|jobinator|portfolio|pushcheck|host-rename)/,
       )
@@ -64,6 +64,30 @@ describe('the last three days of notices', () => {
     for (const item of pushNow) expect(parseNotice(item.notice).phone_reason).toMatch(/\S/)
     for (const item of replay.notices.filter((entry) => !pushNow.includes(entry)))
       expect(parseNotice(item.notice).phone_reason).toBeUndefined()
+  })
+})
+
+describe('an agent test', () => {
+  const test = { v: 1, body: 'x', severity: 'warning', interrupt: 'needs-you' }
+
+  it('stays off the phone even with a reason, from a test sender or under a test title', () => {
+    const route = (extra: object) => parseNotice({ ...test, ...extra }).push
+    expect(route({ source: 'zz-toast-test', title: 'Toast check' })).toBe('tray')
+    expect(route({ source: 'aico', key: 'pushcheck:1', title: 'Push check' })).toBe('tray')
+    expect(route({ source: 'aico', key: 'm10d2-test-a:1', title: 'Pairing' })).toBe('tray')
+    expect(route({ source: 'aico', title: 'TEST ignore: toast check' })).toBe('tray')
+    expect(route({ source: 'agent', title: 'Test notification' })).toBe('tray')
+    expect(route({ source: 'agent', title: 'Testing the phone push' })).toBe('tray')
+  })
+
+  it('reaches the phone only as the documented phone test', () => {
+    expect(parseNotice({ ...test, source: 'agent', title: 'Test: my phone' }).push).toBe('phone')
+    expect(parseNotice({ ...test, source: 'agent', title: 'Test failures in aico' }).push).toBe(
+      'phone',
+    )
+    expect(parseNotice({ ...test, source: 'aico', key: 'm2-disk:1', title: 'Disk' }).push).toBe(
+      'phone',
+    )
   })
 })
 

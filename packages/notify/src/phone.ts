@@ -4,7 +4,8 @@
 // routes: a warning or critical without a reason stays in the tray and the digest. The reason is
 // stored on the notice (`phone_reason`) so an audit can say why each push went out. Senders decide
 // what counts as one of these in their own domain (Status: status/src/major.ts); this file only
-// holds the list and the words.
+// holds the list and the words. The owner's choice in Settings > Notifications beats this rule and
+// every sender (choices.ts).
 
 export const INTERRUPTS = ['needs-you', 'security', 'data-risk', 'outage', 'reminder'] as const
 export type Interrupt = (typeof INTERRUPTS)[number]
@@ -17,6 +18,23 @@ export const PHONE_REASONS: Record<Interrupt | 'digest', string> = {
   outage: 'An always-on host or service has been down for a while.',
   reminder: 'A reminder you set.',
   digest: 'Your morning digest, once a day.',
+}
+
+/** An agent's test, by what it says it is: a test sender or key, or a title that starts with TEST. */
+const TEST_TITLE =
+  /^test(\s+(ignore|toast|only))?\s*(\(\w+\))?\s*:|^test(ing)?\s+(the\s+)?(notification|notice|push|phone|toast|alert)s?\b/i
+/** Where agents' tests have come from (sources like zz-toast-test, keys like m92b or pushcheck). */
+const TEST_NAME = /^zz-|(^|-)test(-|$)|-proof$|-drill$|^pushcheck$|^m\d+[a-z]?\d*$/
+/** The documented phone test: `aico notify --interrupt needs-you --title 'Test: ...'`. */
+const PHONE_TEST_TITLE = /^test:/i
+
+export function isTestNotice(source: string, keyPrefix: string, title: string): boolean {
+  return TEST_NAME.test(source) || TEST_NAME.test(keyPrefix) || TEST_TITLE.test(title)
+}
+
+/** A test that may not reach the phone: anything but the documented phone test. */
+export function testStaysOffPhone(source: string, key: string | undefined, title: string): boolean {
+  return isTestNotice(source, key?.split(':')[0] ?? '', title) && !PHONE_TEST_TITLE.test(title)
 }
 
 /** Aico's own morning digest: the one info notice the owner approved for the phone. */

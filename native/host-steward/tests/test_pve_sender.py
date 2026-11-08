@@ -594,3 +594,53 @@ def test_uncorrected_episode_still_sends_its_recovery(cfg, monkeypatch, middle):
         watchdog.tick(cfg, now=now + i, boot=0, send=lambda n: notices.append(n) or {"ok": True},
                       door=lambda *_a: None, publish=False)
     assert [n["severity"] for n in notices if n["key"].endswith("/check-ecc")] == ["critical", "ok"]
+
+
+def test_route_sync_carries_the_owners_phone_off_list_and_survives_a_failed_read(tmp_path, monkeypatch):
+    from host_steward import heartbeat
+    account, devices, token = [tmp_path / name for name in ("account", "devices", "token")]
+    account.write_text('{"private_key_id":"fixture-key"}')
+    devices.write_text("[]")
+    token.write_text("{}")
+    cfg = {"route": {"account": str(account), "devices": str(devices), "token": str(token), "base": "https://fixture"},
+           "ssh": ["ssh", "fixture", "pve-sender", "heartbeat", "workstation"],
+           "sync_command": ["pve-sender", "sync-credentials"], "timeout_s": 30}
+    wires = []
+    def execute(_argv, **kwargs):
+        wires.append(json.loads(kwargs["input"]))
+        return SimpleNamespace(returncode=0, stdout='{"synced":true}')
+    monkeypatch.setattr(heartbeat, "phone_off", lambda _cfg: ["outage"])
+    assert heartbeat.sync_route(cfg, execute)
+    assert wires[-1]["phone_off"] == ["outage"]
+    monkeypatch.setattr(heartbeat, "phone_off", lambda _cfg: None)
+    assert heartbeat.sync_route(cfg, execute)
+    assert "phone_off" not in wires[-1]  # unread: Proxmox keeps the last list it had
+
+
+def test_a_type_switched_off_in_settings_never_leaves_proxmox(tmp_path, monkeypatch):
+    from pve_sender import sender
+    (tmp_path / "phone-off.json").write_text('{"phone_off":["outage","tests","source:aico"]}')
+    cfg = {"state_dir": str(tmp_path)}
+    monkeypatch.setattr(sender, "_route", lambda _cfg: (_ for _ in ()).throw(AssertionError("no send")))
+    alarm = {"key": "pve-sender:workstation-down", "severity": "critical", "title": "T", "body": "b"}
+    result = sender.send(cfg, alarm)
+    assert result["ok"] is True and result["accepted"] == 0 and result["silenced"] is True
+    off = lambda **notice: sender.phone_off(cfg, {"title": "T", **notice})
+    assert off(key="pve-sender:workstation-down")
+    assert off(key="aico:pushcheck:1") and off(key="aico:test:1") and off(key="aico:x:1", title="Test: phone")
+    assert off(key="aico:foo:1", source="aico")  # a key the table doesn't name files under its sender
+    assert not off(key="aico:ask:1")
+    assert not off(key="portfolio-ai:1", source="portfolio-ai")
+    assert not sender.phone_off({"state_dir": str(tmp_path / "none")}, {"key": "pve-sender:x"})
+
+
+def test_a_silenced_notice_leaves_no_receipt_so_it_can_go_out_once_switched_back_on(tmp_path):
+    from pve_sender import push
+    cfg = json.loads((Path(push.__file__).parents[1] / "config.json").read_text())
+    cfg["state_dir"] = str(tmp_path)
+    raw = json.dumps({"v": 1, "source": "aico", "kind": "todo", "severity": "warning", "title": "T", "body": "b", "key": "ask:1"})
+    silenced = lambda _notice: {"ok": True, "accepted": 0, "silenced": True}
+    sent = lambda _notice: {"ok": True, "accepted": 1}
+    assert push.push(cfg, "aico", raw, now=100.0, send=silenced)["accepted"] == 0
+    assert push.push(cfg, "aico", raw, now=101.0, send=sent)["accepted"] == 1
+    assert push.push(cfg, "aico", raw, now=102.0, send=sent)["result"] == "Already sent."

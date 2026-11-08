@@ -39,6 +39,7 @@ struct State {
     queued: bool,
     wake: f64, // a re-read is due then (wake_at)
     quiet_queue: bool, // cards queued up during a quiet hour (only the newest few come up after)
+    approval_cards_off: bool, // the last known Settings switch: a failed read must not bring a silenced card back
     summary: serde_json::Value, // the item store's tray summary with the read's time (items::tray_summary), Null: unknown
     log: serde_json::Value, // the push log from the last good store read (notices::log_of), Null before the first
     marks: serde_json::Value, // the read marks from that read (read_marks)
@@ -195,7 +196,9 @@ fn refresh(st: &Shared) {
     // in a quiet hour an ask's card waits until it is about to expire (the tray lists it meanwhile)
     // while the inbox is open it lists a new ask under Approvals; its card comes up once the inbox closes
     let holding = s.window.is_some() && s.panel;
-    let new: Vec<(String, String)> = list.iter().filter(|w| !holding && !s.shown.contains(&w.id))
+    // the owner silenced approval cards on the desktop (Settings > Notifications): the tray still lists the request
+    let cards_off = s.approval_cards_off;
+    let new: Vec<(String, String)> = list.iter().filter(|w| !cards_off && !holding && !s.shown.contains(&w.id))
         .filter(|w| crate::quiet::ask_may_show(quiet, w.expires, t)).map(|w| (w.id.clone(), w.kind.clone())).collect();
     if quiet > 0.0 {
         let near = list.iter().filter(|w| !s.shown.contains(&w.id) && w.expires - crate::quiet::ASK_NEAR_S > t)
@@ -284,6 +287,9 @@ fn on_items(st: &Shared, r: Result<serde_json::Value, String>) {
             }
         }
         s.summary = crate::items::tray_summary(&r);
+        if let Some(off) = s.summary["approval_cards_off"].as_bool() {
+            s.approval_cards_off = off;
+        }
         s.summary_why = why;
         if let Ok(v) = &r {
             let log = crate::notices::log_of(v);

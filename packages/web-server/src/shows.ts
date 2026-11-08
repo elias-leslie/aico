@@ -6,6 +6,7 @@
 // boundary, so each is checked again here.
 
 import { isAbsolute } from 'node:path'
+import { desktopOff, NO_CHOICES, type NoticeChoices } from '@aico/notify'
 import type { Router } from './http'
 import { tetherCall } from './lifecycle'
 import { type Notice, type NoticeSink, sendNotice } from './notice'
@@ -155,8 +156,15 @@ export class Shows {
       publicHost: string | null
       /** This server's Notifier. */
       notices: NoticeSink
+      /** The owner's Settings choices: whether the page may pop a share up. */
+      choices?: NoticeChoices
     },
   ) {}
+
+  /** The owner turned the shared type's desktop cards off (Settings > Notifications). */
+  toastsOff(): boolean {
+    return desktopOff('shared', this.options.choices ?? NO_CHOICES)
+  }
 
   /** A `show.requested` event's data from the trusted Tether. */
   async receive(data: unknown): Promise<void> {
@@ -192,8 +200,10 @@ export function registerShowRoutes(router: Router, shows: Shows): void {
     const items = await shows.list()
     const since = ctx.query.get('since')
     const index = since ? items.findIndex((item) => item.id === since) : -1
-    // An unknown cursor (an expired share) gets the whole list.
-    return { shows: index >= 0 ? items.slice(index + 1) : items }
+    // An unknown cursor (an expired share) gets the whole list. `toasts: false`: the owner turned
+    // this type's desktop cards off in Settings, so the page lists shares and pops none up.
+    const list = index >= 0 ? items.slice(index + 1) : items
+    return shows.toastsOff() ? { shows: list, toasts: false } : { shows: list }
   })
 
   // Takes an entry out of Files > Shared. A linked host's share is removed on that host.

@@ -12,7 +12,15 @@
 // page. Needs you stays what the tray's Questions list shows: the open Tether asks, except the ones
 // that stand for a failing Status row (those are the row itself).
 
-import { type NotifyStore, popsUp, type StoredNotice } from '@aico/notify'
+import {
+  desktopCard,
+  desktopOff,
+  NO_CHOICES,
+  type NoticeChoices,
+  type NotifyStore,
+  popsUp,
+  type StoredNotice,
+} from '@aico/notify'
 import { shortAgo } from '@aico/shared/time'
 import { counted, type ShownRow, type StatusStore, type StatusView } from '@aico/status'
 import type { Approval, Ask } from './asks'
@@ -70,6 +78,8 @@ export interface TrayInput {
   rowAsks: ReadonlySet<string>
   /** Null: the pending host grants could not be read. */
   approvals: Approval[] | null
+  /** The owner's Settings > Notifications choices. */
+  choices?: NoticeChoices
 }
 
 // -- Words --------------------------------------------------------------------------
@@ -206,6 +216,7 @@ const toastAsk = (ask: Ask) => ask.blocking && ask.state === 'open'
 
 export function buildTray(input: TrayInput): Record<string, unknown> {
   const { now, publicHost: host, status, marks } = input
+  const choices = input.choices ?? NO_CHOICES
   const seconds = (ms: number) => ms / 1000
   const problems = status.rows.filter(counted)
   const readAt = (id: string, at: number) => marks.reads.has(id) || at <= marks.readAllAt
@@ -315,9 +326,12 @@ export function buildTray(input: TrayInput): Record<string, unknown> {
     ended.set(stored.id, expired(stored, now) ? now : endedAt(stored, recent))
     // The log is what the corner cards and the unread count read, so it holds only what pops up
     // (popsUp in packages/notify phone.ts). An info or ok notice, such as "nothing left to do",
-    // already did its job by ending the earlier notice above; it is not a new item.
-    if (!popsUp(notice) || log.length >= LOG_MAX) continue
+    // already did its job by ending the earlier notice above; it is not a new item. One the owner
+    // silenced stays in the log marked quiet: it counts as unread and never shows a card.
+    const card = desktopCard(notice, choices)
+    if ((!card && !popsUp(notice)) || log.length >= LOG_MAX) continue
     log.push({
+      ...(card ? {} : { quiet: true }),
       id: stored.id,
       ts: seconds(stored.receivedAt),
       kind: 'manual',
@@ -331,6 +345,7 @@ export function buildTray(input: TrayInput): Record<string, unknown> {
   }
   for (const ask of open.filter((a) => toastAsk(a) && !input.rowAsks.has(a.id))) {
     log.push({
+      ...(desktopOff('agent-question', choices) ? { quiet: true } : {}),
       id: ask.id,
       ts: seconds(ask.createdAt),
       kind: 'manual',
@@ -346,6 +361,7 @@ export function buildTray(input: TrayInput): Record<string, unknown> {
     const kind = APPROVE_KIND[new URL(tap.url).pathname.split('/')[1] ?? ''] ?? ''
     if (kind)
       log.push({
+        ...(desktopOff('approval', choices) ? { quiet: true } : {}),
         id: tap.id.slice(0, 12),
         ts: seconds(now),
         kind: 'approve',
@@ -442,6 +458,8 @@ export function buildTray(input: TrayInput): Record<string, unknown> {
       health,
       grant_labels: GRANT_LABELS,
       unread_rows: notifications.map((row) => row.unread),
+      // The owner turned approval cards off: the tray lists a request and opens no card for it.
+      approval_cards_off: desktopOff('approval', choices),
     },
     read_marks: marksOut,
   }
@@ -454,6 +472,7 @@ export interface TrayDeps {
   notify: Pick<NotifyStore, 'list' | 'get' | 'readMarks' | 'rowAskIds' | 'markRead' | 'markAllRead'>
   asks: { list(): Promise<Ask[]>; approvals(): Promise<Approval[] | null> }
   publicHost: string | null
+  choices?: NoticeChoices
   now?: () => number
 }
 
@@ -485,6 +504,7 @@ export function registerTrayRoutes(router: Router, deps: TrayDeps): void {
       askError,
       rowAsks: deps.notify.rowAskIds(),
       approvals,
+      ...(deps.choices ? { choices: deps.choices } : {}),
     })
   })
 

@@ -1,4 +1,11 @@
-import { BookOpen, KeyRound, Smartphone, Undo2, UserRound } from 'lucide-react'
+import {
+  Bell,
+  BookOpen,
+  KeyRound,
+  Smartphone,
+  Undo2,
+  UserRound,
+} from 'lucide-react'
 import type { ComponentType } from 'react'
 
 export interface SettingsPlace {
@@ -11,6 +18,12 @@ export interface SettingsPlace {
 
 /** The setup places, touched a few times a year: the Settings menu, the phone's Settings page and the Settings dialog's own list all show these, in this order. */
 export const SETTINGS_PLACES: readonly SettingsPlace[] = [
+  {
+    label: 'Notifications',
+    href: '/notifications',
+    hint: 'what reaches your phone and desktop',
+    icon: Bell,
+  },
   { label: 'Logins', href: '/logins', hint: 'agent sign-ins', icon: UserRound },
   {
     label: 'Grants',

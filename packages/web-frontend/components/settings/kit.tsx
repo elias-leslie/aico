@@ -174,6 +174,47 @@ export function Notice({
   )
 }
 
+/** An on/off switch: a real checkbox with its label read out; `busy` while the change saves. */
+export function Switch({
+  label,
+  title,
+  checked,
+  busy = false,
+  disabled = false,
+  showLabel = false,
+  onChange,
+}: {
+  label: string
+  title?: string
+  checked: boolean
+  busy?: boolean
+  disabled?: boolean
+  /** Writes the label beside the switch; otherwise it is for screen readers and the tooltip. */
+  showLabel?: boolean
+  onChange: (on: boolean) => void
+}) {
+  return (
+    <label
+      className={styles.switch}
+      title={title ?? label}
+      data-busy={busy || undefined}
+    >
+      <input
+        type="checkbox"
+        role="switch"
+        aria-label={showLabel ? undefined : label}
+        aria-checked={checked}
+        aria-busy={busy || undefined}
+        checked={checked}
+        disabled={busy || disabled}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      <span className={styles.track} aria-hidden="true" />
+      {showLabel && <span>{label}</span>}
+    </label>
+  )
+}
+
 /** A quiet line: loading, empty, or a hint. */
 export function Quiet({
   children,

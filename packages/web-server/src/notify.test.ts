@@ -4,6 +4,7 @@ import { request, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { NO_CHOICES } from '@aico/notify'
 import { StatusStore } from '@aico/status'
 import { TetherError } from '@aico/tether-client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -53,6 +54,7 @@ beforeEach(async () => {
     dataDir: dir,
     publicHost: 'aico.example.dev',
     machine: 'here',
+    choices: NO_CHOICES,
     status,
     tether: {
       request: (async (method: string, path: string, body?: unknown) => {
@@ -329,6 +331,7 @@ describe('the pieces', () => {
       dataDir: mkdtempSync(join(tmpdir(), 'aico-notify-door-')),
       publicHost: null,
       machine: 'here',
+      choices: NO_CHOICES,
       status,
       tether: { request: (async () => ({ status: 201, body: { id: 'x' } })) as never },
     })

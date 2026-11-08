@@ -9,6 +9,30 @@ from pathlib import Path
 from . import fcm
 from .state import read, write
 
+# Which row of Aico's Settings > Notifications each key this sender sees belongs to; first match wins.
+# Off-host messages have no door, so the owner's phone switches reach here through sync-credentials.
+NOTICE_TYPES = {
+    "pve-sender:test": "tests",
+    "pve-sender:": "outage",
+    "portfolio-ai:": "portfolio",
+    "aico:ask:": "agent-question",
+    "aico:digest:": "digest",
+    "aico:test": "tests",
+    "aico:pushcheck:": "tests",
+}
+
+
+def phone_off(cfg: dict, notice: dict) -> bool:
+    """The owner keeps this notice's type off the phone in Aico's Settings. A key the table doesn't name
+    files under its sender, as at Aico's door, so nothing passes a switch by being unknown."""
+    off = read(Path(cfg["state_dir"]) / "phone-off.json", {}).get("phone_off", [])
+    if str(notice.get("title", "")).lower().startswith("test"):
+        return "tests" in off
+    for prefix, notice_type in cfg.get("notice_types", NOTICE_TYPES).items():
+        if notice["key"].startswith(prefix):
+            return notice_type in off
+    return f"source:{notice.get('source') or notice['key'].split(':')[0]}" in off
+
 
 def route_status(cfg: dict) -> dict:
     """Operational metadata only; never return device identifiers, keys or tokens."""
@@ -27,6 +51,8 @@ def _route(cfg: dict) -> tuple[dict, list, dict]:
 
 def send(cfg: dict, notice: dict, now: float | None = None) -> dict:
     now = time.time() if now is None else now
+    if phone_off(cfg, notice):
+        return {"ok": True, "accepted": 0, "devices": 0, "silenced": True, "result": "Silenced in Aico's Settings."}
     route = _route(cfg)[0]
     delivery_id = notice.get("delivery_id") or hashlib.sha256(json.dumps(notice, sort_keys=True).encode()).hexdigest()
     severity = notice["severity"]

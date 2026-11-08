@@ -119,7 +119,7 @@
         "source": "aico",
         "kind": "alert",
         "severity": "critical",
-        "title": "61 failed: / recovery · T7, /home recovery · T7, /srv/models recovery · T7, /srv/workspaces recovery · T7, /var/lib/dock",
+        "title": "61 failed: / recovery \u00b7 T7, /home recovery \u00b7 T7, /srv/models recovery \u00b7 T7, /srv/workspaces recovery \u00b7 T7, /var/lib/dock",
         "body": "(body not kept)",
         "key": "status:0123456789ab",
         "push": "tray"
@@ -135,7 +135,7 @@
         "source": "aico",
         "kind": "alert",
         "severity": "warning",
-        "title": "61 late: / recovery · T7, /home recovery · T7, /srv/models recovery · T7, /srv/workspaces recovery · T7, /var/lib/docker",
+        "title": "61 late: / recovery \u00b7 T7, /home recovery \u00b7 T7, /srv/models recovery \u00b7 T7, /srv/workspaces recovery \u00b7 T7, /var/lib/docker",
         "body": "(body not kept)",
         "key": "status:0123456789ab",
         "push": "phone"
@@ -151,7 +151,7 @@
         "source": "aico",
         "kind": "alert",
         "severity": "critical",
-        "title": "1 failed: Redis database · Drive",
+        "title": "1 failed: Redis database \u00b7 Drive",
         "body": "(body not kept)",
         "key": "status:davion-sidarli/backup/drive/redis=failed",
         "push": "tray"
@@ -167,7 +167,7 @@
         "source": "aico",
         "kind": "alert",
         "severity": "warning",
-        "title": "1 late: Aico databases and photos · CT 160",
+        "title": "1 late: Aico databases and photos \u00b7 CT 160",
         "body": "(body not kept)",
         "key": "status:davion-sidarli/backup/append/aico-davion-sidarli=late",
         "push": "phone"
@@ -394,7 +394,7 @@
         "source": "aico",
         "kind": "alert",
         "severity": "warning",
-        "title": "63 late: A-Loom · Drive, Agent Hub journals and context deliveries · Drive, Agent Skills · Drive, Agent-Hub · Drive, Aic",
+        "title": "63 late: A-Loom \u00b7 Drive, Agent Hub journals and context deliveries \u00b7 Drive, Agent Skills \u00b7 Drive, Agent-Hub \u00b7 Drive, Aic",
         "body": "(body not kept)",
         "key": "status:0123456789ab",
         "push": "phone"
@@ -666,7 +666,7 @@
         "source": "aico",
         "kind": "alert",
         "severity": "critical",
-        "title": "1 failed: Portfolio-AI full backup (database and uploads) · Owner backup",
+        "title": "1 failed: Portfolio-AI full backup (database and uploads) \u00b7 Owner backup",
         "body": "(body not kept)",
         "key": "status:davion-sidarli/backup/external/portfolio-ai-complete=failed",
         "push": "phone"
@@ -682,7 +682,7 @@
         "source": "aico",
         "kind": "alert",
         "severity": "critical",
-        "title": "1 failed: Portfolio-AI full backup (database and uploads) · Owner backup",
+        "title": "1 failed: Portfolio-AI full backup (database and uploads) \u00b7 Owner backup",
         "body": "(body not kept)",
         "key": "status:davion-sidarli/backup/external/portfolio-ai-complete=failed",
         "push": "phone"
@@ -826,7 +826,7 @@
         "source": "aico",
         "kind": "alert",
         "severity": "critical",
-        "title": "1 failed: PostgreSQL databases · Drive",
+        "title": "1 failed: PostgreSQL databases \u00b7 Drive",
         "body": "(body not kept)",
         "key": "status:davion-sidarli/backup/drive/postgres=failed",
         "push": "phone"
@@ -858,7 +858,7 @@
         "source": "aico",
         "kind": "alert",
         "severity": "critical",
-        "title": "1 failed: VM180 app recovery data · Drive",
+        "title": "1 failed: VM180 app recovery data \u00b7 Drive",
         "body": "(body not kept)",
         "key": "status:davion-sidarli/backup/drive/pve-vm-180-app-recovery=failed",
         "push": "phone"
@@ -874,7 +874,7 @@
         "source": "aico",
         "kind": "todo",
         "severity": "warning",
-        "title": "Claude Code waiting in Aico — w04 waiting-notice test",
+        "title": "Claude Code waiting in Aico \u2014 w04 waiting-notice test",
         "body": "(body not kept)",
         "key": "aico-waiting:10df2898",
         "push": "phone",
@@ -907,7 +907,7 @@
         "source": "aico",
         "kind": "alert",
         "severity": "critical",
-        "title": "1 failed: Aico databases and photos · Drive",
+        "title": "1 failed: Aico databases and photos \u00b7 Drive",
         "body": "(body not kept)",
         "key": "status:davion-sidarli/backup/drive/aico-davion-sidarli=failed",
         "push": "phone"
@@ -1277,7 +1277,7 @@
         "source": "aico",
         "kind": "alert",
         "severity": "warning",
-        "title": "49 late: Agent Hub journals and context deliveries · Drive, Agent Skills · Drive, Aico databases and photos · Drive, Aic",
+        "title": "49 late: Agent Hub journals and context deliveries \u00b7 Drive, Agent Skills \u00b7 Drive, Aico databases and photos \u00b7 Drive, Aic",
         "body": "(body not kept)",
         "key": "status:0123456789ab",
         "push": "phone"
@@ -1578,6 +1578,53 @@
       "wasPushed": false,
       "count": 3,
       "expectPush": "tray",
+      "expectToast": true
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "zz-toast-test",
+        "kind": "todo",
+        "severity": "warning",
+        "title": "TEST ignore: toast check, needs you",
+        "body": "x",
+        "key": "zz-toast-test:1",
+        "interrupt": "needs-you"
+      },
+      "wasPushed": true,
+      "count": 1,
+      "expectPush": "tray",
+      "expectToast": true
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "zz-toast-test",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "TEST ignore: critical with reason",
+        "body": "x",
+        "key": "zz-toast-test:1",
+        "interrupt": "outage"
+      },
+      "wasPushed": true,
+      "count": 1,
+      "expectPush": "tray",
+      "expectToast": true
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "agent",
+        "kind": "alert",
+        "severity": "warning",
+        "title": "Test: Aico phone alert",
+        "body": "x",
+        "interrupt": "needs-you"
+      },
+      "wasPushed": true,
+      "count": 1,
+      "expectPush": "phone",
       "expectToast": true
     }
   ]

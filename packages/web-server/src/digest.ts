@@ -5,7 +5,7 @@
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { Notifier } from '@aico/notify'
+import { type Notifier, type NotifyStore, typeOf } from '@aico/notify'
 import { concentration, type StatusStore } from '@aico/status'
 import type { TetherClient } from '@aico/tether-client'
 import { localDay, openUsage, usageDbPath } from '@aico/usage'
@@ -23,7 +23,7 @@ const DIGEST_HISTORY_LIMIT = 200
 /** The longest window a digest covers. */
 const DIGEST_MAX_DAYS = 14
 
-export type DigestPart = 'history' | 'sessions' | 'asks' | 'status' | 'spend'
+export type DigestPart = 'history' | 'sessions' | 'asks' | 'status' | 'spend' | 'notices'
 
 export interface Digest {
   since: number
@@ -35,6 +35,8 @@ export interface Digest {
   asks: number
   problems: { count: number; failed: number; crowd?: { machine: string; count: number } }
   spend: { sinceDay: string; items: { provider: string; credits: number }[] } | null
+  /** Notices kept off the phone by Settings since then (agents' tests aside): the digest still tells. */
+  keptOffPhone: number
   unavailable: DigestPart[]
 }
 
@@ -43,6 +45,7 @@ export interface DigestDeps {
   tether: Pick<TetherClient, 'listSessions' | 'history'>
   asks: { list(): Promise<Pick<Ask, 'createdAt' | 'state'>[]> }
   status: Pick<StatusStore, 'read'>
+  notify: Pick<NotifyStore, 'since'>
 }
 
 function spendSince(dataDir: string, since: number): NonNullable<Digest['spend']> {
@@ -79,6 +82,7 @@ export async function buildDigest(deps: DigestDeps, since: number, now: number):
     asks: 0,
     problems: { count: 0, failed: 0 },
     spend: null,
+    keptOffPhone: 0,
     unavailable,
   }
 
@@ -123,6 +127,13 @@ export async function buildDigest(deps: DigestDeps, since: number, now: number):
   } catch {
     unavailable.push('spend')
   }
+  try {
+    digest.keptOffPhone = deps.notify
+      .since(since)
+      .filter(({ notice }) => notice.phone_silenced && typeOf(notice) !== 'tests').length
+  } catch {
+    unavailable.push('notices')
+  }
   return digest
 }
 
@@ -156,7 +167,8 @@ function digestIsQuiet(d: Digest): boolean {
     d.stuck.quiet === 0 &&
     d.stuck.waiting === 0 &&
     d.asks === 0 &&
-    d.problems.count === 0
+    d.problems.count === 0 &&
+    d.keptOffPhone === 0
   )
 }
 
@@ -169,6 +181,7 @@ function digestWording(d: Digest): { title: string; body: string } {
     d.asks && plural(d.asks, 'new question', 'new questions'),
     d.stuck.quiet && `${d.stuck.quiet} quiet`,
     d.problems.count && plural(d.problems.count, 'problem', 'problems'),
+    d.keptOffPhone && `${d.keptOffPhone} kept off your phone`,
   ]
     .filter(Boolean)
     .slice(0, 3)
@@ -181,6 +194,8 @@ function digestWording(d: Digest): { title: string; body: string } {
     d.asks && plural(d.asks, 'new question', 'new questions'),
     d.problems.count &&
       `${plural(d.problems.count, 'problem', 'problems')} in Status${d.problems.failed ? ` (${d.problems.failed} failed)` : ''}${d.problems.crowd ? `, ${d.problems.crowd.count} on ${d.problems.crowd.machine}` : ''}`,
+    d.keptOffPhone &&
+      `${plural(d.keptOffPhone, 'notice', 'notices')} kept off your phone (they are in the tray)`,
   ].filter(Boolean) as string[]
   const list =
     facts.length > 1 ? `${facts.slice(0, -1).join(', ')} and ${facts[facts.length - 1]}` : facts[0]

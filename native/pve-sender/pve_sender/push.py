@@ -123,8 +123,10 @@ def push(cfg: dict, name: str, text: str, *, now=None, send=None) -> dict:
         notice["severity"] = "info"
     result = (send or (lambda message: sender.send(cfg, message, now)))(notice)
     if result["ok"]:
-        receipts[key] = now
-        write(path, receipts)
+        # A silenced notice was not sent: switched back on, the same key may still go out.
+        if not result.get("silenced"):
+            receipts[key] = now
+            write(path, receipts)
         pending.pop(key, None)
         write(pending_path, pending)
     return result

@@ -1,0 +1,137 @@
+/* Settings > Notifications: three columns on any width, a name with its weekly count, then the two
+   switches; a row's recent notices open in place under it. */
+
+.table {
+  --col: 44px;
+}
+.columns,
+.line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--col) var(--col);
+  align-items: center;
+  gap: 8px;
+}
+.columns {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 4px 6px 6px;
+  background: var(--ink);
+  color: var(--mist);
+}
+.columns span {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.columns small {
+  font-size: 10.5px;
+  line-height: 1;
+}
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.row {
+  border-top: 1px solid var(--line);
+}
+.line {
+  min-height: 44px;
+  padding: 4px 6px;
+}
+.line > label {
+  justify-self: center;
+}
+.name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--bone);
+  font-size: 13px;
+  line-height: 1.3;
+}
+.count {
+  flex: none;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid var(--paper-veil);
+  border-radius: 11px;
+  background: transparent;
+  color: var(--bone);
+  font: 500 11.5px / 1 var(--font-ui);
+  cursor: pointer;
+  transition: border-color 0.18s var(--ease-arrival);
+}
+.count[data-none] {
+  color: var(--mist);
+}
+.count:hover {
+  border-color: var(--lantern);
+}
+.count:focus-visible {
+  outline: 2px solid var(--lantern);
+  outline-offset: 2px;
+}
+.locked {
+  display: flex;
+  justify-content: center;
+  color: var(--mist);
+}
+.detail {
+  padding: 0 6px 10px;
+  color: var(--mist);
+}
+.detail > small {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.recent {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.recent li {
+  padding: 6px 0;
+  border-top: 1px solid var(--line);
+}
+.recentHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--bone);
+  font-size: 12.5px;
+}
+.recentTitle {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.recentWhen {
+  flex: none;
+  color: var(--mist);
+  font-size: 11.5px;
+}
+.recentRoute {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 3px;
+}
+.routeIcon {
+  flex: none;
+  color: var(--mist);
+  opacity: 0.55;
+}
+.routeIcon[data-on] {
+  color: var(--lantern);
+  opacity: 1;
+}
+.why {
+  font-size: 12px;
+  line-height: 1.35;
+}

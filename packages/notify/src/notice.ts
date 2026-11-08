@@ -3,7 +3,7 @@
 // contract.test.ts holds these lists and limits to it and replays
 // contracts/notice-fixtures.json.
 
-import { INTERRUPTS, type Interrupt, isDigest, PHONE_REASONS } from './phone'
+import { INTERRUPTS, type Interrupt, isDigest, PHONE_REASONS, testStaysOffPhone } from './phone'
 
 export const KINDS = ['alert', 'todo', 'question', 'info'] as const
 export type NoticeKind = (typeof KINDS)[number]
@@ -55,6 +55,12 @@ export interface Notice {
   interrupt?: Interrupt
   /** Set by the door when push is phone: why this reached the phone, for audits. Not a sender field. */
   phone_reason?: string
+  /** Set by the door when the owner's Settings choice stopped the phone push. Not a sender field. */
+  phone_silenced?: string
+  /** Door-set: whether a desktop card was due when it arrived. */
+  desktop_card?: boolean
+  /** The machine this is about is a lab machine (the OmniNull hub says so); it files under its own type. */
+  lab?: boolean
   /** Seconds a repeat of `key` stays quiet. */
   cooldown: number
   /** Seconds after sending when it ends by itself. */
@@ -98,6 +104,7 @@ const FIELDS = new Set([
   'cooldown',
   'expires',
   'if_ignored',
+  'lab',
 ])
 
 /** A template field nobody filled in ("old kernel {running}"); `{}` and JSON-like text pass. */
@@ -251,6 +258,10 @@ export function parseNotice(value: unknown): Notice {
       ? undefined
       : oneOf(body.interrupt, 'interrupt', INTERRUPTS)
   if (interrupt) notice.interrupt = interrupt
+  if (body.lab !== undefined && body.lab !== null) {
+    if (typeof body.lab !== 'boolean') throw new NoticeError('lab', 'lab is true or false')
+    if (body.lab) notice.lab = true
+  }
   // The one rule (phone.ts): the phone is reached by a named reason (or the digest) and a sender
   // that asks for it; severity does not route. A phone request without a reason stays in the tray.
   const digest = isDigest(source, kind, notice.key)
@@ -258,7 +269,11 @@ export function parseNotice(value: unknown): Notice {
     body.push === undefined || body.push === null || body.push === ''
       ? true
       : oneOf(body.push, 'push', PUSH) === 'phone'
-  const push: Push = wantsPhone && (interrupt || digest) ? 'phone' : 'tray'
+  // An agent's test never reaches the phone unless it is the documented phone test (phone.ts).
+  const push: Push =
+    wantsPhone && (interrupt || digest) && !testStaysOffPhone(source, notice.key, title)
+      ? 'phone'
+      : 'tray'
   if (push === 'phone' && (severity === 'info' || severity === 'ok') && !digest)
     throw new NoticeError(
       'push',

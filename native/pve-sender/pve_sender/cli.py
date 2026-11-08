@@ -56,6 +56,10 @@ def main(argv=None) -> int:
                     raise ValueError("Invalid phone route.")
                 # Root-to-root stdin transfer only; this is never part of heartbeat/status replies.
                 write(Path(cfg["credentials"]), {"fcm": route})
+                # The owner's phone switches (Aico Settings); absent when Aico couldn't be read: keep the last.
+                off = data.get("phone_off")
+                if isinstance(off, list) and all(isinstance(item, str) for item in off):
+                    write(directory / "phone-off.json", {"phone_off": off})
                 token = data.get("token_cache", {})
                 if token.get("access_token") and token.get("expires_at", 0) > time.time():
                     write(Path(cfg["token_cache"]), token)

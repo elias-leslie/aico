@@ -20,4 +20,5 @@ export const WEB_SYNC_TABLES: readonly SyncTable[] = [
   { name: 'session_links', keys: ['session_id'], clock: 'sync_at' },
   { name: 'project_settings', keys: ['project_id'], clock: 'sync_at' },
   { name: 'session_seen', keys: ['session_id'], merge: { max: 'seen_at' } },
+  { name: 'notice_choices', keys: ['choice'], clock: 'sync_at' },
 ]

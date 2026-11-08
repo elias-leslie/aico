@@ -18,7 +18,7 @@ import { hostNameFrom } from './config'
 import { baseOf, type SyncHandle } from './sync/engine'
 import { WEB_SYNC_TABLES } from './sync/registry'
 
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 4
 
 const SYNC_COLUMNS = (table: string) => `
   ALTER TABLE ${table} ADD COLUMN sync_at INTEGER NOT NULL DEFAULT 0;
@@ -40,6 +40,19 @@ const MIGRATIONS: Record<number, string> = {
   2: `ALTER TABLE panes ADD COLUMN prev_origin TEXT;
       ALTER TABLE session_links ADD COLUMN prev_origin TEXT;
       ALTER TABLE project_settings ADD COLUMN prev_origin TEXT;`,
+  // The owner's Settings > Notifications choices: one row per switch (<channel>:<type>), so two
+  // doors flipping different switches of a type both stick.
+  3: `CREATE TABLE IF NOT EXISTS notice_choices (
+        choice      TEXT PRIMARY KEY,
+        value       INTEGER NOT NULL,
+        sync_at     INTEGER NOT NULL DEFAULT 0,
+        origin      TEXT    NOT NULL DEFAULT '',
+        prev        INTEGER,
+        prev_origin TEXT,
+        deleted     INTEGER NOT NULL DEFAULT 0,
+        seq         INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX IF NOT EXISTS notice_choices_seq ON notice_choices (seq);`,
 }
 
 /**
@@ -571,6 +584,46 @@ export class WebStore {
   allProjectSettings(): Map<string, ProjectSettings> {
     const rows = this.db.prepare('SELECT * FROM project_settings WHERE deleted = 0').all() as Row[]
     return new Map(rows.map((row) => [String(row.project_id), settings(row)]))
+  }
+
+  // -- Notification choices ----------------------------------------------------
+
+  /** What the owner chose for a type on a channel; null when no choice is saved. */
+  noticeChoice(type: string, channel: 'phone' | 'desktop'): boolean | null {
+    const row = this.db
+      .prepare('SELECT value FROM notice_choices WHERE choice = ? AND deleted = 0')
+      .get(`${channel}:${type}`) as Row | undefined
+    return row === undefined ? null : Number(row.value) === 1
+  }
+
+  /** Every saved choice, by type. */
+  noticeChoices(): Map<string, { phone: boolean | null; desktop: boolean | null }> {
+    const rows = this.db
+      .prepare('SELECT choice, value FROM notice_choices WHERE deleted = 0')
+      .all() as Row[]
+    const choices = new Map<string, { phone: boolean | null; desktop: boolean | null }>()
+    for (const row of rows) {
+      const choice = String(row.choice)
+      const split = choice.indexOf(':')
+      const type = choice.slice(split + 1)
+      const channel = choice.slice(0, split) === 'phone' ? 'phone' : 'desktop'
+      const known = choices.get(type) ?? { phone: null, desktop: null }
+      choices.set(type, { ...known, [channel]: Number(row.value) === 1 })
+    }
+    return choices
+  }
+
+  /** Saves one switch. */
+  setNoticeChoice(type: string, channel: 'phone' | 'desktop', value: boolean): void {
+    const choice = `${channel}:${type}`
+    const stored = value ? 1 : 0
+    this.transaction(() => {
+      const existing = this.db
+        .prepare('SELECT 1 FROM notice_choices WHERE choice = ?')
+        .get(choice) as Row | undefined
+      if (existing) this.edit('notice_choices', 'choice', choice, { value: stored, deleted: 0 })
+      else this.insertRow('notice_choices', { choice, value: stored })
+    })
   }
 
   /** Tombstones the settings of projects not in `projectIds` (never all of them: an empty list prunes nothing). */

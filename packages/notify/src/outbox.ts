@@ -7,6 +7,7 @@
 // (pending) and are tried again. Its Status row says what it did.
 
 import type { StatusRow } from '@aico/status'
+import { keptOffPhone, NO_CHOICES, type NoticeChoices, phoneSilenced } from './choices'
 import { itemPlaintext, type PhoneSender, type SendResult, TTL_S } from './fcm'
 import { ANY_PHONE, type NotifyStore } from './store'
 
@@ -31,6 +32,8 @@ export interface OutboxOptions {
   sender: PhoneSender
   /** The Aico host a tap opens when the notice has no link of its own. */
   publicHost: string | null
+  /** The owner's Settings choices: a push still queued when its type goes off is dropped. */
+  choices?: NoticeChoices
   now?: () => number
 }
 
@@ -101,6 +104,11 @@ export class Outbox {
         continue
       }
       const { notice } = stored
+      if (phoneSilenced(notice, this.options.choices ?? NO_CHOICES)) {
+        store.dropOutboxRow(row.id)
+        store.rewriteNotice(stored.id, keptOffPhone(notice))
+        continue
+      }
       if (notice.expires && now > stored.receivedAt + notice.expires * 1000) {
         store.finish(row.id, { state: 'failed', result: 'ended before it could be sent' }, now)
         continue

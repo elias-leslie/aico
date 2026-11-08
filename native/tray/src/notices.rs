@@ -168,6 +168,7 @@ pub fn to_show<'a>(log: &'a Value, since: f64, shown: &HashMap<String, u32>, cle
     all.iter()
         .filter(|e| e["ts"].as_f64().unwrap_or(0.0) > since)
         .filter(|e| !HIDDEN_KINDS.contains(&e["kind"].as_str().unwrap_or("")))
+        .filter(|e| e["quiet"] != true) // the owner silenced this type on the desktop; it stays in the list
         .filter(|e| showable(e["result"].as_str().unwrap_or("")))
         .filter(|e| e["id"].as_str().is_some_and(|i| valid_entry_id(i) && !shown.contains_key(i)))
         .filter(|e| !cleared.of(e))
@@ -273,6 +274,16 @@ mod tests {
 
     fn cleared() -> Cleared {
         Cleared { seen: HashMap::from([("cccccccccccc".to_string(), 1.0)]), opened_seen: 15.0, over: HashSet::from(["111111111111".into()]) }
+    }
+
+    #[test]
+    fn a_quiet_entry_pops_no_card() {
+        let log = json!([
+            {"id": "aaaaaaaaaaaa", "ts": 10.0, "kind": "manual", "result": "desktop-popup", "quiet": true},
+            {"id": "bbbbbbbbbbbb", "ts": 20.0, "kind": "manual", "result": "desktop-popup"}]);
+        let ids: Vec<&str> =
+            to_show(&log, 5.0, &HashMap::new(), &cleared()).iter().map(|e| e["id"].as_str().unwrap()).collect();
+        assert_eq!(ids, vec!["bbbbbbbbbbbb"]);
     }
 
     #[test]

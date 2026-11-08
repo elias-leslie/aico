@@ -314,7 +314,7 @@ export class AppApi {
       .filter(
         (stored) =>
           stored.receivedAt >= nowMs - RECENT_MS &&
-          stored.notice.push === 'phone' &&
+          (stored.notice.push === 'phone' || stored.notice.phone_silenced !== undefined) &&
           !(stored.askId && asked.has(stored.askId)),
       )
       .slice(0, RECENT_MAX)

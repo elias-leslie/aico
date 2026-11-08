@@ -20,6 +20,7 @@ import {
   type AskPort,
   FcmSender,
   NeedsYou,
+  type NoticeChoices,
   NoticeError,
   Notifier,
   NotifyStore,
@@ -208,6 +209,8 @@ export interface NotifyDeps {
   machine: string
   status: StatusStore
   tether: TetherRequest
+  /** The owner's Settings > Notifications choices (web.db). */
+  choices: NoticeChoices
 }
 
 export class NotifyHub {
@@ -228,7 +231,12 @@ export class NotifyHub {
     const sender = relay
       ? relaySender(relay)
       : new FcmSender({ tokenFile: config.fcmTokenFile, devicesFile: config.devicesFile })
-    this.outbox = new Outbox({ store: this.store, sender, publicHost: deps.publicHost })
+    this.outbox = new Outbox({
+      store: this.store,
+      sender,
+      publicHost: deps.publicHost,
+      choices: deps.choices,
+    })
     this.needsYou = new NeedsYou({
       store: this.store,
       asks: tetherAsks(deps.tether),
@@ -239,6 +247,7 @@ export class NotifyHub {
       sender,
       outbox: this.outbox,
       needsYou: this.needsYou,
+      choices: deps.choices,
     })
   }
 

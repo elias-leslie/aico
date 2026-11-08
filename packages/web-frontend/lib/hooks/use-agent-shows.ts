@@ -70,11 +70,15 @@ function parseShows(value: unknown): AgentShow[] {
   return items
 }
 
-function fetchShows(since?: string, signal?: AbortSignal) {
+function fetchRawShows(since?: string, signal?: AbortSignal) {
   return apiFetch<unknown>(`/api/shows${since ? `?since=${since}` : ''}`, {
     signal,
     cache: 'no-store',
-  }).then(parseShows)
+  })
+}
+
+function fetchShows(since?: string, signal?: AbortSignal) {
+  return fetchRawShows(since, signal).then(parseShows)
 }
 
 /** Take one share out of Files > Shared; a refusal throws with the server's reason. */
@@ -116,7 +120,10 @@ export function useAgentShows() {
       polling = true
       try {
         const first = cursor.current === undefined
-        const items = await fetchShows(cursor.current, controller.signal)
+        const raw = await fetchRawShows(cursor.current, controller.signal)
+        const items = parseShows(raw)
+        // The owner turned this type's desktop cards off (Settings > Notifications).
+        const quiet = isRecord(raw) && raw.toasts === false
         if (controller.signal.aborted) return
         const last = items.at(-1)
         if (last) cursor.current = last.id
@@ -127,6 +134,7 @@ export function useAgentShows() {
           seenAt === null ? !first : item.createdAt > seenAt,
         )
         if (first) fresh = fresh.slice(-MAX_CATCH_UP)
+        if (quiet) fresh = []
         if (last && (!seenAt || last.createdAt > seenAt))
           writeSeenAt(last.createdAt)
         const asked = requested

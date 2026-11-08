@@ -2,17 +2,28 @@
 // it for the paired phones when it asks for the phone, wakes the outbox, and
 // files its Needs-you ask when it asks the owner something.
 
+import {
+  applyDailyLimit,
+  applyPhoneChoice,
+  desktopCard,
+  headedToPhone,
+  NO_CHOICES,
+  type NoticeChoices,
+} from './choices'
 import type { PhoneSender } from './fcm'
 import type { NeedsYou } from './needs-you'
 import { parseNotice } from './notice'
 import type { Outbox } from './outbox'
 import { type Accepted, ANY_PHONE, type NotifyStore, type Via } from './store'
+import { typeOf } from './types'
 
 export interface NotifierOptions {
   store: NotifyStore
   sender: PhoneSender
   outbox: Outbox
   needsYou: NeedsYou
+  /** The owner's Settings choices; read on every notice. */
+  choices?: NoticeChoices
   now?: () => number
   log?: (line: string) => void
 }
@@ -43,12 +54,20 @@ export class Notifier {
   receive(value: unknown, via: Via): Accepted {
     const { store, sender, outbox, needsYou } = this.options
     const log = this.options.log ?? ((line: string) => console.log(`[notify] ${line}`))
-    const notice = parseNotice(hubPage(value, via))
+    const now = (this.options.now ?? Date.now)()
+    const parsed = parseNotice(hubPage(value, via))
+    const choices = this.options.choices ?? NO_CHOICES
+    const notice = {
+      ...applyDailyLimit(applyPhoneChoice(parsed, choices), () =>
+        this.pushedToday(typeOf(parsed), now),
+      ),
+      desktop_card: desktopCard(parsed, choices),
+    }
     // When the paired-phones file can't be read, one row waits for any phone; the outbox
     // turns it into a row per phone once the file reads again.
     const devices =
       notice.push === 'phone' ? (sender.devices()?.map((device) => device.id) ?? [ANY_PHONE]) : []
-    const accepted = store.accept(notice, via, devices, (this.options.now ?? Date.now)())
+    const accepted = store.accept(notice, via, devices, now)
     log(
       `${accepted.repeat ? 'repeat of' : 'took'} ${accepted.id} from ${notice.source} via ${via} (${notice.severity}, ${notice.push}${devices[0] === ANY_PHONE ? ', phones unknown yet' : devices.length ? `, ${devices.length} phone(s)` : ''})`,
     )
@@ -63,6 +82,14 @@ export class Notifier {
     this.pendingAsks.set(accepted.id, pending)
     void pending.finally(() => this.pendingAsks.delete(accepted.id))
     return accepted
+  }
+
+  /** How many notices of a type went to the phone since this calendar day began. */
+  private pushedToday(type: string, now: number): number {
+    const midnight = new Date(now).setHours(0, 0, 0, 0)
+    return this.options.store
+      .since(midnight)
+      .filter((stored) => headedToPhone(stored) && typeOf(stored.notice) === type).length
   }
 
   /** Resolve after pending creation, so an in-flight ask cannot reopen the condition. */
