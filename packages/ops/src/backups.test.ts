@@ -490,9 +490,24 @@ it('gem backs itself up to its own Drive repository with its own login, reported
   c.scratchRoot = temp()
   expect(c.drive?.repository).toBe('rclone:aico-notes-drive:SummitFlow-Aico-gem-backup')
   const drive = entries(emptyState(), c, 'aico', now).filter((e) => e.target === 'drive')
-  expect(drive.map((e) => [e.id, e.name])).toEqual([
-    ['drive/aico-aico', 'Aico databases and photos'],
-  ])
+  expect(drive[0]).toMatchObject({ id: 'drive/aico-aico', name: 'Aico databases and photos' })
+  // gem copies the machines on its own Proxmox host itself, so they stay safe with the workstation off.
+  expect(new Set(drive.map((e) => e.source))).toEqual(
+    new Set([
+      'aico-aico',
+      'pve-ct-191-jobinator-data',
+      'pve-vm-210-dadbot-data',
+      'pve-vm-180-app-recovery',
+      'pve-cluster-config',
+      'ominull-production-state',
+    ]),
+  )
+  expect(drive.find((e) => e.source === 'pve-ct-191-jobinator-data')?.project).toBe(
+    'jobinator-4000',
+  )
+  expect(
+    entries(emptyState(), config({ AICO_BACKUP_MACHINE: 'davion-sidarli' }), 'aico', now).length,
+  ).toBeLessThan(drive.length)
   // The workstation's Drive repository is not touched by gem's config, and gem's is not the workstation's.
   expect(config({ AICO_BACKUP_MACHINE: 'davion-sidarli' }).drive).toBeUndefined()
   const run = vi.fn(async (_argv: string[], _options?: { env?: NodeJS.ProcessEnv }) => ({

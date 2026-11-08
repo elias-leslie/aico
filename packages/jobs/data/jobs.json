@@ -208,10 +208,10 @@
     },
     {
       "kind": "backups-drive-aico",
-      "what": "Standby databases to Google Drive",
+      "what": "Standby databases, its guests and the Ominull hub to Google Drive",
       "project": "aico",
       "home": "aico",
-      "at": "04:30",
+      "at": "01:30",
       "run": {
         "command": ["../../web-server/scripts/aico", "backups", "run", "drive", "--scheduled"]
       },

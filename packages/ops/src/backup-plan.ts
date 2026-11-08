@@ -82,6 +82,8 @@ export function driveTarget() {
     pruneQualified: backend.config.restic_offsite_prune_qualified === true,
   }
 }
+/** The sources this machine copies to its own Drive repository besides its own databases. */
+export const driveGuests = (cfg: BackupConfig): readonly string[] => cfg.drive?.guests ?? []
 /** The Drive repository this machine writes: its own (`driveClients`), else the workstation's migrated one. */
 export const driveSpec = (cfg: BackupConfig) => cfg.drive ?? driveTarget()
 export const contains = (parent: string, path: string) =>
@@ -247,6 +249,22 @@ export function entries(
         now,
       ),
     )
+  if (machine !== cfg.workstation)
+    for (const id of driveGuests(cfg)) {
+      const source = imported.sources.find((s) => s.id === id && s.enabled)
+      if (!source) continue
+      const item = entry(
+        source.id,
+        cfg.displayNames[source.id as keyof typeof cfg.displayNames] ?? source.name,
+        'drive',
+        state.copies[copyKey(source.id, 'drive')],
+        cfg,
+        machine,
+        now,
+      )
+      if (source.project_id) item.project = source.project_id
+      all.push(item)
+    }
   if (machine === cfg.workstation) {
     const source = cfg.remoteSqlite.source
     const remote = entry(

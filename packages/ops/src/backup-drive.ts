@@ -8,6 +8,7 @@ import {
   type BackupState,
   type Copy,
   copyKey,
+  driveGuests,
   driveTarget,
   homePath,
   migrated,
@@ -30,6 +31,8 @@ export interface BackupJob {
   filename?: string
   offline?: boolean
   prepare?: boolean
+  /** Where the source owner stages its payload on a machine without the usual disk. */
+  prepareEnv?: Record<string, string>
   /** The machine this copy reads: how it stood at the start, and how to read it again if the copy fails. */
   machine?: { before: GuestPower; read: () => Promise<GuestPower> }
 }
@@ -305,7 +308,7 @@ export async function prepareFolder(
   // The owner extension keeps its existing secret and Proxmox access path. Never log its response.
   const result = await rt.run([...spec.command, '--request', JSON.stringify(request)], {
     cwd: spec.root,
-    env: { ...process.env, ST_EXTENSION_CONTEXT: JSON.stringify(context) },
+    env: { ...process.env, ...job.prepareEnv, ST_EXTENSION_CONTEXT: JSON.stringify(context) },
   })
   if (result.code)
     throw new Error(
@@ -472,32 +475,45 @@ export async function driveBackup(
   save: () => void,
 ): Promise<boolean> {
   const jobs: BackupJob[] = machine === rt.cfg.workstation ? volumeJobs(rt.cfg, state) : []
-  if (machine === rt.cfg.workstation)
-    for (const s of migrated.sources.filter((s) => s.enabled)) {
-      if (s.path.startsWith('proxmox://')) {
-        try {
-          jobs.push(await proxmoxJob(rt, state, s))
-        } catch (error) {
-          state.copies[copyKey(s.id, 'drive')] = {
-            ...state.copies[copyKey(s.id, 'drive')],
-            source: s.id,
-            target: 'drive',
-            attemptedAt: rt.now().toISOString(),
-            error: (error as Error).message,
-          }
-          save()
+  // The workstation copies every source. The standby copies the machines on its own Proxmox host to
+  // its own repository, every day, so nothing there depends on the workstation being on.
+  const sources = migrated.sources.filter(
+    (s) => s.enabled && (machine === rt.cfg.workstation || driveGuests(rt.cfg).includes(s.id)),
+  )
+  for (const s of sources) {
+    const stage = rt.cfg.drive?.stages?.[s.id as keyof typeof rt.cfg.drive.stages]
+    if (s.path.startsWith('proxmox://')) {
+      try {
+        jobs.push(await proxmoxJob(rt, state, s))
+      } catch (error) {
+        state.copies[copyKey(s.id, 'drive')] = {
+          ...state.copies[copyKey(s.id, 'drive')],
+          source: s.id,
+          target: 'drive',
+          attemptedAt: rt.now().toISOString(),
+          error: (error as Error).message,
         }
-      } else if (s.path.startsWith('/media/') || s.path.startsWith('/mnt/')) {
-        jobs.push({
-          id: s.id,
-          paths: [s.path],
-          binds: [],
-          dataAt: payloadTime(s.path) ?? '',
-          offline: diskAway(s.path),
-          prepare: s.id in rt.cfg.prepare,
-        })
+        save()
       }
+    } else if (stage || s.path.startsWith('/media/') || s.path.startsWith('/mnt/')) {
+      const path = stage ? homePath(stage.path) : s.path
+      jobs.push({
+        id: s.id,
+        paths: [path],
+        binds: [],
+        dataAt: payloadTime(path) ?? '',
+        offline: diskAway(path),
+        prepare: s.id in rt.cfg.prepare,
+        ...(stage
+          ? {
+              prepareEnv: Object.fromEntries(
+                Object.entries(stage.env).map(([k, v]) => [k, homePath(v)]),
+              ),
+            }
+          : {}),
+      })
     }
+  }
   const sqlite = stageSqlite(rt.cfg, rt.now())
   jobs.push({ id: `aico-${machine}`, ...sqlite, binds: [] })
   let ok = true

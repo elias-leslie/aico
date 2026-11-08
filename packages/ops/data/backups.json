@@ -183,7 +183,20 @@
       "repository": "rclone:aico-notes-drive:SummitFlow-Aico-gem-backup",
       "passwordFile": "~/.local/state/aico/secrets/backup-append.password",
       "rcloneConfig": "~/.config/aico-export/notes-drive.conf",
-      "pruneQualified": true
+      "pruneQualified": true,
+      "guests": [
+        "pve-ct-191-jobinator-data",
+        "pve-vm-210-dadbot-data",
+        "pve-vm-180-app-recovery",
+        "pve-cluster-config",
+        "ominull-production-state"
+      ],
+      "stages": {
+        "ominull-production-state": {
+          "path": "~/.local/state/aico/standby-stage/ominull-production-state/current",
+          "env": { "OMINULL_BACKUP_STAGE": "~/.local/state/aico/standby-stage" }
+        }
+      }
     }
   },
   "externalProbes": {
