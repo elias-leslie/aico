@@ -128,11 +128,24 @@ agents when no coordinator is present; enforcement must not depend on agents.
   directory contains timestamped complete Portfolio artifacts with PostgreSQL
   dumps and 71 uploaded files (20.9 MB in the inspected manifests). Newer archives
   are about 104 MB each; earlier ones are about 376 MB. Preserve this history.
-  Both abandoned generated chunk directories remain present in the stopped VM.
+  Removed only the two abandoned generated chunk directories: 2,264 part files,
+  27,147,948,432 bytes. VM 180 stayed off; a temporary PVE backup lock prevented
+  startup during the offline cleanup. The filesystem now has 34,560,405,504 bytes
+  available. The temporary mount, loop device and backup lock were cleared.
 - The stopped VM's SSH metadata has two unrestricted management public keys and
   the standby's restricted port-forward key. One management fingerprint matches
   the workstation's existing gem key. Do not widen the standby key or copy a
   management private key as a shortcut to the new transport.
+- `4bf3fcae`: initial local thermal guard and native sender integration. Focused
+  independent review passed 71 tests and found two notification defects: a repeated
+  sensor outage reused its episode ID, and a heat/recovery pair could be missed
+  between five-minute sender ticks. The guard worker is fixing both with unique
+  persisted episodes and transition-only publication over existing Status transport.
+  No live installation yet.
+- `cf96af79` and `830c5855`: strict guard row contract, standalone/coordinator
+  delivery, persisted deduplication, recovery and explicit powered-off handling.
+  The base gate passed 2,347 TypeScript tests, 1,583 Python tests and contract
+  checks; independent review is underway. No live pushes or deployment yet.
 - Finish and review schedule/phone corrections and browser on-demand lifecycle;
   deploy Aico to both hosts and browser tools to both entry points, then validate
   the live paths. VM 100's on-demand runtime policy is registered on both hosts.
