@@ -590,6 +590,152 @@ describe('deploy', () => {
     expect(queued).not.toContain('SECRET_TOKEN')
   })
 
+  it('a second request for the same commit joins the live job and prints its wait hint', async () => {
+    const { root, deps, lines, calls } = setup()
+    await deploy(request({ detach: true }), root, deps)
+    await deploy(request({ detach: true }), root, deps)
+    const [only, ...rest] = readdirSync(deps.jobsDir)
+    expect(rest).toEqual([])
+    const id = only.replace(/\.json$/, '')
+    expect(calls.filter((call) => call.startsWith('systemd-run'))).toHaveLength(1)
+    expect(lines.some((line) => line.includes(`${id} is already queued`))).toBe(true)
+    expect(lines.filter((line) => line.includes(`aico deploy wait ${id}`))).toHaveLength(2)
+    // A different request is not a repeat.
+    await deploy(request({ detach: true, withAck: 'r1' }), root, deps)
+    expect(readdirSync(deps.jobsDir)).toHaveLength(2)
+  })
+
+  it('a job whose unit died is not joined', async () => {
+    const { root, deps } = setup()
+    await deploy(request({ detach: true }), root, deps)
+    const original = deps.run
+    deps.run = (cmd, args, opts) =>
+      cmd === 'systemctl' && args.includes('is-active')
+        ? { code: 3, out: 'inactive\n', err: '' }
+        : original(cmd, args, opts)
+    await deploy(request({ detach: true }), root, deps)
+    expect(readdirSync(deps.jobsDir)).toHaveLength(2)
+  })
+
+  it('a queued job a newer deploy already covers ends without acceptance', async () => {
+    const { root, git, deps, calls, head } = setup()
+    await deploy(request({ detach: true }), root, deps)
+    const id = readdirSync(deps.jobsDir)[0].replace(/\.json$/, '')
+    writeFileSync(join(root, 'packages/web-server/main.ts'), 'v2\n')
+    git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qam', 'two')
+    const newer = git('rev-parse', 'HEAD').out.trim()
+    const other = 'aico-0123456789ab'
+    writeFileSync(
+      join(deps.jobsDir, `${other}.json`),
+      JSON.stringify({
+        id: other,
+        project: 'demo',
+        sha: newer,
+        state: 'succeeded',
+        argv: ['demo', '--sha', newer, '--job', other],
+        queued_at: new Date().toISOString(),
+        finished_at: new Date().toISOString(),
+      }),
+    )
+    expect(await deploy(request({ job: id, sha: head }), root, deps)).toBe(0)
+    expect(calls.filter((call) => call.includes('--acceptance'))).toEqual([])
+    const job = JSON.parse(readFileSync(join(deps.jobsDir, `${id}.json`), 'utf8'))
+    expect(job).toMatchObject({ state: 'succeeded', exit_code: 0 })
+    expect(job.message).toMatch(/^Not needed: /)
+  })
+
+  it('acceptance failing on a safe fix commits it and deploys the new HEAD', async () => {
+    let fixedSha = ''
+    const { root, deps, calls, head } = setup({
+      acceptOut:
+        'CHECK:FAIL:biome|1s|hint:x\n  Biome and ruff can fix your own files: st check --fix\n',
+      accept: (at, args) => {
+        if (args.includes('--repair')) {
+          writeFileSync(join(at, 'packages/web-server/main.ts'), 'formatted\n')
+          run('git', [
+            '-C',
+            at,
+            '-c',
+            'user.email=t@t',
+            '-c',
+            'user.name=t',
+            'commit',
+            '-qam',
+            'fix',
+          ])
+          fixedSha = run('git', ['-C', at, 'rev-parse', 'HEAD']).out.trim()
+          return 0
+        }
+        return args.includes(fixedSha) && fixedSha ? 0 : 1
+      },
+    })
+    await deploy(request({ detach: true }), root, deps)
+    const id = readdirSync(deps.jobsDir)[0].replace(/\.json$/, '')
+    expect(await deploy(request({ job: id, sha: head }), root, deps)).toBe(0)
+    expect(calls).toContain('aico check --repair biome')
+    const job = JSON.parse(readFileSync(join(deps.jobsDir, `${id}.json`), 'utf8'))
+    expect(job).toMatchObject({ state: 'succeeded', sha: fixedSha })
+    expect(existsSync(join(deps.releasesDir, fixedSha))).toBe(true)
+  })
+
+  it('nothing to fix: no retry, the failure names the file, its commit and who was told', async () => {
+    const { root, deps, calls, head } = setup({
+      acceptOut:
+        'CHECK:FAIL:tsc|1s|hint:packages/web-server/main.ts(1,1): error TS1\n  Biome and ruff can fix your own files: st check --fix\n',
+      accept: (_at, args) => (args[0] === 'sessions' ? 0 : args.includes('--repair') ? 1 : 2),
+    })
+    const receipts = join(root, '.git/aico-checks/receipts')
+    mkdirSync(receipts, { recursive: true })
+    writeFileSync(join(receipts, `commit-session-${head}.json`), '{"session":"owner-session"}')
+    await deploy(request({ detach: true }), root, deps)
+    const id = readdirSync(deps.jobsDir)[0].replace(/\.json$/, '')
+    await expect(deploy(request({ job: id, sha: head }), root, deps)).rejects.toMatchObject({
+      code: 2,
+    })
+    expect(calls.filter((call) => call.includes('--acceptance'))).toHaveLength(1)
+    expect(calls.some((call) => call.startsWith('aico sessions send owner-session '))).toBe(true)
+    const job = JSON.parse(readFileSync(join(deps.jobsDir, `${id}.json`), 'utf8'))
+    expect(job.state).toBe('failed')
+    expect(job.message.split('\n')[0]).toContain(
+      `packages/web-server/main.ts, last changed in ${head.slice(0, 10)}`,
+    )
+    expect(job.message.split('\n')[0]).toContain('told owner-session')
+  })
+
+  it('a rollback never repairs its way onto HEAD', async () => {
+    const { root, deps, calls, head } = setup({
+      acceptOut:
+        'CHECK:FAIL:biome|1s|hint:x\n  Biome and ruff can fix your own files: st check --fix\n',
+      accept: (_at, args) => (args[0] === 'sessions' ? 0 : 1),
+    })
+    await expect(deploy(request({ rollback: true, sha: head }), root, deps)).rejects.toThrow(
+      /Acceptance of/,
+    )
+    expect(calls.filter((call) => call.includes('--repair'))).toEqual([])
+  })
+
+  it('names a root-level file, and never a directory, with its own failure line', async () => {
+    const { root, git, deps, calls, head } = setup({
+      acceptOut:
+        'CHECK:FAIL:boundaries|1s|hint:packages/web-server bad\n  package.json: pin versions\nCHECK:FAIL:tsc|1s|hint:packages/web-server/main.ts(1,1): error TS1\n',
+      accept: (_at, args) => (args[0] === 'sessions' ? 0 : 1),
+    })
+    const receipts = join(root, '.git/aico-checks/receipts')
+    mkdirSync(receipts, { recursive: true })
+    writeFileSync(join(receipts, `commit-session-${head}.json`), '{"session":"owner-session"}')
+    writeFileSync(join(root, 'package.json'), '{}\n')
+    git('add', 'package.json')
+    git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'root')
+    writeFileSync(
+      join(receipts, `commit-session-${git('rev-parse', 'HEAD').out.trim()}.json`),
+      '{"session":"other-session"}',
+    )
+    await expect(deploy(request(), root, deps)).rejects.toThrow(/package\.json, last changed/)
+    const sends = calls.filter((call) => call.startsWith('aico sessions send'))
+    expect(sends.find((call) => call.includes('package.json fails'))).toContain('pin versions')
+    expect(sends.find((call) => call.includes('main.ts fails'))).toContain('TS1')
+  })
+
   it('restores the previous unit when health fails', async () => {
     const { root, deps } = setup()
     const before = '[Service]\nWorkingDirectory=/old/packages/web-server\n'

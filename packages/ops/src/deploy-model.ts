@@ -19,6 +19,22 @@ export class Refusal extends Error {
 
 export type DeployConfig = typeof ops.deploy
 
+export interface Job {
+  id: string
+  project: string
+  sha: string
+  state: 'queued' | 'running' | 'succeeded' | 'failed'
+  argv: string[]
+  queued_at: string
+  finished_at?: string
+  units?: string[]
+  /** Units whose frontend build this deploy swapped without restarting them. */
+  frontends?: string[]
+  message?: string
+  /** The exit code the deploy ended with (`st service wait` exits with it). */
+  exit_code?: number
+}
+
 export interface DeployDeps {
   run: Runner
   out: (line: string) => void

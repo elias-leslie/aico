@@ -35,6 +35,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { machineId, postStatusRows } from '@aico/status'
 import ops from '../data/ops.json' with { type: 'json' }
+import { coveredBy, liveTwin, repairAcceptance, tellOwners } from './deploy-follow'
 import {
   hookInstallWanted,
   installedOpsSha,
@@ -45,7 +46,14 @@ import {
   restoreOps,
   rootInstallWanted,
 } from './deploy-install'
-import { type DeployConfig, type DeployDeps, Refusal, runningSha, touches } from './deploy-model'
+import {
+  type DeployConfig,
+  type DeployDeps,
+  type Job,
+  Refusal,
+  runningSha,
+  touches,
+} from './deploy-model'
 import { expandHome, run as realRun, tail } from './sh'
 
 export * from './deploy-install'
@@ -417,22 +425,6 @@ export function defaultDeps(env: NodeJS.ProcessEnv = process.env): DeployDeps {
   }
 }
 
-export interface Job {
-  id: string
-  project: string
-  sha: string
-  state: 'queued' | 'running' | 'succeeded' | 'failed'
-  argv: string[]
-  queued_at: string
-  finished_at?: string
-  units?: string[]
-  /** Units whose frontend build this deploy swapped without restarting them. */
-  frontends?: string[]
-  message?: string
-  /** The exit code the deploy ended with (`st service wait` exits with it). */
-  exit_code?: number
-}
-
 const jobPath = (deps: DeployDeps, id: string) => {
   if (!/^aico-[0-9a-f]{12}$/.test(id)) throw new Refusal(`Not a deploy job id: ${id}`, 2)
   return join(deps.jobsDir, `${id}.json`)
@@ -699,6 +691,16 @@ function queueDeploy(
   if (req.includeAllWorkers) argv.push('--include-all-workers')
   if (req.rollback) argv.push('--rollback')
   if (req.withAck) argv.push('--with-ack', req.withAck)
+  const hint = (job: string) =>
+    deps.out(
+      `[deploy] result: aico deploy result ${job}   wait: aico deploy wait ${job}   log: aico logs aico-deploy-${job}`,
+    )
+  const twin = liveTwin(deps, { project: project.id, sha, argv })
+  if (twin) {
+    deps.out(`[deploy] ${twin.id} is already ${twin.state} for ${sha.slice(0, 12)}; joining it`)
+    hint(twin.id)
+    return 0
+  }
   writeJob(deps, {
     id,
     project: project.id,
@@ -739,9 +741,7 @@ function queueDeploy(
     throw new Refusal(`Could not queue the deploy: ${tail(queued, 3)}`)
   }
   deps.out(`[deploy] queued ${id} for ${sha.slice(0, 12)}`)
-  deps.out(
-    `[deploy] result: aico deploy result ${id}   wait: aico deploy wait ${id}   log: aico logs aico-deploy-${id}`,
-  )
+  hint(id)
   return 0
 }
 
@@ -1041,6 +1041,22 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
   selectUnits(project, req, { active: view.active, changed: () => false })
   if (req.detach) return queueDeploy(req, project, root, sha, deps)
 
+  /** A newer deploy of the same request already covers this job: end it, nothing to do. */
+  const covered = (queued: Job | null) => {
+    const newer = queued && coveredBy(deps, root, queued)
+    if (!queued || !newer) return false
+    const message = `Not needed: ${newer.sha.slice(0, 10)}, which contains ${sha.slice(0, 10)}, is already deployed`
+    deps.out(`[deploy] ${message}`)
+    writeJob(deps, {
+      ...queued,
+      state: 'succeeded',
+      message,
+      exit_code: 0,
+      finished_at: new Date().toISOString(),
+    })
+    return true
+  }
+  if (covered(job)) return 0
   const started = Date.now()
   if (job) {
     job = { ...job, state: 'running' }
@@ -1056,17 +1072,46 @@ export async function deploy(req: DeployRequest, root: string, deps: DeployDeps)
       tee: true,
     })
     if (accepted.code !== 0) {
+      // A rollback deploys that exact old commit: moving on to HEAD would undo it.
+      const fixed = req.rollback ? null : repairAcceptance(accepted.out, root, ack, deps)
+      if (fixed && fixed !== sha) {
+        deps.out(`[deploy] safe fixes committed as ${fixed.slice(0, 12)}; carrying on with it`)
+        if (job)
+          writeJob(deps, {
+            ...job,
+            sha: fixed,
+            state: 'queued',
+            argv: job.argv.map((arg) => (arg === sha ? fixed : arg)),
+          })
+        run.finished = true // this job ends in the deploy of the fix
+        try {
+          return await deploy({ ...req, sha: fixed }, root, deps)
+        } catch (error) {
+          // Refused before that deploy took the job on: nothing else will end it.
+          const pending = req.job ? readJob(deps, req.job) : null
+          if (pending?.state === 'queued')
+            await new DeployRun(pending, project, deps).fail(
+              (error as Error).message,
+              error as Error,
+            )
+          throw error
+        }
+      }
+      const failures = acceptanceFailures(accepted.out)
+      const told = tellOwners(failures, root, sha, deps)
       throw new Refusal(
         [
-          `Acceptance of ${sha.slice(0, 12)} failed; nothing was deployed.`,
-          ...acceptanceFailures(accepted.out),
+          `Acceptance of ${sha.slice(0, 12)} failed; nothing was deployed.${told ? ` ${told}.` : ''}`,
+          ...failures,
         ].join('\n'),
         accepted.code,
         true,
       )
     }
     return await withLock(deps, (held) =>
-      deployLocked({ req, project, root, sha, view, run, started, deps, holds, held }),
+      covered(job)
+        ? Promise.resolve(0)
+        : deployLocked({ req, project, root, sha, view, run, started, deps, holds, held }),
     )
   } catch (error) {
     if (!run.finished) await run.fail((error as Error).message, error as Error)
