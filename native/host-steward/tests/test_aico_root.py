@@ -1,7 +1,9 @@
 """Exact retained-root owner controls, using isolated receipts only."""
 
 import json
+import subprocess
 import threading
+import time
 
 import pytest
 from aico_cli_fixtures import REAL_STARTED_AGENT_ID, admin
@@ -426,3 +428,29 @@ def test_create_reports_the_started_agent_id_and_null_when_it_has_not_started(mo
     monkeypatch.setattr(admin, "CREATE_AGENT_SECONDS", 0.0)
     lane_receipts(monkeypatch, session={**REPORT_SESSION, "resumeId": None})
     assert REAL_STARTED_AGENT_ID(instance, created) is None
+
+
+def test_an_agent_is_found_by_its_window_before_tether_knows_its_resume_id(monkeypatch):
+    process = subprocess.Popen(["sleep", "30"], env={"AICO_WIDGET_ID": "aabbcc01"})
+    try:
+        deadline = time.monotonic() + 5
+        while admin.anchor_window(f"{process.pid}:1") != "aabbcc01" and time.monotonic() < deadline:
+            time.sleep(.01)
+        rows = {"cc:000002": {"main": True, "anchor": f"{process.pid}:1", "last": "2026-11-08T10:00:00Z"},
+                "cc:child1": {"main": False, "anchor": f"{process.pid}:1", "last": "2026-11-08T11:00:00Z"},
+                "cc:999999": {"main": True, "anchor": "not-a-process:1", "last": "2026-11-08T12:00:00Z"}}
+        lane_receipts(monkeypatch, session={**REPORT_SESSION, "resumeId": None})
+        instance = admin.Collector("/fixture/tether.sock", "/fixture/tether.sock", "", 1e12, threading.Event())
+        receipt = admin.Collector.receipt
+
+        def identities(self, path, route, *args, **kwargs):
+            if route == admin.COORD_DOC_ROUTE:
+                return 200, {"doc": {"identities": rows}}
+            return receipt(self, path, route, *args, **kwargs)
+        monkeypatch.setattr(admin.Collector, "receipt", identities)
+        session = {**REPORT_SESSION, "resumeId": None}
+        assert admin.agent_id_of(instance, "/fixture/tether.sock", session) == "cc:000002"
+        assert admin.agent_id_of(instance, "/fixture/tether.sock", {**session, "id": "ffffffff"}) is None
+    finally:
+        process.kill()
+        process.wait()

@@ -2074,10 +2074,28 @@ def session_view(collector: Collector, socket_name: str, widget: str) -> dict:
     return data if status == 200 else {}
 
 
+def anchor_window(anchor: object) -> str | None:
+    """The Aico window an agent's process runs in, from its environment; the same reading as the hook's widgetFor."""
+    pid = str(anchor).partition(":")[0]
+    if not pid.isdigit():
+        return None
+    try:
+        environ = Path(f"/proc/{pid}/environ").read_bytes()
+    except OSError:
+        return None
+    for entry in environ.split(b"\0"):
+        if entry.startswith(b"AICO_WIDGET_ID="):
+            return entry.partition(b"=")[2].decode(errors="replace")
+    return None
+
+
 def agent_id_of(collector: Collector, socket_name: str, session: dict) -> str | None:
-    """The agent id `st sessions send` shows for a session's agent, once it has started and registered."""
-    resume = session.get("resumeId")
-    if not isinstance(resume, str) or not resume:
+    """The agent id `st sessions send` shows for a session's agent, once it has started and registered.
+
+    An agent registers within a second of starting, well before Tether learns its resume id, so its window counts too.
+    """
+    resume, window = session.get("resumeId"), session.get("id")
+    if not resume and not window:
         return None
     try:
         status, data = collector.receipt(socket_name, COORD_DOC_ROUTE, timeout=2)
@@ -2087,8 +2105,9 @@ def agent_id_of(collector: Collector, socket_name: str, session: dict) -> str | 
     identities = doc.get("identities") if isinstance(doc, dict) else None
     if not isinstance(identities, dict):
         return None
-    found = [(str(row.get("last")), agent) for agent, row in identities.items()
-             if isinstance(row, dict) and row.get("session") == resume]
+    found = [(str(row.get("last")), agent) for agent, row in identities.items() if isinstance(row, dict) and (
+        (resume and row.get("session") == resume)
+        or (window and row.get("main") and anchor_window(row.get("anchor")) == window))]
     return max(found)[1] if found else None
 
 
