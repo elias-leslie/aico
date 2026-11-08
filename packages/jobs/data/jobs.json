@@ -51,6 +51,7 @@
       "home": "davion-sidarli",
       "lease_host": "aico",
       "workers": ["davion-sidarli", "aico"],
+      "fallback": ["davion-sidarli"],
       "at": "07:30",
       "run": {
         "post": "/api/digest/push"
@@ -75,6 +76,7 @@
       "home": "davion-sidarli",
       "lease_host": "aico",
       "workers": ["davion-sidarli", "aico"],
+      "fallback": ["davion-sidarli"],
       "every_min": 1,
       "run": {
         "post": "/api/notes/reminders/run"

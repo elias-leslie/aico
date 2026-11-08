@@ -205,6 +205,11 @@ export async function main(argv: string[], env = process.env): Promise<number> {
     machine,
     holder: `${machine}:${process.pid}`,
     authority,
+    standinOf: (job, other) =>
+      remoteAuthority(join(peerDir(env, process.getuid?.(), other), 'jobs.sock')).standin(
+        job.kind,
+        TICK_MS,
+      ),
     act: act([process.execPath, process.argv[1] as string], units),
     inFlight: (job) => unitInFlight(job.kind, units, whereOf(job)),
     drain: async () => void (await drainOutbox(rowsUrl, outbox)),

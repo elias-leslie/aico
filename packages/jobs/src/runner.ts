@@ -1,10 +1,20 @@
 // Each configured worker claims from the job’s single lease authority. The home
 // worker has first chance; backups wait one lease period past the due time. A
 // lost lease never kills work, but the authority refuses its late result.
+// A job's fallback workers stand in on their own lease only while its lease host does not answer
+// at all, and report that run when it is back; the lease host asks them before it runs a slot
+// they may have covered, so a run is not repeated after either machine comes back.
 
 import type { StatusRow } from '@aico/status'
 import { type JobDef, nextRun, schedule } from './jobs'
-import { type JobResult, type JobState, type JobStore, type Lease, StaleLease } from './leases'
+import {
+  type JobResult,
+  type JobState,
+  type JobStore,
+  type Lease,
+  StaleLease,
+  Unreachable,
+} from './leases'
 
 type MaybePromise<T> = T | Promise<T>
 export interface LeaseAuthority {
@@ -20,6 +30,8 @@ export interface LeaseAuthority {
   /** Frees the lease without a result (a busy run); the job is due again at `retryAt`. */
   release(lease: Lease, retryAt: number): MaybePromise<void>
   get(kind: string): MaybePromise<JobState | null>
+  /** A fallback worker's run made while this authority was down; false when it ran here itself. */
+  report?(kind: string, result: JobResult, ranAt: number): MaybePromise<boolean>
 }
 
 export type Act = (job: JobDef) => Promise<JobResult>
@@ -39,6 +51,9 @@ export interface RunnerOptions {
   /** True when a run of this job already lives outside this process (still going, or finished
    * with its result not yet recorded), so a restarted scheduler adopts it instead of starting another. */
   inFlight?: (job: JobDef) => Promise<boolean>
+  /** What a fallback worker of this job (held here) last ran on its own lease; throws
+   * Unreachable when that machine does not answer. */
+  standinOf?: (job: JobDef, machine: string) => Promise<JobState | null>
   /** Sends Status rows an earlier writer could not post; called every tick. */
   drain?: () => Promise<void>
   now?: () => number
@@ -54,12 +69,18 @@ export class Runner {
   private readonly running = new Map<string, Promise<void>>()
   private readonly unsent = new Map<string, StatusRow>()
   private readonly announced = new Set<string>()
+  /** Jobs held elsewhere whose lease host held a lease when last asked: not stood in for until
+   * that lease would have run out. */
+  private readonly heldThere = new Map<string, number>()
+  private readonly told = new Set<string>()
+  private readonly started: number
   private readonly now: () => number
   private readonly log: (line: string) => void
 
   constructor(private readonly options: RunnerOptions) {
     this.now = options.now ?? Date.now
     this.log = options.log ?? ((line) => console.log(`[jobs] ${line}`))
+    this.started = this.now()
   }
 
   private get jobs(): readonly JobDef[] {
@@ -96,24 +117,45 @@ export class Runner {
     this.sync()
     for (const job of this.jobs) {
       if (!(job.workers ?? [job.home]).includes(machine) || this.running.has(job.kind)) continue
-      const authority = this.options.authority?.(job) ?? store
-      let lease: Lease | null
-      try {
-        lease =
-          (await this.adopt(job)) ??
-          (await authority.claim(
+      const remote = this.options.authority?.(job) ?? store
+      const standsIn = remote !== store && (job.fallback ?? []).includes(machine)
+      let authority: LeaseAuthority = remote
+      let lease: Lease | null = await this.adopt(job, standsIn)
+      if (lease) authority = store
+      else
+        try {
+          if (standsIn) await this.follow(job, remote)
+          else if (remote === store && (await this.coveredElsewhere(job))) continue
+          lease = await remote.claim(
             job.kind,
             this.who,
             this.now(),
             job.lease_s * 1000,
             job.home === machine ? 0 : job.lease_s * 1000,
-          ))
-      } catch (error) {
-        this.log(`${job.kind}: could not take the lease: ${(error as Error).message}`)
-        continue
-      }
+          )
+        } catch (error) {
+          if (!standsIn || !(error instanceof Unreachable)) {
+            this.log(`${job.kind}: could not take the lease: ${(error as Error).message}`)
+            continue
+          }
+          lease =
+            (this.heldThere.get(job.kind) ?? 0) > this.now()
+              ? null
+              : store.claim(
+                  job.kind,
+                  this.who,
+                  this.now(),
+                  job.lease_s * 1000,
+                  job.home === machine ? 0 : job.lease_s * 1000,
+                )
+          if (!lease) continue
+          authority = store
+          this.log(
+            `${job.kind}: ${job.lease_host} does not answer (${error.message}); running it here on this machine's own lease`,
+          )
+        }
       if (!lease) continue
-      const work = this.run(job, lease).finally(() => this.running.delete(job.kind))
+      const work = this.run(job, lease, authority).finally(() => this.running.delete(job.kind))
       this.running.set(job.kind, work)
     }
     await this.flush()
@@ -123,9 +165,9 @@ export class Runner {
    * A lease this machine's earlier scheduler left behind, with its run still alive or finished
    * unrecorded: take it over now rather than let it expire and start the job a second time.
    */
-  private async adopt(job: JobDef): Promise<Lease | null> {
+  private async adopt(job: JobDef, standsIn: boolean): Promise<Lease | null> {
     const { store, machine, holder, inFlight } = this.options
-    if (!inFlight || (job.lease_host ?? job.home) !== machine) return null
+    if (!inFlight || ((job.lease_host ?? job.home) !== machine && !standsIn)) return null
     const state = store.get(job.kind)
     if (!state?.leaseId || state.holderMachine !== machine || state.holder === holder) return null
     if (!(await inFlight(job))) return null
@@ -134,14 +176,101 @@ export class Runner {
     return lease
   }
 
+  /**
+   * A job held elsewhere that this machine may stand in for: hands over a run it made here while
+   * the lease host was down (once that host answers again), then keeps the host's due time and
+   * pause here. Throws Unreachable when the lease host does not answer.
+   */
+  private async follow(job: JobDef, remote: LeaseAuthority): Promise<void> {
+    const { store, machine } = this.options
+    let there = await remote.get(job.kind)
+    if (!there) return
+    const here = store.get(job.kind)
+    if (
+      here?.lastMachine === machine &&
+      here.lastRun !== null &&
+      here.lastState &&
+      here.lastRun >= there.nextRun &&
+      (there.lastRun ?? 0) < here.lastRun &&
+      remote.report
+    ) {
+      const result = {
+        state: here.lastState as JobResult['state'],
+        meaning: here.lastMeaning ?? '',
+      }
+      if (await remote.report(job.kind, result, here.lastRun)) {
+        this.log(`${job.kind}: handed the run made here to ${job.lease_host}`)
+        there = (await remote.get(job.kind)) ?? there
+      } else if (!this.told.has(`${job.kind}:${here.lastRun}`)) {
+        this.told.add(`${job.kind}:${here.lastRun}`)
+        this.log(
+          `${job.kind}: ${job.lease_host} did not take the run made here; it ran or holds it there too`,
+        )
+      }
+    }
+    if (there.leaseId && there.holderMachine !== machine)
+      this.heldThere.set(job.kind, there.leaseExpires ?? 0)
+    else this.heldThere.delete(job.kind)
+    store.follow(job.kind, there.nextRun, there.paused, this.now())
+  }
+
+  /**
+   * Before this lease host runs a due slot of a job with fallback workers, asks them whether one
+   * already ran it while this machine was down, and records that run instead of repeating it.
+   * Just after a start it waits for an answer (the link to them may not be up yet).
+   */
+  private async coveredElsewhere(job: JobDef): Promise<boolean> {
+    const { store, machine, standinOf } = this.options
+    const others = (job.fallback ?? []).filter((name) => name !== machine)
+    if (!standinOf || !others.length) return false
+    const now = this.now()
+    const state = store.get(job.kind)
+    const delay = job.home === machine ? 0 : job.lease_s * 1000
+    if (!state || state.runNow || state.paused || now < state.nextRun + delay) return false
+    if (state.leaseId && (state.leaseExpires ?? 0) > now) return false
+    for (const other of others) {
+      let seen: JobState | null
+      try {
+        seen = await standinOf(job, other)
+      } catch (error) {
+        if (error instanceof Unreachable && now - this.started < job.lease_s * 1000) return true
+        continue
+      }
+      // It is running the job in this machine's place right now: wait for its result.
+      if (seen?.leaseId && seen.holderMachine === other && (seen.leaseExpires ?? 0) > now)
+        return true
+      if (
+        seen?.lastMachine !== other ||
+        seen.lastRun === null ||
+        seen.lastRun < state.nextRun ||
+        !seen.lastState
+      )
+        continue
+      const result = {
+        state: seen.lastState as JobResult['state'],
+        meaning: seen.lastMeaning ?? '',
+      }
+      if (!store.record(job.kind, result, seen.lastRun, other, nextRun(job, now), now)) continue
+      this.log(`${job.kind}: ${other} ran it while this machine was down; took its result`)
+      const after = store.get(job.kind)
+      if (after) this.queueRow(job, after)
+      return true
+    }
+    return false
+  }
+
+  /** This run went through another machine's lease, for a job this machine may stand in for. */
+  private standsIn(job: JobDef, authority: LeaseAuthority): boolean {
+    return authority !== this.options.store && (job.fallback ?? []).includes(this.options.machine)
+  }
+
   /** Resolves once every job started so far has finished (tests, shutdown). */
   async idle(): Promise<void> {
     await Promise.all(this.running.values())
     await this.flush()
   }
 
-  private async run(job: JobDef, lease: Lease): Promise<void> {
-    const store = this.options.authority?.(job) ?? this.options.store
+  private async run(job: JobDef, lease: Lease, store: LeaseAuthority): Promise<void> {
     const ttlMs = job.lease_s * 1000
     this.log(`${job.kind}: started on ${lease.machine} (lease ${lease.fence})`)
     let held = true
@@ -188,6 +317,25 @@ export class Runner {
         nextRun(job, finishedAt),
       )
     } catch (error) {
+      // Ran on the lease host's lease, which then stopped answering: keep the run here as a
+      // stand-in, so it is handed over when the lease host is back instead of run again.
+      if (error instanceof Unreachable && this.standsIn(job, store)) {
+        const own = this.options.store
+        const kept = own.record(
+          job.kind,
+          { ...result, meaning: cut(result.meaning) },
+          startedAt,
+          this.options.machine,
+          nextRun(job, finishedAt),
+          finishedAt,
+        )
+        this.log(
+          `${job.kind}: ${job.lease_host} stopped answering; ${kept ? 'kept the result here to hand over' : 'could not keep the result here'}`,
+        )
+        const state = own.get(job.kind)
+        if (kept && state) this.queueRow(job, state)
+        return
+      }
       // The work is done either way; a refused result does not undo it (jobs are idempotent).
       if (error instanceof StaleLease)
         this.log(`${job.kind}: result refused: ${error.message}${held ? '' : ' (lease was lost)'}`)
@@ -198,6 +346,12 @@ export class Runner {
       return
     }
     this.log(`${job.kind}: ${result.state}: ${result.meaning}`)
+    // Ran on the lease host's lease: this machine's copy of the due time moves on too, so it does
+    // not stand in for this slot if the lease host stops answering before the next follow.
+    if (this.standsIn(job, store)) {
+      const own = this.options.store
+      own.follow(job.kind, nextRun(job, finishedAt), own.get(job.kind)?.paused ?? false, finishedAt)
+    }
     const state = await store.get(job.kind)
     if (state) this.queueRow(job, state)
   }

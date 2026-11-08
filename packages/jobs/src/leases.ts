@@ -121,6 +121,15 @@ export class StaleLease extends Error {
   }
 }
 
+/** The lease authority did not answer at all (no socket, connection refused or dropped), as
+ * opposed to answering with a refusal. Only this lets a fallback worker stand in. */
+export class Unreachable extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'Unreachable'
+  }
+}
+
 type Raw = Record<string, string | number | null>
 
 function state(row: Raw): JobState {
@@ -226,6 +235,47 @@ export class JobStore {
         lease.fence,
       ).changes
     if (changes === 0) throw new StaleLease(lease)
+  }
+
+  /**
+   * Records a run another machine made while this one could not be reached, when it covers the
+   * pending due time (it started at or after it) and no live lease is held here: the fence goes up,
+   * so a lease from before is refused. False when this machine ran it itself or someone holds it.
+   */
+  record(
+    kind: string,
+    result: JobResult,
+    ranAt: number,
+    machine: string,
+    nextRun: number,
+    now: number,
+  ): boolean {
+    return (
+      this.db
+        .prepare(
+          `UPDATE jobs SET fence = fence + 1, next_run = ?, last_run = ?, last_state = ?,
+             last_meaning = ?, last_machine = ?, lease_id = NULL, holder = NULL,
+             holder_machine = NULL, lease_expires = NULL, run_now = 0
+           WHERE kind = ? AND next_run <= ? AND run_now = 0
+             AND (lease_id IS NULL OR lease_expires <= ?)`,
+        )
+        .run(nextRun, ranAt, result.state, result.meaning, machine, kind, ranAt, now).changes > 0
+    )
+  }
+
+  /** Keeps this machine's copy of when a job held elsewhere is due and whether it is paused,
+   * so it can stand in while that machine is down. Its own lease and results are left alone. */
+  follow(kind: string, nextRun: number, paused: boolean, now: number): void {
+    // A lease of its own that ran out (its run died with a restart) is dropped, fence raised.
+    this.db
+      .prepare(
+        `INSERT INTO jobs (kind, next_run, paused) VALUES (?, ?, ?)
+         ON CONFLICT (kind) DO UPDATE SET next_run = excluded.next_run, paused = excluded.paused,
+           fence = fence + (lease_id IS NOT NULL), lease_id = NULL, holder = NULL,
+           holder_machine = NULL, lease_expires = NULL
+         WHERE lease_id IS NULL OR lease_expires <= ?`,
+      )
+      .run(kind, nextRun, paused ? 1 : 0, now)
   }
 
   /**

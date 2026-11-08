@@ -20,6 +20,9 @@ export interface JobDef {
   /** Lease length; the holder renews it every third of this while the job runs. */
   lease_host?: string
   workers?: string[]
+  /** Workers that run the job on a lease of their own while its lease host does not answer at all
+   * (a connection error, never a refusal), and hand the result over when it is back. */
+  fallback?: string[]
   lease_s: number
   /** jobs.json (built-in) or a routine another project registered. */
   source?: 'built-in' | 'registered'
@@ -149,6 +152,19 @@ export function parseJobs(value: unknown): JobDef[] {
         workers.some((name) => typeof name !== 'string' || !KIND.test(name)))
     )
       fail(`${where}.workers`, 'a list of machine names')
+    const fallback = job.fallback
+    const eligible = (workers as string[] | undefined) ?? [job.home]
+    if (
+      fallback !== undefined &&
+      (!Array.isArray(fallback) ||
+        fallback.some(
+          (name) =>
+            typeof name !== 'string' ||
+            !eligible.includes(name) ||
+            name === (leaseHost ?? job.home),
+        ))
+    )
+      fail(`${where}.fallback`, 'workers of this job other than its lease host')
     const scope = job.scope
     if (scope !== undefined && scope !== 'user' && scope !== 'system')
       fail(`${where}.scope`, 'user or system')
@@ -163,6 +179,7 @@ export function parseJobs(value: unknown): JobDef[] {
       run: action,
       ...(leaseHost !== undefined ? { lease_host: leaseHost as string } : {}),
       ...(workers !== undefined ? { workers: workers as string[] } : {}),
+      ...(fallback !== undefined ? { fallback: fallback as string[] } : {}),
       ...(scope !== undefined ? { scope } : {}),
       ...(job.tz !== undefined ? { tz: job.tz as string } : {}),
       lease_s: seconds(job, 'lease_s', where),

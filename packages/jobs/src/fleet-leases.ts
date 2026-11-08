@@ -1,5 +1,6 @@
-// All lease writes reach one configured authority; no local fallback during a
-// partition. Its own clock decides due/expiry and its durable fence rejects late results.
+// All lease writes reach one configured authority. Only a job's `fallback` workers run it on their
+// own lease, and only while that authority does not answer at all; they report the run when it is
+// back. Its own clock decides due/expiry and its durable fence rejects late results.
 import { chmodSync, existsSync, lstatSync, mkdirSync, unlinkSync } from 'node:fs'
 import { createServer, request } from 'node:http'
 import { createServer as createCarrier, createConnection, type Server, type Socket } from 'node:net'
@@ -13,6 +14,7 @@ import {
   type Lease,
   type Routine,
   StaleLease,
+  Unreachable,
 } from './leases'
 import type { LeaseAuthority } from './runner'
 
@@ -28,6 +30,8 @@ export interface LeaseCall {
     | 'resume'
     | 'register'
     | 'unregister'
+    | 'report'
+    | 'standin'
   kind: string
   who?: { holder: string; machine: string }
   lease?: Lease
@@ -64,6 +68,17 @@ export function leaseCall(
       throw new Error('Routine is not for this caller')
     return store.removeRoutine(call.kind)
   }
+  // The lease host asks a fallback worker what it ran here while the host was down.
+  if (call.op === 'standin') {
+    const held = jobs.find(
+      (entry) =>
+        entry.kind === call.kind &&
+        (entry.lease_host ?? entry.home) === caller &&
+        entry.fallback?.includes(authority),
+    )
+    if (!held) throw new Error('Job does not fall back to this machine')
+    return store.get(held.kind)
+  }
   const job = jobs.find(
     (entry) => entry.kind === call.kind && (entry.lease_host ?? entry.home) === authority,
   )
@@ -73,6 +88,17 @@ export function leaseCall(
   if (call.op === 'run') return store.runNow(job.kind, now)
   if (call.op === 'pause') return store.setPaused(job.kind, true, now)
   if (call.op === 'resume') return store.setPaused(job.kind, false, resumeAt(job, now))
+  if (call.op === 'report') {
+    if (!job.fallback?.includes(caller)) throw new Error('Machine is not a fallback for this job')
+    return store.record(
+      job.kind,
+      validResult(call),
+      call.ranAt as number,
+      caller,
+      nextRun(job, now),
+      now,
+    )
+  }
   if (call.op === 'claim') {
     const who = call.who
     if (who?.machine !== caller) throw new Error('Job caller does not match the pinned machine')
@@ -99,6 +125,11 @@ export function leaseCall(
     return null
   }
   if (call.op !== 'complete') throw new Error('Unknown lease operation')
+  store.complete(lease, validResult(call), call.ranAt as number, nextRun(job, now))
+  return null
+}
+
+function validResult(call: LeaseCall): JobResult {
   const result = call.result
   if (
     !result ||
@@ -108,8 +139,7 @@ export function leaseCall(
     !Number.isSafeInteger(call.ranAt)
   )
     throw new Error('Invalid job result')
-  store.complete(lease, result, call.ranAt as number, nextRun(job, now))
-  return null
+  return { state: result.state, meaning: result.meaning }
 }
 
 export async function serveLeases(
@@ -210,7 +240,7 @@ export async function serveLeases(
   return server
 }
 
-async function remoteCall(socketPath: string, body: LeaseCall): Promise<unknown> {
+async function remoteCall(socketPath: string, body: LeaseCall, waitMs?: number): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const req = request(
       {
@@ -242,7 +272,9 @@ async function remoteCall(socketPath: string, body: LeaseCall): Promise<unknown>
         })
       },
     )
-    req.on('error', reject)
+    if (waitMs !== undefined)
+      req.setTimeout(waitMs, () => req.destroy(new Error(`no answer in ${waitMs} ms`)))
+    req.on('error', (error) => reject(new Unreachable(error.message)))
     req.end(JSON.stringify(body))
   })
 }
@@ -253,6 +285,9 @@ export function remoteAuthority(socket: string): LeaseAuthority & {
   resume(kind: string): Promise<boolean>
   register(routine: Routine): Promise<void>
   unregister(kind: string): Promise<boolean>
+  report(kind: string, result: JobResult, ranAt: number): Promise<boolean>
+  /** `waitMs`: no answer by then counts as unreachable (the caller's scheduler must not stall). */
+  standin(kind: string, waitMs: number): Promise<JobState | null>
 } {
   return {
     claim: async (kind, who) =>
@@ -273,5 +308,9 @@ export function remoteAuthority(socket: string): LeaseAuthority & {
       await remoteCall(socket, { op: 'register', kind: routine.kind, routine })
     },
     unregister: async (kind) => (await remoteCall(socket, { op: 'unregister', kind })) as boolean,
+    report: async (kind, result, ranAt) =>
+      (await remoteCall(socket, { op: 'report', kind, result, ranAt })) as boolean,
+    standin: async (kind, waitMs) =>
+      (await remoteCall(socket, { op: 'standin', kind }, waitMs)) as JobState | null,
   }
 }
