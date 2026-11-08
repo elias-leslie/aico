@@ -220,7 +220,7 @@ describe('MachinesPage', () => {
     )
     expect(screen.getByText('Shut down Workstation?')).toBeInTheDocument()
     expect(screen.getByText(/Sessions save their place/)).toBeInTheDocument()
-    expect(screen.getByText(/Neither has been tried yet/)).toBeInTheDocument()
+    expect(screen.getByText(/hasn’t been tried yet yet/)).toBeInTheDocument()
     fireEvent.click(
       screen
         .getAllByRole('button', { name: 'Shut down' })
