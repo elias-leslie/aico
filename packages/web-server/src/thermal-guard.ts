@@ -12,9 +12,12 @@ type Phase = ThermalGuard['phase']
 interface Receipts {
   owner?: Phase | 'off'
   sessions: Record<string, Phase>
+  /** Written before POST: a lost response does not prove that Tether failed to queue the line. */
+  attempted?: Record<string, Phase>
   /** A deliberate stop ends the warning; a fresh native observation can resume it. */
   off_at?: string
 }
+type Withdrawals = Record<string, string[]>
 interface Latest {
   at: string
   episode: string
@@ -121,6 +124,9 @@ export class ThermalGuardDelivery {
   }
 
   private async pass(): Promise<void> {
+    // Cleanup is durable work in its own right, even after the row changes, the host returns,
+    // or the previous episode no longer appears in Status.
+    await this.retryWithdrawals()
     const rows = this.deps.status
       .read()
       .rows.filter((row): row is ShownRow & { guard: ThermalGuard } =>
@@ -143,16 +149,86 @@ export class ThermalGuardDelivery {
     }
   }
 
+  private receiptKey(source: string): string {
+    return `thermal.receipts:${source}`
+  }
+
+  private withdrawalKey(): string {
+    return `thermal.withdrawals:${this.deps.machine}`
+  }
+
+  /** Persist cleanup before retiring recipients, in the same local transaction. */
+  private retire(source: string, receipts?: Receipts, only?: readonly string[]): boolean {
+    const meta = this.deps.store.syncHandle()
+    const key = this.receiptKey(source)
+    const stored = meta.meta(key)
+    const prior: Receipts =
+      receipts ?? (stored ? (JSON.parse(stored) as Receipts) : { sessions: {} })
+    const known = [
+      ...new Set([...Object.keys(prior.sessions), ...Object.keys(prior.attempted ?? {})]),
+    ]
+    const ids = only ? known.filter((id) => only.includes(id)) : known
+    if (!ids.length) return false
+    meta.transaction(() => {
+      const pending = meta.meta(this.withdrawalKey())
+      const withdrawals: Withdrawals = pending ? (JSON.parse(pending) as Withdrawals) : {}
+      withdrawals[source] = [...new Set([...(withdrawals[source] ?? []), ...ids])]
+      meta.setMeta(this.withdrawalKey(), JSON.stringify(withdrawals))
+      for (const id of ids) {
+        delete prior.sessions[id]
+        if (prior.attempted) delete prior.attempted[id]
+      }
+      meta.setMeta(key, JSON.stringify(prior))
+    })
+    return true
+  }
+
+  private withdrawalDone(source: string, id: string): void {
+    const meta = this.deps.store.syncHandle()
+    const stored = meta.meta(this.withdrawalKey())
+    if (!stored) return
+    const pending = JSON.parse(stored) as Withdrawals
+    if (!pending[source]?.includes(id)) return
+    pending[source] = pending[source].filter((session) => session !== id)
+    if (!pending[source].length) delete pending[source]
+    meta.setMeta(this.withdrawalKey(), JSON.stringify(pending))
+  }
+
+  private async retryWithdrawals(): Promise<void> {
+    const stored = this.deps.store.syncHandle().meta(this.withdrawalKey())
+    if (!stored) return
+    const pending = JSON.parse(stored) as Withdrawals
+    for (const [source, ids] of Object.entries(pending)) {
+      for (const id of ids) {
+        try {
+          await this.deps.tether.request(
+            'DELETE',
+            `/v1/sessions/${encodeURIComponent(id)}/deliveries?source=${encodeURIComponent(source)}`,
+          )
+          this.withdrawalDone(source, id)
+        } catch (error) {
+          if (error instanceof TetherError && error.status === 404) this.withdrawalDone(source, id)
+          else this.failed(`withdraw session ${id}`, error)
+        }
+      }
+    }
+  }
+
   /** End only our warning and withdraw queued heat lines; being off is not a temperature reading. */
   private async machineOff(row: StatusRow & { guard: ThermalGuard }): Promise<void> {
     const meta = this.deps.store.syncHandle()
     const source = thermalSource(row.machine, row.guard.episode_id)
-    const key = `thermal.receipts:${source}`
+    const key = this.receiptKey(source)
     const stored = meta.meta(key)
     const receipts: Receipts = stored ? (JSON.parse(stored) as Receipts) : { sessions: {} }
     const save = () => meta.setMeta(key, JSON.stringify(receipts))
     receipts.off_at = row.last_run as string
     save()
+    let retired = this.retire(source, receipts)
+    const previous = meta.meta(`thermal.latest:${row.machine}`)
+    const latest = previous ? (JSON.parse(previous) as Latest) : null
+    if (latest && latest.episode !== row.guard.episode_id)
+      retired = this.retire(thermalSource(row.machine, latest.episode)) || retired
     if (receipts.owner !== 'off') {
       try {
         await this.deps.notices.resolve(
@@ -166,21 +242,7 @@ export class ThermalGuardDelivery {
         this.failed(`end owner notice for ${row.machine}`, error)
       }
     }
-    for (const id of Object.keys(receipts.sessions)) {
-      try {
-        await this.deps.tether.request(
-          'DELETE',
-          `/v1/sessions/${encodeURIComponent(id)}/deliveries?source=${encodeURIComponent(source)}`,
-        )
-        delete receipts.sessions[id]
-        save()
-      } catch (error) {
-        if (error instanceof TetherError && error.status === 404) {
-          delete receipts.sessions[id]
-          save()
-        } else this.failed(`withdraw session ${id}`, error)
-      }
-    }
+    if (retired) await this.retryWithdrawals()
   }
 
   private async deliver(
@@ -202,11 +264,17 @@ export class ThermalGuardDelivery {
       guard.phase !== 'recovered'
     )
       return
+    const retired =
+      latest && latest.episode !== guard.episode_id
+        ? this.retire(thermalSource(machine, latest.episode))
+        : false
     meta.setMeta(
       latestKey,
       JSON.stringify({ at, episode: guard.episode_id, phase: guard.phase } satisfies Latest),
     )
-    const key = `thermal.receipts:${thermalSource(machine, guard.episode_id)}`
+    if (retired) await this.retryWithdrawals()
+    const source = thermalSource(machine, guard.episode_id)
+    const key = this.receiptKey(source)
     const stored = meta.meta(key)
     const receipts: Receipts = stored ? (JSON.parse(stored) as Receipts) : { sessions: {} }
     const save = () => meta.setMeta(key, JSON.stringify(receipts))
@@ -214,6 +282,16 @@ export class ThermalGuardDelivery {
       if (Date.parse(at) <= Date.parse(receipts.off_at)) return
       delete receipts.off_at
       if (receipts.owner === 'off') delete receipts.owner
+    }
+    if (guard.phase === 'recovered') {
+      // A disconnected recipient still may have our hot line queued. It cannot receive a new
+      // agent message now, but its old source must be withdrawn before it reconnects.
+      const live = new Set(sessions.map((session) => session.id))
+      const absent = [
+        ...Object.keys(receipts.sessions),
+        ...Object.keys(receipts.attempted ?? {}),
+      ].filter((id) => !live.has(id) && receipts.sessions[id] !== 'recovered')
+      if (this.retire(source, receipts, absent)) await this.retryWithdrawals()
     }
     const summary = thermalSummary(row)
     const line =
@@ -252,22 +330,35 @@ export class ThermalGuardDelivery {
       }
     }
     for (const session of sessions) {
-      if (receipts.sessions[session.id] === guard.phase) continue
+      if (receipts.sessions[session.id] === guard.phase && !receipts.attempted?.[session.id])
+        continue
       // A fresh agent after recovery needs no stale event; agents warned earlier get the
       // replacement on the same source, clearing any still-queued hot instruction.
-      if (guard.phase === 'recovered' && !receipts.sessions[session.id]) continue
+      if (
+        guard.phase === 'recovered' &&
+        !receipts.sessions[session.id] &&
+        !receipts.attempted?.[session.id]
+      )
+        continue
+      receipts.attempted ??= {}
+      receipts.attempted[session.id] = guard.phase
+      save()
       try {
         await this.deps.tether.request(
           'POST',
           `/v1/sessions/${encodeURIComponent(session.id)}/deliveries`,
           {
-            source: thermalSource(machine, guard.episode_id),
+            source,
             line,
             ride: false,
           },
         )
         receipts.sessions[session.id] = guard.phase
+        delete receipts.attempted[session.id]
         save()
+        // A confirmed current-phase replacement also satisfies an older pending withdraw on
+        // this same source; replaying that DELETE later would discard the fresh instruction.
+        this.withdrawalDone(source, session.id)
       } catch (error) {
         this.failed(`session ${session.id}`, error)
       }

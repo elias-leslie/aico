@@ -14,7 +14,11 @@ afterEach(() => {
   for (const stop of close.splice(0).reverse()) stop()
 })
 
-function row(phase: ThermalGuard['phase'] = 'hot', at = '2026-11-08T12:00:00Z'): StatusRow {
+function row(
+  phase: ThermalGuard['phase'] = 'hot',
+  at = '2026-11-08T12:00:00Z',
+  episode = 'boot:episode',
+): StatusRow {
   return {
     id: 'gem/backup-guard',
     machine: 'gem',
@@ -24,12 +28,56 @@ function row(phase: ThermalGuard['phase'] = 'hot', at = '2026-11-08T12:00:00Z'):
     meaning: 'Guard checked.',
     last_run: at,
     guard: {
-      episode_id: 'boot:episode',
+      episode_id: episode,
       phase,
       temperature_c: phase === 'unavailable' ? null : 85,
       cpu_quota_percent: phase === 'recovered' ? 200 : 50,
       admission_open: phase === 'recovered',
       delivery_machine: 'aico',
+    },
+  }
+}
+
+const offMachine: StatusRow = {
+  id: 'gem/machine',
+  machine: 'gem',
+  what: 'gem',
+  kind: 'machine',
+  state: 'off',
+  meaning: 'Stopped.',
+  next_run: '2026-11-08T12:10:00Z',
+}
+
+/** Models Tether's actual coalescing boundary: only the same source replaces a queued line. */
+function queuedServer(work: ReturnType<typeof setup>) {
+  const queued = new Map<string, string>()
+  let losePost = false
+  let failedDeletes = 0
+  work.request.mockImplementation(async (method, path, value) => {
+    const url = new URL(path, 'http://tether')
+    if (method === 'POST') {
+      const payload = value as { source: string; line: string }
+      queued.set(payload.source, payload.line)
+      if (losePost) {
+        losePost = false
+        throw new Error('response lost after Tether queued the line')
+      }
+    } else if (method === 'DELETE') {
+      if (failedDeletes) {
+        failedDeletes -= 1
+        throw new Error('Tether link unavailable during withdrawal')
+      }
+      queued.delete(url.searchParams.get('source') as string)
+    }
+    return { status: 201, body: {} }
+  })
+  return {
+    queued,
+    loseNextPost() {
+      losePost = true
+    },
+    failNextDelete() {
+      failedDeletes += 1
     },
   }
 }
@@ -102,6 +150,111 @@ function setup(path = ':memory:') {
 }
 
 describe('native thermal event delivery', () => {
+  it('retires a superseded episode source after missing its recovery, including a failed cleanup across restart', async () => {
+    const folder = mkdtempSync(join(tmpdir(), 'aico-thermal-episodes-'))
+    close.push(() => rmSync(folder, { recursive: true, force: true }))
+    const work = setup(join(folder, 'web.db'))
+    const server = queuedServer(work)
+    const sourceA = thermalSource('gem', 'boot:episode')
+    const sourceB = thermalSource('gem', 'episode-b')
+    await work.tick()
+    expect(server.queued.get(sourceA)).toContain('is hot')
+    // Aico was down through A's recovery and now sees B; the busy agent still has A queued.
+    work.rows([row('hot', '2026-11-08T12:02:00Z', 'episode-b')])
+    work.restart()
+    server.failNextDelete()
+    await work.tick()
+    expect(server.queued.get(sourceA)).toContain('is hot')
+    expect(server.queued.get(sourceB)).toContain('is hot')
+    work.rows([row('recovered', '2026-11-08T12:03:00Z', 'episode-b')])
+    work.restart()
+    await work.tick()
+    expect([...server.queued.entries()]).toEqual([
+      [sourceB, expect.stringContaining('guard recovered')],
+    ])
+    expect(work.request.mock.calls.filter((call) => call[0] === 'DELETE')).toHaveLength(2)
+  })
+
+  it.each(['recovered', 'off'] as const)(
+    'clears a possibly queued hot attempt after its response is lost and the host becomes %s',
+    async (ending) => {
+      const folder = mkdtempSync(join(tmpdir(), 'aico-thermal-uncertain-'))
+      close.push(() => rmSync(folder, { recursive: true, force: true }))
+      const work = setup(join(folder, 'web.db'))
+      const server = queuedServer(work)
+      const source = thermalSource('gem', 'boot:episode')
+      server.loseNextPost()
+      await work.tick()
+      expect(server.queued.get(source)).toContain('is hot')
+      work.rows(ending === 'off' ? [row(), offMachine] : [row('recovered', '2026-11-08T12:01:00Z')])
+      work.restart()
+      await work.tick()
+      if (ending === 'off') {
+        expect(server.queued.size).toBe(0)
+        expect(work.resolve).toHaveBeenCalledWith(
+          'aico',
+          thermalNoticeKey('gem'),
+          expect.stringContaining('is off'),
+        )
+      } else expect(server.queued.get(source)).toContain('guard recovered')
+      expect([...server.queued.values()].some((line) => line.includes('is hot'))).toBe(false)
+    },
+  )
+
+  it('retries a failed off withdrawal after restart even when power returns with the same old guard observation', async () => {
+    const folder = mkdtempSync(join(tmpdir(), 'aico-thermal-withdraw-'))
+    close.push(() => rmSync(folder, { recursive: true, force: true }))
+    const work = setup(join(folder, 'web.db'))
+    const server = queuedServer(work)
+    await work.tick()
+    server.failNextDelete()
+    work.rows([row(), offMachine])
+    await work.tick()
+    expect(server.queued.size).toBe(1)
+    work.rows([row(), { ...offMachine, state: 'ok' }])
+    work.restart()
+    await work.tick()
+    expect(server.queued.size).toBe(0)
+    expect(work.request.mock.calls.filter((call) => call[0] === 'DELETE')).toHaveLength(2)
+    expect(work.request.mock.calls.filter((call) => call[0] === 'POST')).toHaveLength(1)
+    expect(work.receive).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps a confirmed fresh warning when an earlier off withdrawal failed on the same source', async () => {
+    const work = setup()
+    const server = queuedServer(work)
+    await work.tick()
+    server.failNextDelete()
+    work.rows([row(), offMachine])
+    await work.tick()
+    server.failNextDelete()
+    work.rows([row('hot', '2026-11-08T12:01:00Z')])
+    await work.tick()
+    await work.tick()
+    expect(server.queued.get(thermalSource('gem', 'boot:episode'))).toContain('is hot')
+    expect(work.request.mock.calls.filter((call) => call[0] === 'DELETE')).toHaveLength(2)
+    expect(work.request.mock.calls.filter((call) => call[0] === 'POST')).toHaveLength(2)
+  })
+
+  it('withdraws an uncertain hot attempt from a disconnected recipient on recovery', async () => {
+    const work = setup()
+    const server = queuedServer(work)
+    server.loseNextPost()
+    await work.tick()
+    work.sessions([
+      descriptor({
+        id: '00000001',
+        tool: 'codex',
+        host: 'peer',
+        peer: { state: 'offline', since: 1, listedAt: 1 },
+      }),
+    ])
+    work.rows([row('recovered', '2026-11-08T12:01:00Z')])
+    await work.tick()
+    expect(server.queued.size).toBe(0)
+    expect(work.request.mock.calls.map((call) => call[0])).toEqual(['POST', 'DELETE'])
+  })
+
   it('ends a warning when its machine is off, withdraws queued heat, and skips off-row startup replay', async () => {
     const folder = mkdtempSync(join(tmpdir(), 'aico-thermal-off-'))
     close.push(() => rmSync(folder, { recursive: true, force: true }))
