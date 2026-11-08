@@ -98,6 +98,23 @@ describe('GlanceBackups', () => {
     expect(screen.getByText('oldest 38 h, late after 8 h')).toBeVisible()
   })
 
+  it('a failed copy being retried shows one state and no next time', () => {
+    give([
+      entry({
+        source: 'home',
+        name: 'Home',
+        target: 'drive',
+        state: 'failed',
+        running: true,
+        meaning: 'Failed once.',
+      }),
+    ])
+    view()
+    expect(screen.queryByText('Copying…')).toBeNull()
+    expect(screen.getByText(/Copying now/)).toBeVisible()
+    expect(screen.queryByText(/Next copy:/)).toBeNull()
+  })
+
   it('opens a source to its copies with last good data, next copy and Restore', () => {
     view()
     fireEvent.click(screen.getByRole('button', { name: /Home/ }))

@@ -70,10 +70,10 @@ function Copy({ row, machine }: { row: Entry; machine: boolean }) {
         {row.state !== 'ok' && row.state !== 'off' && <p>{row.meaning}</p>}
         <small>
           Last good data: {when(row.dataAt)}
-          {row.state !== 'off' && row.nextRun && (
+          {row.state !== 'off' && (row.running || row.nextRun) && (
             <>
               <br />
-              Next copy: {when(row.nextRun)}
+              {row.running ? 'Copying now' : `Next copy: ${when(row.nextRun)}`}
             </>
           )}
         </small>

@@ -11,6 +11,7 @@ import {
   backupSummary,
   copyWord,
   groupBySource,
+  refreshing,
   runnableTargets,
   type TargetAge,
   targetLabel,
@@ -62,7 +63,7 @@ const CHIP: Record<string, string> = {
   off: 'off',
 }
 const chipOf = (entry: Pick<BackupEntry, 'state' | 'running'>) =>
-  entry.running ? 'running' : (CHIP[entry.state] ?? 'late')
+  refreshing(entry) ? 'running' : (CHIP[entry.state] ?? 'late')
 
 /** One copy of a source: where it is, how it stands, when it last had good data, and Restore. */
 function Copy({ entry, machine }: { entry: BackupEntry; machine: boolean }) {
@@ -82,8 +83,11 @@ function Copy({ entry, machine }: { entry: BackupEntry; machine: boolean }) {
       )}
       <p className={own.line}>
         Last good data: {shortWhen(entry.dataAt)}
-        {entry.state !== 'off' && entry.nextRun && (
-          <> · Next copy: {shortWhen(entry.nextRun)}</>
+        {entry.running ? (
+          <> · Copying now</>
+        ) : (
+          entry.state !== 'off' &&
+          entry.nextRun && <> · Next copy: {shortWhen(entry.nextRun)}</>
         )}
       </p>
       {entry.target !== 'external' && (

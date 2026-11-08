@@ -150,11 +150,16 @@ const COPY_WORD: Record<string, string> = {
   off: 'Archived',
 }
 
+/** A healthy copy being refreshed. A failed copy being retried stays Failed until the run ends. */
+export const refreshing = (
+  row: Pick<BackupEntry, 'state' | 'running'>,
+): boolean => Boolean(row.running) && row.state === 'ok'
+
 /** One copy's state in a word: "Current", "Copying…", "Needs a fresh copy". */
 export const copyWord = (
   row: Pick<BackupEntry, 'state' | 'running'>,
 ): string =>
-  row.running ? 'Copying…' : (COPY_WORD[row.state] ?? 'Needs a fresh copy')
+  refreshing(row) ? 'Copying…' : (COPY_WORD[row.state] ?? 'Needs a fresh copy')
 
 /** The destinations Back up now can start a copy to: those with a live (not archived) copy. */
 export function runnableTargets(
