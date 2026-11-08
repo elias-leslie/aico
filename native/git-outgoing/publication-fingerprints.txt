@@ -1,4 +1,4 @@
-# Reviewed publication-scan findings, one exact commit:path:rule:line per line. Read by outgoing.py through ~/.config/git/secretguard/publication-fingerprints.txt.
+# Reviewed publication-scan findings, one exact commit:path:rule:line per line. Read by outgoing.py from this file's own path in the Aico checkout.
 # Portfolio AI demo-fixtures match_key values: bare record UUIDs in made-up demo data, not credentials (checked 2026-11-08).
 eb37fad0040be9732e9477efd07f1de3cb2681c1:frontend/lib/api/demo-fixtures.json:generic-api-key:432
 eb37fad0040be9732e9477efd07f1de3cb2681c1:frontend/lib/api/demo-fixtures.json:generic-api-key:499

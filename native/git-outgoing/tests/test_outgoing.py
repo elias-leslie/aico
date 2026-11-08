@@ -56,6 +56,7 @@ def history(tmp_path: Path):
     policy.mkdir()
     policy.joinpath("denylist.txt").write_text("*.secret\n*.pass\n.env\n*.key\n")
     policy.joinpath("allowlist.txt").write_text("*.example\n")
+    policy.joinpath("publication-fingerprints.txt").write_text("# No reviewed findings.\n")
     scanner = tmp_path / "scanner"
     scanner.write_text("#!/bin/sh\nexit 0\n")
     scanner.chmod(0o700)
@@ -439,7 +440,7 @@ def test_only_unreviewed_findings_are_named_and_an_unprovable_key_keeps_its_find
     report = history[1] / "report.json"
     report.write_text(json.dumps([reviewed, other]))
     history[1].joinpath("publication-fingerprints.txt").write_text(f"{oid}:fixture.py:generic-api-key:20\n")
-    assert outgoing._unreviewed_findings(history[0], report, history[1]) == [other]
+    assert outgoing._unreviewed_findings(history[0], report, history[1] / "publication-fingerprints.txt") == [other]
 
     # A key type the library can't load raises its own exception, not a ValueError.
     class Unsupported(Exception):
@@ -447,6 +448,20 @@ def test_only_unreviewed_findings_are_named_and_an_unprovable_key_keeps_its_find
 
     monkeypatch.setattr(outgoing, "_git", Mock(side_effect=Unsupported()))
     assert outgoing._public_manifest_key(history[0], {**reviewed, "File": "manifest.json"}) is False
+
+
+def test_reviewed_list_is_the_checkouts_own_file_and_a_missing_one_is_refused(history, tmp_path) -> None:
+    from git_outgoing import outgoing
+
+    # Read by its real path, so a rebuilt host needs no link; policy_dir is only the tests' own copy.
+    assert outgoing._FINGERPRINTS.is_file() and outgoing._FINGERPRINTS.parent.name == "git-outgoing"
+    report = tmp_path / "report.json"
+    report.write_text(json.dumps([{"Commit": "a" * 40, "File": "f.py", "RuleID": "generic-api-key", "StartLine": 1}]))
+    dangling = tmp_path / "link.txt"
+    dangling.symlink_to(tmp_path / "gone.txt")
+    for missing in (tmp_path / "absent.txt", dangling):
+        with pytest.raises(OutgoingVerificationError, match="list is missing"):
+            outgoing._unreviewed_findings(history[0], report, missing)
 
 
 def test_publication_fingerprint_policy_has_no_path_or_pattern_allows(history, monkeypatch) -> None:

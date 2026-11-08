@@ -52,6 +52,9 @@ class OutgoingVerification:
     refs_checked: int
 
 
+# The reviewed-findings list is owned by this checkout, which is also where the code runs from, so it is read
+# by its real path: nothing to link on a rebuilt host. A policy_dir (tests) supplies its own copy.
+_FINGERPRINTS = Path(__file__).resolve().parents[1] / "publication-fingerprints.txt"
 _OID = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
 _MANIFEST_NAME = re.compile(r"manifest(?:-[A-Za-z0-9_.]+)?\.json")
 _BEGIN = rb"-----" + rb"BEGIN "
@@ -324,7 +327,8 @@ def _verify_outgoing(
                 except (OSError, subprocess.TimeoutExpired) as exc:
                     raise OutgoingVerificationError("Outgoing secret scan failed or timed out.") from exc
                 if result.returncode:
-                    unreviewed = _unreviewed_findings(root, report, policy)
+                    fingerprints = policy / "publication-fingerprints.txt" if policy_dir is not None else _FINGERPRINTS
+                    unreviewed = _unreviewed_findings(root, report, fingerprints)
                     if unreviewed is None or unreviewed:
                         raise OutgoingVerificationError("Outgoing secret scan refused history or failed (details redacted).",
                                                         findings=_finding_locations(unreviewed or []))
@@ -357,17 +361,18 @@ def _finding_locations(findings: list[Any]) -> tuple[dict[str, Any], ...]:
     return tuple(located)
 
 
-def _unreviewed_findings(root: Path, report: Path, policy: Path) -> list[Any] | None:
+def _unreviewed_findings(root: Path, report: Path, fingerprints: Path) -> list[Any] | None:
     """The findings no review tolerates; None when the report can't prove anything. A nonzero scan passes only on []."""
     try:
         findings = json.loads(report.read_bytes())
     except (OSError, ValueError):
         return None
     try:
-        reviewed = {line.strip() for line in policy.joinpath("publication-fingerprints.txt").read_text().splitlines()
+        reviewed = {line.strip() for line in fingerprints.read_text().splitlines()
                     if line.strip() and not line.lstrip().startswith("#")}
-    except FileNotFoundError:
-        reviewed = set()
+    except FileNotFoundError as exc:
+        # A missing list is a broken install, not an empty review.
+        raise OutgoingVerificationError(f"Reviewed publication findings list is missing: {fingerprints.name}.") from exc
     except OSError:
         return None
 
