@@ -182,13 +182,27 @@ export function executable(
   const b = extension.binding
   let root = projectRoot
   if (b.execution_source === 'accepted_runtime') {
+    // A host the owner was never deployed to (a fresh peer) has no state folder at all: say so.
     const owner = join(state, 'projects', b.owner)
-    root = realpathSync(join(owner, 'current/source'))
-    if (relative(realpathSync(join(owner, 'releases')), root).startsWith('..'))
-      throw new Error('Owner runtime is outside its accepted releases')
+    try {
+      root = realpathSync(join(owner, 'current/source'))
+      if (relative(realpathSync(join(owner, 'releases')), root).startsWith('..'))
+        throw new Error('Owner runtime is outside its accepted releases')
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+      throw new Error(
+        `Extension ${b.namespace}: ${b.owner} has no accepted runtime on this host (${join(owner, 'current/source')} is missing); deploy ${b.owner} here first`,
+      )
+    }
   }
   if (!root) throw new Error(`Owner ${b.owner} has no registered root`)
-  const path = inside(root, b.executable)
+  let path: string
+  try {
+    path = inside(root, b.executable)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    throw new Error(`Install executable for ${b.owner}: ${b.executable}`)
+  }
   if (!statSync(path).isFile() || !(statSync(path).mode & 0o111))
     throw new Error(`Install executable for ${b.owner}: ${b.executable}`)
   return path

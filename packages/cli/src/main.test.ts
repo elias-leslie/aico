@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { openTasksDb } from '@aico/tasks'
@@ -278,6 +278,31 @@ describe('versioned extensions', () => {
     expect(entries.some((x) => x.binding.namespace === 'design')).toBe(false)
     const b = entries.find((x) => x.binding.namespace === 'browser')
     expect(b && passiveHelp(b, ['--help'])).toContain('browser')
+  })
+  it('names the missing runtime on a host with no service state folder', async () => {
+    const home = temp()
+    const h = harness({ HOME: home })
+    expect(await h.go(['browser', 'login', 'list'])).toBe(2)
+    expect(h.errors.join('\n')).toContain('browser: browser-automation has no accepted runtime')
+    expect(h.errors.join('\n')).not.toMatch(/ENOENT|lstat/)
+    expect(h.calls).toEqual([])
+    // The extension listing reports it instead of crashing, and core commands never read the folder.
+    expect(await h.go(['tools', 'extensions', '--check'])).toBe(0)
+    const listed = JSON.parse(h.output.at(-1) ?? '{}').extensions
+    expect(listed.find((e: { namespace: string }) => e.namespace === 'browser').status).toBe(
+      'missing-dependency',
+    )
+    expect(await h.go(['browser', '--help'])).toBe(0)
+    // A runtime folder without its executable names the install step.
+    mkdirSync(join(home, '.summitflow/services/projects/browser-automation/releases/r/source'), {
+      recursive: true,
+    })
+    symlinkSync(
+      join(home, '.summitflow/services/projects/browser-automation/releases/r'),
+      join(home, '.summitflow/services/projects/browser-automation/current'),
+    )
+    expect(await h.go(['browser', 'login', 'list'])).toBe(2)
+    expect(h.errors.at(-1)).toContain('Install executable for browser-automation')
   })
   it('rejects traversal and injected environment', () => {
     const b = {
