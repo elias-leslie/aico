@@ -587,6 +587,34 @@ describe('FilesDialog', () => {
     expect(screen.getByText('inside.ts')).toBeInTheDocument()
   })
 
+  it('closes the preview with its X, or by tapping the file again', async () => {
+    renderDialog(null, null, (url) => {
+      const { pathname, searchParams } = new URL(url, 'http://aico.test')
+      if (pathname !== '/api/files/content') return serve(url)
+      return json({
+        path: searchParams.get('path'),
+        name: 'tmp-file.txt',
+        content: 'hello',
+        size: 5,
+        lines: 1,
+        extension: '.txt',
+        language: null,
+        is_binary: false,
+        is_truncated: false,
+      })
+    })
+    fireEvent.click(await screen.findByText('tmp-file.txt'))
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Close preview' }),
+    )
+    expect(await screen.findByText('Pick a file to preview it.')).toBeVisible()
+
+    fireEvent.click(screen.getByRole('button', { name: /tmp-file\.txt/ }))
+    await screen.findByRole('button', { name: 'Close preview' })
+    fireEvent.click(screen.getByRole('button', { name: /tmp-file\.txt/ }))
+    expect(await screen.findByText('Pick a file to preview it.')).toBeVisible()
+  })
+
   it('works when storage is out of reach', async () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('blocked')

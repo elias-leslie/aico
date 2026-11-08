@@ -14,6 +14,7 @@ import {
   FileText,
   Folder,
   FolderOpen,
+  X,
 } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 import { RenderedView } from '@/components/render/RenderedView'
@@ -356,6 +357,10 @@ export function FileBrowser({
     setOpen(new Map([...open].filter(([, folder]) => folder.open)))
   }
   const entries = withOpenFolders(tree.entries, '', open, view)
+  // Tapping the file that's showing closes it, as the preview's own X does.
+  const pick = useCallback((entry: PaneFileTreeEntry) => {
+    setSelected((current) => (current?.path === entry.path ? null : entry))
+  }, [])
 
   return (
     // max-md: keeps a plain `flex` off this element so it cannot beat md:grid.
@@ -390,7 +395,7 @@ export function FileBrowser({
                 entry={entry}
                 depth={0}
                 selectedPath={selected?.path ?? null}
-                onSelect={setSelected}
+                onSelect={pick}
                 view={view}
                 open={open}
                 onToggle={toggle}
@@ -411,6 +416,7 @@ export function FileBrowser({
         source={source}
         selected={selected}
         onInsertPath={onInsertPath}
+        onClose={() => setSelected(null)}
         className={selected ? 'flex' : 'hidden md:flex'}
         shared={shared}
       />
@@ -427,6 +433,7 @@ export function FilePreview({
   source,
   selected,
   onInsertPath,
+  onClose,
   className,
   shared = false,
 }: {
@@ -434,6 +441,8 @@ export function FilePreview({
   selected: FileChoice | null
   /** Types the path into the session; without it there is no Insert path. */
   onInsertPath?: (path: string) => void
+  /** Puts the preview away; without it there is no close button. */
+  onClose?: () => void
   className?: string
   /** A shared or attached file: a web page's Open shows it rendered. */
   shared?: boolean
@@ -640,6 +649,17 @@ export function FilePreview({
                     <Copy className="h-3.5 w-3.5" />
                   )}
                   {copiedThing === 'content' ? 'Copied' : 'Copy contents'}
+                </button>
+              )}
+              {onClose && (
+                <button
+                  type="button"
+                  className="lantern-icon-btn compact"
+                  aria-label="Close preview"
+                  title="Close preview"
+                  onClick={onClose}
+                >
+                  <X className="h-3.5 w-3.5" strokeWidth={1.7} />
                 </button>
               )}
             </div>
