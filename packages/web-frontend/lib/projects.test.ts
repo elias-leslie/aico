@@ -158,6 +158,10 @@ describe('places', () => {
     expect(powerSummary(vm, 0, NOW)).toBe(
       'Stopped at 10:40 · checked 1 min ago',
     )
+    // A check time that can't be read says nothing rather than "NaN ago".
+    expect(powerSummary({ ...vm, asOf: 'not a time' }, 0, NOW)).toBe(
+      'Stopped at 10:40',
+    )
   })
 })
 

@@ -263,8 +263,11 @@ export function shortAge(iso: string | null, now: number): string {
   return Number.isNaN(ms) ? '' : shortAgo(ms, now)
 }
 
-/** "checked 1 min ago". */
-const longAge = (iso: string, now: number) => ago(Date.parse(iso), now)
+/** "checked 1 min ago", or '' when the time can't be read. */
+function checkedAge(iso: string | undefined | null, now: number): string {
+  const ms = iso ? Date.parse(iso) : Number.NaN
+  return Number.isNaN(ms) ? '' : `checked ${ago(ms, now)}`
+}
 
 const clock = (ms: number) =>
   new Date(ms).toLocaleTimeString('en-GB', {
@@ -324,7 +327,7 @@ export function placeLine(place: Place, now: number): string {
     case 'running': {
       const parts = [
         hasSince ? `since ${sinceDay(since)}` : '',
-        place.asOf ? `checked ${longAge(place.asOf, now)}` : '',
+        checkedAge(place.asOf, now),
       ]
       return parts.filter(Boolean).join(' · ')
     }
@@ -385,7 +388,8 @@ export function powerSummary(
         ? word
         : `${word} ${place.state === 'down' ? 'since' : 'at'} ${clock(since)}`,
     )
-    if (place.asOf) parts.push(`checked ${longAge(place.asOf, now)}`)
+    const checked = checkedAge(place.asOf, now)
+    if (checked) parts.push(checked)
   }
   return parts.join(' · ')
 }

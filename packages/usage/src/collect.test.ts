@@ -727,6 +727,20 @@ describe('Claude Code transcripts', () => {
     expect(stored).not.toContain('s4')
     expect(stored).not.toContain('neri')
     expect(stored).toContain('private:')
+    // A third pass resumes from the hashed cursor: only the new line adds, nothing twice.
+    appendFileSync(
+      path,
+      `${assistant('m3', 'claude-opus-5-5', { input: 1, output: 2 }, { cwd: '/srv/workspaces/projects/neri-hunters/case' })}\n`,
+    )
+    await run(db)
+    await run(db)
+    const total = db
+      .prepare('SELECT SUM(requests) AS n, SUM(output_tokens) AS o FROM daily')
+      .get() as {
+      n: number
+      o: number
+    }
+    expect(total).toEqual({ n: 3, o: 6 })
   })
 })
 

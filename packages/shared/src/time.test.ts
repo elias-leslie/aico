@@ -30,3 +30,16 @@ it('says how long ago one way: minutes, rounded hours under two days, then days'
   expect(agoOrDate(Date.parse('2026-11-05T12:00:00Z'), now)).toBe('Nov 5')
   expect(agoOrDate(Date.parse('2025-02-03T12:00:00Z'), now)).toBe('Feb 3, 2025')
 })
+
+it('rounds at the edges: half a minute is a minute, two days switch to days or the date', () => {
+  const now = Date.parse('2026-11-08T12:00:00Z'),
+    min = 60_000
+  expect(ago(now - 29_000, now)).toBe('just now')
+  expect(ago(now - 30_000, now)).toBe('1 min ago')
+  expect(ago(now - 59 * min, now)).toBe('59 min ago')
+  expect(ago(now - 60 * min, now)).toBe('1 h ago')
+  expect(ago(now - (48 * 60 - 1) * min, now)).toBe('48 h ago')
+  expect(ago(now - 48 * 60 * min, now)).toBe('2 days ago')
+  expect(agoOrDate(now - (48 * 60 - 1) * min, now)).toBe('48 h ago')
+  expect(agoOrDate(now - 48 * 60 * min, now)).toBe('Nov 6')
+})
