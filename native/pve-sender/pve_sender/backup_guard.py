@@ -335,8 +335,22 @@ def delivery_state(cfg: dict):
 
 
 def _newer_row(delivery: dict, at: float) -> bool:
+    reference = delivery.get("source_at")
+    if reference is None:
+        previous = delivery.get("last_row")
+        if not previous or previous.get("guard", {}).get("phase") == "unavailable":
+            return False
+        reference = datetime.fromisoformat(previous["last_run"]).timestamp()
+    return reference > at
+
+
+def _ordered_row(delivery: dict, row: dict) -> dict:
+    """Transport order is separate from sample time, including millisecond serialization."""
     previous = delivery.get("last_row")
-    return bool(previous and datetime.fromisoformat(previous["last_run"]).timestamp() > at)
+    if previous and previous["last_run"] > row["last_run"]:
+        return {**row, "last_run": previous["last_run"],
+                "next_run": max(row["next_run"], previous["next_run"])}
+    return row
 
 
 def _deliver_pending(cfg: dict, path: Path, delivery: dict, publish) -> int:
@@ -348,20 +362,26 @@ def _deliver_pending(cfg: dict, path: Path, delivery: dict, publish) -> int:
         if event["seq"] <= staged:
             continue
         snapshot = event["snapshot"]
-        # A stale source must not regress notice identity or a newer accepted observation.
-        row = None if _newer_row(delivery, snapshot["observed_at"]) else status_row(
-            cfg, snapshot, snapshot["observed_at"], historical=True
-        )
-        pending.append({"seq": event["seq"], "row": row})
+        # Durable sequence is authoritative. A synthetic fallback cannot discard this phase.
+        row = status_row(cfg, snapshot, snapshot["observed_at"], historical=True)
+        pending.append({"seq": event["seq"], "row": row, "observed_at": snapshot["observed_at"]})
         delivery["staged"] = staged = event["seq"]
         # Each staged phase is durable before transport or the next phase is built.
         write(path, delivery)
     while pending:
-        row = pending[0]["row"]
-        if row is not None and not _newer_row(delivery, datetime.fromisoformat(row["last_run"]).timestamp()):
-            if not publish(cfg, row):
-                raise OSError("Status transport refused the row.")
-            delivery["last_row"] = row
+        item = pending[0]
+        row = item["row"]
+        if row is None:  # Recover an unacknowledged tombstone written by an older producer.
+            snapshot = next(event["snapshot"] for event in events if event["seq"] == item["seq"])
+            row = item["row"] = status_row(cfg, snapshot, snapshot["observed_at"], historical=True)
+            item["observed_at"] = snapshot["observed_at"]
+            write(path, delivery)
+        observed = item.get("observed_at", datetime.fromisoformat(row["last_run"]).timestamp())
+        row = _ordered_row(delivery, row)
+        if not publish(cfg, row):
+            raise OSError("Status transport refused the row.")
+        delivery["last_row"] = row
+        delivery["source_at"] = max(delivery.get("source_at", observed), observed)
         item = pending.pop(0)
         delivery["acked"] = item["seq"]
         write(path, delivery)
@@ -390,11 +410,13 @@ def reconcile_row(cfg: dict, machine: str, *, clock=None, publish=None) -> dict:
         observed = snapshot["observed_at"] if fresh(cfg, snapshot, now) else now
         if _newer_row(delivery, observed):
             return delivery["last_row"]
-        row = status_row(cfg, snapshot, now, machine)
+        row = _ordered_row(delivery, status_row(cfg, snapshot, now, machine))
         try:
             if not publish(cfg, row):
                 raise OSError("Status transport refused the row.")
             delivery["last_row"] = row
+            if fresh(cfg, snapshot, now):
+                delivery["source_at"] = max(delivery.get("source_at", observed), observed)
             write(path, delivery)
         except Exception:  # noqa: BLE001 -- keep evidence; retry on the existing periodic pass
             print("aico-backup-guard: status publication failed; periodic checks will reconcile.", file=sys.stderr)

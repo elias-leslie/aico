@@ -558,6 +558,68 @@ def test_periodic_reconcile_cannot_publish_runtime_snapshot_older_than_accepted_
     assert guard.load(Path(cfg["state_dir"]) / "notice.json")["phase"] == expected
 
 
+@pytest.mark.parametrize("sample_at,fallback_at,recover_at", [
+    (200.0, 200.1, 215.0),
+    (200.0004, 200.0005, 200.0006),
+    (200.0009, 200.0011, 200.0012),
+])
+def test_synthetic_fallback_cannot_discard_delayed_durable_critical_phase(cfg, sample_at, fallback_at, recover_at):
+    import aico_status
+
+    entered, release = threading.Event(), threading.Event()
+    completed = []
+
+    def paused_enforce(_cfg, mode):
+        assert mode == "critical"
+        entered.set()
+        assert release.wait(2)
+
+    def run_tick():
+        completed.append(guard.tick(cfg, {}, now=sample_at, sample=lambda _: 90,
+                                    enforce=paused_enforce, starting=True))
+
+    loop = threading.Thread(target=run_tick)
+    loop.start()
+    accepted = []
+
+    def transport(_cfg, row):
+        # Exercise the actual serialized millisecond timestamps accepted by the row contract.
+        normalized = aico_status.check_row(json.loads(json.dumps(row)))
+        assert normalized["last_run"] == row["last_run"]
+        accepted.append(normalized)
+        return True
+
+    try:
+        assert entered.wait(2)
+        guard.reconcile_row(cfg, "davion-gem", clock=lambda: fallback_at, publish=transport)
+        receipt = guard.load(Path(cfg["state_dir"]) / "delivery.json")
+        assert receipt.get("acked", 0) == 0 and "source_at" not in receipt
+    finally:
+        release.set()
+        loop.join(2)
+    assert completed
+    attempted = []
+
+    def refused(_cfg, row):
+        attempted.append(row["guard"]["phase"])
+        return False
+
+    with pytest.raises(OSError):
+        guard.deliver_pending(cfg, publish=refused)
+    assert attempted == ["critical"]
+    assert guard.load(Path(cfg["state_dir"]) / "delivery.json").get("acked", 0) == 0
+    assert guard.deliver_pending(cfg, publish=transport) == 1
+    sample(cfg, completed[0], 60, recover_at, [])
+    assert guard.deliver_pending(cfg, publish=transport) == 2
+    assert [row["guard"]["phase"] for row in accepted] == ["unavailable", "critical", "recovered"]
+    assert len({row["guard"]["episode_id"] for row in accepted}) == 1
+    stamps = [row["last_run"] for row in accepted]
+    # ThermalGuardDelivery rejects strictly older timestamps, and rejects reopening recovery.
+    # These serialized rows meet both rules even when all three stamps share a millisecond.
+    assert stamps == sorted(stamps)
+    assert accepted[-1]["guard"]["phase"] == "recovered"
+
+
 def test_fresh_cpu_guard_owns_cpu_notice_while_other_hot_sensors_and_cpu_fallback_remain(cfg, tmp_path, monkeypatch):
     from pve_sender import watch
 
