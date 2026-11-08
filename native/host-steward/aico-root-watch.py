@@ -2117,6 +2117,12 @@ def agent_id_of(collector: Collector, socket_name: str, session: dict) -> str | 
     return max(found)[1] if found else None
 
 
+ROOT_STATUS_HELP = (
+    "status: running until the session ends. state: what its agent is doing: working; idle (finished its "
+    "turn, its answer is lastMessage); blocked (waiting, see waitingOn); unknown (not read yet, just after "
+    "it starts). model: the one it last used, null until its first reply.")
+
+
 def lane_view(collector: Collector, socket_name: str, widget: str) -> dict:
     """What `root status` adds for a running root: its agent's state and last words. Best effort."""
     session = session_view(collector, socket_name, widget)
@@ -2127,6 +2133,7 @@ def lane_view(collector: Collector, socket_name: str, widget: str) -> dict:
     view["agentId"] = agent_id_of(collector, socket_name, session)
     report = session_report(collector, socket_name, widget)
     view["context"] = context_label(report)
+    view["model"] = report.get("model")
     text = report.get("text")
     if isinstance(text, str):
         view["lastMessage"] = text[:STATUS_MESSAGE_CHARS]
@@ -2163,7 +2170,8 @@ def root_main(argv: list[str]) -> int:
     commands = parser.add_subparsers(dest="operation", required=True)
     for operation in ("status", "report", "title", "end", "send", "rewind"):
         command = commands.add_parser(operation, help=(
-            "the session's last message, in plain text" if operation == "report" else None))
+            "the session's last message, in plain text" if operation == "report" else None),
+            description=ROOT_STATUS_HELP if operation == "status" else None)
         command.add_argument("request_id")
         if operation == "title":
             command.add_argument("label")

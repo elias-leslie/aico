@@ -399,6 +399,7 @@ def test_status_says_how_the_lane_is_and_what_it_said_bounded(monkeypatch):
     assert view["state"] == "idle" and view["context"] == "21%" and view["agentId"] == "cc:000002"
     assert view["lastMessage"].startswith("Done.") and len(view["lastMessage"]) == admin.STATUS_MESSAGE_CHARS
     assert view["lastMessageCut"] is True and view["lastActivityAt"] == 2_000
+    assert view["model"] == "claude-opus-5-5"
 
 
 def test_report_prints_the_whole_last_message_in_plain_text(monkeypatch, capsys):
