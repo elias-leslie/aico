@@ -1,21 +1,53 @@
-import { existsSync, mkdirSync, mkdtempSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { expect, it } from 'vitest'
-import { sweepRuns } from './vitest-tmp'
+import { afterEach, expect, it, vi } from 'vitest'
+import setup, { sweepRuns } from './vitest-tmp'
+
+afterEach(() => {
+  vi.unstubAllEnvs()
+})
+
+const sandbox = () => mkdtempSync(join(tmpdir(), 'sweep-'))
 
 it('a test’s temp folders live in the run’s own folder, which the run removes', () => {
   expect(tmpdir()).toMatch(/\/vt-\d+$/)
 })
 
 it('removes only the folders of runs that have ended', () => {
-  const top = mkdtempSync(join(tmpdir(), 'sweep-'))
-  for (const name of ['vt-11', 'vt-22', 'vt-x', 'aico-tray-33']) {
+  const top = sandbox()
+  for (const name of ['vt-11', 'vt-22', 'vt-x', 'vt-5000-backup', 'vt-123abc', 'aico-tray-33'])
     mkdirSync(join(top, name))
-  }
+  writeFileSync(join(top, 'vt-44'), 'not a folder')
   expect(sweepRuns(top, (pid) => pid === 22)).toEqual(['vt-11'])
+  for (const name of ['vt-22', 'vt-x', 'vt-5000-backup', 'vt-123abc', 'aico-tray-33', 'vt-44'])
+    expect(existsSync(join(top, name))).toBe(true)
   expect(existsSync(join(top, 'vt-11'))).toBe(false)
-  expect(existsSync(join(top, 'vt-22'))).toBe(true)
-  expect(existsSync(join(top, 'vt-x'))).toBe(true)
-  expect(existsSync(join(top, 'aico-tray-33'))).toBe(true)
+})
+
+it('a run folder it can’t remove stays and doesn’t stop the run', () => {
+  const top = sandbox()
+  const stuck = join(top, 'vt-11', 'locked')
+  mkdirSync(stuck, { recursive: true })
+  writeFileSync(join(stuck, 'inside.txt'), 'x')
+  chmodSync(stuck, 0o000)
+  try {
+    expect(sweepRuns(top, () => false)).toEqual([])
+  } finally {
+    chmodSync(stuck, 0o700)
+  }
+})
+
+it('makes its own folder over a dead run’s with the same pid, and ends as it started', () => {
+  const top = sandbox()
+  vi.stubEnv('TMPDIR', top)
+  const leftover = join(top, `vt-${process.pid}`)
+  mkdirSync(leftover)
+  writeFileSync(join(leftover, 'old.txt'), 'x')
+  const done = setup()
+  expect(tmpdir()).toBe(leftover)
+  expect(existsSync(join(leftover, 'old.txt'))).toBe(false)
+  done()
+  expect(tmpdir()).toBe(top)
+  expect(existsSync(leftover)).toBe(false)
 })
