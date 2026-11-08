@@ -11,7 +11,7 @@ from pathlib import Path
 
 import aico_status
 
-from . import sender, trim, watch
+from . import backup_guard, sender, trim, watch
 from .state import read, write
 
 
@@ -118,12 +118,13 @@ def tick(cfg: dict, *, now: float | None = None, boot: float | None = None,
     if not test:
         try:
             local_rows = (local or watch.local_rows)(state.setdefault("checks", {}), now, socket.gethostname().split('.')[0])
+            local_rows = [item for item in local_rows if not backup_guard.owns_row(item)]
             state["local_rows"] = local_rows
             state.pop("local_error", None)
             rows.append(row(cfg, "pve-watch", "Proxmox checks", "ok", "Local PVE checks finished.", now))
         except Exception as error:  # noqa: BLE001 -- retain previous findings if one local probe fails
             state["local_error"] = f"Local PVE checks failed ({type(error).__name__})."
-            local_rows = state.get("local_rows", [])
+            local_rows = [item for item in state.get("local_rows", []) if not backup_guard.owns_row(item)]
             rows.append(row(cfg, "pve-watch", "Proxmox checks", "failed", state["local_error"], now))
         rows += local_rows
         # Proxmox owns local critical pushes while the workstation is absent, even if CT 190 is live.

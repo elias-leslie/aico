@@ -298,15 +298,21 @@ def status_row(cfg: dict, snapshot: dict, now: float, machine: str | None = None
     meaning = f"{condition} {'Backups may start' if allowed else 'New backups wait'}; CPU limit {cpu:g}%."
     sender_cfg = load(Path(cfg["sender_config"]))
     deadline = sum(sender_cfg.get(key, 0) for key in ("tick_s", "status_relay_s", "slack_s"))
+    observed = snapshot["observed_at"] if historical or fresh(cfg, snapshot, now) else now
     row = {"id": f"{machine}/check-backup-guard", "what": "Backup thermal guard", "kind": "check",
            "machine": machine, "state": "failed" if phase == "critical" else "warn"
            if phase in ("hot", "unavailable") else "ok", "meaning": meaning,
-           "last_run": datetime.fromtimestamp(now, UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+           "last_run": datetime.fromtimestamp(observed, UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
            "next_run": datetime.fromtimestamp(now + max(deadline, cfg["stale_s"]), UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
            "actions": [{"kind": "log", "ref": "journalctl -u aico-backup-guard.service"}]}
     if payload is not None:
         row["guard"] = payload
     return row
+
+
+def owns_row(row: dict) -> bool:
+    """Guard rows have their own serialized transport, including older cached payloads."""
+    return "guard" in row or row.get("id", "").endswith("/check-backup-guard")
 
 
 def publish_row(cfg: dict, row: dict, *, run=subprocess.run) -> bool:
@@ -328,42 +334,71 @@ def delivery_state(cfg: dict):
         yield path, load(path)
 
 
+def _newer_row(delivery: dict, at: float) -> bool:
+    previous = delivery.get("last_row")
+    return bool(previous and datetime.fromisoformat(previous["last_run"]).timestamp() > at)
+
+
+def _deliver_pending(cfg: dict, path: Path, delivery: dict, publish) -> int:
+    pending = delivery.setdefault("pending", [])
+    staged = delivery.get("staged", 0)
+    state = load(Path(cfg["state_dir"]) / "state.json")
+    events = [json.loads(value) for value in state.get("events", [])]
+    for event in events:
+        if event["seq"] <= staged:
+            continue
+        snapshot = event["snapshot"]
+        # A stale source must not regress notice identity or a newer accepted observation.
+        row = None if _newer_row(delivery, snapshot["observed_at"]) else status_row(
+            cfg, snapshot, snapshot["observed_at"], historical=True
+        )
+        pending.append({"seq": event["seq"], "row": row})
+        delivery["staged"] = staged = event["seq"]
+        # Each staged phase is durable before transport or the next phase is built.
+        write(path, delivery)
+    while pending:
+        row = pending[0]["row"]
+        if row is not None and not _newer_row(delivery, datetime.fromisoformat(row["last_run"]).timestamp()):
+            if not publish(cfg, row):
+                raise OSError("Status transport refused the row.")
+            delivery["last_row"] = row
+        item = pending.pop(0)
+        delivery["acked"] = item["seq"]
+        write(path, delivery)
+    return delivery.get("acked", 0)
+
+
 def deliver_pending(cfg: dict, *, publish=None) -> int:
     """Retain a failed head and ACK only accepted rows, using existing transition state."""
-    publish = publish or publish_row
     with delivery_state(cfg) as (path, delivery):
-        pending = delivery.setdefault("pending", [])
-        staged = delivery.get("staged", 0)
-        state = load(Path(cfg["state_dir"]) / "state.json")
-        events = [json.loads(value) for value in state.get("events", [])]
-        for event in events:
-            if event["seq"] <= staged:
-                continue
-            snapshot = event["snapshot"]
-            row = status_row(cfg, snapshot, snapshot["observed_at"], historical=True)
-            pending.append({"seq": event["seq"], "row": row})
-            delivery["staged"] = staged = event["seq"]
-            # Each staged phase is durable before transport or the next phase is built.
-            write(path, delivery)
-        while pending:
-            if not publish(cfg, pending[0]["row"]):
-                raise OSError("Status transport refused the row.")
-            item = pending.pop(0)
-            delivery["acked"] = item["seq"]
-            write(path, delivery)
-        return delivery.get("acked", 0)
+        return _deliver_pending(cfg, path, delivery, publish or publish_row)
 
 
-def reconcile_row(cfg: dict, snapshot: dict, now: float, machine: str) -> dict:
-    """The existing periodic sender retries the outbox before announcing a newer phase."""
-    try:
-        deliver_pending(cfg)
-    except Exception:  # noqa: BLE001 -- watchdog checks can retain their evidence when transport fails
-        print("aico-backup-guard: status publication failed; pending phases retained.", file=sys.stderr)
-    with delivery_state(cfg) as (_path, delivery):
+def reconcile_row(cfg: dict, machine: str, *, clock=None, publish=None) -> dict:
+    """Publish inside the phase lock; returned evidence must never enter a generic batch."""
+    clock, publish = clock or time.time, publish or publish_row
+    with delivery_state(cfg) as (path, delivery):
+        try:
+            _deliver_pending(cfg, path, delivery, publish)
+        except Exception:  # noqa: BLE001 -- periodic evidence survives a failed transport
+            print("aico-backup-guard: status publication failed; pending phases retained.", file=sys.stderr)
         if delivery.get("pending"):
             return delivery["pending"][0]["row"]
-    return status_row(cfg, snapshot, now, machine)
+        # Re-read after obtaining the lock: a publisher may have delivered recovery meanwhile.
+        snapshot = load(Path(cfg["runtime_dir"]) / "status.json")
+        now = clock()
+        observed = snapshot["observed_at"] if fresh(cfg, snapshot, now) else now
+        if _newer_row(delivery, observed):
+            return delivery["last_row"]
+        row = status_row(cfg, snapshot, now, machine)
+        try:
+            if not publish(cfg, row):
+                raise OSError("Status transport refused the row.")
+            delivery["last_row"] = row
+            write(path, delivery)
+        except Exception:  # noqa: BLE001 -- keep evidence; retry on the existing periodic pass
+            print("aico-backup-guard: status publication failed; periodic checks will reconcile.", file=sys.stderr)
+        return row
 
 
 class Publisher:

@@ -58,9 +58,9 @@ def local_rows(state: dict, now: float, machine: str) -> list[dict]:
         item["actions"] = [{"kind": "log", "ref": "journalctl -u aico-pve-sender.service"}]
         rows.append(aico_status.check_row(item))
     if guard_cfg:
-        item = backup_guard.reconcile_row(guard_cfg, guard_snapshot, guard_now, machine)
+        item = backup_guard.reconcile_row(guard_cfg, machine, clock=lambda: now + time.monotonic() - started)
         state.setdefault("push_failed", {})[item["id"]] = False
-        rows.append(aico_status.check_row(item))
+        state["guard_row"] = aico_status.check_row(item)
     return rows
 
 

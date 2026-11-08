@@ -261,7 +261,8 @@ def test_guard_episode_uses_shared_validated_guard_row(cfg, tmp_path, monkeypatc
     state = sample(cfg, {}, 92, 100, [], starting=True)
     checks = {}
     rows = watch.local_rows(checks, 100, "davion-gem")
-    row = next(item for item in rows if item["id"] == "davion-gem/check-backup-guard")
+    row = checks["guard_row"]
+    assert not any(guard.owns_row(item) for item in rows)
     assert row["guard"] == {
         "episode_id": state["episode"]["id"], "phase": "critical", "temperature_c": 92,
         "cpu_quota_percent": 10, "admission_open": False, "delivery_machine": "aico",
@@ -269,17 +270,17 @@ def test_guard_episode_uses_shared_validated_guard_row(cfg, tmp_path, monkeypatc
     assert checks["push_failed"][row["id"]] is False
     Path(cfg["runtime_dir"], "status.json").unlink()
     missing_state = {}
-    missing = next(item for item in watch.local_rows(missing_state, 101, "davion-gem")
-                   if item["id"] == row["id"])
+    watch.local_rows(missing_state, 101, "davion-gem")
+    missing = missing_state["guard_row"]
     assert missing["guard"]["phase"] == "unavailable"
     assert missing["guard"]["temperature_c"] is None
     sample(cfg, {}, 60, 102, [], starting=True)
-    restored = next(item for item in watch.local_rows(missing_state, 102, "davion-gem")
-                    if item["id"] == row["id"])
+    watch.local_rows(missing_state, 102, "davion-gem")
+    restored = missing_state["guard_row"]
     assert restored["guard"]["phase"] == "recovered"
     assert restored["guard"]["episode_id"] == missing["guard"]["episode_id"]
-    quiet = next(item for item in watch.local_rows(missing_state, 103, "davion-gem")
-                 if item["id"] == row["id"])
+    watch.local_rows(missing_state, 103, "davion-gem")
+    quiet = missing_state["guard_row"]
     assert "guard" not in quiet
 
 
@@ -468,13 +469,93 @@ def test_periodic_reconcile_retains_failed_head_then_retries_phases_in_order(cfg
     state = sample(cfg, {}, 90, 100, [], starting=True)
     sample(cfg, state, 60, 115, [])
     monkeypatch.setattr(guard, "publish_row", lambda *_: False)
-    failed = guard.reconcile_row(cfg, snapshot(cfg), 115, "davion-gem")
+    failed = guard.reconcile_row(cfg, "davion-gem", clock=lambda: 115)
     assert failed["guard"]["phase"] == "critical"
     posted = []
     monkeypatch.setattr(guard, "publish_row", lambda _cfg, row: posted.append(row["guard"]["phase"]) or True)
-    reconciled = guard.reconcile_row(cfg, snapshot(cfg), 115, "davion-gem")
-    assert posted == ["critical", "recovered"]
+    reconciled = guard.reconcile_row(cfg, "davion-gem", clock=lambda: 115)
+    assert posted == ["critical", "recovered", "recovered"]
     assert reconciled["guard"]["phase"] == "recovered"
+
+
+@pytest.mark.parametrize("cached", [False, True])
+def test_watchdog_generic_batch_cannot_repost_old_guard_after_publisher_recovery(cfg, tmp_path, monkeypatch, cached):
+    from pve_sender import watch, watchdog
+    from pve_sender.state import write
+
+    policy = tmp_path / "policy.json"
+    policy.write_text(json.dumps(cfg))
+    monkeypatch.setattr(guard, "DEFAULT_CONFIG", policy)
+    monkeypatch.setattr(guard, "publish_row", lambda *_: False)
+    monkeypatch.setattr(watch.core, "run_command", lambda *_a, **_k: watch.core.Result(
+        0, "===NS hwmon\nT k10temp Tctl 95000 0 0\n===NS end\n", ""
+    ))
+    hot_state = sample(cfg, {}, 95, 1000, [], starting=True)
+    sender_cfg = json.loads((ROOT / "native/pve-sender/config.json").read_text())
+    sender_cfg["state_dir"] = str(tmp_path / "sender")
+    directory = Path(sender_cfg["state_dir"])
+    write(directory / "heartbeats.json", {"workstation": {"at": 1000}, "ct190": {"at": 1000}})
+    old = guard.reconcile_row(cfg, "davion-gem", clock=lambda: 1000)
+    write(directory / "state.json", {"started": 1000, "local_rows": [old] if cached else []})
+    store = {}
+    applied = []
+
+    def accepted(_cfg, row):
+        store[row["id"]] = row
+        applied.append(row["guard"]["phase"])
+        return True
+
+    def local(checks, now, machine):
+        if cached:
+            raise OSError("periodic probe failed; use saved evidence")
+        rows = watch.local_rows(checks, now, machine)
+        assert checks["guard_row"]["guard"]["phase"] == "critical"
+        return rows
+
+    def door(_alias):
+        # The watchdog has collected critical evidence and now does another probe.
+        # Meanwhile the independent publisher successfully catches up through recovery.
+        sample(cfg, hot_state, 60, 1015, [])
+        guard.deliver_pending(cfg, publish=accepted)
+
+    batches = []
+
+    def generic_post(_argv, **kwargs):
+        batch = json.loads(kwargs["input"])
+        batches.append(batch)
+        for row in batch:
+            # Match StatusStore.upsert: an older row unconditionally replaces the current row.
+            store[row["id"]] = row
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(watchdog.subprocess, "run", generic_post)
+    result = watchdog.tick(sender_cfg, now=1000, boot=0, local=local, door=door,
+                           send=lambda _: pytest.fail("No phone send belongs to this test."))
+    assert result["rows_posted"]
+    assert applied == ["critical", "recovered"]
+    assert not any(guard.owns_row(row) for batch in batches for row in batch)
+    assert store[old["id"]]["guard"]["phase"] == "recovered"
+
+
+@pytest.mark.parametrize("recover", [False, True])
+def test_periodic_reconcile_cannot_publish_runtime_snapshot_older_than_accepted_phase(cfg, recover):
+    from pve_sender.state import write
+
+    state = sample(cfg, {}, 60, 100, [], starting=True)
+    old = snapshot(cfg)
+    state = sample(cfg, state, 90, 115, [])
+    if recover:
+        old = snapshot(cfg)
+        sample(cfg, state, 60, 130, [])
+    # A write window or cached file presents an older snapshot than the durable phase log.
+    write(Path(cfg["runtime_dir"]) / "status.json", old, mode=0o644)
+    posted = []
+    result = guard.reconcile_row(cfg, "davion-gem", clock=lambda: 135,
+                                 publish=lambda _cfg, row: posted.append(row["guard"]["phase"]) or True)
+    assert posted == (["critical", "recovered"] if recover else ["critical"])
+    expected = "recovered" if recover else "critical"
+    assert result["guard"]["phase"] == expected
+    assert guard.load(Path(cfg["state_dir"]) / "notice.json")["phase"] == expected
 
 
 def test_fresh_cpu_guard_owns_cpu_notice_while_other_hot_sensors_and_cpu_fallback_remain(cfg, tmp_path, monkeypatch):
@@ -489,10 +570,11 @@ def test_fresh_cpu_guard_owns_cpu_notice_while_other_hot_sensors_and_cpu_fallbac
         0, "===NS hwmon\n" + sensors + "===NS end\n", ""
     ))
     sample(cfg, {}, 95, 100, [], starting=True)
-    rows = watch.local_rows({}, 100, "davion-gem")
+    checks = {}
+    rows = watch.local_rows(checks, 100, "davion-gem")
     failed = [row for row in rows if row["state"] == "failed" and "temperature" in row["what"].lower()]
     assert failed == []
-    dedicated = next(row for row in rows if row["id"].endswith("/check-backup-guard"))
+    dedicated = checks["guard_row"]
     assert dedicated["state"] == "failed" and dedicated["guard"]["phase"] == "critical"
     sensors += "T nvme Composite 85000 70000 80000\n"
     other = next(row for row in watch.local_rows({}, 100, "davion-gem") if row["id"].endswith("/check-thermal"))
