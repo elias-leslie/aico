@@ -1497,7 +1497,7 @@ def started_agent_id(collector: Collector, created: dict) -> str | None:
         time.sleep(.5)
 
 
-def create_main(argv: list[str]) -> int:
+def create_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="st aico create", usage=(
         'st aico create REQUEST_ID "PROMPT" --tool TOOL --work-role ROLE --project P --project-root PATH '
         '[--model M] [--reasoning-effort E] [options]'), description=(
@@ -1550,12 +1550,12 @@ def create_main(argv: list[str]) -> int:
     parser.add_argument("--root-socket", type=socket_path, help=argparse.SUPPRESS)
     # Older callers (SummitFlow before it dropped the web app surface) still pass `--surface aico`.
     parser.add_argument("--surface", choices=("aico",), default="aico", help=argparse.SUPPRESS)
-    args = parser.parse_args(argv)
+    return parser
 
-    def refuse(message: str) -> typing.NoReturn:
-        """The options parsed: a refusal from here on is one line, without the usage."""
-        parser.exit(2, f"{parser.prog}: error: {message}\n")
 
+def create_launch(args: argparse.Namespace, refuse: typing.Callable[[str], typing.NoReturn]) -> tuple[dict | None, dict]:
+    """The launch table's row for the work role and what it filled in; the checks on the work role come first.
+    Fills args from the row, so this runs before create_check_options reads them."""
     if args.work_role is not None and (not re.fullmatch(KEY, args.work_role) or args.work_role == "unknown"):
         refuse("expected a declared work role ID; unknown is reserved for legacy sessions")
     if args.work_role_name is not None and (not args.work_role or not args.work_role_name.strip()
@@ -1574,6 +1574,11 @@ def create_main(argv: list[str]) -> int:
             refuse(reason)
         if launch is not None:
             applied = apply_launch_defaults(args, launch)
+    return launch, applied
+
+
+def create_check_options(args: argparse.Namespace, refuse: typing.Callable[[str], typing.NoReturn]) -> dict | None:
+    """Refuse options that don't go together, settle the project of a Blank Slate, and return --needs parsed."""
     if args.blank_slate:
         if args.project_root is not None or args.resume_session is not None:
             refuse("--blank-slate starts fresh in its own empty workspace; drop --project-root, "
@@ -1623,15 +1628,10 @@ def create_main(argv: list[str]) -> int:
         # A host's Tether reaches no other host; the workstation's hub does.
         refuse(f"--host works from the workstation only; on agent host {here}, "
                      "st aico create without --host starts the session on this host")
-    try:
-        endpoint = owner_endpoint(args.root_socket)
-    except argparse.ArgumentTypeError as error:
-        refuse(f"invalid owner transport configuration: {error}")
-    receipt_seconds = HOST_CREATE_SECONDS if args.host else 10
-    collector = Collector(endpoint, "", "", time.monotonic() + receipt_seconds + CREATE_RECEIPT_RESERVE, threading.Event())
-    output = {"owner": "aico", "requestId": args.request_id}
-    if args.host:
-        output["host"] = args.host
+    return needs
+
+
+def create_launch_note(output: dict, args: argparse.Namespace, launch: dict | None, applied: dict) -> None:
     if launch is not None:
         output["launchDefault"] = {"job": launch.get("job"), "applied": applied,
                                    "table": f"st models route --role {args.work_role} --tool {args.tool}"}
@@ -1642,156 +1642,212 @@ def create_main(argv: list[str]) -> int:
             output["launchDefault"]["note"] = str(launch.get("why") or "")[:300]
     elif args.work_role is not None and args.resume_session is None and args.tool in LAUNCH_TOOLS:
         output["launchDefault"] = {"applied": {}, "note": "Aico's launch table could not be read; the tool's own settings apply"}
+
+
+def refuse_unready(collector: Collector, endpoint: str, args: argparse.Namespace,
+                   refuse: typing.Callable[[str], typing.NoReturn]) -> None:
+    """Refuse a launch the tool can't run here before anything reaches Tether. May turn Daybreak off for it."""
+    auto = args.host == AUTO_HOST
+    if args.host and not auto and args.host != LOCAL_HOST:
+        # This computer's Codex and Pi logins say nothing about the host's; ask its Tether.
+        if (reason := host_tool_unavailable(collector, endpoint, args.host, args.tool)):
+            refuse(reason)
+    elif args.tool == "pi" and args.entry is None and (reason := pi_provider_unavailable(args.model)):
+        # Nothing reaches Tether, so the same request id can be retried with the right provider.
+        # An entry's Pi has its own provider setup; this computer's says nothing about it.
+        refuse(reason)
+    on_this_computer = args.host in (None, LOCAL_HOST)
+    if on_this_computer and args.tool == "pi" and (block := opencode_go_quota_block(args.model)):
+        # Nothing reaches Tether, so the same request id can be retried after the reset.
+        refuse(f"opencode-go quota is used up ({block}); pick another model or launch after the reset")
+    # This computer's Codex login and catalog say nothing about an entry's Codex.
+    local_codex = on_this_computer and args.tool == "codex" and args.entry is None
+    if local_codex and (reason := codex_model_unavailable(args.model)):
+        # Nothing reaches Tether, so the same request id can be retried with the right model.
+        refuse(reason)
+    if (local_codex and args.daybreak == "on"
+            and (reason := codex_daybreak_unavailable(args.model))):
+        refuse(reason)
+    if (local_codex and args.daybreak is None and (catalog := codex_catalog()) is not None
+            and catalog[0].get("daybreak") is True and codex_daybreak_unavailable(args.model)):
+        # Codex's shared config turns Daybreak on, and this model lacks it: Codex would reject
+        # the first turn and leave an idle root, so this one launch runs without it.
+        args.daybreak = "off"
+    # The hub forwards an entry only when it runs entries for this tool itself.
+    if args.entry is not None and (reason := entry_api_refusal(collector, endpoint, args.tool)):
+        refuse(reason)
+
+
+def create_payload(args: argparse.Namespace, prompt: str, instructions: dict | None, needs: dict | None,
+                   output: dict) -> tuple[dict, str]:
+    """What goes to Tether and the digest of the fields a retry must repeat."""
+    payload = {"requestId": args.request_id, "tool": args.tool, "projectId": args.project,
+               "projectRoot": args.project_root, "initialPrompt": prompt, "role": args.role,
+               "leadRootReference": args.lead_root, "facetCapsuleRef": args.facet}
+    # Run from an Aico session: Tether records it as the
+    # launcher, so the root joins its coordinator (or makes it one).
+    creator = caller_widget_id()
+    if isinstance(creator, str) and re.fullmatch(WIDGET, creator):
+        payload["launchedBy"] = creator
+    if args.host:
+        # Not part of the digest: the host's Tether computes it without the field.
+        payload["host"] = args.host
+    if needs is not None:
+        payload["needs"] = needs
+    if args.pool is not None:
+        payload["pool"] = args.pool
+    fields = [args.tool, args.project, args.project_root, prompt, args.role, args.lead_root, args.facet]
+    if args.resume_session:
+        payload["resumeSessionId"] = args.resume_session
+        fields.append(args.resume_session)
+    if args.model or args.reasoning_effort or args.daybreak is not None:
+        selection = {"model": args.model, "reasoningEffort": args.reasoning_effort}
+        if args.daybreak is not None:
+            selection["daybreak"] = args.daybreak == "on"
+        payload.update(selection)
+        fields.append(selection)
+    if args.work_role:
+        payload.update(workRole=args.work_role, workRoleDisplayName=args.work_role_name)
+        fields.append({"workRole": args.work_role, "workRoleDisplayName": args.work_role_name})
+    if instructions:
+        payload["instructions"] = instructions
+        fields.append({"instructions": instructions["revision"]})
+        output["instructions"] = {key: instructions[key] for key in ("prompt", "name", "revision")}
+    if args.entry is not None:
+        payload["entry"] = args.entry
+        fields.append({"entry": [args.entry["name"], args.entry["arg"]]})
+        output["entry"] = args.entry
+    digest = hashlib.sha256(json.dumps(fields, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()
+    return payload, digest
+
+
+def post_root(collector: Collector, endpoint: str, args: argparse.Namespace, payload: dict,
+              receipt_seconds: int) -> tuple[int, dict]:
+    auto = args.host == AUTO_HOST
+    # Said only once the host is slow to answer (powering on): a refusal comes back at once.
+    waiting = threading.Timer(HOST_WAIT_NOTICE_SECONDS, lambda: print(
+        f"st aico create: starting on {'the host Tether picks' if auto else args.host}; "
+        "if it is off this waits for it to power on "
+        f"(up to {HOST_CREATE_SECONDS // 60} min)", file=sys.stderr, flush=True))
+    if args.host and args.host != LOCAL_HOST:
+        waiting.daemon = True
+        waiting.start()
+    try:
+        return collector.receipt(endpoint, "/v1/roots", payload, timeout=receipt_seconds)
+    finally:
+        waiting.cancel()
+
+
+def raise_create_refusal(status: int, data: dict, output: dict) -> typing.NoReturn:
+    """Tether's answer other than a receipt, as the refusal to report; output gets what it named."""
+    errors = {400: ("invalid_body", "unsupported_tool", "work_role_required", "prompt_too_long", "unknown_host",
+                    "unknown_pool", "unknown_entry", "entry_unsupported"),
+              409: ("request_conflict", "recovery_pending", "conversation_open", "host_unavailable",
+                    "outcome_uncertain", "at_capacity"),
+              422: ("launch_unavailable", "unknown_agent", "unknown_model", "entry_unavailable"),
+              503: ("unavailable",)}
+    reason = data.get("error")
+    if reason not in errors.get(status, ()):
+        raise Unavailable("create_receipt_unqualified")
+    supported = data.get("supported")
+    if (reason == "unsupported_tool" and isinstance(supported, list) and 0 < len(supported) <= 50
+            and all(isinstance(slug, str) and re.fullmatch(TOOL_SLUG, slug) for slug in supported)):
+        output["supportedTools"] = supported
+    # Tether is resuming this conversation in its own session after a crash.
+    if reason == "recovery_pending" and isinstance(data.get("widgetId"), str) \
+            and re.fullmatch(WIDGET, data["widgetId"]):
+        output["recoveringWidget"] = data["widgetId"]
+    if reason == "at_capacity":
+        # Nothing was reserved or created: the same create can be repeated.
+        output["hosts"] = placement_hosts(data.get("hosts"))
+    if reason == "unknown_pool":
+        output["pools"] = pool_names(data.get("pools"))
+    refusal = Unavailable(reason)
+    # The hub's own words for why the host could not take it (host_unavailable).
+    refusal.detail = reason_detail(data.get("reason"))
+    refusal.refused = status in (400, 422) or reason in REFUSED_CREATES
+    raise refusal
+
+
+def check_create_receipt(args: argparse.Namespace, status: int, data: dict, digest: str) -> None:
+    host = data.get("hostIdentity")
+    generation = data.get("generation")
+    state = data.get("status")
+    if (data.get("owner") != "aico" or data.get("requestId") != args.request_id
+            or data.get("digest") != digest or data.get("role") != args.role
+            or data.get("workRole") != args.work_role or data.get("workRoleDisplayName") != args.work_role_name
+            or data.get("leadRootReference") != args.lead_root or data.get("facetCapsuleRef") != args.facet
+            or not surface_identity("aico", host, data.get("surfaceLocator"))
+            or not isinstance(data.get("logicalSessionId"), str)
+            or not re.fullmatch(KEY, data["logicalSessionId"])
+            or state not in ("running", "pending", "uncertain", "ended")
+            or status != (202 if state in ("pending", "uncertain") else 200)
+            or state == "running" and generation is None
+            or generation is not None and (not isinstance(generation, str) or not re.fullmatch(GENERATION, generation))
+            or state == "ended" and generation is not None):
+        raise Unavailable("create_receipt_unqualified")
+
+
+def create_output(collector: Collector, args: argparse.Namespace, payload: dict, data: dict, output: dict) -> None:
+    auto = args.host == AUTO_HOST
+    output.update({key: data[key] for key in ("digest", "hostIdentity", "logicalSessionId", "generation", "surfaceLocator", "status")})
+    if auto:
+        # Where Tether put it: a remote root's answer names its host.
+        picked = data.get("host")
+        output["host"] = picked if isinstance(picked, str) and re.fullmatch(HOST_NAME, picked) else "local"
+    output.update(launch_deferral(data))
+    output.update(workRole=args.work_role, workRoleDisplayName=args.work_role_name)
+    if "launchedBy" in payload:
+        output["launchedBy"] = payload["launchedBy"]
+    # Either name reaches a local one with `st sessions send`; the agent id exists once its agent has started.
+    if output.get("host", "local") == "local":
+        output["sendTo"] = args.request_id
+    output["agentId"] = started_agent_id(collector, output)
+    if args.model or args.reasoning_effort:
+        output["requested"] = {"model": args.model, "effort": args.reasoning_effort}
+    output["next"] = (f"st aico wait session {args.request_id}, st aico root report {args.request_id}, "
+                      f"st aico root end {args.request_id}")
+
+
+def create_main(argv: list[str]) -> int:
+    parser = create_parser()
+    args = parser.parse_args(argv)
+
+    def refuse(message: str) -> typing.NoReturn:
+        """The options parsed: a refusal from here on is one line, without the usage."""
+        parser.exit(2, f"{parser.prog}: error: {message}\n")
+
+    launch, applied = create_launch(args, refuse)
+    needs = create_check_options(args, refuse)
+    try:
+        endpoint = owner_endpoint(args.root_socket)
+    except argparse.ArgumentTypeError as error:
+        refuse(f"invalid owner transport configuration: {error}")
+    receipt_seconds = HOST_CREATE_SECONDS if args.host else 10
+    collector = Collector(endpoint, "", "", time.monotonic() + receipt_seconds + CREATE_RECEIPT_RESERVE, threading.Event())
+    output = {"owner": "aico", "requestId": args.request_id}
+    if args.host:
+        output["host"] = args.host
+    create_launch_note(output, args, launch, applied)
     try:
         prompt = admin_stdin(collector) if args.stdin else args.prompt
         if prompt is None and args.resume_session:
             prompt = "Resume this exact saved session. Reconcile current state after the crash before continuing."
         if (problem := prompt_error(prompt)) is not None:
             refuse(problem)
-        if args.host and not auto and args.host != LOCAL_HOST:
-            # This computer's Codex and Pi logins say nothing about the host's; ask its Tether.
-            if (reason := host_tool_unavailable(collector, endpoint, args.host, args.tool)):
-                refuse(reason)
-        elif args.tool == "pi" and args.entry is None and (reason := pi_provider_unavailable(args.model)):
-            # Nothing reaches Tether, so the same request id can be retried with the right provider.
-            # An entry's Pi has its own provider setup; this computer's says nothing about it.
-            refuse(reason)
-        on_this_computer = args.host in (None, LOCAL_HOST)
-        if on_this_computer and args.tool == "pi" and (block := opencode_go_quota_block(args.model)):
-            # Nothing reaches Tether, so the same request id can be retried after the reset.
-            refuse(f"opencode-go quota is used up ({block}); pick another model or launch after the reset")
-        # This computer's Codex login and catalog say nothing about an entry's Codex.
-        local_codex = on_this_computer and args.tool == "codex" and args.entry is None
-        if local_codex and (reason := codex_model_unavailable(args.model)):
-            # Nothing reaches Tether, so the same request id can be retried with the right model.
-            refuse(reason)
-        if (local_codex and args.daybreak == "on"
-                and (reason := codex_daybreak_unavailable(args.model))):
-            refuse(reason)
-        if (local_codex and args.daybreak is None and (catalog := codex_catalog()) is not None
-                and catalog[0].get("daybreak") is True and codex_daybreak_unavailable(args.model)):
-            # Codex's shared config turns Daybreak on, and this model lacks it: Codex would reject
-            # the first turn and leave an idle root, so this one launch runs without it.
-            args.daybreak = "off"
-        # The hub forwards an entry only when it runs entries for this tool itself.
-        if args.entry is not None and (reason := entry_api_refusal(collector, endpoint, args.tool)):
-            refuse(reason)
+        refuse_unready(collector, endpoint, args, refuse)
         instructions = None
         if args.instructions is not None:
             try:
                 instructions = resolve_instructions(args.instructions)
             except ValueError as error:
                 refuse(str(error))
-        payload = {"requestId": args.request_id, "tool": args.tool, "projectId": args.project,
-                   "projectRoot": args.project_root, "initialPrompt": prompt, "role": args.role,
-                   "leadRootReference": args.lead_root, "facetCapsuleRef": args.facet}
-        # Run from an Aico session: Tether records it as the
-        # launcher, so the root joins its coordinator (or makes it one).
-        creator = caller_widget_id()
-        if isinstance(creator, str) and re.fullmatch(WIDGET, creator):
-            payload["launchedBy"] = creator
-        if args.host:
-            # Not part of the digest: the host's Tether computes it without the field.
-            payload["host"] = args.host
-        if needs is not None:
-            payload["needs"] = needs
-        if args.pool is not None:
-            payload["pool"] = args.pool
-        fields = [args.tool, args.project, args.project_root, prompt, args.role, args.lead_root, args.facet]
-        if args.resume_session:
-            payload["resumeSessionId"] = args.resume_session
-            fields.append(args.resume_session)
-        if args.model or args.reasoning_effort or args.daybreak is not None:
-            selection = {"model": args.model, "reasoningEffort": args.reasoning_effort}
-            if args.daybreak is not None:
-                selection["daybreak"] = args.daybreak == "on"
-            payload.update(selection)
-            fields.append(selection)
-        if args.work_role:
-            payload.update(workRole=args.work_role, workRoleDisplayName=args.work_role_name)
-            fields.append({"workRole": args.work_role, "workRoleDisplayName": args.work_role_name})
-        if instructions:
-            payload["instructions"] = instructions
-            fields.append({"instructions": instructions["revision"]})
-            output["instructions"] = {key: instructions[key] for key in ("prompt", "name", "revision")}
-        if args.entry is not None:
-            payload["entry"] = args.entry
-            fields.append({"entry": [args.entry["name"], args.entry["arg"]]})
-            output["entry"] = args.entry
-        digest = hashlib.sha256(json.dumps(fields, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()
-        # Said only once the host is slow to answer (powering on): a refusal comes back at once.
-        waiting = threading.Timer(HOST_WAIT_NOTICE_SECONDS, lambda: print(
-            f"st aico create: starting on {'the host Tether picks' if auto else args.host}; "
-            "if it is off this waits for it to power on "
-            f"(up to {HOST_CREATE_SECONDS // 60} min)", file=sys.stderr, flush=True))
-        if args.host and args.host != LOCAL_HOST:
-            waiting.daemon = True
-            waiting.start()
-        try:
-            status, data = collector.receipt(endpoint, "/v1/roots", payload, timeout=receipt_seconds)
-        finally:
-            waiting.cancel()
-        errors = {400: ("invalid_body", "unsupported_tool", "work_role_required", "prompt_too_long", "unknown_host",
-                        "unknown_pool", "unknown_entry", "entry_unsupported"),
-                  409: ("request_conflict", "recovery_pending", "conversation_open", "host_unavailable",
-                        "outcome_uncertain", "at_capacity"),
-                  422: ("launch_unavailable", "unknown_agent", "unknown_model", "entry_unavailable"),
-                  503: ("unavailable",)}
+        payload, digest = create_payload(args, prompt, instructions, needs, output)
+        status, data = post_root(collector, endpoint, args, payload, receipt_seconds)
         if status not in (200, 202):
-            reason = data.get("error")
-            if reason not in errors.get(status, ()):
-                raise Unavailable("create_receipt_unqualified")
-            supported = data.get("supported")
-            if (reason == "unsupported_tool" and isinstance(supported, list) and 0 < len(supported) <= 50
-                    and all(isinstance(slug, str) and re.fullmatch(TOOL_SLUG, slug) for slug in supported)):
-                output["supportedTools"] = supported
-            # Tether is resuming this conversation in its own session after a crash.
-            if reason == "recovery_pending" and isinstance(data.get("widgetId"), str) \
-                    and re.fullmatch(WIDGET, data["widgetId"]):
-                output["recoveringWidget"] = data["widgetId"]
-            if reason == "at_capacity":
-                # Nothing was reserved or created: the same create can be repeated.
-                output["hosts"] = placement_hosts(data.get("hosts"))
-            if reason == "unknown_pool":
-                output["pools"] = pool_names(data.get("pools"))
-            refusal = Unavailable(reason)
-            # The hub's own words for why the host could not take it (host_unavailable).
-            refusal.detail = reason_detail(data.get("reason"))
-            refusal.refused = status in (400, 422) or reason in REFUSED_CREATES
-            raise refusal
-        host = data.get("hostIdentity")
-        generation = data.get("generation")
-        state = data.get("status")
-        if (data.get("owner") != "aico" or data.get("requestId") != args.request_id
-                or data.get("digest") != digest or data.get("role") != args.role
-                or data.get("workRole") != args.work_role or data.get("workRoleDisplayName") != args.work_role_name
-                or data.get("leadRootReference") != args.lead_root or data.get("facetCapsuleRef") != args.facet
-                or not surface_identity("aico", host, data.get("surfaceLocator"))
-                or not isinstance(data.get("logicalSessionId"), str)
-                or not re.fullmatch(KEY, data["logicalSessionId"])
-                or state not in ("running", "pending", "uncertain", "ended")
-                or status != (202 if state in ("pending", "uncertain") else 200)
-                or state == "running" and generation is None
-                or generation is not None and (not isinstance(generation, str) or not re.fullmatch(GENERATION, generation))
-                or state == "ended" and generation is not None):
-            raise Unavailable("create_receipt_unqualified")
-        output.update({key: data[key] for key in ("digest", "hostIdentity", "logicalSessionId", "generation", "surfaceLocator", "status")})
-        if auto:
-            # Where Tether put it: a remote root's answer names its host.
-            picked = data.get("host")
-            output["host"] = picked if isinstance(picked, str) and re.fullmatch(HOST_NAME, picked) else "local"
-        output.update(launch_deferral(data))
-        output.update(workRole=args.work_role, workRoleDisplayName=args.work_role_name)
-        if "launchedBy" in payload:
-            output["launchedBy"] = payload["launchedBy"]
-        # Either name reaches a local one with `st sessions send`; the agent id exists once its agent has started.
-        if output.get("host", "local") == "local":
-            output["sendTo"] = args.request_id
-        output["agentId"] = started_agent_id(collector, output)
-        if args.model or args.reasoning_effort:
-            output["requested"] = {"model": args.model, "effort": args.reasoning_effort}
-        output["next"] = (f"st aico wait session {args.request_id}, st aico root report {args.request_id}, "
-                          f"st aico root end {args.request_id}")
+            raise_create_refusal(status, data, output)
+        check_create_receipt(args, status, data, digest)
+        create_output(collector, args, payload, data, output)
         emit_json(collector, output)
         return 0
     except (ValueError, UnicodeError):
@@ -3091,42 +3147,23 @@ or timed out; end your turn meanwhile. --block holds the command until then inst
 agents outside Aico)."""
 
 
-def wait_main(argv: list[str]) -> int:
-    """`st aico wait session|job|reply|ask|host|cmd|time|get|cancel` and `st aico waits`."""
-    operation = argv[0] if argv else ""
-    if operation == "time":
-        return wake_main(["set", *argv[1:]])
-    if operation not in ("session", *PULL_WAITS, "cmd", "get", "cancel", "list"):
-        asked = operation in ("--help", "-h")
-        print(WAIT_HELP, file=sys.stdout if asked else sys.stderr)
-        return 0 if asked else 2
-    if operation == "job" and (deploys := [a for a in argv[1:] if re.fullmatch(AICO_DEPLOY_JOB, a)]):
-        # An aico deploy has no service job file; its own CLI waits for it and exits 0 only on success.
-        rest = [a for a in argv[1:] if a != deploys[0]]
-        if "--until" in rest:
-            del rest[rest.index("--until"):rest.index("--until") + 2]
-        # The command stays until this wait's own timeout: its default would report a running deploy as over.
-        span = next((rest[i + 1] for i, a in enumerate(rest[:-1]) if a == "--timeout"), None)
-        try:
-            minutes = wait_minutes(span) if span else CMD_DEFAULT_MINUTES
-        except argparse.ArgumentTypeError:
-            minutes = CMD_DEFAULT_MINUTES  # the cmd parser below refuses the bad span
-        argv = ["cmd", *rest, "--", shutil.which("aico") or "aico", "deploy", "wait", deploys[0],
-                "--timeout", str(int(minutes * 60))]
-        operation = "cmd"
-    pull = PULL_WAITS.get(operation)
-    command: list[str] = []
-    options = argv[1:]
-    if operation == "cmd":
-        # Everything after the first -- is the command, untouched.
-        asked = bool({"--help", "-h"} & set(options[:options.index("--")] if "--" in options else options))
-        if asked or "--" not in options:
-            print("usage: st aico wait cmd [--timeout 6h] [--note T] [--key K] [--block] -- ARGV...",
-                  file=sys.stdout if asked else sys.stderr)
-            return 0 if asked else 2
-        cut = options.index("--")
-        options, command = options[:cut], options[cut + 1:]
-    arming = operation in ("session", "cmd") or pull is not None
+def wait_deploy_argv(argv: list[str], job: str) -> list[str]:
+    """`wait job` on an aico deploy, as the `wait cmd` that waits for it."""
+    # An aico deploy has no service job file; its own CLI waits for it and exits 0 only on success.
+    rest = [a for a in argv[1:] if a != job]
+    if "--until" in rest:
+        del rest[rest.index("--until"):rest.index("--until") + 2]
+    # The command stays until this wait's own timeout: its default would report a running deploy as over.
+    span = next((rest[i + 1] for i, a in enumerate(rest[:-1]) if a == "--timeout"), None)
+    try:
+        minutes = wait_minutes(span) if span else CMD_DEFAULT_MINUTES
+    except argparse.ArgumentTypeError:
+        minutes = CMD_DEFAULT_MINUTES  # the cmd parser below refuses the bad span
+    return ["cmd", *rest, "--", shutil.which("aico") or "aico", "deploy", "wait", job,
+            "--timeout", str(int(minutes * 60))]
+
+
+def wait_parser(operation: str, pull: tuple | None, arming: bool) -> argparse.ArgumentParser:
     prog = "st aico waits" if operation == "list" else f"st aico wait {operation}"
     parser = argparse.ArgumentParser(prog=prog, description=(
         "Wait for a session (finished, idle, blocked, ended), a service job (done), a request you sent "
@@ -3165,7 +3202,12 @@ def wait_main(argv: list[str]) -> int:
                             help="also every armed wait of this session whose note contains TEXT")
     if operation == "list":
         parser.add_argument("--recent", action="store_true", help="also waits that ended in the last day")
-    args = parser.parse_args(options)
+    return parser
+
+
+def wait_check_args(parser: argparse.ArgumentParser, args: argparse.Namespace, operation: str, pull: tuple | None,
+                    arming: bool, command: list[str]) -> tuple[str | None, bool]:
+    """Refuse what the parser can't; returns the waiting session and whether this command holds until it's over."""
     if operation == "cmd":
         args.ref = None
         if not command or not command[0]:
@@ -3194,94 +3236,153 @@ def wait_main(argv: list[str]) -> int:
             parser.error("--key needs a session wait; with --block, ask again with st aico wait get WAIT_ID --block")
         if args.note is not None and not 0 < len(args.note.strip()) <= 200:
             parser.error("--note: one line, at most 200 characters")
+    return widget, block
+
+
+def wait_refusal(data: dict) -> Refused:
+    return Refused(data.get("error") if isinstance(data.get("error"), str) else "wait_unavailable")
+
+
+# Each operation fills output and returns None, or returns the exit code when it printed its own.
+def wait_arm(collector: Collector, args: argparse.Namespace, operation: str, pull: tuple | None, command: list[str],
+             widget: str | None, block: bool, output: dict) -> int | None:
+    if operation == "cmd":
+        if not kinds_api(collector, args.owner_socket, WAIT_CMD_API):
+            raise Refused("wait_kind_unsupported")
+        payload: dict = {"kind": "cmd", "argv": command, "cwd": os.getcwd(), "until": "succeeded"}
+    else:
+        if pull is not None and not kinds_api(collector, args.owner_socket):
+            raise Refused("wait_kind_unsupported")
+        payload = {"kind": operation, "ref": args.ref, "until": args.until}
+    if block:
+        payload.update(waiter=None, by=widget)
+    else:
+        payload["waiter"] = widget
+        thread = os.environ.get("CODEX_THREAD_ID", "")
+        if re.fullmatch(CODEX_THREAD, thread):
+            payload["thread"] = thread
+    for name, field in (("timeout", "timeoutMinutes"), ("note", "note"), ("key", "key")):
+        if getattr(args, name) is not None:
+            payload[field] = getattr(args, name)
+    try:
+        status, data = collector.receipt(args.owner_socket, "/v1/waits", payload, timeout=10)
+    except WaitInterrupted:
+        print("stopped before the wait was armed; if it was, it times out on its own", file=sys.stderr)
+        return 130
+    if status >= 500:
+        raise Unavailable(data.get("error") if isinstance(data.get("error"), str) else "wait_unavailable")
+    if status not in (200, 201):
+        if isinstance(data.get("field"), str):
+            output["field"] = data["field"]
+        if isinstance(data.get("max"), int):
+            output["max"] = data["max"]
+        raise wait_refusal(data)
+    if block:
+        return wait_block(collector, args.owner_socket, data)
+    output.update(applied=True, created=data.get("created") is True, wait=wait_item(data))
+    if data.get("created") is True and data.get("state") != "armed":
+        output["note"] = "already over: its line is on the way to this session"
+    elif data.get("state") == "armed":
+        output["note"] = "armed, not over: you get one line in this session when it is"
+    return None
+
+
+def wait_get(collector: Collector, args: argparse.Namespace, block: bool, output: dict) -> int | None:
+    status, data = collector.receipt(args.owner_socket, f"/v1/waits/{args.wait_id}", timeout=5)
+    if status != 200:
+        raise wait_refusal(data)
+    if block:
+        return wait_block(collector, args.owner_socket, data)
+    output["wait"] = wait_item(data)
+    return None
+
+
+def wait_cancel(collector: Collector, args: argparse.Namespace, widget: str | None, output: dict) -> int | None:
+    targets = list(args.wait_id)
+    if args.cancel_note:
+        status, data = collector.receipt(args.owner_socket, f"/v1/sessions/{widget}/waits", timeout=5)
+        if status != 200 or not isinstance(data.get("items"), list):
+            raise wait_refusal(data)
+        targets += [item["id"] for item in data["items"]
+                    if isinstance(item, dict) and item.get("state") == "armed"
+                    and args.cancel_note in str(item.get("note") or "") and item.get("id") not in targets]
+    if len(targets) == 1 and not args.cancel_note:
+        status, data = collector.receipt(args.owner_socket, f"/v1/waits/{targets[0]}", timeout=5,
+                                         method="DELETE")
+        if status != 200:
+            if isinstance(data.get("state"), str):
+                output["state"] = data["state"]
+            raise wait_refusal(data)
+        output.update(applied=True, waitId=targets[0], detail="cancelled; no line will be sent")
+    else:
+        cancelled, not_cancelled = [], []
+        for wait_id in targets:
+            try:
+                status = collector.receipt(args.owner_socket, f"/v1/waits/{wait_id}", timeout=5, method="DELETE")[0]
+            except Unavailable:
+                status = None
+            (cancelled if status == 200 else not_cancelled).append(wait_id)
+        output.update(applied=not not_cancelled, cancelled=cancelled, notCancelled=not_cancelled,
+                      detail=(f"cancelled {len(cancelled)} of {len(targets)}; no line will be sent for those"
+                              if targets else "no armed wait of this session has that note"))
+        if not_cancelled:
+            emit_json(collector, output)
+            return 1
+    return None
+
+
+def wait_list(collector: Collector, args: argparse.Namespace, widget: str | None, output: dict) -> int | None:
+    route = f"/v1/sessions/{widget}/waits" + ("?recent=1" if args.recent else "")
+    status, data = collector.receipt(args.owner_socket, route, timeout=5)
+    if status != 200 or not isinstance(data.get("items"), list):
+        raise wait_refusal(data)
+    output.update(widgetId=widget, items=[wait_item(item) for item in data["items"] if isinstance(item, dict)])
+    return None
+
+
+def wait_main(argv: list[str]) -> int:
+    """`st aico wait session|job|reply|ask|host|cmd|time|get|cancel` and `st aico waits`."""
+    operation = argv[0] if argv else ""
+    if operation == "time":
+        return wake_main(["set", *argv[1:]])
+    if operation not in ("session", *PULL_WAITS, "cmd", "get", "cancel", "list"):
+        asked = operation in ("--help", "-h")
+        print(WAIT_HELP, file=sys.stdout if asked else sys.stderr)
+        return 0 if asked else 2
+    if operation == "job" and (deploys := [a for a in argv[1:] if re.fullmatch(AICO_DEPLOY_JOB, a)]):
+        argv = wait_deploy_argv(argv, deploys[0])
+        operation = "cmd"
+    pull = PULL_WAITS.get(operation)
+    command: list[str] = []
+    options = argv[1:]
+    if operation == "cmd":
+        # Everything after the first -- is the command, untouched.
+        asked = bool({"--help", "-h"} & set(options[:options.index("--")] if "--" in options else options))
+        if asked or "--" not in options:
+            print("usage: st aico wait cmd [--timeout 6h] [--note T] [--key K] [--block] -- ARGV...",
+                  file=sys.stdout if asked else sys.stderr)
+            return 0 if asked else 2
+        cut = options.index("--")
+        options, command = options[:cut], options[cut + 1:]
+    arming = operation in ("session", "cmd") or pull is not None
+    parser = wait_parser(operation, pull, arming)
+    args = parser.parse_args(options)
+    widget, block = wait_check_args(parser, args, operation, pull, arming, command)
     collector = Collector("", args.owner_socket, "", time.monotonic() + WAIT_CLIENT_SECONDS, threading.Event())
     output: dict = {"owner": "aico", "operation": "waits" if operation == "list" else f"wait {operation}"}
     # With --block a signal cancels the wait this command arms (wait_block).
     previous = {s: signal.signal(s, wait_interrupted) for s in WAIT_SIGNALS} if block else {}
     try:
         if arming:
-            if operation == "cmd":
-                if not kinds_api(collector, args.owner_socket, WAIT_CMD_API):
-                    raise Refused("wait_kind_unsupported")
-                payload: dict = {"kind": "cmd", "argv": command, "cwd": os.getcwd(), "until": "succeeded"}
-            else:
-                if pull is not None and not kinds_api(collector, args.owner_socket):
-                    raise Refused("wait_kind_unsupported")
-                payload = {"kind": operation, "ref": args.ref, "until": args.until}
-            if block:
-                payload.update(waiter=None, by=widget)
-            else:
-                payload["waiter"] = widget
-                thread = os.environ.get("CODEX_THREAD_ID", "")
-                if re.fullmatch(CODEX_THREAD, thread):
-                    payload["thread"] = thread
-            for name, field in (("timeout", "timeoutMinutes"), ("note", "note"), ("key", "key")):
-                if getattr(args, name) is not None:
-                    payload[field] = getattr(args, name)
-            try:
-                status, data = collector.receipt(args.owner_socket, "/v1/waits", payload, timeout=10)
-            except WaitInterrupted:
-                print("stopped before the wait was armed; if it was, it times out on its own", file=sys.stderr)
-                return 130
-            if status >= 500:
-                raise Unavailable(data.get("error") if isinstance(data.get("error"), str) else "wait_unavailable")
-            if status not in (200, 201):
-                if isinstance(data.get("field"), str):
-                    output["field"] = data["field"]
-                if isinstance(data.get("max"), int):
-                    output["max"] = data["max"]
-                raise Refused(data.get("error") if isinstance(data.get("error"), str) else "wait_unavailable")
-            if block:
-                return wait_block(collector, args.owner_socket, data)
-            output.update(applied=True, created=data.get("created") is True, wait=wait_item(data))
-            if data.get("created") is True and data.get("state") != "armed":
-                output["note"] = "already over: its line is on the way to this session"
-            elif data.get("state") == "armed":
-                output["note"] = "armed, not over: you get one line in this session when it is"
+            code = wait_arm(collector, args, operation, pull, command, widget, block, output)
         elif operation == "get":
-            status, data = collector.receipt(args.owner_socket, f"/v1/waits/{args.wait_id}", timeout=5)
-            if status != 200:
-                raise Refused(data.get("error") if isinstance(data.get("error"), str) else "wait_unavailable")
-            if block:
-                return wait_block(collector, args.owner_socket, data)
-            output["wait"] = wait_item(data)
+            code = wait_get(collector, args, block, output)
         elif operation == "cancel":
-            targets = list(args.wait_id)
-            if args.cancel_note:
-                status, data = collector.receipt(args.owner_socket, f"/v1/sessions/{widget}/waits", timeout=5)
-                if status != 200 or not isinstance(data.get("items"), list):
-                    raise Refused(data.get("error") if isinstance(data.get("error"), str) else "wait_unavailable")
-                targets += [item["id"] for item in data["items"]
-                            if isinstance(item, dict) and item.get("state") == "armed"
-                            and args.cancel_note in str(item.get("note") or "") and item.get("id") not in targets]
-            if len(targets) == 1 and not args.cancel_note:
-                status, data = collector.receipt(args.owner_socket, f"/v1/waits/{targets[0]}", timeout=5,
-                                                 method="DELETE")
-                if status != 200:
-                    if isinstance(data.get("state"), str):
-                        output["state"] = data["state"]
-                    raise Refused(data.get("error") if isinstance(data.get("error"), str) else "wait_unavailable")
-                output.update(applied=True, waitId=targets[0], detail="cancelled; no line will be sent")
-            else:
-                cancelled, not_cancelled = [], []
-                for wait_id in targets:
-                    try:
-                        status = collector.receipt(args.owner_socket, f"/v1/waits/{wait_id}", timeout=5, method="DELETE")[0]
-                    except Unavailable:
-                        status = None
-                    (cancelled if status == 200 else not_cancelled).append(wait_id)
-                output.update(applied=not not_cancelled, cancelled=cancelled, notCancelled=not_cancelled,
-                              detail=(f"cancelled {len(cancelled)} of {len(targets)}; no line will be sent for those"
-                                      if targets else "no armed wait of this session has that note"))
-                if not_cancelled:
-                    emit_json(collector, output)
-                    return 1
+            code = wait_cancel(collector, args, widget, output)
         else:
-            route = f"/v1/sessions/{widget}/waits" + ("?recent=1" if args.recent else "")
-            status, data = collector.receipt(args.owner_socket, route, timeout=5)
-            if status != 200 or not isinstance(data.get("items"), list):
-                raise Refused(data.get("error") if isinstance(data.get("error"), str) else "wait_unavailable")
-            output.update(widgetId=widget, items=[wait_item(item) for item in data["items"] if isinstance(item, dict)])
+            code = wait_list(collector, args, widget, output)
+        if code is not None:
+            return code
         emit_json(collector, output)
         return 0
     except (Unavailable, Stopped) as error:
