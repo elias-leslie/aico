@@ -463,6 +463,11 @@ async function runInUnit(
   return result.code
 }
 
+/** systemd counts dying of SIGINT as a clean exit, so a stopped run would report "Backup finished". */
+export function stopReadsFailed(): void {
+  process.once('SIGINT', () => process.exit(130))
+}
+
 /** Run this same command again under the shared backup lock (flock). */
 async function runUnderLock(
   env: NodeJS.ProcessEnv,
@@ -691,6 +696,7 @@ export async function backups(argv: string[], env = process.env): Promise<number
   if (verb === 'recover' || verb === 'drill') return recovery([verb, ...args], cfg, env)
   if (verb === 'request') return requestCommand(rt, machine, args)
   if (verb === 'run' && env.AICO_BACKUPS_UNIT !== '1') return runInUnit(cfg, env, args)
+  if (verb === 'run') stopReadsFailed()
   // Work snapshots and the read-only guard keep their original independent schedules.
   // Only native/Drive/append data operations share the old host-recovery lock.
   const lockFiles =
