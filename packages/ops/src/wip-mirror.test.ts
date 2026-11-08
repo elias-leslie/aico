@@ -235,6 +235,32 @@ describe('wip mirror', () => {
     expect(again.problems).toEqual([expect.objectContaining({ key: 'peer-gem', state: 'failed' })])
   })
 
+  it('a link that drops partway does not quote what the peer had printed so far', async () => {
+    const root = repo('app')
+    const dropped: Peer = {
+      ...fakePeer('gem'),
+      exec: async () => ({ code: 255, out: '/dev/sda1 100 50 50 50% /' }),
+    }
+    const report = await mirror(deps([{ id: 'app', root }], {}, {}, [dropped]))
+    expect(report.problems).toEqual([
+      expect.objectContaining({ key: 'peer-gem', state: 'off', reason: 'gem did not answer' }),
+    ])
+  })
+
+  it('a peer that answers has its row taken off even when no run is tracking it', async () => {
+    const root = repo('app')
+    const seen = deps([{ id: 'app', root }])
+    const report = await mirror(seen)
+    expect(report.rows).toEqual([])
+    const removed: string[] = []
+    await settleRows(seen.state, report.rows, async (key) => {
+      removed.push(key)
+      return true
+    })
+    expect(removed).toEqual(['peer-gem'])
+    expect(JSON.parse(readFileSync(seen.state, 'utf8')).rows).toEqual([])
+  })
+
   it('a peer whose link does not answer is off or restarting: off, not a failure', async () => {
     const root = repo('app')
     const down: Peer = { ...fakePeer('gem'), exec: async () => ({ code: 255, out: '' }) }

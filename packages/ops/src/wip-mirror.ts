@@ -263,11 +263,13 @@ async function look(
   const answer = await peer.exec(
     `mkdir -p ${dir}/${sq(machine)} && df -Pk ${dir} | tail -n 1 && du -sk ${dir} && ls -1 ${dir}/${sq(machine)}`,
   )
+  // 255: the link itself, maybe partway through, so what came back so far says nothing. Off or
+  // restarting, and the next run catches up; a machine that stays down has its own row.
+  if (answer.code === 255) return { state: 'off', reason: `${peer.name} did not answer` }
+  // Any other exit is the peer answering that it can't.
   if (answer.code)
     return {
-      // 255: the link itself. Off or restarting, and the next run catches up; a machine that stays
-      // down has its own row. Any other exit is the peer answering that it can't.
-      state: answer.code === 255 ? 'off' : 'failed',
+      state: 'failed',
       reason: `${peer.name} did not answer (${answer.out.trim().split('\n').at(-1) || `exit ${answer.code}`})`,
     }
   const [df, du, ...names] = answer.out.trim().split('\n')
@@ -323,6 +325,9 @@ export async function mirror(deps: WipDeps): Promise<WipReport> {
     else {
       disks.set(peer.name, disk)
       targets.push(peer)
+      // Its row can land after the run that cleared it (posted while Status was restarting, sent
+      // later), so a peer that answers always has its row taken off, tracked or not.
+      state.rows.push(`peer-${peer.name}`)
     }
   }
   // A peer switched off partway through is off like one that was off at the start, not a failed
