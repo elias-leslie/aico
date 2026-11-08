@@ -1,6 +1,7 @@
 // A broken fleet link must leave the local session service available.
 import { hostname } from 'node:os'
 import type { StatusRow } from '@aico/status'
+import { postStatusRows } from '@aico/status/rows-api'
 import { Fleet } from './fleet'
 import { machineName } from './identity'
 import { type FleetSettings, readSettings } from './settings'
@@ -100,12 +101,7 @@ export class FleetService {
       )
       if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1')
         throw new Error('Fleet Status writer must use loopback HTTP')
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(rows),
-        signal: AbortSignal.timeout(settings?.deadMs ?? 300000),
-      })
+      const response = await postStatusRows(url, rows, { timeoutMs: settings?.deadMs ?? 300000 })
       if (!response.ok) throw new Error(`Status answered ${response.status}`)
     } catch (error) {
       this.log(`Could not write link Status: ${String(error)}`)

@@ -5,7 +5,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { machineId, type StatusRow } from '@aico/status'
+import { machineId, postStatusRows, type StatusRow } from '@aico/status'
 import { registryProjects } from '@aico/tasks'
 import type { StepResult } from './run'
 
@@ -81,11 +81,8 @@ export async function postCheckRow(
   const base = webUrl(env)
   if (!base || env.AICO_CHECK_STATUS === '0') return null
   try {
-    const res = await fetch(new URL('/api/status/rows', base), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify([checkRow(projectId(root, env), summary)]),
-      signal: AbortSignal.timeout(3_000),
+    const res = await postStatusRows(base, [checkRow(projectId(root, env), summary)], {
+      timeoutMs: 3_000,
     })
     return res.ok ? null : `Status row not recorded: aico-web answered ${res.status}`
   } catch (error) {

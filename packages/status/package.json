@@ -16,7 +16,8 @@
   },
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./rows-api": "./src/rows-api.ts"
   },
   "scripts": {
     "test": "vitest run"

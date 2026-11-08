@@ -4,7 +4,14 @@ import { dirname, join, relative, resolve } from 'node:path'
 import { backupTargetName } from '@aico/shared/backup-targets'
 import { nearest } from '@aico/shared/suggest'
 import { localTime } from '@aico/shared/time'
-import { machineId, outboxDir, postOrKeep, type StatusRow } from '@aico/status'
+import {
+  deleteStatusRow,
+  machineId,
+  outboxDir,
+  postOrKeep,
+  postStatusRows,
+  type StatusRow,
+} from '@aico/status'
 import { backupJob, driveBackup, stageSqlite } from './backup-drive'
 import { observeExternal } from './backup-external'
 import { nativeBackup } from './backup-native'
@@ -207,12 +214,7 @@ async function prune(cfg: BackupConfig, url: string, machine: string, kept: Set<
         id === `${machine}/backup/restore-drill`
       )
         continue
-      const gone = new URL('/api/status/rows', url)
-      gone.searchParams.set('id', id)
-      await fetch(gone, {
-        method: 'DELETE',
-        signal: AbortSignal.timeout(cfg.statusPublish.timeoutMs),
-      })
+      await deleteStatusRow(url, id, { timeoutMs: cfg.statusPublish.timeoutMs })
     }
   } catch (error) {
     // The rows themselves went out; a leftover row is tidied on the next report.
@@ -223,12 +225,7 @@ async function prune(cfg: BackupConfig, url: string, machine: string, kept: Set<
 async function post(cfg: BackupConfig, url: string, rows: unknown[]): Promise<void> {
   for (let attempt = 1; ; attempt++) {
     try {
-      const result = await fetch(new URL('/api/status/rows', url), {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(rows),
-        signal: AbortSignal.timeout(cfg.statusPublish.timeoutMs),
-      })
+      const result = await postStatusRows(url, rows, { timeoutMs: cfg.statusPublish.timeoutMs })
       if (!result.ok) throw new Error(`Could not publish backup Status rows (${result.status}).`)
       return
     } catch (error) {
@@ -238,14 +235,10 @@ async function post(cfg: BackupConfig, url: string, rows: unknown[]): Promise<vo
         (error as { code?: string }).code
       if (code !== 'ECONNREFUSED' || attempt >= cfg.statusPublish.attempts) {
         // Out of tries (aico-web restarting): keep the rows to send later instead of losing them.
-        const waiting = await postOrKeep(
-          new URL('/api/status/rows', url).toString(),
-          rows as StatusRow[],
-          {
-            dir: outboxDir(process.env.AICO_DATA_DIR || homePath(cfg.sqlite.dataDir)),
-            timeoutMs: cfg.statusPublish.timeoutMs,
-          },
-        )
+        const waiting = await postOrKeep(url, rows as StatusRow[], {
+          dir: outboxDir(process.env.AICO_DATA_DIR || homePath(cfg.sqlite.dataDir)),
+          timeoutMs: cfg.statusPublish.timeoutMs,
+        })
         if (waiting !== null) console.error(`Backup Status rows will go out later: ${waiting}`)
         return
       }

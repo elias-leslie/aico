@@ -23,7 +23,7 @@ import { requestExec, runExec } from '@aico/fleet/exec'
 import { fullPeers } from '@aico/fleet/peers'
 import { readSettings } from '@aico/fleet/settings'
 import { readPins } from '@aico/fleet/trust'
-import { machineId, outboxDir, postOrKeep, type StatusRow } from '@aico/status'
+import { deleteStatusRow, machineId, outboxDir, postOrKeep, type StatusRow } from '@aico/status'
 import wipConfig from '../data/wip-mirror.json' with { type: 'json' }
 import { Refusal } from './deploy'
 import { expandHome, type Runner, type RunResult, run as shell, tail } from './sh'
@@ -743,16 +743,14 @@ function realDeps(env = process.env): WipDeps {
 async function postRows(rows: StatusRow[], gone: string[], env: NodeJS.ProcessEnv): Promise<void> {
   const base = env.AICO_WEB_URL || wipConfig.webUrl
   if (rows.length) {
-    const waiting = await postOrKeep(new URL('/api/status/rows', base).toString(), rows, {
+    const waiting = await postOrKeep(base, rows, {
       dir: outboxDir(env.AICO_DATA_DIR || expandHome('~/.local/state/aico')),
       timeoutMs: 10_000,
     })
     if (waiting !== null) console.error(`Repo copy Status will go out later: ${waiting}`)
   }
   for (const id of gone) {
-    const url = new URL('/api/status/rows', base)
-    url.searchParams.set('id', id)
-    await fetch(url, { method: 'DELETE', signal: AbortSignal.timeout(10_000) }).catch(() => {})
+    await deleteStatusRow(base, id, { timeoutMs: 10_000 }).catch(() => {})
   }
 }
 

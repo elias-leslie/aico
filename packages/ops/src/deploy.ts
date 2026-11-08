@@ -36,7 +36,7 @@ import { homedir, hostname, tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { signDetached } from '@aico/fleet/releases'
 import { secretsDir } from '@aico/fleet/secrets'
-import { machineId, type StatusRow } from '@aico/status'
+import { machineId, postStatusRows, type StatusRow } from '@aico/status'
 import ops from '../data/ops.json' with { type: 'json' }
 import { expandHome, type Runner, run as realRun, tail } from './sh'
 
@@ -426,12 +426,7 @@ export function defaultDeps(env: NodeJS.ProcessEnv = process.env): DeployDeps {
       const base = env.AICO_WEB_URL?.trim() || (port ? `http://127.0.0.1:${port}` : '')
       if (!base) return
       try {
-        await fetch(new URL('/api/status/rows', base), {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify([row]),
-          signal: AbortSignal.timeout(3_000),
-        })
+        await postStatusRows(base, [row], { timeoutMs: 3_000 })
       } catch {}
     },
     self: process.argv[1] ?? '',

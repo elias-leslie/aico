@@ -324,7 +324,7 @@ async function postPublicationRow(row: StatusRow, env = process.env): Promise<vo
   const base = webUrl(env)
   if (!base) throw new Error('Publication Status address is unavailable')
   // aico-web restarting keeps the row waiting instead of dropping it.
-  await postOrKeep(new URL('/api/status/rows', base).toString(), [row], {
+  await postOrKeep(base, [row], {
     dir: outboxDir(dataDir(env)),
   })
 }

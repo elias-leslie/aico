@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto'
 import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { StatusRow } from './row'
+import { postStatusRows } from './rows-api'
 
 const TIMEOUT_MS = 10_000
 
@@ -26,12 +27,10 @@ class Refused extends Error {
   }
 }
 
-async function send(url: string, rows: StatusRow[], options: OutboxOptions): Promise<void> {
-  const response = await (options.fetch ?? fetch)(url, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(rows),
-    signal: AbortSignal.timeout(options.timeoutMs ?? TIMEOUT_MS),
+async function send(url: string | URL, rows: StatusRow[], options: OutboxOptions): Promise<void> {
+  const response = await postStatusRows(url, rows, {
+    fetch: options.fetch,
+    timeoutMs: options.timeoutMs ?? TIMEOUT_MS,
   })
   if (!response.ok) throw new Refused(response.status)
 }
@@ -66,7 +65,7 @@ function waiting(dir: string): { file: string; row: StatusRow }[] {
 
 /** Sends the rows waiting from earlier attempts. Stops at the first unreachable answer; a row
  * aico-web refuses outright (4xx) will never be accepted, so it is dropped. Returns how many went out. */
-export async function drainOutbox(url: string, options: OutboxOptions): Promise<number> {
+export async function drainOutbox(url: string | URL, options: OutboxOptions): Promise<number> {
   let sent = 0
   for (const { file, row } of waiting(options.dir)) {
     try {
@@ -82,11 +81,12 @@ export async function drainOutbox(url: string, options: OutboxOptions): Promise<
   return sent
 }
 
-/** Posts the rows; when aico-web cannot take them they wait in the outbox instead of being lost.
+/** Posts the rows to `url` (an aico-web origin or its rows endpoint); when aico-web cannot take
+ * them they wait in the outbox instead of being lost.
  * Null when they went out, else the reason they are waiting. Rows aico-web refuses (4xx) throw:
  * waiting would never help. */
 export async function postOrKeep(
-  url: string,
+  url: string | URL,
   rows: StatusRow[],
   options: OutboxOptions,
 ): Promise<string | null> {

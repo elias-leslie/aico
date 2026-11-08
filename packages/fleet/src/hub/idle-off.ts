@@ -5,6 +5,7 @@
 // the host came up does not matter: one started by hand is powered off the same way. Each
 // power-off is logged and written to Status; the row goes when the host is up again.
 
+import { deleteStatusRow, postStatusRows } from '@aico/status/rows-api'
 import type { HubDeps, IdleFacts } from './hub'
 
 export interface IdleOffDeps {
@@ -128,19 +129,11 @@ export class IdleOff {
 
 /** Status over aico-web's loopback API, as the fleet link writes its rows. */
 export function statusWriter(env: NodeJS.ProcessEnv, defaultUrl: string): IdleOffDeps['status'] {
-  const base = (env.AICO_WEB_URL?.trim() || defaultUrl).replace(/\/+$/, '')
+  const base = env.AICO_WEB_URL?.trim() || defaultUrl
   return async (host, row) => {
     const response = row
-      ? await fetch(`${base}/api/status/rows`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify([row]),
-          signal: AbortSignal.timeout(10_000),
-        })
-      : await fetch(`${base}/api/status/rows?id=${encodeURIComponent(`tether/idle-off/${host}`)}`, {
-          method: 'DELETE',
-          signal: AbortSignal.timeout(10_000),
-        })
+      ? await postStatusRows(base, [row], { timeoutMs: 10_000 })
+      : await deleteStatusRow(base, `tether/idle-off/${host}`, { timeoutMs: 10_000 })
     if (!response.ok && response.status !== 404)
       throw new Error(`Status answered ${response.status}`)
   }
@@ -151,14 +144,9 @@ export function releaseStatusWriter(
   env: NodeJS.ProcessEnv,
   defaultUrl: string,
 ): NonNullable<HubDeps['status']> {
-  const base = (env.AICO_WEB_URL?.trim() || defaultUrl).replace(/\/+$/, '')
+  const base = env.AICO_WEB_URL?.trim() || defaultUrl
   return async (row) => {
-    const response = await fetch(`${base}/api/status/rows`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify([row]),
-      signal: AbortSignal.timeout(10_000),
-    })
+    const response = await postStatusRows(base, [row], { timeoutMs: 10_000 })
     if (!response.ok) throw new Error(`Status answered ${response.status}`)
   }
 }

@@ -32,6 +32,7 @@ export {
   type State,
   type StatusRow,
 } from './row'
+export { deleteStatusRow, postStatusRows, type RowsRequest, statusRowsUrl } from './rows-api'
 export {
   type Concentration,
   CROWD_MIN,
