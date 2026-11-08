@@ -17,10 +17,13 @@
 import { spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import {
+  closeSync,
   existsSync,
+  fsyncSync,
   linkSync,
   lstatSync,
   mkdirSync,
+  openSync,
   readdirSync,
   readFileSync,
   readlinkSync,
@@ -446,6 +449,20 @@ export function acceptanceFailures(output: string, max = 16): string[] {
     if (inFailure) kept.push(line)
   }
   return kept.length > max ? [...kept.slice(0, max), `${kept.length - max} more in the log`] : kept
+}
+
+/** Written whole and on disk before it replaces the old one: a power cut mid-deploy
+ * must not leave an empty unit, which systemd takes as masked and won't start. */
+function writeDurable(path: string, text: string): void {
+  const tmp = `${path}.tmp`
+  const fd = openSync(tmp, 'w')
+  try {
+    writeFileSync(fd, text)
+    fsyncSync(fd)
+  } finally {
+    closeSync(fd)
+  }
+  renameSync(tmp, path)
 }
 
 const writeJob = (deps: DeployDeps, job: Job) => {
@@ -1265,7 +1282,7 @@ export function prepareRelease(
   }
   const done = (pkg: string) => {
     state.built.push(pkg)
-    writeFileSync(marker, `${JSON.stringify(state)}\n`)
+    writeDurable(marker, `${JSON.stringify(state)}\n`)
   }
   for (const pkg of builds) {
     if (state.built.includes(pkg)) continue
@@ -1370,7 +1387,7 @@ function restoreUnits(previous: Record<string, string | null>, deps: DeployDeps)
         const stopped = systemctl('stop', unit)
         if (stopped.code !== 0) problems.push(`${unit} did not stop: ${tail(stopped, 1)}`)
         rmSync(join(deps.systemdDir, unit), { force: true })
-      } else writeFileSync(join(deps.systemdDir, unit), text)
+      } else writeDurable(join(deps.systemdDir, unit), text)
     } catch (error) {
       problems.push(`${unit} not written back: ${(error as Error).message}`)
     }
@@ -1464,8 +1481,7 @@ async function swapUnits(
     previousOps,
     previousFrontends,
   }
-  writeFileSync(`${journalPath(deps)}.tmp`, JSON.stringify(journal))
-  renameSync(`${journalPath(deps)}.tmp`, journalPath(deps))
+  writeDurable(journalPath(deps), JSON.stringify(journal))
   const fail = (failure: string) => {
     restoreOps(previousOps, deps)
     restoreFrontends(previousFrontends)
@@ -1481,7 +1497,7 @@ async function swapUnits(
   if (installOps) installOpsBundle(deps, release)
   for (const [unit, spec] of frontends)
     pointFrontend(spec, release, deps, runningSha(previous[unit] ?? null, deps.releasesDir))
-  for (const [unit, text] of rendered) writeFileSync(join(deps.systemdDir, unit), text)
+  for (const [unit, text] of rendered) writeDurable(join(deps.systemdDir, unit), text)
   if (systemctl('daemon-reload').code !== 0) return fail('systemctl daemon-reload failed')
   const boot = units.filter(
     (unit) =>
