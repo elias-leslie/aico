@@ -353,12 +353,21 @@ export class ThermalGuardDelivery {
             ride: false,
           },
         )
-        receipts.sessions[session.id] = guard.phase
-        delete receipts.attempted[session.id]
-        save()
         // A confirmed current-phase replacement also satisfies an older pending withdraw on
-        // this same source; replaying that DELETE later would discard the fresh instruction.
-        this.withdrawalDone(source, session.id)
+        // this same source. Commit both together: a restart must not discard the fresh line
+        // while deduplicating its replacement. Keep the in-memory receipt unchanged on rollback.
+        const attempted = { ...receipts.attempted }
+        delete attempted[session.id]
+        const accepted: Receipts = {
+          ...receipts,
+          sessions: { ...receipts.sessions, [session.id]: guard.phase },
+          attempted,
+        }
+        meta.transaction(() => {
+          meta.setMeta(key, JSON.stringify(accepted))
+          this.withdrawalDone(source, session.id)
+        })
+        Object.assign(receipts, accepted)
       } catch (error) {
         this.failed(`session ${session.id}`, error)
       }

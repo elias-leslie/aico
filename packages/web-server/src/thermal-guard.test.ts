@@ -124,6 +124,7 @@ function setup(path = ':memory:') {
     receive,
     resolve,
     log,
+    db: () => store.syncHandle().db,
     tick: () => delivery.tick(),
     write(value: StatusRow) {
       rows = [value]
@@ -234,6 +235,46 @@ describe('native thermal event delivery', () => {
     expect(server.queued.get(thermalSource('gem', 'boot:episode'))).toContain('is hot')
     expect(work.request.mock.calls.filter((call) => call[0] === 'DELETE')).toHaveLength(2)
     expect(work.request.mock.calls.filter((call) => call[0] === 'POST')).toHaveLength(2)
+  })
+
+  it('rolls back the receipt when interrupted before cancelling an old withdrawal, then restores the fresh warning after restart', async () => {
+    const folder = mkdtempSync(join(tmpdir(), 'aico-thermal-atomic-'))
+    close.push(() => rmSync(folder, { recursive: true, force: true }))
+    const work = setup(join(folder, 'web.db'))
+    const server = queuedServer(work)
+    const source = thermalSource('gem', 'boot:episode')
+    await work.tick()
+    server.failNextDelete()
+    work.rows([row(), offMachine])
+    await work.tick()
+    server.failNextDelete()
+    // Tether will accept the fresh POST. Interrupt its local acknowledgement after the receipt
+    // statement, at the exact write that removes the older pending DELETE.
+    work.db().exec(`CREATE TRIGGER interrupt_withdrawal BEFORE UPDATE ON meta
+      WHEN NEW.key = 'thermal.withdrawals:aico' AND NEW.value = '{}'
+      BEGIN SELECT RAISE(ABORT, 'interrupted before withdrawal cancellation'); END`)
+    work.rows([row('hot', '2026-11-08T12:01:00Z')])
+    await work.tick()
+    expect(server.queued.get(source)).toContain('is hot')
+    expect(work.log).toHaveBeenCalledWith(
+      expect.stringContaining('interrupted before withdrawal cancellation'),
+    )
+    work.db().exec('DROP TRIGGER interrupt_withdrawal')
+    work.restart()
+    const stored = work
+      .db()
+      .prepare('SELECT value FROM meta WHERE key = ?')
+      .get(`thermal.receipts:${source}`) as { value: string }
+    const receipt = JSON.parse(stored.value) as {
+      sessions: Record<string, string>
+      attempted: Record<string, string>
+    }
+    expect(receipt.sessions['00000001']).toBeUndefined()
+    expect(receipt.attempted['00000001']).toBe('hot')
+    await work.tick()
+    expect(server.queued.get(source)).toContain('is hot')
+    expect(work.request.mock.calls.filter((call) => call[0] === 'DELETE')).toHaveLength(3)
+    expect(work.request.mock.calls.filter((call) => call[0] === 'POST')).toHaveLength(3)
   })
 
   it('withdraws an uncertain hot attempt from a disconnected recipient on recovery', async () => {
