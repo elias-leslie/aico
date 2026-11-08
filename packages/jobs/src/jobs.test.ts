@@ -265,6 +265,71 @@ describe('the runner', () => {
     expect(store.get('export')?.fence).toBe(1)
   })
 
+  it('sends the lease host a new row when another machine ran the job on its lease', async () => {
+    const clock = { now: new Date(2026, 10, 3, 3, 0).getTime() }
+    const store = new JobStore(':memory:')
+    const def: JobDef = { ...job, home: 'a', lease_host: 'b', workers: ['a'] }
+    const host = runnerFor(
+      B,
+      store,
+      clock,
+      async () => ({ state: 'ok', meaning: 'never here' }),
+      def,
+    )
+    host.runner.start()
+    await host.runner.tick()
+    expect(host.posted).toHaveLength(1)
+    expect(host.posted[0]?.[0]).toMatchObject({ id: 'jobs/export', machine: 'a' })
+    // Nothing changed: no second row.
+    await host.runner.tick()
+    await host.runner.idle()
+    expect(host.posted).toHaveLength(1)
+    // The worker runs it on this host's lease (as the fleet link does) and posts only to its own Status.
+    clock.now = new Date(2026, 10, 3, 3, 31).getTime()
+    const lease = store.claim('export', A, clock.now, TTL, 0)
+    if (!lease) throw new Error('no lease')
+    store.complete(
+      lease,
+      { state: 'ok', meaning: 'Copied 3 notes.' },
+      clock.now,
+      clock.now + 86_400_000,
+    )
+    await host.runner.tick()
+    await host.runner.idle()
+    expect(host.posted).toHaveLength(2)
+    expect(host.posted[1]?.[0]).toMatchObject({
+      machine: 'a',
+      state: 'ok',
+      meaning: 'Copied 3 notes.',
+      next_run: new Date(clock.now + 86_400_000).toISOString(),
+    })
+  })
+
+  it('takes the Status row of a removed routine down', async () => {
+    const clock = { now: new Date(2026, 10, 3, 3, 0).getTime() }
+    const store = new JobStore(':memory:')
+    let jobs: JobDef[] = [job]
+    const removed: string[] = []
+    const runner = new Runner({
+      store,
+      jobs: () => jobs,
+      machine: 'a',
+      holder: 'a:1',
+      act: async () => ({ state: 'ok', meaning: 'x' }),
+      postRows: async () => {},
+      removeRow: async (id) => void removed.push(id),
+      now: () => clock.now,
+      log: () => {},
+    })
+    runner.start()
+    await runner.tick()
+    expect(removed).toEqual([])
+    jobs = []
+    await runner.tick()
+    await runner.tick()
+    expect(removed).toEqual(['jobs/export'])
+  })
+
   it('never runs a job homed on another machine, however overdue', async () => {
     const clock = { now: new Date(2026, 10, 3, 3, 29).getTime() }
     const store = new JobStore(':memory:')

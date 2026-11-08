@@ -54,6 +54,8 @@ export interface RunnerOptions {
   /** What a fallback worker of this job (held here) last ran on its own lease; throws
    * Unreachable when that machine does not answer. */
   standinOf?: (job: JobDef, machine: string) => Promise<JobState | null>
+  /** Takes a Status row down (DELETE /api/status/rows/ID) when its routine was removed. */
+  removeRow?: (id: string) => Promise<void>
   /** Sends Status rows an earlier writer could not post; called every tick. */
   drain?: () => Promise<void>
   now?: () => number
@@ -68,7 +70,10 @@ const iso = (ms: number) => new Date(ms).toISOString()
 export class Runner {
   private readonly running = new Map<string, Promise<void>>()
   private readonly unsent = new Map<string, StatusRow>()
-  private readonly announced = new Set<string>()
+  /** What each queued row last said (see rowSignature), so a state another machine changed is sent again. */
+  private readonly announced = new Map<string, string>()
+  /** Every kind this process wrote a Status row for, to take the row down when the routine is removed. */
+  private readonly rowKinds = new Set<string>()
   /** Jobs held elsewhere whose lease host held a lease when last asked: not stood in for until
    * that lease would have run out. */
   private readonly heldThere = new Map<string, number>()
@@ -98,16 +103,39 @@ export class Runner {
     this.sync()
   }
 
-  /** Ensures every job homed here has its state, and queues the row of each not seen since start. */
+  /**
+   * Ensures every job whose lease is held here has its state, and queues its row when it is new
+   * or changed. A job another machine works reports its results to this machine's lease, not to
+   * this machine's Status, so the change is picked up here.
+   */
   private sync(): void {
     const { store, machine } = this.options
     for (const job of this.jobs) {
       if ((job.lease_host ?? job.home) !== machine) continue
       store.ensure(job.kind, job.every_min === undefined ? nextRun(job, this.now()) : this.now())
-      if (this.announced.has(job.kind)) continue
-      this.announced.add(job.kind)
       const state = store.get(job.kind)
-      if (state) this.queueRow(job, state)
+      if (state && this.announced.get(job.kind) !== rowSignature(state)) this.queueRow(job, state)
+    }
+  }
+
+  /** Takes down the Status row of each routine this process wrote one for and that was removed since. */
+  private async purge(): Promise<void> {
+    const { removeRow } = this.options
+    if (!removeRow) return
+    const kinds = new Set(this.jobs.map((job) => job.kind))
+    for (const kind of [...this.rowKinds]) {
+      if (kinds.has(kind)) continue
+      try {
+        await removeRow(`jobs/${kind}`)
+      } catch (error) {
+        this.log(
+          `could not remove the Status row of ${kind}, will retry: ${(error as Error).message}`,
+        )
+        continue
+      }
+      this.rowKinds.delete(kind)
+      this.announced.delete(kind)
+      this.unsent.delete(`jobs/${kind}`)
     }
   }
 
@@ -115,6 +143,7 @@ export class Runner {
   async tick(): Promise<void> {
     const { store, machine } = this.options
     this.sync()
+    await this.purge()
     for (const job of this.jobs) {
       if (!(job.workers ?? [job.home]).includes(machine) || this.running.has(job.kind)) continue
       const remote = this.options.authority?.(job) ?? store
@@ -359,6 +388,8 @@ export class Runner {
   private queueRow(job: JobDef, state: JobState): void {
     const row = jobRow(job, state)
     this.unsent.set(row.id, row)
+    this.rowKinds.add(job.kind)
+    this.announced.set(job.kind, rowSignature(state))
   }
 
   private async flush(): Promise<void> {
@@ -374,6 +405,17 @@ export class Runner {
     }
   }
 }
+
+/** What the job's Status row says, apart from the clock. */
+const rowSignature = (state: JobState) =>
+  [
+    state.paused,
+    state.lastRun,
+    state.lastState,
+    state.lastMeaning,
+    state.lastMachine,
+    state.nextRun,
+  ].join('|')
 
 /** The job's one Status row: where and how it last ran, and when it is due next. */
 export function jobRow(job: JobDef, state: JobState): StatusRow {

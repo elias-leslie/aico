@@ -213,6 +213,7 @@ export async function main(argv: string[], env = process.env): Promise<number> {
     inFlight: (job) => unitInFlight(job.kind, units, whereOf(job)),
     drain: async () => void (await drainOutbox(rowsUrl, outbox)),
     postRows: (rows) => postRows(webUrl, rows),
+    removeRow: (id) => removeRow(webUrl, id),
   })
   runner.start()
   await serveLeases(socket, store, () => loadJobs(jobsFile, store), machine, units.dir)
