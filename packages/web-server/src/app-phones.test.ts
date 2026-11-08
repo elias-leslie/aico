@@ -198,8 +198,8 @@ it('keeps sender origin and the last whole list when the list write fails after 
   ).rejects.toThrow('list write interrupted')
   expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual(ours)
   expect(JSON.parse(readFileSync(`${file}.sync.json`, 'utf8')).received_pairs).toEqual({
-    kept: null,
-    'sent-new': null,
+    kept: [null],
+    'sent-new': [null],
   })
   expect(JSON.parse(readFileSync(`${file}.sync.json`, 'utf8'))).not.toHaveProperty('pending')
   failed.mockRestore()
@@ -259,6 +259,9 @@ it('takes a new sender pairing over the receiver copy of an acknowledged old pai
     last_ack: 1,
   })
   expect(await mergePhonesFile(file, [fresh], 300)).toEqual([fresh])
+  expect(JSON.parse(readFileSync(`${file}.sync.json`, 'utf8')).received_pairs).toEqual({
+    'same-phone': ['new-sender-pair'],
+  })
   await confirmPhonesMerge(file)
   expect(await mergePhonesFile(file, [], 400)).toEqual([])
 })
@@ -291,7 +294,9 @@ it.each(['phone list', 'reply cursor'])(
     expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual([stage === 'phone list' ? old : fresh])
     const interrupted = JSON.parse(readFileSync(`${file}.sync.json`, 'utf8'))
     expect(interrupted.known_pairs).toEqual({ 'same-phone': 'old-pair' })
-    expect(interrupted.received_pairs).toEqual({ 'same-phone': 'new-pair' })
+    expect(interrupted.received_pairs).toEqual({
+      'same-phone': ['old-pair', 'new-pair'],
+    })
     expect(interrupted).not.toHaveProperty('pending')
     // Retry the same request: the unchanged old local record must not be mistaken for a fresh pairing.
     expect(await mergePhonesFile(file, [fresh], 400)).toEqual([fresh])
@@ -302,6 +307,48 @@ it.each(['phone list', 'reply cursor'])(
     expect(JSON.parse(readFileSync(`${file}.sync.json`, 'utf8')).known_pairs).toEqual({
       'same-phone': 'new-pair',
     })
+  },
+)
+
+it.each(['current', 'legacy'])(
+  'does not resurrect a received pairing when its replacement list write fails (%s cursor)',
+  async (cursorFormat) => {
+    const dir = mkdtempSync(join(tmpdir(), 'aico-phone-replacement-cut-'))
+    dirs.push(dir)
+    const file = join(dir, 'phones.json')
+    const acknowledged = phone('same-phone', { pairing_id: 'pair-a', auth: 'auth-a' })
+    const received = phone('same-phone', { pairing_id: 'pair-b', auth: 'auth-b' })
+    const replacement = phone('same-phone', { pairing_id: 'pair-c', auth: 'auth-c' })
+    await mergePhonesFile(file, [acknowledged], 200)
+    await confirmPhonesMerge(file)
+    // B reached the receiver, but its reply never reached the sender, so A remains acknowledged.
+    expect(await mergePhonesFile(file, [received], 300)).toEqual([received])
+    if (cursorFormat === 'legacy') {
+      const cursor = JSON.parse(readFileSync(`${file}.sync.json`, 'utf8'))
+      writeFileSync(
+        `${file}.sync.json`,
+        JSON.stringify({ ...cursor, received_pairs: { 'same-phone': 'pair-b' } }),
+      )
+    }
+    const write = durableFile.writeFileDurable
+    const failed = vi
+      .spyOn(durableFile, 'writeFileDurable')
+      .mockImplementation((path, data, options) => {
+        if (path === file) throw new Error('replacement list write interrupted')
+        write(path, data, options)
+      })
+    await expect(mergePhonesFile(file, [replacement], 400)).rejects.toThrow(
+      'replacement list write interrupted',
+    )
+    failed.mockRestore()
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual([received])
+    const interrupted = JSON.parse(readFileSync(`${file}.sync.json`, 'utf8'))
+    expect(interrupted.known_pairs).toEqual({ 'same-phone': 'pair-a' })
+    expect(interrupted.received_pairs).toEqual({ 'same-phone': ['pair-b', 'pair-c'] })
+    // C never reached the list. Removing the phone at the sender must still remove received B.
+    expect(await mergePhonesFile(file, [], 500)).toEqual([])
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual([])
+    expect(JSON.parse(readFileSync(`${file}.sync.json`, 'utf8')).received_pairs).toEqual({})
   },
 )
 

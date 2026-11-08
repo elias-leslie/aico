@@ -351,7 +351,7 @@ export function mergePhones(
   lastSync: number,
   confirmedIds?: ReadonlySet<string>,
   knownPairs?: ReadonlyMap<string, string | null>,
-  receivedPairs?: ReadonlyMap<string, string | null>,
+  receivedPairs?: ReadonlyMap<string, ReadonlySet<string | null>>,
 ): Phone[] {
   const mine = new Map(ours.map((phone) => [phone.id, phone]))
   const merged = theirs.map((sent) => {
@@ -365,8 +365,7 @@ export function mergePhones(
       // State from another pairing (including old acknowledgements and FCM tokens) is not merged.
       const senderUnchanged = knownPairs?.has(sent.id) && knownPairs.get(sent.id) === sentPairing
       const localAcknowledged = knownPairs?.has(sent.id) && knownPairs.get(sent.id) === localPairing
-      const localReceived =
-        receivedPairs?.has(sent.id) && receivedPairs.get(sent.id) === localPairing
+      const localReceived = receivedPairs?.get(sent.id)?.has(localPairing)
       return { ...(senderUnchanged && !localAcknowledged && !localReceived ? here : sent) }
     }
     const keep: Phone = { ...sent }
@@ -405,7 +404,7 @@ export function mergePhones(
       const pairing = phone.pairing_id ?? null
       // A received or confirmed pairing is already known to the sender. A genuinely new local
       // registration has another generation, even for the same device in the same second.
-      if (receivedPairs?.has(phone.id) && receivedPairs.get(phone.id) === pairing) return false
+      if (receivedPairs?.get(phone.id)?.has(pairing)) return false
       if (knownPairs?.has(phone.id)) return knownPairs.get(phone.id) !== pairing
       return (
         pairing !== null ||
@@ -428,7 +427,9 @@ export async function mergePhonesFile(path: string, sent: Phone[], now: number):
     // Phones received from the sender are governed by its list immediately, even if the reply
     // never arrives there. Only a phone paired on this receiver gets the unconfirmed-pairing rule.
     const knownPairs = new Map(Object.entries(cursor.known_pairs ?? {}))
-    const receivedPairs = new Map(Object.entries(cursor.received_pairs ?? {}))
+    const receivedPairs = new Map(
+      Object.entries(cursor.received_pairs ?? {}).map(([id, pairings]) => [id, new Set(pairings)]),
+    )
     const merged = mergePhones(
       sent,
       readPhones(path) ?? [],
@@ -439,19 +440,36 @@ export async function mergePhonesFile(path: string, sent: Phone[], now: number):
     )
     // Received provenance is not an acknowledgement: a failed list write must leave the common
     // baseline unchanged. Decide conflicts first, then remember which generations the sender has.
-    for (const phone of sent) receivedPairs.set(phone.id, phone.pairing_id ?? null)
+    for (const phone of sent) {
+      const pairings = receivedPairs.get(phone.id) ?? new Set<string | null>()
+      pairings.add(phone.pairing_id ?? null)
+      receivedPairs.set(phone.id, pairings)
+    }
     mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
     // Save origin before copying sender phones: a cut between writes must not turn a received
     // phone into a locally paired one when the sender retries with that phone removed.
-    const received = { ...cursor, received_pairs: Object.fromEntries(receivedPairs) }
+    const received = {
+      ...cursor,
+      received_pairs: Object.fromEntries(
+        [...receivedPairs].map(([id, pairings]) => [id, [...pairings]]),
+      ),
+    }
     writeFileDurable(syncFile, JSON.stringify(received), { mode: 0o600 })
     writeFileDurable(path, JSON.stringify(merged), { mode: 0o600 })
+    // Older received generations can still be on disk until the list replacement succeeds.
+    // Only now can provenance be pruned to the exact received generations in the stored list.
+    const storedReceived = Object.fromEntries(
+      merged
+        .filter((phone) => receivedPairs.get(phone.id)?.has(phone.pairing_id ?? null))
+        .map((phone) => [phone.id, [phone.pairing_id ?? null]]),
+    )
     // Only a stored list can become a reply awaiting acknowledgement. If either write fails,
     // nothing in the common acknowledged baseline advances and a retry uses that same baseline.
     writeFileDurable(
       syncFile,
       JSON.stringify({
         ...received,
+        received_pairs: storedReceived,
         pending: now,
         pending_ids: merged.map((phone) => phone.id),
         pending_pairs: Object.fromEntries(
@@ -502,7 +520,7 @@ interface PhoneSync {
   pending_ids?: string[]
   known_pairs?: Record<string, string | null>
   pending_pairs?: Record<string, string | null>
-  received_pairs?: Record<string, string | null>
+  received_pairs?: Record<string, (string | null)[]>
 }
 
 function readSync(file: string): PhoneSync {
@@ -516,6 +534,23 @@ function readSync(file: string): PhoneSync {
       typeof value === 'object' &&
       !Array.isArray(value) &&
       Object.values(value).every((pairing) => pairing === null || typeof pairing === 'string')
+    const generations = (value: unknown): value is Record<string, (string | null)[]> =>
+      value !== null &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      Object.values(value).every(
+        (pairings) =>
+          Array.isArray(pairings) &&
+          pairings.every((pairing) => pairing === null || typeof pairing === 'string'),
+      )
+    // Existing cursors stored only one generation per phone. Treat it as a singleton history.
+    const receivedPairs = generations(raw.received_pairs)
+      ? raw.received_pairs
+      : pairs(raw.received_pairs)
+        ? Object.fromEntries(
+            Object.entries(raw.received_pairs).map(([id, pairing]) => [id, [pairing]]),
+          )
+        : undefined
     return {
       at: Number(raw.at) || 0,
       ...(pending > 0 ? { pending } : {}),
@@ -523,7 +558,7 @@ function readSync(file: string): PhoneSync {
       ...(ids(raw.pending_ids) ? { pending_ids: raw.pending_ids } : {}),
       ...(pairs(raw.known_pairs) ? { known_pairs: raw.known_pairs } : {}),
       ...(pairs(raw.pending_pairs) ? { pending_pairs: raw.pending_pairs } : {}),
-      ...(pairs(raw.received_pairs) ? { received_pairs: raw.received_pairs } : {}),
+      ...(receivedPairs === undefined ? {} : { received_pairs: receivedPairs }),
     }
   } catch {
     /* First sync: nothing has been paired here since. */
