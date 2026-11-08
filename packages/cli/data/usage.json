@@ -42,7 +42,7 @@
     "surface": "st.notify",
     "tier": "reference",
     "cmd": "st notify --title T --body B [--severity warning] [--key K] [--open URL] | --json (notice v1 on stdin) | resolve KEY --text T",
-    "when": "tell the owner something through Aico (phone for warning and critical); a repeat of the same key stays quiet for the cooldown"
+    "when": "tell the owner something through Aico (tray and digest; the phone only with --interrupt); a repeat of the same key stays quiet for the cooldown"
   },
   {
     "surface": "st.pulse",

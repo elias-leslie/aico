@@ -11,6 +11,7 @@
   "nativeHelper": "/usr/local/sbin/summitflow-native-capture",
   "windowHelper": "/usr/local/sbin/summitflow-backup-window",
   "nativeTarget": "/mnt/summitflow-native/native",
+  "nativeDriveUuid": "36a930fb-4860-47b5-9d77-f2617ae2e59b",
   "nativeSources": ["/", "/home", "/srv/workspaces", "/var/lib/docker", "/srv/models", "/var/log"],
   "subvolumes": {
     "workspaces": {

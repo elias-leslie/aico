@@ -19,6 +19,7 @@ import {
   coverage,
   entries,
   homePath,
+  markUnplugged,
   migrated,
   runPeriodMinutes,
 } from './backup-plan'
@@ -766,6 +767,8 @@ export async function scheduledEntries(
       return true
     }
   })
+  if (machine === cfg.workstation)
+    markUnplugged(items, existsSync(join('/dev/disk/by-uuid', cfg.nativeDriveUuid)))
   const result = await jobsRun
   let jobs: {
     kind: string

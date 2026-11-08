@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { type Database, type Migration, openDatabase, transaction } from '@aico/store'
 import { type AlertBatch, type AlertHook, transitions } from './alerts'
 import { expectedOffSince, type Intent, type MachineIntent, showsBack } from './intent'
+import { type Major, type MajorWindows, majorOf, type Sustained } from './major'
 import { parseRow, type StatusRow } from './row'
 import {
   type Filter,
@@ -82,6 +83,13 @@ function migrations(now: () => number): Migration[] {
        machine TEXT PRIMARY KEY,
        at INTEGER NOT NULL
      ) STRICT`,
+    // How long each row has been in its alert state, and whether the phone was told it stayed
+    // that way (major.ts). Rows already showing start counting now.
+    (db) => {
+      db.exec('ALTER TABLE status_seen ADD COLUMN since INTEGER')
+      db.exec('ALTER TABLE status_seen ADD COLUMN escalated INTEGER NOT NULL DEFAULT 0')
+      db.prepare('UPDATE status_seen SET since = ?').run(now())
+    },
   ]
 }
 
@@ -95,9 +103,13 @@ export function statusDbPath(dataDir: string): string {
   return join(dataDir, 'status.db')
 }
 
+/** Told of rows that stayed bad past their window, and of those told before that are well again. */
+export type SustainedHook = (told: { stayed: Sustained[]; recovered: string[] }) => void
+
 export class StatusStore {
   private readonly db: Database
   private alertHook: AlertHook | null = null
+  private sustained: { windows: MajorWindows; hook: SustainedHook } | null = null
 
   /** Opens `path` (`':memory:'` for tests); `now` stamps updated_at. */
   constructor(
@@ -139,7 +151,7 @@ export class StatusStore {
         if (showsBack(row)) ended.run(row.machine, at)
       }
     })
-    if (this.alertHook) this.checkAlerts()
+    if (this.alertHook || this.sustained) this.checkAlerts()
   }
 
   /** The declared intent of each machine and what the owner did since. */
@@ -203,7 +215,7 @@ export class StatusStore {
     transaction(this.db, () => {
       for (const machine of machines) put.run(machine, at)
     })
-    if (this.alertHook) this.checkAlerts()
+    if (this.alertHook || this.sustained) this.checkAlerts()
   }
 
   /** Takes back a planned outage (the plan failed, or the machine stays on). */
@@ -212,7 +224,7 @@ export class StatusStore {
     transaction(this.db, () => {
       for (const machine of machines) drop.run(machine)
     })
-    if (this.alertHook) this.checkAlerts()
+    if (this.alertHook || this.sustained) this.checkAlerts()
   }
 
   /** Whether `machine` is meant to be off now. */
@@ -243,13 +255,13 @@ export class StatusStore {
           .run(machine, intent, at)
       }
     })
-    if (this.alertHook) this.checkAlerts()
+    if (this.alertHook || this.sustained) this.checkAlerts()
   }
 
   /** The owner shut `machine` down (`at`, default now) or undid that (`null`). */
   markStopped(machine: string, at: number | null = this.now()): void {
     this.db.prepare('UPDATE machine_intent SET stopped_at = ? WHERE machine = ?').run(at, machine)
-    if (this.alertHook) this.checkAlerts()
+    if (this.alertHook || this.sustained) this.checkAlerts()
   }
 
   /**
@@ -266,7 +278,7 @@ export class StatusStore {
         'UPDATE machine_intent SET power_on = ?, power_since = ?, power_at = ? WHERE machine = ?',
       )
       .run(running ? 1 : 0, changed ? since : (m.powerSince ?? since), at, machine)
-    if (changed && this.alertHook) this.checkAlerts()
+    if (changed && (this.alertHook || this.sustained)) this.checkAlerts()
   }
 
   /** Drops a row (a thing that no longer exists); false when there was none. */
@@ -281,6 +293,14 @@ export class StatusStore {
    */
   onAlert(hook: AlertHook): void {
     this.alertHook = hook
+  }
+
+  /**
+   * Hands `hook` the rows that stayed failed or late past their class's window (major.ts), once
+   * each, and the ids of rows it was told about that are well again. Checked with the alerts.
+   */
+  onSustained(windows: MajorWindows, hook: SustainedHook): void {
+    this.sustained = { windows, hook }
   }
 
   /**
@@ -299,6 +319,11 @@ export class StatusStore {
         }[]
       ).map(({ id, shown }) => [id, shown]),
     )
+    const escalated = new Set(
+      (
+        this.db.prepare('SELECT id FROM status_seen WHERE escalated = 1').all() as { id: string }[]
+      ).map((r) => r.id),
+    )
     const changes = transitions(seen, rows)
     const batch = changes.length
       ? { generated_at: new Date(now).toISOString(), changes, summary: summary(rows) }
@@ -313,17 +338,66 @@ export class StatusStore {
       }
     }
     const put = this.db.prepare(
-      `INSERT INTO status_seen (id, shown) VALUES (?, ?)
-       ON CONFLICT (id) DO UPDATE SET shown = excluded.shown`,
+      `INSERT INTO status_seen (id, shown, since, escalated) VALUES (?, ?, ?, 0)
+       ON CONFLICT (id) DO UPDATE SET shown = excluded.shown, since = excluded.since, escalated = 0`,
     )
     transaction(this.db, () => {
       for (const row of rows) {
         const state = seenState(row)
         if (state !== null && seen.get(row.id) !== state && !unsent.has(row.id))
-          put.run(row.id, state)
+          put.run(row.id, state, row.shown_since ? Date.parse(row.shown_since) : now)
       }
     })
+    this.checkSustained(rows, now, escalated)
     return batch
+  }
+
+  /** The sustained pass (major.ts): rows past their window are told once, recovered ones once. */
+  private checkSustained(
+    rows: readonly ShownRow[],
+    now: number,
+    wasTold: ReadonlySet<string>,
+  ): void {
+    if (!this.sustained) return
+    const { windows, hook } = this.sustained
+    const kept = new Map(
+      (
+        this.db.prepare('SELECT id, shown, since, escalated FROM status_seen').all() as {
+          id: string
+          shown: Shown
+          since: number | null
+          escalated: number
+        }[]
+      ).map((r) => [r.id, r]),
+    )
+    const intents = new Map(this.intents().map((m) => [m.machine, m.intent]))
+    const stayed: Sustained[] = []
+    const recovered: string[] = []
+    for (const row of rows) {
+      const record = kept.get(row.id)
+      if (!record) continue
+      const major = majorOf(row, intents)
+      if (major && record.shown === row.shown) {
+        const since = record.since ?? now
+        if (!record.escalated && now - since >= windows[major]) stayed.push({ row, major, since })
+      } else if (
+        wasTold.has(row.id) &&
+        (row.shown === 'ok' || row.shown === 'warn' || row.shown === 'off')
+      )
+        recovered.push(row.id)
+    }
+    if (!stayed.length && !recovered.length) return
+    try {
+      hook({ stayed, recovered })
+    } catch (error) {
+      console.error('[status] sustained hook failed; the next pass tries again:', error)
+      return
+    }
+    const mark = this.db.prepare('UPDATE status_seen SET escalated = ? WHERE id = ?')
+    transaction(this.db, () => {
+      for (const { row } of stayed) mark.run(1, row.id)
+      for (const id of recovered) mark.run(0, id)
+    })
   }
 
   rows(): StoredRow[] {

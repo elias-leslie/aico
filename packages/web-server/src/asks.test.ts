@@ -107,6 +107,7 @@ describe('the push', () => {
       body: '“Disk merge & history” has a question for you. Open Aico to answer it.',
       key: 'ask:abcdefabcdef',
       push: 'phone',
+      interrupt: 'needs-you',
       open: 'https://aico.example/?ask=abcdefabcdef',
       actions: ['answer'],
       primary: 'answer',

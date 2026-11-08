@@ -106,7 +106,11 @@
     },
     "push": {
       "enum": ["phone", "tray"],
-      "description": "phone: the phone too; tray: the desktop only. Default: phone for warning and critical, tray for info and ok"
+      "description": "phone: ask for the phone too; tray: the desktop only. The phone is reached only with an interrupt reason (or Aico's own morning digest); a phone request without one stays in the tray. Default: phone when there is a reason, else tray"
+    },
+    "interrupt": {
+      "enum": ["needs-you", "security", "data-risk", "outage", "reminder"],
+      "description": "why the owner is interrupted on the phone: an agent or approval truly waits on them (needs-you), a security event, a backup failing or long overdue (data-risk), an always-on host or service down for a while (outage), or a reminder they set. Severity does not route to the phone; everything without a reason stays in the tray and the morning digest. The stored notice carries phone_reason, one line saying why it reached the phone"
     },
     "cooldown": {
       "type": "number",

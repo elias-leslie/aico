@@ -81,6 +81,7 @@ describe('waiting notices', () => {
         actions: ['open'],
         primary: 'open',
         push: 'phone',
+        interrupt: 'needs-you',
       },
     ])
     // The same wait again (a re-published descriptor) sends nothing more.

@@ -49,7 +49,7 @@ def post_notice(cfg: dict[str, Any], req: dict[str, Any]) -> bool:
     body = {
         "v": 1, "source": "aico", "kind": "info", "severity": "warning",
         "title": req["title"], "body": f"{req['reason']} Approve in the Aico tray or deny.",
-        "key": f"approve:elevate:{req['id']}", "push": "phone",
+        "key": f"approve:elevate:{req['id']}", "push": "phone", "interrupt": "needs-you",
         "open": f"{cfg['public_url']}?request={req['id']}",
     }
     try:

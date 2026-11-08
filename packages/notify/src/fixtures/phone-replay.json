@@ -1,0 +1,1470 @@
+{
+  "description": "Notices aico-web took in the three days to 2026-11-07, one per distinct kind (titles and keys anonymised, bodies dropped, no secrets), with the push the sender asked for. interrupt is what the sender now declares for it (the in-repo senders are tested on their own). wasPushed: it reached the phone then. expectPush: where the one rule (packages/notify/src/phone.ts) sends it now.",
+  "notices": [
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: agent-skills GitHub publication",
+        "body": "(body not kept)",
+        "key": "status:publish:agent-skills=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 3,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: blackbox GitHub publication",
+        "body": "(body not kept)",
+        "key": "status:publish:blackbox=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 2,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: browser-automation GitHub publication",
+        "body": "(body not kept)",
+        "key": "status:publish:browser-automation=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 3,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: code-intelligence GitHub publication",
+        "body": "(body not kept)",
+        "key": "status:publish:code-intelligence=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 3,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: ominull GitHub publication",
+        "body": "(body not kept)",
+        "key": "status:publish:ominull=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 2,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: Nightly GitHub publication",
+        "body": "(body not kept)",
+        "key": "status:jobs/github-publish=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 4,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "4 failed: Aico databases to CT 160, Backup storage read-only guard, T7 recovery points, Work recovery snapshots",
+        "body": "(body not kept)",
+        "key": "status:jobs/backups-append=failed,jobs/backups-guard=failed,jobs/backups-native=failed,jobs/backups-snapshots=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "61 failed: / recovery · T7, /home recovery · T7, /srv/models recovery · T7, /srv/workspaces recovery · T7, /var/lib/dock",
+        "body": "(body not kept)",
+        "key": "status:0123456789ab",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 2,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "warning",
+        "title": "61 late: / recovery · T7, /home recovery · T7, /srv/models recovery · T7, /srv/workspaces recovery · T7, /var/lib/docker",
+        "body": "(body not kept)",
+        "key": "status:0123456789ab",
+        "push": "phone"
+      },
+      "wasPushed": true,
+      "count": 11,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: Redis database · Drive",
+        "body": "(body not kept)",
+        "key": "status:davion-sidarli/backup/drive/redis=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "warning",
+        "title": "1 late: Aico databases and photos · CT 160",
+        "body": "(body not kept)",
+        "key": "status:davion-sidarli/backup/append/aico-davion-sidarli=late",
+        "push": "phone"
+      },
+      "wasPushed": true,
+      "count": 12,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "warning",
+        "title": "1 late: Link to agent-work",
+        "body": "(body not kept)",
+        "key": "status:fleet/davion-sidarli/agent-work=late",
+        "push": "phone"
+      },
+      "wasPushed": true,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: Proxmox heartbeat link",
+        "body": "(body not kept)",
+        "key": "status:davion-sidarli/pve-heartbeat=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 2,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "info",
+        "severity": "warning",
+        "title": "Open test access for 10 min?",
+        "body": "(body not kept)",
+        "key": "approve:elevate:0123456789ab",
+        "push": "phone",
+        "interrupt": "needs-you"
+      },
+      "wasPushed": true,
+      "count": 5,
+      "expectPush": "phone"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: aico checks",
+        "body": "(body not kept)",
+        "key": "status:check:aico=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 6,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "info",
+        "severity": "warning",
+        "title": "Open GitHub admin for 1 min?",
+        "body": "(body not kept)",
+        "key": "approve:elevate:0123456789ab",
+        "push": "phone",
+        "interrupt": "needs-you"
+      },
+      "wasPushed": true,
+      "count": 1,
+      "expectPush": "phone"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "info",
+        "severity": "warning",
+        "title": "Open your main Chrome for 1 min?",
+        "body": "(body not kept)",
+        "key": "approve:elevate:0123456789ab",
+        "push": "phone",
+        "interrupt": "needs-you"
+      },
+      "wasPushed": true,
+      "count": 21,
+      "expectPush": "phone"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "info",
+        "title": "TEST: canary hook drill",
+        "body": "(body not kept)",
+        "key": "canary-drill:0123456789ab",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "warning",
+        "title": "1 late: Proxmox host",
+        "body": "(body not kept)",
+        "key": "status:davion-gem/machine=late",
+        "push": "phone"
+      },
+      "wasPushed": true,
+      "count": 4,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: code-intelligence checks",
+        "body": "(body not kept)",
+        "key": "status:check:code-intelligence=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 2,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: PVE memory errors",
+        "body": "(body not kept)",
+        "key": "status:davion-gem/check-ecc=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 2,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "warning",
+        "title": "TEST: Aico phone pairing migration",
+        "body": "(body not kept)",
+        "key": "pairing-test-1",
+        "push": "phone"
+      },
+      "wasPushed": true,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: Agent Hub import into Aico",
+        "body": "(body not kept)",
+        "key": "status:jobs/context-import=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: agent-hub checks",
+        "body": "(body not kept)",
+        "key": "status:check:agent-hub=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "warning",
+        "title": "63 late: A-Loom · Drive, Agent Hub journals and context deliveries · Drive, Agent Skills · Drive, Agent-Hub · Drive, Aic",
+        "body": "(body not kept)",
+        "key": "status:0123456789ab",
+        "push": "phone"
+      },
+      "wasPushed": true,
+      "count": 2,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: agent-hub GitHub publication",
+        "body": "(body not kept)",
+        "key": "status:publish:agent-hub=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: aico GitHub publication",
+        "body": "(body not kept)",
+        "key": "status:publish:aico=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 2,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: desktop-automation GitHub publication",
+        "body": "(body not kept)",
+        "key": "status:publish:desktop-automation=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 2,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: jobinator-4000 GitHub publication",
+        "body": "(body not kept)",
+        "key": "status:publish:jobinator-4000=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 2,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: portfolio-ai GitHub publication",
+        "body": "(body not kept)",
+        "key": "status:publish:portfolio-ai=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 3,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: summitflow GitHub publication",
+        "body": "(body not kept)",
+        "key": "status:publish:summitflow=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: vault-tools GitHub publication",
+        "body": "(body not kept)",
+        "key": "status:publish:vault-tools=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 2,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: Backups",
+        "body": "(body not kept)",
+        "key": "status:davion-sidarli/check-backups=failed",
+        "push": "phone"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: Login and listener changes",
+        "body": "(body not kept)",
+        "key": "status:davion-sidarli/check-tripwire=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 2,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: Usage collection",
+        "body": "(body not kept)",
+        "key": "status:jobs/usage-collect=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: Phone sender access token",
+        "body": "(body not kept)",
+        "key": "status:davion-sidarli/fcm-token=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "warning",
+        "title": "2 late: Link to agent-work, Link to neri-hunters",
+        "body": "(body not kept)",
+        "key": "status:fleet/davion-sidarli/agent-work=late,fleet/davion-sidarli/neri-hunters=late",
+        "push": "phone"
+      },
+      "wasPushed": true,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: PVE host health",
+        "body": "(body not kept)",
+        "key": "status:davion-sidarli/check-pve=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "warning",
+        "title": "1 late: Link to aico",
+        "body": "(body not kept)",
+        "key": "status:fleet/davion-sidarli/aico=late",
+        "push": "phone"
+      },
+      "wasPushed": true,
+      "count": 2,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: Fleet link",
+        "body": "(body not kept)",
+        "key": "status:fleet/davion-sidarli=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: Phone alerts",
+        "body": "(body not kept)",
+        "key": "status:davion-sidarli/notify-outbox=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: Portfolio-AI full backup (database and uploads) · Owner backup",
+        "body": "(body not kept)",
+        "key": "status:davion-sidarli/backup/external/portfolio-ai-complete=failed",
+        "push": "phone"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: Portfolio-AI full backup (database and uploads) · Owner backup",
+        "body": "(body not kept)",
+        "key": "status:davion-sidarli/backup/external/portfolio-ai-complete=failed",
+        "push": "phone"
+      },
+      "wasPushed": true,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "3 failed: Link to agent-work, Link to aico, Link to neri-hunters",
+        "body": "(body not kept)",
+        "key": "status:fleet/davion-sidarli/agent-work=failed,fleet/davion-sidarli/aico=failed,fleet/davion-sidarli/neri-hunters=failed",
+        "push": "phone"
+      },
+      "wasPushed": true,
+      "count": 2,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "info",
+        "severity": "warning",
+        "title": "43 context items have no recorded use",
+        "body": "(body not kept)",
+        "key": "context-unused",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "warning",
+        "title": "1 late: apps",
+        "body": "(body not kept)",
+        "key": "status:jobinator-4000/machine=late",
+        "push": "phone"
+      },
+      "wasPushed": true,
+      "count": 3,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: Nightly full check and live session checks",
+        "body": "(body not kept)",
+        "key": "status:jobs/check-nightly=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: blackbox checks",
+        "body": "(body not kept)",
+        "key": "status:check:blackbox=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: Backups",
+        "body": "(body not kept)",
+        "key": "status:davion-sidarli/check-backups=failed",
+        "push": "phone"
+      },
+      "wasPushed": true,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "jobinator-4000",
+        "kind": "todo",
+        "severity": "warning",
+        "title": "Jobinator update",
+        "body": "(body not kept)",
+        "key": "jobinator:followups",
+        "push": "phone"
+      },
+      "wasPushed": true,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: ominull checks",
+        "body": "(body not kept)",
+        "key": "status:check:ominull=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: PostgreSQL databases · Drive",
+        "body": "(body not kept)",
+        "key": "status:davion-sidarli/backup/drive/postgres=failed",
+        "push": "phone"
+      },
+      "wasPushed": true,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: Google Drive backup",
+        "body": "(body not kept)",
+        "key": "status:jobs/backups-drive=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: VM180 app recovery data · Drive",
+        "body": "(body not kept)",
+        "key": "status:davion-sidarli/backup/drive/pve-vm-180-app-recovery=failed",
+        "push": "phone"
+      },
+      "wasPushed": true,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "todo",
+        "severity": "warning",
+        "title": "Claude Code waiting in Aico — w04 waiting-notice test",
+        "body": "(body not kept)",
+        "key": "aico-waiting:10df2898",
+        "push": "phone",
+        "interrupt": "needs-you"
+      },
+      "wasPushed": true,
+      "count": 1,
+      "expectPush": "phone"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "info",
+        "severity": "ok",
+        "title": "The session no longer waits on you.",
+        "body": "(body not kept)",
+        "key": "aico-waiting:10df2898",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: Aico databases and photos · Drive",
+        "body": "(body not kept)",
+        "key": "status:davion-sidarli/backup/drive/aico-davion-sidarli=failed",
+        "push": "phone"
+      },
+      "wasPushed": true,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: Work recovery snapshots",
+        "body": "(body not kept)",
+        "key": "status:jobs/backups-snapshots=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: monkey-fight GitHub publication",
+        "body": "(body not kept)",
+        "key": "status:publish:monkey-fight=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico-card-test",
+        "kind": "todo",
+        "severity": "warning",
+        "title": "Follow-ups due",
+        "body": "(body not kept)",
+        "key": "aico-card-test:todo",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 2,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "2 failed: Aico databases to CT 160, Google Drive backup",
+        "body": "(body not kept)",
+        "key": "status:jobs/backups-append=failed,jobs/backups-drive=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico-card-test",
+        "kind": "info",
+        "severity": "ok",
+        "title": "Test notice replaced.",
+        "body": "(body not kept)",
+        "key": "aico-card-test:todo",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico-card-test",
+        "kind": "info",
+        "severity": "ok",
+        "title": "Card test finished.",
+        "body": "(body not kept)",
+        "key": "aico-card-test:todo",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: jobinator-4000 checks",
+        "body": "(body not kept)",
+        "key": "status:check:jobinator-4000=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: monkey-fight checks",
+        "body": "(body not kept)",
+        "key": "status:check:monkey-fight=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: Aico container on the workstation's release",
+        "body": "(body not kept)",
+        "key": "status:jobs/peer-release=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 2,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: browser-automation checks",
+        "body": "(body not kept)",
+        "key": "status:check:browser-automation=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "browser-automation",
+        "kind": "info",
+        "severity": "ok",
+        "title": "The session was closed; nothing left to do.",
+        "body": "(body not kept)",
+        "key": "browser-hand-off:aico-fc89e0b1",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 29,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "info",
+        "severity": "warning",
+        "title": "Push check",
+        "body": "(body not kept)",
+        "key": "pushcheck:nightshift-move",
+        "push": "phone"
+      },
+      "wasPushed": true,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "info",
+        "severity": "ok",
+        "title": "Push check done; alerts still reach the phone.",
+        "body": "(body not kept)",
+        "key": "pushcheck:nightshift-move",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "warning",
+        "title": "Phone moved to app.summitflow.dev",
+        "body": "(body not kept)",
+        "key": "host-rename-test",
+        "push": "phone"
+      },
+      "wasPushed": true,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "Canary tripped: ssh host vault-backup",
+        "body": "(body not kept)",
+        "key": "canary:02447eff3f",
+        "push": "phone",
+        "interrupt": "security"
+      },
+      "wasPushed": true,
+      "count": 1,
+      "expectPush": "phone"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "Canary tripped: env billing-portal",
+        "body": "(body not kept)",
+        "key": "canary:4fa91bb46e",
+        "push": "phone",
+        "interrupt": "security"
+      },
+      "wasPushed": true,
+      "count": 1,
+      "expectPush": "phone"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "todo",
+        "severity": "warning",
+        "title": "Shared: recommendations.md",
+        "body": "(body not kept)",
+        "key": "show:0123456789ab",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "browser-automation",
+        "kind": "info",
+        "severity": "ok",
+        "title": "The owner finished the hand-off; the session resumed.",
+        "body": "(body not kept)",
+        "key": "browser-hand-off:work",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 2,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "browser-automation",
+        "kind": "info",
+        "severity": "ok",
+        "title": "The session was resumed; nothing left to do.",
+        "body": "(body not kept)",
+        "key": "browser-hand-off:aico-fc89e0b1",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 2,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: portfolio-ai checks",
+        "body": "(body not kept)",
+        "key": "status:check:portfolio-ai=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "todo",
+        "severity": "warning",
+        "title": "Shared: mockup",
+        "body": "(body not kept)",
+        "key": "show:0123456789ab",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "todo",
+        "severity": "warning",
+        "title": "Shared: mockup-2",
+        "body": "(body not kept)",
+        "key": "show:0123456789ab",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "warning",
+        "title": "49 late: Agent Hub journals and context deliveries · Drive, Agent Skills · Drive, Aico databases and photos · Drive, Aic",
+        "body": "(body not kept)",
+        "key": "status:0123456789ab",
+        "push": "phone"
+      },
+      "wasPushed": true,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: Morning digest to the phone",
+        "body": "(body not kept)",
+        "key": "status:jobs/morning-digest=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "jobinator-4000",
+        "kind": "todo",
+        "severity": "warning",
+        "title": "Follow-ups due",
+        "body": "(body not kept)",
+        "key": "jobinator:followups",
+        "push": "phone"
+      },
+      "wasPushed": true,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "portfolio-ai",
+        "kind": "alert",
+        "severity": "warning",
+        "title": "November 2026 is heading over plan",
+        "body": "(body not kept)",
+        "key": "portfolio-ai:month_projected_over_plan:2026-11",
+        "push": "phone"
+      },
+      "wasPushed": true,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "info",
+        "severity": "info",
+        "title": "While you were away: 9 finished, 1 failed, 9 problems",
+        "body": "(body not kept)",
+        "key": "digest:2026-11-07",
+        "push": "phone"
+      },
+      "wasPushed": true,
+      "count": 1,
+      "expectPush": "phone"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: Repo copy to aico",
+        "body": "(body not kept)",
+        "key": "status:davion-sidarli/wip-mirror/peer-aico=failed",
+        "push": "phone"
+      },
+      "wasPushed": true,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: Repo copies to the other full Aico",
+        "body": "(body not kept)",
+        "key": "status:jobs/wip-mirror-davion-sidarli=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "warning",
+        "title": "1 late: Link to neri-hunters",
+        "body": "(body not kept)",
+        "key": "status:fleet/davion-sidarli/neri-hunters=late",
+        "push": "phone"
+      },
+      "wasPushed": true,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "todo",
+        "severity": "warning",
+        "title": "Shared: redundancy-audit",
+        "body": "(body not kept)",
+        "key": "show:0123456789ab",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: aico deploy",
+        "body": "(body not kept)",
+        "key": "status:deploy:aico=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: cinderwake checks",
+        "body": "(body not kept)",
+        "key": "status:check:cinderwake=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "alert",
+        "severity": "critical",
+        "title": "1 failed: cinderwake GitHub publication",
+        "body": "(body not kept)",
+        "key": "status:publish:cinderwake=failed",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "info",
+        "severity": "ok",
+        "title": "Access request expired.",
+        "body": "(body not kept)",
+        "key": "approve:elevate:0123456789ab",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 3,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "info",
+        "severity": "info",
+        "title": "104 context items have no recorded use",
+        "body": "(body not kept)",
+        "key": "context-unused",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "info",
+        "severity": "ok",
+        "title": "Over; nothing left to answer.",
+        "body": "(body not kept)",
+        "key": "approve:elevate:0123456789ab",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 27,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "info",
+        "severity": "ok",
+        "title": "Over; nothing left to answer.",
+        "body": "(body not kept)",
+        "key": "context-unused",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "info",
+        "severity": "ok",
+        "title": "Over; nothing left to answer.",
+        "body": "(body not kept)",
+        "key": "host-rename-test",
+        "push": "tray"
+      },
+      "wasPushed": false,
+      "count": 1,
+      "expectPush": "tray"
+    },
+    {
+      "notice": {
+        "v": 1,
+        "source": "aico",
+        "kind": "question",
+        "severity": "warning",
+        "title": "An agent is waiting on you",
+        "body": "(synthetic: no blocking ask in the window)",
+        "key": "ask:0123456789ab",
+        "push": "phone",
+        "interrupt": "needs-you",
+        "open": "https://aico.example/?ask=0123456789ab",
+        "actions": ["answer"]
+      },
+      "wasPushed": false,
+      "count": 0,
+      "expectPush": "phone",
+      "synthetic": true
+    }
+  ]
+}

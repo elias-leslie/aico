@@ -1,7 +1,8 @@
-// The phone alert rule (owner, 2026-11-03): one alert per batch when a row turns failed, or when a
+// The tray alert rule (owner, 2026-11-03): one alert per batch when a row turns failed, or when a
 // backup or machine row goes late. Warnings and unknowns change only the badge and the screen.
-// A batch of only project-owned failures (a project's checks, publication, jobs, app rows) goes to
-// the tray instead: its owning agent fixes it (statusNotice in web-server/src/status-actions.ts).
+// These alerts go to the tray and the morning digest, never the phone (owner 2026-11-07): a first
+// late or failed run is mostly a guest, a drive or a copy catching up. The phone hears only a
+// major row that stays bad past its window (major.ts, statusNotice in web-server/src/status-actions.ts).
 // Rows on a machine turned off on purpose show off, so they never alert.
 //
 // StatusStore.checkAlerts() compares each row's shown state with the last pass (kept in status.db,

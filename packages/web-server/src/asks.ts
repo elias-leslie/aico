@@ -269,6 +269,7 @@ export function askNotice(ask: Ask, who: string | null, publicHost: string | nul
     body: `${who ? `“${who}”` : 'A session'} has a question for you${attachedText(ask)}. Open Aico to answer it.`,
     key: askKey(ask.id),
     push: 'phone',
+    interrupt: 'needs-you',
   }
   if (publicHost) {
     notice.open = `https://${publicHost}/?ask=${ask.id}`

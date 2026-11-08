@@ -21,6 +21,8 @@ export interface Notice {
   actions?: NoticeAction[]
   primary?: NoticeAction
   push: 'phone' | 'tray'
+  /** Why the phone is interrupted (packages/notify phone.ts); without it the notice stays in the tray. */
+  interrupt?: 'needs-you'
 }
 
 /** What notices need of the Notifier. */

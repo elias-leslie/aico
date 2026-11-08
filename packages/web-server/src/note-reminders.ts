@@ -54,6 +54,7 @@ function noticeFor(note: NoteRow, sentAt: number, publicHost: string | null) {
     kind: 'info',
     severity: 'warning',
     push: 'phone',
+    interrupt: 'reminder',
     key: `reminder:${note.id}:${remindAt}`,
     title: `Reminder: ${nameOf(note)}`,
     body: late > LATE_MS ? `This was due ${ago(late)}.` : 'It is due now.',

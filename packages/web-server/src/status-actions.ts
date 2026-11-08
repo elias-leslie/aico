@@ -16,7 +16,7 @@
 
 import { spawn } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
-import type { ActionKind, AlertBatch, StatusRow, StatusStore } from '@aico/status'
+import type { ActionKind, AlertBatch, StatusRow, StatusStore, Sustained } from '@aico/status'
 import { alertText } from '@aico/status'
 import type { TetherClient } from '@aico/tether-client'
 import { objectBody, type Router, requiredString } from './http'
@@ -240,20 +240,11 @@ export function statusKey(batch: AlertBatch): string {
 }
 
 /**
- * Whether a failed row is the owner's to hear about on the phone: a row with no project (backups,
- * links, machines, host checks, the phone path itself) or one with an owner-only action. A
- * project's own rows (its checks, publication and jobs, and the LAN apps' rows) have an owning
- * agent; they stay on the tray, and an app alerts the owner itself through its own notices.
- */
-function ownerFailure(row: StatusRow): boolean {
-  return !row.project || (row.actions?.some((action) => action.owner_only === true) ?? false)
-}
-
-/**
- * The Status alert notice (contracts/notice.schema.json). The phone hears a backup or machine row
- * going late and a failed row the owner must see (ownerFailure); a batch of only project-owned
- * failures stays on the tray. Once per `cooldownS` for the same changes, so a flapping row doesn't
- * push every time.
+ * The Status alert notice (contracts/notice.schema.json) for rows that turned failed or late. It
+ * goes to the tray and the morning digest, never the phone: a first late or failed run is usually
+ * a guest, a drive or a copy catching up. What does reach the phone is a major row that stays that
+ * way (sustainedNotice). Once per `cooldownS` for the same changes, so a flapping row doesn't
+ * repeat in the tray.
  */
 export function statusNotice(
   batch: AlertBatch,
@@ -262,7 +253,6 @@ export function statusNotice(
 ): Record<string, unknown> {
   const { title, body } = alertText(batch)
   const failed = batch.changes.some((change) => change.to === 'failed')
-  const phone = batch.changes.some((change) => change.to === 'late' || ownerFailure(change.row))
   return {
     v: 1,
     source: 'aico',
@@ -272,7 +262,40 @@ export function statusNotice(
     body: body.slice(0, 1000),
     key: statusKey(batch),
     cooldown: cooldownS,
-    push: phone ? 'phone' : 'tray',
+    push: 'tray',
+    ...(publicHost ? { open: `https://${publicHost}/status` } : {}),
+  }
+}
+
+const SUSTAINED_REASON: Record<Sustained['major'], string> = {
+  'data-risk': 'has stayed failed or late past its retry',
+  outage: 'is still down',
+}
+
+/** The notice key for a row that stayed bad; `resolveNotice` ends it when the row is well. */
+export const sustainedKey = (rowId: string) => `status-sustained:${rowId}`.slice(0, MAX_KEY)
+
+/**
+ * The phone notice for a major row that stayed failed or late past its window (status/major.ts):
+ * a backup that did not recover on its retry, an always-on machine or a service still down. One
+ * per row until it is well again.
+ */
+export function sustainedNotice(
+  item: Sustained,
+  publicHost: string | null,
+): Record<string, unknown> {
+  const { row, major } = item
+  return {
+    v: 1,
+    source: 'aico',
+    kind: 'alert',
+    severity: 'critical',
+    title: `${row.what} ${SUSTAINED_REASON[major]}`.slice(0, 200),
+    body: `${row.meaning || row.what} Since ${new Date(item.since).toISOString()}.`.slice(0, 1000),
+    key: sustainedKey(row.id),
+    cooldown: 7 * 24 * 3600,
+    push: 'phone',
+    interrupt: major,
     ...(publicHost ? { open: `https://${publicHost}/status` } : {}),
   }
 }

@@ -96,7 +96,7 @@
         ["phones", "paired phones: list, remove"],
         ["app", "the phone app's published version and outage drills"],
         ["declare", "record a host change you made, so Status knows it was you"],
-        ["notify", "send the owner a notice (warning and critical reach the phone)"]
+        ["notify", "send the owner a notice (tray and digest; the phone only with --interrupt)"]
       ]
     },
     {

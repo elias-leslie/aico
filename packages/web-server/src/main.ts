@@ -39,6 +39,7 @@ import { registerMockupRoutes } from './mockups'
 import { registerReminderRoutes } from './note-reminders'
 import { NotesStore } from './notes-db'
 import { registerExportRoutes } from './notes-export'
+import { resolveNotice } from './notice'
 import { NotifyHub } from './notify'
 import { NotesOwner } from './owners/notes'
 import { PortfolioAiOwner } from './owners/portfolio-ai'
@@ -52,7 +53,13 @@ import { registerSharedPageRoutes } from './shared-pages'
 import { Shows } from './shows'
 import { createStaticSite } from './static'
 import { registerStatusRoutes, startSelfRows } from './status'
-import { registerStatusActions, StatusRuns, statusNotice } from './status-actions'
+import {
+  registerStatusActions,
+  StatusRuns,
+  statusNotice,
+  sustainedKey,
+  sustainedNotice,
+} from './status-actions'
 import { registerSyncRoutes, startSync } from './sync/start'
 import { TerminalHub } from './terminal'
 import { registerTrayRoutes } from './tray'
@@ -247,7 +254,7 @@ function serve(): void {
   registerLoginRoutes(api, process.env, tether)
   registerMockupRoutes(api, { dataDir: config.dataDir, tether })
   registerSharedPageRoutes(api, { shares: () => shows.list('here') })
-  // The phone alert rule: checked on every write of rows. aico-web's own heartbeat writes every
+  // The tray alert rule: checked on every write of rows. aico-web's own heartbeat writes every
   // few minutes, so a backup or machine row that goes late is seen then too. A notice notify
   // refuses throws, and the batch is offered again on the next pass.
   status.onAlert((batch) => {
@@ -255,6 +262,14 @@ function serve(): void {
       statusNotice(batch, config.publicHost, config.status.alertCooldownS),
       'local',
     )
+  })
+  // The only Status rows that reach the phone: major ones (status/major.ts) that stayed bad past
+  // their window. Recovery ends the notice, so the tray clears.
+  status.onSustained(config.status.major, ({ stayed, recovered }) => {
+    for (const item of stayed)
+      notify.notifier.receive(sustainedNotice(item, config.publicHost), 'local')
+    for (const id of recovered)
+      void resolveNotice(notify.notifier, sustainedKey(id), 'Back to normal.')
   })
   notify.register(api)
   registerTrayRoutes(api, { status, notify: notify.store, asks, publicHost: config.publicHost })

@@ -17,6 +17,23 @@ export interface NotifierOptions {
   log?: (line: string) => void
 }
 
+/**
+ * An OmniNull detection page (an alert keyed `alerts:<id>`, warning or critical) is a security
+ * event whatever the hub's own routing says; the hub is not ours to change, so the reason is
+ * added here, once, at the door.
+ */
+function hubPage(value: unknown, via: Via): unknown {
+  const body = value as Record<string, unknown> | null
+  if (via !== 'ominull' || !body || typeof body !== 'object' || body.interrupt !== undefined)
+    return value
+  const page =
+    (body.kind === undefined || body.kind === 'alert') &&
+    (body.severity === 'warning' || body.severity === 'critical') &&
+    typeof body.key === 'string' &&
+    body.key.startsWith('alerts:')
+  return page ? { ...body, interrupt: 'security' } : value
+}
+
 export class Notifier {
   private readonly pendingAsks = new Map<string, Promise<void>>()
 
@@ -26,7 +43,7 @@ export class Notifier {
   receive(value: unknown, via: Via): Accepted {
     const { store, sender, outbox, needsYou } = this.options
     const log = this.options.log ?? ((line: string) => console.log(`[notify] ${line}`))
-    const notice = parseNotice(value)
+    const notice = parseNotice(hubPage(value, via))
     // When the paired-phones file can't be read, one row waits for any phone; the outbox
     // turns it into a row per phone once the file reads again.
     const devices =

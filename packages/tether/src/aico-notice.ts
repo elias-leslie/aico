@@ -14,6 +14,7 @@ export interface WaitingNotice {
   actions: ['open']
   primary: 'open'
   push: 'phone' | 'tray'
+  interrupt?: 'needs-you'
 }
 
 /** A session waiting on the owner, as an Aico notice (contract v1). */
@@ -37,5 +38,6 @@ export function waitingNotice(parts: {
     actions: ['open'],
     primary: 'open',
     push: parts.push ?? 'phone',
+    ...((parts.push ?? 'phone') === 'phone' ? { interrupt: 'needs-you' as const } : {}),
   }
 }

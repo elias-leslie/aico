@@ -3,7 +3,16 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { ACTIONS, KINDS, LIMITS, NoticeError, PUSH, parseNotice, SEVERITIES } from './notice'
+import {
+  ACTIONS,
+  INTERRUPTS,
+  KINDS,
+  LIMITS,
+  NoticeError,
+  PUSH,
+  parseNotice,
+  SEVERITIES,
+} from './notice'
 
 const read = (name: string) =>
   JSON.parse(readFileSync(fileURLToPath(new URL(`../../../${name}`, import.meta.url)), 'utf8'))
@@ -20,6 +29,7 @@ describe('notice.ts matches the schema', () => {
     expect(props.actions.items.enum).toEqual([...ACTIONS])
     expect(props.primary.enum).toEqual([...ACTIONS])
     expect(props.push.enum).toEqual([...PUSH])
+    expect(props.interrupt.enum).toEqual([...INTERRUPTS])
     expect(props.source.pattern).toBe(LIMITS.source.pattern.source)
     expect(props.key.pattern).toBe(LIMITS.key.pattern.source)
     for (const field of ['title', 'body', 'command', 'if_ignored'] as const) {

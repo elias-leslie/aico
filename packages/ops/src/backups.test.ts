@@ -33,6 +33,7 @@ import {
   entries,
   entry,
   homePath,
+  markUnplugged,
   migrated,
 } from './backup-plan'
 import {
@@ -153,6 +154,28 @@ it('never treats a failed run or a job timestamp as new restorable data', () => 
   expect(aico?.state).toBe('failed')
   expect(aico?.last_run).toBe(new Date(now - 5 * 86400000).toISOString())
   expect(rows.every((r) => r.actions?.every((a) => !a.owner_only))).toBe(true)
+})
+it('shows the T7 rows off while the drive is unplugged, never late or failed', () => {
+  const c = cfg(),
+    s = emptyState()
+  s.copies[copyKey('/', 'native')] = {
+    source: '/',
+    target: 'native',
+    dataAt: new Date(now - 30 * 3600000).toISOString(),
+    error: 'The T7 Btrfs backup drive is not mounted.',
+    attemptedAt: new Date(now).toISOString(),
+  }
+  const items = entries(s, c, c.workstation, now)
+  markUnplugged(items, false)
+  const native = items.filter((e) => e.target === 'native')
+  expect(native.length).toBeGreaterThan(0)
+  expect(native.every((e) => e.state === 'off' && e.nextRun === null)).toBe(true)
+  expect(items.filter((e) => e.target !== 'native').every((e) => e.state !== 'off' || e.gone)).toBe(
+    true,
+  )
+  const plugged = entries(s, c, c.workstation, now)
+  markUnplugged(plugged, true)
+  expect(plugged.some((e) => e.target === 'native' && e.state === 'failed')).toBe(true)
 })
 it('gets next-run and running state from the real scheduler; unavailable is unknown', async () => {
   const c = cfg(),

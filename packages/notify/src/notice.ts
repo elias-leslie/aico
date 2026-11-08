@@ -3,6 +3,8 @@
 // contract.test.ts holds these lists and limits to it and replays
 // contracts/notice-fixtures.json.
 
+import { INTERRUPTS, type Interrupt, isDigest, PHONE_REASONS } from './phone'
+
 export const KINDS = ['alert', 'todo', 'question', 'info'] as const
 export type NoticeKind = (typeof KINDS)[number]
 
@@ -23,6 +25,8 @@ export type NoticeAction = (typeof ACTIONS)[number]
 
 export const PUSH = ['phone', 'tray'] as const
 export type Push = (typeof PUSH)[number]
+
+export { INTERRUPTS, type Interrupt }
 
 export interface Field {
   label: string
@@ -45,7 +49,12 @@ export interface Notice {
   actions: NoticeAction[]
   /** One of `actions`, or '' when the sender named none. */
   primary: NoticeAction | ''
+  /** Where it goes: the phone only with a reason in `interrupt` (phone.ts), else the tray. */
   push: Push
+  /** Why the owner is interrupted on the phone (a sender's claim; see phone.ts). */
+  interrupt?: Interrupt
+  /** Set by the door when push is phone: why this reached the phone, for audits. Not a sender field. */
+  phone_reason?: string
   /** Seconds a repeat of `key` stays quiet. */
   cooldown: number
   /** Seconds after sending when it ends by itself. */
@@ -85,6 +94,7 @@ const FIELDS = new Set([
   'actions',
   'primary',
   'push',
+  'interrupt',
   'cooldown',
   'expires',
   'if_ignored',
@@ -236,19 +246,26 @@ export function parseNotice(value: unknown): Notice {
       throw new NoticeError('primary', 'primary must be one of the actions')
     notice.primary = body.primary as NoticeAction
   }
-  const push =
+  const interrupt =
+    body.interrupt === undefined || body.interrupt === null
+      ? undefined
+      : oneOf(body.interrupt, 'interrupt', INTERRUPTS)
+  if (interrupt) notice.interrupt = interrupt
+  // The one rule (phone.ts): the phone is reached by a named reason (or the digest) and a sender
+  // that asks for it; severity does not route. A phone request without a reason stays in the tray.
+  const digest = isDigest(source, kind, notice.key)
+  const wantsPhone =
     body.push === undefined || body.push === null || body.push === ''
-      ? severity === 'warning' || severity === 'critical'
-        ? 'phone'
-        : 'tray'
-      : oneOf(body.push, 'push', PUSH)
-  // The one owner-approved info push: Aico's own morning digest, once a day.
-  const digest = source === 'aico' && kind === 'info' && notice.key?.startsWith('digest:') === true
+      ? true
+      : oneOf(body.push, 'push', PUSH) === 'phone'
+  const push: Push = wantsPhone && (interrupt || digest) ? 'phone' : 'tray'
   if (push === 'phone' && (severity === 'info' || severity === 'ok') && !digest)
     throw new NoticeError(
       'push',
       'info and ok stay on the desktop; the phone gets warnings and criticals',
     )
+  if (push === 'phone')
+    notice.phone_reason = PHONE_REASONS[digest ? 'digest' : (interrupt as Interrupt)]
   notice.push = push
   // A todo is something to do: below warning it would never be listed. Raised after the route is picked.
   if (kind === 'todo' && (severity === 'info' || severity === 'ok')) severity = 'warning'

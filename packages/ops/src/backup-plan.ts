@@ -293,6 +293,22 @@ export function entries(
   const order = { failed: 0, warn: 1, ok: 2, off: 3 }
   return all.sort((a, b) => order[a.state] - order[b.state] || a.name.localeCompare(b.name))
 }
+/**
+ * The T7 is a portable USB drive: while it is unplugged its rows are off (not late, not failed),
+ * like a machine turned off on purpose, and run again once it is back. Only the T7 (native)
+ * copies; Drive and CT 160 copies have no such state.
+ */
+export function markUnplugged(items: BackupEntry[], attached: boolean): void {
+  if (attached) return
+  for (const item of items)
+    if (item.target === 'native')
+      Object.assign(item, {
+        state: 'off',
+        nextRun: null,
+        running: false,
+        meaning: 'The T7 drive is unplugged. Backups to it resume when it is plugged in.',
+      })
+}
 export function backupRows(items: BackupEntry[]): StatusRow[] {
   return items.map((item) => ({
     id: `${item.machine}/backup/${item.id}`,

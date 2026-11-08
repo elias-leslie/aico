@@ -189,6 +189,7 @@ export async function alertTrip(
       // One key per decoy: a burst of probes is one alert, counted as repeats.
       key: `canary:${createHash('sha256').update(trip.name).digest('hex').slice(0, 10)}`,
       push: 'phone',
+      interrupt: 'security',
       cooldown: PUSH_COOLDOWN_S,
     },
     'local',

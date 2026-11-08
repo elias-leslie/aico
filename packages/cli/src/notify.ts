@@ -6,9 +6,12 @@ export const HOST_STEWARD = '/usr/local/bin/host-steward'
 
 const NOTIFY_HELP = `Usage: aico notify --title T --body B [--severity critical|warning|info|ok] [--key K] [--open https://URL]
                    [--kind alert|todo|question|info] [--source NAME] [--cooldown SECONDS]
+                   [--interrupt needs-you|security|data-risk|outage|reminder]
        aico notify --json            one notice v1 (contracts/notice.schema.json) as JSON on stdin
        aico notify resolve KEY --text T [--source NAME]   end your notice under KEY
-Sends a notice to the owner through Aico web (this machine only). Warning and critical reach the phone.
+Sends a notice to the owner through Aico web (this machine only). It goes to the tray and the morning digest.
+It reaches the phone only with --interrupt (a warning or critical): an agent truly needs the owner, a security event,
+a backup failing, or an always-on host or service down. Anything else is not a phone matter.
 A repeat of the same key from the same source stays quiet for the cooldown. Exits 2 when the notice breaks the contract and 1 when Aico web refuses or is down, with the server's reason.`
 
 export interface NotifyContext {
@@ -63,6 +66,7 @@ export async function notify(args: string[], ctx: NotifyContext): Promise<number
       open: { type: 'string' },
       source: { type: 'string' },
       cooldown: { type: 'string' },
+      interrupt: { type: 'string' },
       text: { type: 'string' },
     },
   })
@@ -95,7 +99,7 @@ export async function notify(args: string[], ctx: NotifyContext): Promise<number
       return 2
     }
     body = { v: 1, source, title: values.title, body: values.body }
-    for (const name of ['severity', 'kind', 'key', 'open'] as const)
+    for (const name of ['severity', 'kind', 'key', 'open', 'interrupt'] as const)
       if (values[name]) body[name] = values[name]
     if (values.cooldown !== undefined) body.cooldown = Number(values.cooldown)
   }

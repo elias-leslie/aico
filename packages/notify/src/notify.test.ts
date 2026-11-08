@@ -164,7 +164,15 @@ describe('the outbox', () => {
       now: () => now,
       log: () => {},
     })
-    const raw = { v: 1, source: 'aico', severity: 'warning', title: 'T', body: 'B', push: 'phone' }
+    const raw = {
+      v: 1,
+      source: 'aico',
+      severity: 'warning',
+      title: 'T',
+      body: 'B',
+      push: 'phone',
+      interrupt: 'needs-you',
+    }
     const queued = notifier.receive(raw, 'local')
     const early = notifier.receive({ ...raw, title: 'T2' }, 'local')
     await outbox.kick()
@@ -438,12 +446,13 @@ describe('phone route for info notices', () => {
     body: 'x',
   }
   it('keeps info off the phone', () => {
-    expect(() => parseNotice({ ...base, source: 'aico', key: 'other:1' })).toThrow(
+    // A phone request with no reason stays in the tray; with a reason, info is refused.
+    expect(parseNotice({ ...base, source: 'aico', key: 'other:1' }).push).toBe('tray')
+    const reason = { ...base, interrupt: 'needs-you' }
+    expect(() => parseNotice({ ...reason, source: 'aico', key: 'other:1' })).toThrow(
       /stay on the desktop/,
     )
-    expect(() => parseNotice({ ...base, source: 'jobs', key: 'digest:2026-11-07' })).toThrow(
-      /stay on the desktop/,
-    )
+    expect(parseNotice({ ...base, source: 'jobs', key: 'digest:2026-11-07' }).push).toBe('tray')
   })
   it("lets Aico's morning digest reach the phone", () => {
     expect(parseNotice({ ...base, source: 'aico', key: 'digest:2026-11-07' }).push).toBe('phone')

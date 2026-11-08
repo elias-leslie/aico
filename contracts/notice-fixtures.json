@@ -1,5 +1,5 @@
 {
-  "description": "Replay fixtures for contracts/notice.schema.json. valid: notices every validator accepts, with `expect` the notice as read (defaults filled in: kind alert, severity info, push phone for warning and critical else tray, cooldown 3600, fields and actions empty lists, primary empty; a todo below warning is raised to warning). invalid: notices every validator refuses, naming `field` (`notice` for the whole value). The hub fixture is the shape the OmniNull hub sends (alert ids in the key).",
+  "description": "Replay fixtures for contracts/notice.schema.json. valid: notices every validator accepts, with `expect` the notice as read (defaults filled in: kind alert, severity info, push phone only with an interrupt reason (or Aico's digest) else tray; phone_reason says why, cooldown 3600, fields and actions empty lists, primary empty; a todo below warning is raised to warning). invalid: notices every validator refuses, naming `field` (`notice` for the whole value). The hub fixture is the shape the OmniNull hub sends (alert ids in the key).",
   "version": 1,
   "valid": [
     {
@@ -57,7 +57,7 @@
         ],
         "actions": ["expected", "not-expected"],
         "primary": "not-expected",
-        "push": "phone",
+        "push": "tray",
         "cooldown": 3600
       }
     },
@@ -113,7 +113,8 @@
         "body": "A session has a question for you.",
         "key": "ask:0123456789ab",
         "open": "https://aico.summitflow.dev/?ask=0123456789ab",
-        "actions": ["answer"]
+        "actions": ["answer"],
+        "interrupt": "needs-you"
       },
       "expect": {
         "v": 1,
@@ -128,6 +129,8 @@
         "actions": ["answer"],
         "primary": "",
         "push": "phone",
+        "interrupt": "needs-you",
+        "phone_reason": "An agent or an approval is waiting on you.",
         "cooldown": 3600
       }
     }
@@ -273,7 +276,8 @@
         "title": "T",
         "body": "B",
         "severity": "info",
-        "push": "phone"
+        "push": "phone",
+        "interrupt": "needs-you"
       },
       "field": "push"
     },

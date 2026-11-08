@@ -147,7 +147,7 @@ Aico web sends it when the owner has sessions open and visible (an agent's autom
 The Tether that knows where Aico is (`TETHER_AICO_URL`) tells the owner when something waits on them: a
 session `blocked` (a permission prompt or a question), local or on a remote host, not seen for 2 minutes since its wait began, gets one notice through Aico's notify (contract
 v1 posted to `POST /api/notices` on loopback at `AICO_WEB_URL`, default `http://127.0.0.1:3002`; `kind: todo`,
-`push: phone`, so an unattended stuck agent reaches the phone and Needs you; Open as the one action:
+`push: phone` with `interrupt: needs-you`, so an unattended stuck agent reaches the phone and Needs you; Open as the one action:
 `<aico>/?session=<id>`, a run's page only on Aico's origin). A repeat for the same key stays quiet for the
 notice cooldown (an hour). The key is `aico-waiting:<session id>`. Tether posts
 `POST /api/notices/resolve` `{source: "aico", key, text}` once it no longer waits: answered, seen, ended or
@@ -596,7 +596,7 @@ recovery waits on memory amber or anything red but not on a disk-only amber (`me
 The cap is the drop-in `~/.config/systemd/user/tmux-spawn-.scope.d/40-tether-pane.conf`, written only while panes are
 on OOMPolicy=continue (a pane past it loses one process and keeps running); every 5 s the guard also caps any running
 pane at no cap, or at the cap the owner just replaced, unless it is already near the cap. A cap raised by hand at
-runtime is kept. The guard (`src/lifecycle/job-guard.ts`) never kills a pane's root shell or its agent; it writes
+runtime is kept. The guard (`packages/session-engine/src/lifecycle/job-guard.ts`) never kills a pane's root shell or its agent; it writes
 `kill`, `warning` and `agent-hog` records with killer `tether` to host-steward's memory event record
 (`~/.local/state/host-steward/memory-events.jsonl`, schema v1; `TETHER_MEMORY_EVENTS` names another absolute path, which
 the agent user's unit uses to keep the record in its state dir where host-steward reads it) before acting, and its heartbeat

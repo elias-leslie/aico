@@ -37,4 +37,5 @@ export {
 } from './notice'
 export { Notifier, type NotifierOptions } from './notifier'
 export { backoff, Outbox } from './outbox'
+export { INTERRUPTS, type Interrupt, PHONE_REASONS } from './phone'
 export { type Accepted, NotifyStore, notifyDbPath, type StoredNotice, type Via } from './store'
