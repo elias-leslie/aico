@@ -1,7 +1,7 @@
 {
   "about": "Limits for agents that can't be trusted unwatched (today: Antigravity sessions, through `aico-hook agy`). Checked in code on every tool call, before the agent's own permission rules. A refusal tells the agent why and what to do instead. Stops a dumb agent, not a hostile one: a script the agent runs is read when it is a plain file, but what a program does at run time isn't seen.",
   "refusal": "Refused by Aico's limits for this agent: {why} Don't try another way around it. If the task needs this, say so in your report, or ask with: tether ask create \"<one line that stands alone>\" --option A --option B --recommend 1",
-  "allowed_tools": ["finish", "run_command", "read_file", "write_file", "edit_file", "search_web", "manage_task", "invoke_subagent", "manage_subagents", "define_subagent", "finish"],
+  "allowed_tools": ["finish", "run_command", "read_file", "write_file", "edit_file", "search_web", "manage_task", "invoke_subagent", "manage_subagents", "define_subagent", "send_message"],
   "tool_refused": "the tool {tool} is off for this agent.",
   "ask_tool": "ask_question",
   "ask_refused": "questions to the owner go through tether ask, not {tool}.",
@@ -16,6 +16,11 @@
     {"path": "~/.aws", "why": "keys"},
     {"path": "~/.netrc", "why": "keys"},
     {"path": "~/.gnupg", "why": "keys"},
+    {"path": "~/.kube", "why": "keys"},
+    {"path": "~/.npmrc", "why": "keys"},
+    {"path": "~/.docker", "why": "keys"},
+    {"path": "~/.smbcredentials", "why": "keys"},
+    {"path": "~/.config/rclone", "why": "keys"},
     {"path": "~/.config/gh", "why": "keys"},
     {"path": "~/.codex/auth.json", "why": "a login"},
     {"path": "~/.claude/.credentials.json", "why": "a login"},
@@ -37,10 +42,19 @@
     {"path": "/srv/workspaces/projects/neri-hunters", "why": "hunter data stays closed"}
   ],
   "denied_text": [
-    {"pattern": "(^|[\\s/'\"=])\\.env(\\.(local|prod|production|dev|development|staging))?($|[\\s'\"])", "why": ".env files hold credentials."},
-    {"pattern": "control\\.sock|--unix-socket", "why": "it talks straight to a control socket."},
+    {"pattern": "(^|[\\s/'\"=<(])\\.env(\\.(local|prod|production|dev|development|staging|bak|backup)[\\w.-]*)?($|[\\s'\";|&)*])", "why": ".env files hold credentials."},
+    {"pattern": "control\\.sock|--unix-socket", "why": "it talks straight to a control socket."}
+  ],
+  "denied_code": [
     {"pattern": "\\bos\\.(kill|killpg|remove|unlink|rmdir)\\s*\\(|\\bshutil\\.rmtree\\b|\\bprocess\\.kill\\s*\\(|\\bfs\\.(rm|rmSync|unlink|unlinkSync|rmdir|rmdirSync)\\s*\\(", "why": "a script here kills processes or deletes files; use plain shell commands so they can be checked."}
   ],
+  "message_commands": [["st", "commit"], ["tether", "ask"]],
+  "option_targets": {
+    "tar": ["-C", "--directory"],
+    "curl": ["-o", "--output"],
+    "wget": ["-O", "--output-document", "-P", "--directory-prefix"],
+    "unzip": ["-d"]
+  },
   "script_runners": ["bash", "sh", "zsh", "python", "python3", "node", "tsx", "perl", "ruby"],
   "script_read_bytes": 262144,
   "value_options": {
@@ -102,6 +116,9 @@
     {"argv": ["at"], "why": "it starts things outside this session."},
     {"argv": ["nohup"], "why": "it starts things outside this session."},
     {"argv": ["setsid"], "why": "it starts things outside this session."},
+    {"argv": ["systemctl", "reload"], "why": "restarting services is the coordinator's job."},
+    {"argv": ["npx", "kill-port"], "why": "it stops other programs."},
+    {"argv": ["git", "rm"], "why": "remove files with plain rm and name them in your report."},
     {"argv": ["systemctl", "stop"], "why": "stopping services is the coordinator's job."},
     {"argv": ["systemctl", "restart"], "why": "restarting services is the coordinator's job."},
     {"argv": ["systemctl", "try-restart"], "why": "restarting services is the coordinator's job."},
@@ -150,5 +167,5 @@
     "chmod": "all", "chown": "all", "chgrp": "all", "truncate": "all", "touch": "all", "mkdir": "all",
     "cp": "last", "ln": "last", "install": "last"
   },
-  "deleters": ["rm", "rmdir", "unlink", "shred"]
+  "deleters": ["rm", "rmdir", "unlink", "shred", "mv"]
 }
