@@ -858,6 +858,19 @@ describe('deploy', () => {
     expect(lines.at(-1)).toMatch(/the deploy code only/)
   })
 
+  it('sets up the st service tools of the release it installs, so the first st service call need not', async () => {
+    const { root, git, deps, calls, head } = setup({ ops: true })
+    mkdirSync(join(root, 'native/service-tools'), { recursive: true })
+    writeFileSync(join(root, 'native/service-tools/uv.lock'), 'lock\n')
+    git('-c', 'user.email=t@t', '-c', 'user.name=t', 'add', '-A')
+    git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'tools')
+    const sha = git('rev-parse', 'HEAD').out.trim()
+    expect(sha).not.toBe(head)
+    expect(await deploy(request(), root, deps)).toBe(0)
+    const tools = join(deps.releasesDir, sha, 'native/service-tools')
+    expect(calls).toContain(`nice -n 10 uv sync --quiet --locked --no-dev --directory ${tools}`)
+  })
+
   it('builds and refreshes installed commands for a CLI-only commit without restarting units', async () => {
     const { root, git, deps, calls, head } = setup({ ops: true, cli: true })
     expect(await deploy(request(), root, deps)).toBe(0)

@@ -1444,6 +1444,19 @@ export function installOpsBundle(deps: DeployDeps, release: string) {
     !existsSync(join(release, 'packages/cli/dist/aico-cli.mjs'))
   )
     throw new Refusal('The release has no CLI bundle')
+  // st service and st skills run from this release's own Python env; set up here, the first call
+  // after a deploy would wait in the shared heavy lane (behind a long build) just to install it.
+  const tools = join(release, 'native/service-tools')
+  if (existsSync(join(tools, 'uv.lock')) && !existsSync(join(tools, '.venv/bin/python'))) {
+    deps.out('[deploy] preparing st service tools')
+    const sync = deps.run(
+      'nice',
+      ['-n', '10', 'uv', 'sync', '--quiet', '--locked', '--no-dev', '--directory', tools],
+      { cwd: tools, env: deps.env },
+    )
+    if (sync.code !== 0)
+      deps.out(`[deploy] st service tools set up on first use instead: ${tail(sync, 2)}`)
+  }
   const temporary = `${deps.opsLink}.${process.pid}.tmp`
   rmSync(temporary, { force: true })
   mkdirSync(join(deps.opsLink, '..'), { recursive: true })
