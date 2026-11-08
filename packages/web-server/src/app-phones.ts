@@ -356,6 +356,15 @@ export function mergePhones(
   const merged = theirs.map((sent) => {
     const here = mine.get(sent.id)
     if (!here) return sent
+    const sentPairing = sent.pairing_id ?? null
+    const localPairing = here.pairing_id ?? null
+    if (sentPairing !== localPairing) {
+      // The acknowledged generation is the common baseline. Preserve a genuinely new local
+      // pairing against an unchanged sender copy; otherwise the sender's new pairing wins.
+      // State from another pairing (including old acknowledgements and FCM tokens) is not merged.
+      const senderUnchanged = knownPairs?.has(sent.id) && knownPairs.get(sent.id) === sentPairing
+      return { ...(senderUnchanged ? here : sent) }
+    }
     const keep: Phone = { ...sent }
     if ((here.token_at ?? 0) > (sent.token_at ?? 0)) {
       if (here.fcm_token) keep.fcm_token = here.fcm_token
@@ -414,7 +423,6 @@ export async function mergePhonesFile(path: string, sent: Phone[], now: number):
     // Phones received from the sender are governed by its list immediately, even if the reply
     // never arrives there. Only a phone paired on this receiver gets the unconfirmed-pairing rule.
     const knownPairs = new Map(Object.entries(cursor.known_pairs ?? {}))
-    for (const phone of sent) knownPairs.set(phone.id, phone.pairing_id ?? null)
     const merged = mergePhones(
       sent,
       readPhones(path) ?? [],
@@ -422,6 +430,8 @@ export async function mergePhonesFile(path: string, sent: Phone[], now: number):
       cursor.ids === undefined ? undefined : new Set(cursor.ids),
       knownPairs,
     )
+    // Resolve conflicts against the prior common baseline before recording this request's facts.
+    for (const phone of sent) knownPairs.set(phone.id, phone.pairing_id ?? null)
     mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
     // Save origin before copying sender phones: a cut between writes must not turn a received
     // phone into a locally paired one when the sender retries with that phone removed.

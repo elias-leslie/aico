@@ -226,6 +226,42 @@ it('distinguishes a fresh local pairing of a known phone from the pairing the se
   expect(await mergePhonesFile(file, [], 400)).toEqual([])
 })
 
+it('keeps an unconfirmed local re-pair when the sender still sends the acknowledged old pairing', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'aico-phone-pairing-conflict-'))
+  dirs.push(dir)
+  const file = join(dir, 'phones.json')
+  const old = phone('same-phone', { added_at: 1, auth: 'old-auth', last_ack: 999 })
+  await mergePhonesFile(file, [old], 200)
+  await confirmPhonesMerge(file)
+  const registry = new PhoneRegistry(file)
+  // Re-pair after the last reply, within its same second, with new encryption material.
+  await registry.register(
+    phone('same-phone', { added_at: 200, auth: 'new-auth', enc_pub: 'new-enc' }),
+  )
+  const fresh = registry.get('same-phone')
+  expect(fresh?.pairing_id).toBeTruthy()
+  expect(await mergePhonesFile(file, [old], 300)).toEqual([fresh])
+  await confirmPhonesMerge(file)
+  expect(await mergePhonesFile(file, [], 400)).toEqual([])
+})
+
+it('takes a new sender pairing over the receiver copy of an acknowledged old pairing', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'aico-phone-new-sender-'))
+  dirs.push(dir)
+  const file = join(dir, 'phones.json')
+  const old = phone('same-phone', { pairing_id: 'old-pair', auth: 'old-auth', last_ack: 999 })
+  await mergePhonesFile(file, [old], 200)
+  await confirmPhonesMerge(file)
+  const fresh = phone('same-phone', {
+    pairing_id: 'new-sender-pair',
+    auth: 'new-auth',
+    last_ack: 1,
+  })
+  expect(await mergePhonesFile(file, [fresh], 300)).toEqual([fresh])
+  await confirmPhonesMerge(file)
+  expect(await mergePhonesFile(file, [], 400)).toEqual([])
+})
+
 it('an empty or broken phone list refuses pairing and never reads as no phones', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'aico-phones-empty-'))
   dirs.push(dir)
