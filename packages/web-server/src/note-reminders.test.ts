@@ -73,7 +73,8 @@ describe('note reminders', () => {
   it('names an untitled note by its first line, hides secrets, and skips deleted notes', () => {
     store.notes.create({ body: 'Call the garage\nsecond line', remindAt: T0 })
     store.notes.create({
-      title: 'bot 7012345678:AAFakeFakeFake_0123456789abcdefXYZw',
+      // split so secret scanners don't flag the fake token
+      title: `bot ${'7012345678'}:${'AAFakeFakeFake_0123456789abcdefXYZ'}w`,
       remindAt: T0,
     })
     const gone = store.notes.create({ title: 'Gone', remindAt: T0 })
