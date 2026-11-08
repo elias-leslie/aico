@@ -89,7 +89,7 @@ const leaseUsage = `Usage: aico lease GLOB...            claim the files you are
        aico lease --check PATH          who else holds PATH
        aico lease --hold PURPOSE        a whole-project don't-touch hold
        aico lease --take PATH           take over a stale lease on PATH
-       aico lease --release GLOB | --release-all
+       aico lease --release [GLOB] | --release-all   (no GLOB: all of yours)
        aico lease --heartbeat           keep your leases alive
 aico commit releases your leases on the paths it commits.`
 
@@ -143,6 +143,11 @@ func leaseMain(h *lease.Hook, args []string) int {
 		case "--hold":
 			hold, ok = value(&i, a)
 		case "--release":
+			// Bare --release means this session's leases, as --release-all does.
+			if i+1 >= len(args) || strings.HasPrefix(args[i+1], "--") {
+				releaseAll = true
+				break
+			}
 			var v string
 			if v, ok = value(&i, a); ok {
 				release = &v

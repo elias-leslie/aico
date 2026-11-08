@@ -206,3 +206,19 @@ it('fails acceptance at once when a declared environment input is not prepared',
     `environment not prepared: backend/.venv missing in ${root}; run the repo's setup (e.g. uv sync / pnpm install)`,
   )
 })
+it('checks commit arguments alone when the launcher asks, before it queues for the heavy lane', async () => {
+  const root = fixture()
+  const errors: string[] = []
+  const io = (env: NodeJS.ProcessEnv) => ({
+    cwd: root,
+    env,
+    coordination,
+    out: () => {},
+    err: (line: string) => errors.push(line),
+  })
+  const env = { AICO_CHECKS_ARGS_ONLY: '1' }
+  expect(await runCli('commit', ['--dry-run', '-m', 'x', '--paths', 'a'], io(env))).toBe(2)
+  expect(errors[0]).toBe('aico commit: unsupported --dry-run')
+  // Valid arguments stop before loading the repo gate (this fixture has none).
+  expect(await runCli('commit', ['-m', 'x', '--paths', 'a'], io(env))).toBe(0)
+})

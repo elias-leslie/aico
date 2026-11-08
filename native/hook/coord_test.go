@@ -62,6 +62,10 @@ func TestLeaseVerbsAndHandshakeFromTheCommandLine(t *testing.T) {
 	if code, out, _ := run(sessA, "lease", "--release-all"); code != 0 || out != "Released 1 lease(s).\n" {
 		t.Fatalf("release: %d %q", code, out)
 	}
+	run(sessA, "lease", "src/**")
+	if code, out, _ := run(sessA, "lease", "--release"); code != 0 || out != "Released 1 lease(s).\n" {
+		t.Fatalf("bare --release: %d %q", code, out)
+	}
 	if code, out, _ := run(sessB, "lease", "--help"); code != 0 || !strings.HasPrefix(out, "Usage: aico lease GLOB") {
 		t.Fatalf("lease --help: %d %q", code, out)
 	}

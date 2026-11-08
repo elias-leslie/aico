@@ -41,7 +41,7 @@
     "subtask": "dropped",
     "create": "dropped; tasks are gone, each project keeps a ROADMAP.md at its repo root (edit your line in the same commit as the work)",
     "list": "dropped; tasks are gone, each project keeps a ROADMAP.md at its repo root (edit your line in the same commit as the work)",
-    "context": "dropped; tasks are gone, each project keeps a ROADMAP.md at its repo root (edit your line in the same commit as the work)",
+    "context": "dropped; agent context is aico context (aico context --help); for planned work read the project's ROADMAP.md",
     "claim": "dropped; tasks are gone, each project keeps a ROADMAP.md at its repo root (edit your line in the same commit as the work)",
     "log": "dropped; tasks are gone, each project keeps a ROADMAP.md at its repo root (edit your line in the same commit as the work)",
     "done": "dropped; tasks are gone, each project keeps a ROADMAP.md at its repo root (edit your line in the same commit as the work)",
@@ -53,7 +53,7 @@
     "automations": "dropped; use aico jobs",
     "ctx": "dropped; use aico context",
     "native-sessions": "dropped; use st sessions",
-    "note": "dropped; use Notes in Aico",
+    "note": "dropped; the owner's notes are tether note list|get|add (tether note --help)",
     "ask": "renamed: aico prompt-model MODEL \"question\" asks a model; a question for the owner is tether ask create"
   },
   "rootHelper": "native/host-steward/aico-root-watch.py",

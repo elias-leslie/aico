@@ -240,6 +240,8 @@ async function commitCli(argv: string[], io: CliIo): Promise<number> {
     io.err(COMMIT_USAGE)
     return 2
   }
+  // The launcher checks arguments before it queues for the heavy-work lane.
+  if (io.env.AICO_CHECKS_ARGS_ONLY) return 0
   const { root, config } = load(io)
   if ('unsupported' in config) {
     if (!io.env.AICO_CHECKS_CALLER)
