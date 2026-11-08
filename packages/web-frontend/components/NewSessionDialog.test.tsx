@@ -195,7 +195,9 @@ describe('NewSessionDialog', () => {
     renderDialog('neri')
     const hosts = screen.getByRole('group', { name: 'Runs on' })
     expect(within(hosts).getByRole('button', { name: 'Standby' })).toBeTruthy()
-    expect(within(hosts).getAllByRole('button', { name: /Workstation/ })).toHaveLength(1)
+    expect(
+      within(hosts).getAllByRole('button', { name: /Workstation/ }),
+    ).toHaveLength(1)
     statusState.machine = 'davion-sidarli'
     rememberWorkstation('davion-sidarli')
   })
