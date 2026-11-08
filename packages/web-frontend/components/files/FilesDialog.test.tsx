@@ -615,4 +615,98 @@ describe('FilesDialog', () => {
     ).toHaveLength(1)
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull()
   })
+
+  describe('Rendered and Source', () => {
+    /** A one-file folder at /tmp/work, opened on that file. */
+    function openFile(name: string, content: string | null, binary = false) {
+      return renderDialog(
+        { kind: 'path', path: `/tmp/work/${name}` },
+        null,
+        (url) => {
+          const { pathname, searchParams } = new URL(url, 'http://aico.test')
+          if (pathname === '/api/files/stat')
+            return json({ path: searchParams.get('path'), kind: 'file' })
+          if (pathname === '/api/files/tree')
+            return json({
+              entries: [
+                {
+                  name,
+                  path: name,
+                  is_directory: false,
+                  size: 9,
+                  extension: name.slice(name.lastIndexOf('.')),
+                },
+              ],
+              path: '',
+              total: 1,
+            })
+          if (pathname === '/api/files/content')
+            return json({
+              path: name,
+              name,
+              content,
+              size: 9,
+              lines: 1,
+              extension: name.slice(name.lastIndexOf('.')),
+              is_binary: binary,
+              language: null,
+              truncated: false,
+            })
+          return serve(url)
+        },
+      )
+    }
+
+    it('shows an HTML file as source first, and rendered in a sandbox without same-origin on request', async () => {
+      openFile('page.html', '<h1>Hello</h1>')
+      expect(await screen.findByText('<h1>Hello</h1>')).toBeVisible()
+      const view = screen.getByRole('group', { name: 'View' })
+      expect(
+        within(view).getByRole('button', { name: 'Source' }),
+      ).toHaveAttribute('aria-pressed', 'true')
+      fireEvent.click(within(view).getByRole('button', { name: 'Rendered' }))
+      const frame = await screen.findByTitle('Rendered: page.html')
+      expect(frame).toHaveAttribute('sandbox', 'allow-scripts')
+      expect(frame.getAttribute('sandbox')).not.toContain('allow-same-origin')
+      expect(frame).toHaveAttribute(
+        'src',
+        '/api/files/view?root=%2Ftmp%2Fwork&path=page.html',
+      )
+      expect(frame).not.toHaveAttribute('srcdoc')
+      expect(screen.queryByText('<h1>Hello</h1>')).toBeNull()
+      fireEvent.click(within(view).getByRole('button', { name: 'Source' }))
+      expect(await screen.findByText('<h1>Hello</h1>')).toBeVisible()
+      expect(screen.queryByTitle('Rendered: page.html')).toBeNull()
+    })
+
+    it('frames SVG with no scripts and Markdown with the viewer only', async () => {
+      openFile('logo.svg', '<svg/>')
+      await screen.findByText('<svg/>')
+      fireEvent.click(screen.getByRole('button', { name: 'Rendered' }))
+      expect(await screen.findByTitle('Rendered: logo.svg')).toHaveAttribute(
+        'sandbox',
+        '',
+      )
+      cleanup()
+      openFile('notes.md', '# Notes')
+      await screen.findByText('# Notes')
+      fireEvent.click(screen.getByRole('button', { name: 'Rendered' }))
+      expect(await screen.findByTitle('Rendered: notes.md')).toHaveAttribute(
+        'sandbox',
+        'allow-scripts',
+      )
+    })
+
+    it('opens a PDF rendered, and offers no toggle for other files', async () => {
+      openFile('spec.pdf', null, true)
+      const frame = await screen.findByTitle('Rendered: spec.pdf')
+      expect(frame).not.toHaveAttribute('sandbox')
+      fireEvent.click(screen.getByRole('button', { name: 'Source' }))
+      expect(await screen.findByText(/Binary file/)).toBeVisible()
+      cleanup()
+      openFile('plain.txt', 'just text')
+      expect(await screen.findByText('just text')).toBeVisible()
+      expect(screen.queryByRole('group', { name: 'View' })).toBeNull()
+    })
+  })
 })

@@ -25,6 +25,8 @@ interface Route {
   pattern: RegExp
   names: string[]
   handler: Handler
+  /** A bigger body than the router's own, for a route that takes a file. */
+  maxBodyBytes?: number
 }
 
 export function sendJson(res: ServerResponse, status: number, payload: unknown): void {
@@ -68,7 +70,12 @@ export class Router {
 
   constructor(private readonly maxBodyBytes = MAX_BODY_BYTES) {}
 
-  on(method: string, path: string, handler: Handler): this {
+  on(
+    method: string,
+    path: string,
+    handler: Handler,
+    options: { maxBodyBytes?: number } = {},
+  ): this {
     const names: string[] = []
     const source = path
       .split('/')
@@ -83,7 +90,13 @@ export class Router {
         return '([^/]+)'
       })
       .join('/')
-    this.routes.push({ method, pattern: new RegExp(`^${source}$`), names, handler })
+    this.routes.push({
+      method,
+      pattern: new RegExp(`^${source}$`),
+      names,
+      handler,
+      maxBodyBytes: options.maxBodyBytes,
+    })
     return this
   }
 
@@ -108,7 +121,7 @@ export class Router {
           params,
           query: url.searchParams,
           body: () => {
-            body ??= readBody(req, this.maxBodyBytes)
+            body ??= readBody(req, route.maxBodyBytes ?? this.maxBodyBytes)
             return body
           },
         })

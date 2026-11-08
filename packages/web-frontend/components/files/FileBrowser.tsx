@@ -15,6 +15,7 @@ import {
   FolderOpen,
 } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
+import { RenderedView } from '@/components/render/RenderedView'
 import {
   type FilesSource,
   isHtmlPath,
@@ -25,6 +26,7 @@ import {
 } from '@/lib/api/pane-files'
 import { isPermanentRefusal } from '@/lib/api-fetch'
 import { useFileContent, useFileTree } from '@/lib/hooks/use-pane-files'
+import { renderedFileUrl, renderedKindOf } from '@/lib/render'
 import { modifiedLabel } from './listing'
 
 const CODE_EXTENSIONS = new Set([
@@ -369,6 +371,11 @@ export function FilePreview({
   const [copiedThing, setCopiedThing] = useState<'path' | 'content' | null>(
     null,
   )
+  // Rendered or Source, for the file the pick was made on; another file starts from its default.
+  const [pick, setPick] = useState<{
+    path: string
+    mode: 'rendered' | 'source'
+  } | null>(null)
   const content = useFileContent(source, selected?.path ?? null)
   const root = source.kind === 'location' ? source.root : null
   const relativePath = content.data?.path ?? selected?.path ?? null
@@ -389,6 +396,19 @@ export function FilePreview({
     rawUrl && IMAGE_EXTENSIONS.has(content.data?.extension?.toLowerCase() ?? '')
       ? rawUrl
       : null
+  // HTML, SVG, Markdown and PDF can be shown rendered (in a folder of this computer): text shows
+  // its source until asked, a PDF has no source worth showing.
+  const renderKind =
+    root !== null && relativePath !== null && content.data
+      ? renderedKindOf(content.data.name)
+      : null
+  const mode =
+    pick?.path === selectedPath
+      ? pick.mode
+      : renderKind === 'pdf'
+        ? 'rendered'
+        : 'source'
+  const rendered = renderKind !== null && mode === 'rendered'
 
   const handleCopy = useCallback(
     async (kind: 'path' | 'content') => {
@@ -475,7 +495,23 @@ export function FilePreview({
                 {infoPills.join(' · ')}
               </p>
             </div>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {renderKind && selectedPath && (
+                <fieldset aria-label="View" className="lantern-seg compact">
+                  {(['rendered', 'source'] as const).map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      aria-pressed={mode === option}
+                      onClick={() =>
+                        setPick({ path: selectedPath, mode: option })
+                      }
+                    >
+                      {option === 'rendered' ? 'Rendered' : 'Source'}
+                    </button>
+                  ))}
+                </fieldset>
+              )}
               {rawUrl && (
                 <a
                   href={pageUrl ?? rawUrl}
@@ -529,7 +565,7 @@ export function FilePreview({
             </div>
           </div>
 
-          {content.data.truncated && (
+          {content.data.truncated && !rendered && (
             <p
               className="m-0 flex-none px-3 py-1.5 text-xs"
               style={{
@@ -541,7 +577,17 @@ export function FilePreview({
             </p>
           )}
 
-          {image ? (
+          {renderKind !== null &&
+          mode === 'rendered' &&
+          root !== null &&
+          relativePath !== null ? (
+            <RenderedView
+              kind={renderKind}
+              src={renderedFileUrl(root, relativePath)}
+              title={`Rendered: ${content.data.name}`}
+              className="min-h-0 w-full flex-1"
+            />
+          ) : image ? (
             <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-3">
               {/* biome-ignore lint/performance/noImgElement: a static export has no image optimizer; the file is served as it is */}
               <img

@@ -11,6 +11,7 @@ import {
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { MOCKUP_CSP, WRAPPED_CSP } from './design-render'
 import { filePlaces, rawType, registerFileLocationRoutes } from './file-locations'
 import { serveRoutes } from './testing'
 
@@ -48,6 +49,26 @@ afterEach(async () => {
 })
 
 describe('file locations', () => {
+  it('shows HTML, SVG, Markdown and PDF rendered, each sandboxed, and refuses the rest', async () => {
+    const work = join(top, 'work')
+    writeFileSync(join(work, 'page.html'), '<h1>Page</h1>')
+    writeFileSync(join(work, 'logo.svg'), '<svg/>')
+    writeFileSync(join(work, 'doc.pdf'), '%PDF-1.4 tiny')
+    writeFileSync(join(work, 'fake.pdf'), 'not a pdf')
+    const page = await get('view', work, 'page.html')
+    expect(await page.text()).toBe('<h1>Page</h1>')
+    expect(page.headers.get('content-security-policy')).toBe(MOCKUP_CSP)
+    const prompt = await get('view', work, 'prompt.md')
+    expect(prompt.headers.get('content-security-policy')).toBe(WRAPPED_CSP)
+    expect(await prompt.text()).toContain('# Prompt')
+    expect(await (await get('view', work, 'logo.svg')).text()).toContain('data:image/svg+xml')
+    const pdf = await get('view', work, 'doc.pdf')
+    expect(pdf.headers.get('content-type')).toBe('application/pdf')
+    expect((await get('view', work, 'fake.pdf')).status).toBe(415)
+    expect((await get('view', work, 'blob.bin')).status).toBe(415)
+    expect((await get('view', work, '.env')).status).toBe(403)
+  })
+
   it('lists newest first with times when asked, and leaves dotfiles out when asked', async () => {
     const dir = join(top, 'recent')
     mkdirSync(dir)

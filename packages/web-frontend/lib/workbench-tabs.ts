@@ -5,6 +5,7 @@
 export const WORKBENCH_TABS = [
   { id: 'notes', label: 'Notes' },
   { id: 'files', label: 'Files' },
+  { id: 'designs', label: 'Designs' },
 ] as const
 
 export type WorkbenchTab = (typeof WORKBENCH_TABS)[number]['id']

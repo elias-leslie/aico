@@ -156,7 +156,10 @@
         ["db", "read-only queries on Aico's stores"],
         ["tools", "the agent tool manifest; tools run for heavy work"],
         ["skills", "agent skills: status, sync, audit"],
-        ["mockup", "save a UI mockup for the owner to review"]
+        [
+          "mockup",
+          "put a design (HTML, SVG, image, PDF, Markdown, Mermaid) in Aico's Designs tab for the owner"
+        ]
       ]
     }
   ],
@@ -166,7 +169,7 @@
     "vcs": "Usage: {cli} vcs publish [--source ID] [--sha REV] [--now]   publish checked main ({cli} publish --help)\n       {cli} vcs deliver ...                                 checked-main delivery\nFor local inspection use git.",
     "tools": "Usage: {cli} tools manifest [--surface ID|--discover WORD] [--density core|full] [--format json|inject]\n       {cli} tools extensions [--check]\n       {cli} tools run --label TEXT -- COMMAND ...",
     "db": "Usage: {cli} db tables|schema TABLE|count TABLE|sample TABLE [N]|query SQL [--store NAME]\nRead-only Aico stores: {stores}. -t is the query text alias.",
-    "mockup": "Usage: {cli} mockup add FILE --project ID --title TITLE [--note TEXT] [--session ID]",
+    "mockup": "Usage: {cli} mockup add FILE --project ID --title TITLE [--note TEXT] [--session ID]\n       {cli} mockup remove ID --project ID\nFILE is HTML, SVG, PNG/JPEG/GIF/WebP, PDF, Markdown (.md; a ```mermaid block draws a diagram) or Mermaid (.mmd), up to 5 MB of text or 8 MB of image or PDF. It shows in the Workbench Designs tab under its project. Adding the same title again from the same session replaces the design and the open view refreshes; Use this one answers the asking session.",
     "monitor": "Usage: {cli} monitor status|system-info|connections|processes|mounts\nLocal /proc readings; service logs: {cli} logs UNIT.",
     "aico": "Usage: {cli} aico create|wait|waits|roots|watch ...   agent coordination; each takes --help (e.g. {cli} aico wait --help)"
   }

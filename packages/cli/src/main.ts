@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { homedir, hostname, loadavg, uptime } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 import { nearest } from '@aico/shared/suggest'
@@ -403,7 +403,8 @@ async function dbCommand(cli: Cli, rest: string[]): Promise<number> {
   return 0
 }
 
-/** `mockup add FILE`: save an HTML mockup to Aico. */
+/** `mockup add FILE` / `mockup remove ID`: put a design (HTML, SVG, image, PDF, Markdown, Mermaid) in
+ * the Designs tab of Aico's Workbench, or take it off. The web server tells the kind from the name. */
 async function mockupCommand(cli: Cli, rest: string[]): Promise<number> {
   const { root } = cli
   const { env } = cli
@@ -422,9 +423,21 @@ async function mockupCommand(cli: Cli, rest: string[]): Promise<number> {
       help: { type: 'boolean' },
     },
   })
-  if (rest[0] !== 'add' || values.help) {
+  if ((rest[0] !== 'add' && rest[0] !== 'remove') || values.help) {
     out(config.commandHelp.mockup.replaceAll('{cli}', name))
     return values.help ? 0 : 2
+  }
+  if (rest[0] === 'remove') {
+    if (!positionals[0] || !values.project) throw new Error('mockup remove needs ID --project ID')
+    const response = await (options.fetcher ?? fetch)(
+      `${apiBase(root, env)}/mockups/${encodeURIComponent(positionals[0])}?project=${encodeURIComponent(values.project)}`,
+      { method: 'DELETE' },
+    )
+    const body = (await response.json()) as { detail?: string }
+    if (!response.ok)
+      throw new Error(body.detail || `Design was not removed: HTTP ${response.status}`)
+    out(json(body))
+    return 0
   }
   if (!positionals[0] || !values.project || !values.title)
     throw new Error('mockup add needs FILE --project ID --title TITLE')
@@ -441,12 +454,13 @@ async function mockupCommand(cli: Cli, rest: string[]): Promise<number> {
       project: values.project,
       title: values.title,
       note: values.note || '',
-      html: readFileSync(resolve(cwd, positionals[0]), 'utf8'),
+      name: basename(positionals[0]),
+      data: readFileSync(resolve(cwd, positionals[0])).toString('base64'),
       session: /^[0-9a-f]{8}$/.test(candidate) ? candidate : null,
     }),
   })
   const body = (await response.json()) as { detail?: string; pageUrl?: string }
-  if (!response.ok) throw new Error(body.detail || `Mockup was not saved: HTTP ${response.status}`)
+  if (!response.ok) throw new Error(body.detail || `Design was not saved: HTTP ${response.status}`)
   if (body.pageUrl) {
     const identity = JSON.parse(readFileSync(join(root, 'project.identity.json'), 'utf8'))
     const host = identity.hosts?.browser_frontend

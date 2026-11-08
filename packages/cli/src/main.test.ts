@@ -212,7 +212,7 @@ describe('CLI cutover', () => {
     expect(await h.go(['db', 'query', 'DELETE FROM projects'])).toBe(2)
     expect(await h.go(['db', 'exec', 'DROP TABLE projects'])).toBe(2)
   })
-  it('mockup add sends content and originating session to Aico', async () => {
+  it('mockup add sends the file, its name and originating session to Aico', async () => {
     const dir = temp()
     writeFileSync(join(dir, 'test.html'), '<p>test</p>')
     let request: RequestInit | undefined
@@ -227,17 +227,40 @@ describe('CLI cutover', () => {
           fetcher: (async (url, init) => {
             expect(String(url)).toBe('http://127.0.0.1:3002/api/mockups')
             request = init
-            return new Response(JSON.stringify({ pageUrl: '/mockups?project=aico' }))
+            return new Response(JSON.stringify({ pageUrl: '/workbench?tab=designs&project=aico' }))
           }) as typeof fetch,
         },
       ),
     ).toBe(0)
-    expect(JSON.parse(String(request?.body))).toMatchObject({
-      html: '<p>test</p>',
-      session: '1234abcd',
-      project: 'aico',
-    })
-    expect(JSON.parse(output[0]).pageUrl).toBe('https://aico.summitflow.dev/mockups?project=aico')
+    const sent = JSON.parse(String(request?.body))
+    expect(sent).toMatchObject({ name: 'test.html', session: '1234abcd', project: 'aico' })
+    expect(Buffer.from(sent.data, 'base64').toString()).toBe('<p>test</p>')
+    expect(JSON.parse(output[0]).pageUrl).toBe(
+      'https://aico.summitflow.dev/workbench?tab=designs&project=aico',
+    )
+  })
+  it('mockup add sends an image as its bytes, and mockup remove asks for the design to go', async () => {
+    const dir = temp()
+    const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 255, 1])
+    writeFileSync(join(dir, 'shot.png'), bytes)
+    const calls: { url: string; init?: RequestInit }[] = []
+    const run = (args: string[]) =>
+      main(args, {
+        root,
+        env: {},
+        out: () => {},
+        fetcher: (async (url, init) => {
+          calls.push({ url: String(url), init })
+          return new Response('{}')
+        }) as typeof fetch,
+      })
+    expect(
+      await run(['mockup', 'add', join(dir, 'shot.png'), '--project', 'aico', '--title', 'Shot']),
+    ).toBe(0)
+    expect(Buffer.from(JSON.parse(String(calls[0].init?.body)).data, 'base64')).toEqual(bytes)
+    expect(await run(['mockup', 'remove', 'abc123def456', '--project', 'aico'])).toBe(0)
+    expect(calls[1].url).toBe('http://127.0.0.1:3002/api/mockups/abc123def456?project=aico')
+    expect(calls[1].init?.method).toBe('DELETE')
   })
 })
 describe('versioned extensions', () => {

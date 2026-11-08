@@ -7,7 +7,11 @@
     "packages/web-frontend/public/sw.js",
     "packages/web-frontend/test-stubs/*"
   ],
-  "ignorePatterns": ["docs/plans/**/*.html", "evidence/**"],
+  "ignorePatterns": [
+    "docs/plans/**/*.html",
+    "evidence/**",
+    "packages/web-frontend/public/vendor/**"
+  ],
   "ignoreDependencies": ["node:sqlite"],
   "audit": {
     "gate": "new-only"

@@ -1,7 +1,8 @@
 'use client'
 
-import { Folder, StickyNote } from 'lucide-react'
+import { Folder, Palette, StickyNote } from 'lucide-react'
 import type { ComponentType } from 'react'
+import { DesignsView } from '@/components/designs/DesignsView'
 import { handOffNote } from '@/components/notes/NoteEditor'
 import { NotesView } from '@/components/notes/NotesView'
 import type { WorkbenchTab } from '@/lib/workbench'
@@ -26,4 +27,5 @@ export const TAB_VIEWS: Record<WorkbenchTab, TabView> = {
     },
   },
   files: { icon: Folder, Content: FilesTab },
+  designs: { icon: Palette, Content: DesignsView },
 }

@@ -16,6 +16,7 @@ vi.mock('@/components/workbench/tab-views', () => ({
   TAB_VIEWS: {
     notes: { icon: () => null, Content: () => <p>The notes view</p> },
     files: { icon: () => null, Content: () => <p>The files view</p> },
+    designs: { icon: () => null, Content: () => <p>The designs view</p> },
   },
 }))
 

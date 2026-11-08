@@ -7,7 +7,7 @@
 // never copied or read whole into memory.
 
 import { constants, realpathSync, statSync } from 'node:fs'
-import { type FileHandle, open } from 'node:fs/promises'
+import { type FileHandle, open, readFile as readWhole } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, isAbsolute, join } from 'node:path'
 import {
@@ -17,6 +17,14 @@ import {
   readFile,
   resolveSafePath,
 } from '@aico/tether-client/files'
+import {
+  designKindOf,
+  MOCKUP_CSP,
+  PDF_CSP,
+  sniffMedia,
+  viewDocument,
+  WRAPPED_CSP,
+} from './design-render'
 import { RAW, type RequestContext, type Router } from './http'
 import { translate } from './pane-files'
 import { HttpError } from './tether'
@@ -116,6 +124,51 @@ async function streamFile(ctx: RequestContext, target: string): Promise<typeof R
   } finally {
     await file.close()
   }
+}
+
+/** A file shown rendered (the Files preview's Rendered view) is read whole, so it has a bound. */
+const MAX_RENDERED_BYTES = 8 * 1024 * 1024
+
+/**
+ * A file as a page for a frame: HTML as it is, SVG and Markdown wrapped, a PDF as itself. All of
+ * it sandboxed or inert (see design-render.ts); the page loads nothing from beside the file.
+ */
+async function sendRendered(ctx: RequestContext, target: string): Promise<typeof RAW> {
+  const kind = designKindOf(target)
+  if (kind !== 'html' && kind !== 'svg' && kind !== 'markdown' && kind !== 'pdf')
+    throw new HttpError(415, 'This kind of file has no rendered view')
+  let bytes: Buffer
+  try {
+    const info = statSync(target)
+    if (!info.isFile()) throw new HttpError(404, 'Not a file')
+    if (info.size > MAX_RENDERED_BYTES)
+      throw new HttpError(413, 'This file is over 8 MB, too big to show rendered')
+    bytes = await readWhole(target)
+  } catch (error) {
+    if (error instanceof HttpError) throw error
+    if (isPermissionError(error))
+      throw new HttpError(403, 'Can’t read this file: permission denied')
+    throw new HttpError(404, 'This file was moved or deleted')
+  }
+  const { res } = ctx
+  res.statusCode = 200
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN')
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('Cache-Control', 'no-store')
+  res.setHeader('Referrer-Policy', 'no-referrer')
+  if (kind === 'pdf') {
+    if (sniffMedia(bytes)?.kind !== 'pdf') throw new HttpError(415, 'This is not a PDF')
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Security-Policy', PDF_CSP)
+    res.setHeader('Content-Disposition', 'inline')
+    res.end(bytes)
+    return RAW
+  }
+  const text = bytes.toString('utf8')
+  res.setHeader('Content-Type', 'text/html; charset=utf-8')
+  res.setHeader('Content-Security-Policy', kind === 'html' ? MOCKUP_CSP : WRAPPED_CSP)
+  res.end(kind === 'html' ? text : viewDocument(kind, text, basename(target)))
+  return RAW
 }
 
 /** What a path names (a clicked path may start with `~`): its real location and kind. */
@@ -220,5 +273,17 @@ export function registerFileLocationRoutes(
       throw translate(error)
     }
     return streamFile(ctx, target)
+  })
+  router.on('GET', '/api/files/view', async (ctx) => {
+    const root = locationRoot(ctx)
+    const path = ctx.query.get('path')
+    if (path === null) throw new HttpError(422, 'path is required')
+    let target: string
+    try {
+      target = resolveSafePath(root, path, ANYWHERE)
+    } catch (error) {
+      throw translate(error)
+    }
+    return sendRendered(ctx, target)
   })
 }

@@ -152,8 +152,8 @@
   {
     "surface": "st.mockup.add",
     "tier": "reference",
-    "cmd": "st mockup add FILE --project ID --title TITLE [--note TEXT]",
-    "when": "put an HTML design on its project review page; Use this one answers the asking session"
+    "cmd": "st mockup add FILE --project ID --title TITLE [--note TEXT] | st mockup remove ID --project ID",
+    "when": "put a design (HTML, SVG, image, PDF, Markdown, Mermaid) in the owner's Designs tab; the same title again replaces it live; Use this one answers the asking session"
   },
   {
     "surface": "st.monitor",
