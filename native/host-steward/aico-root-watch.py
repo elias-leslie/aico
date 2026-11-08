@@ -1785,7 +1785,7 @@ def create_main(argv: list[str]) -> int:
             output["sendTo"] = args.request_id
         output["agentId"] = started_agent_id(collector, output)
         if args.model or args.reasoning_effort:
-            output["launch"] = {"model": args.model, "effort": args.reasoning_effort}
+            output["requested"] = {"model": args.model, "effort": args.reasoning_effort}
         output["next"] = (f"st aico wait session {args.request_id}, st aico root report {args.request_id}, "
                           f"st aico root end {args.request_id}")
         emit_json(collector, output)
@@ -3091,10 +3091,11 @@ def wait_main(argv: list[str]) -> int:
     options = argv[1:]
     if operation == "cmd":
         # Everything after the first -- is the command, untouched.
-        if "--" not in options:
+        asked = bool({"--help", "-h"} & set(options[:options.index("--")] if "--" in options else options))
+        if asked or "--" not in options:
             print("usage: st aico wait cmd [--timeout 6h] [--note T] [--key K] [--block] -- ARGV...",
-                  file=sys.stderr)
-            return 2
+                  file=sys.stdout if asked else sys.stderr)
+            return 0 if asked else 2
         cut = options.index("--")
         options, command = options[:cut], options[cut + 1:]
     arming = operation in ("session", "cmd") or pull is not None

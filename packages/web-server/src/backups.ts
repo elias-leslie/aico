@@ -84,7 +84,7 @@ export function registerBackupRoutes(
   router.on('GET', '/api/backups/snapshots', (ctx) => {
     const source = ctx.query.get('source')
     if (!source) throw new HttpError(422, 'Choose a backup source.')
-    return run(['snapshots', source, '--target', targetOf(ctx.query.get('target'))])
+    return run(['snapshots', source, '--target', targetOf(ctx.query.get('target')), '--json'])
   })
   router.on('GET', '/api/backups/browse', (ctx) => {
     const source = ctx.query.get('source'),

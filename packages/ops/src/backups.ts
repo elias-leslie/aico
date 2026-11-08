@@ -303,18 +303,20 @@ const BUSY_EXIT = 75
 
 const USAGE = `Usage:
   aico backups [list] [--json]                          backup health: problems first, one line per target
-  aico backups request native|drive|append              run that backup now
+  aico backups request native|drive|append              run that backup now (same run as aico routines run backups-TARGET)
   aico backups recover bootstrap --machine workstation|gem --to /srv/scratch/NEW_FOLDER [--plan]
   aico backups recover check|snapshots|restore|repair --repository REPO --password-file FILE [--to NEW_FOLDER] [--snapshot ID]
   aico backups drill [--plan] [--scheduled]             monthly scratch restore and live Aico counts
   aico backups run native|drive|append|snapshots|guard|verify
   aico backups run snapshots --pressure                 disk pressure: keep only the newest work points
-  aico backups snapshots SOURCE [--target native|drive|append]       copies available to restore
+  aico backups snapshots SOURCE [--target native|drive|append] [--all] [--json]  newest copies to restore
   aico backups browse SOURCE SNAPSHOT PATH [--target native|drive|append]
   aico backups restore SOURCE SNAPSHOT PATH --to /srv/scratch/NEW_FOLDER [--target native|drive|append]
 Run commands hold the existing backup lock. Restores only create a new scratch folder.
 No key setup, prune or forget commands. Settings: AICO_BACKUPS_CONFIG.`
 
+/** Without --all, how many copies `snapshots` lists. */
+const SNAPSHOTS_SHOWN = 10
 const VERBS = ['list', 'request', 'recover', 'drill', 'run', 'snapshots', 'browse', 'restore']
 
 /** The usage lines of one backups command ("aico backups restore ..."), or all of them. */
@@ -510,6 +512,27 @@ async function runCommand(
   return ok ? 0 : 1
 }
 
+/** One line per copy with the id restore and browse take; newest few unless --all. */
+export function snapshotLines(
+  found: Snapshot[],
+  source: string,
+  target: string,
+  all: boolean,
+): string {
+  if (!found.length) return `No copies of ${source} on ${backupTargetName(target)}.`
+  const shown = all ? found : found.slice(0, SNAPSHOTS_SHOWN)
+  const lines = [
+    `${found.length} copies of ${source} on ${backupTargetName(target)}, newest first:`,
+  ]
+  for (const s of shown) lines.push(`  ${new Date(s.time).toLocaleString()}  ${s.id}`)
+  if (shown.length < found.length)
+    lines.push(`${found.length - shown.length} older: add --all (--json for every field).`)
+  lines.push(
+    `To restore: aico backups restore ${source} ID PATH --to /srv/scratch/NEW_FOLDER --target ${target}`,
+  )
+  return lines.join('\n')
+}
+
 /** `aico backups snapshots|browse|restore SOURCE ...`: read or restore one source's snapshots. */
 async function sourceCommand(
   rt: Runtime,
@@ -524,7 +547,12 @@ async function sourceCommand(
   const [source, snapshot, path] = args
   if (!source) throw new Error(USAGE)
   if (verb === 'snapshots') {
-    console.log(JSON.stringify(await snapshotsFor(rt, target, source)))
+    const found = await snapshotsFor(rt, target, source)
+    console.log(
+      args.includes('--json')
+        ? JSON.stringify(found)
+        : snapshotLines(found, source, target, args.includes('--all')),
+    )
     return 0
   }
   if (!snapshot || !path) throw new Error(USAGE)

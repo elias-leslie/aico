@@ -110,6 +110,20 @@ export class ShareStore {
     return row ? fromRow(row) : this.add({ session, title, kind: 'files', paths }, now)
   }
 
+  /** Share these paths again: a new entry, so it notifies, lists and lasts as new, in place of
+   * the session's last one for them; one an open question points at stays with the question. */
+  reshare(session: string | null, title: string | null, paths: string[], now = Date.now()): Share {
+    const row = this.db
+      .prepare(
+        `SELECT * FROM shares WHERE paths = ? AND session_id IS ?
+           AND id NOT IN (SELECT share_id FROM asks WHERE share_id IS NOT NULL)
+         ORDER BY created_at DESC, rowid DESC LIMIT 1`,
+      )
+      .get(JSON.stringify(paths), session) as unknown as ShareRow | undefined
+    if (row) this.remove(row.id)
+    return this.add({ session, title: title ?? row?.title ?? null, kind: 'files', paths }, now)
+  }
+
   get(id: string): Share | undefined {
     const row = this.db.prepare('SELECT * FROM shares WHERE id = ?').get(id) as unknown as
       | ShareRow

@@ -52,6 +52,7 @@ import {
   runBackup,
   scheduledEntries,
   scratchDestination,
+  snapshotLines,
   snapshotsFor,
   validateScheduledTarget,
 } from './backups'
@@ -952,4 +953,19 @@ it('a copy read from a stopped VM is fresh, an unrefreshed one goes late, and ne
     )
   expect(row(fresh).state).toBe('ok')
   expect(row(stale).state).toBe('warn')
+})
+
+it('snapshots list the newest copies with the ids restore takes, and say how to see the rest', () => {
+  const copies = Array.from({ length: 12 }, (_, i) => ({
+    id: String(i).padStart(64, 'a'),
+    time: new Date(Date.UTC(2026, 10, 12 - i)).toISOString(),
+    paths: ['/x'],
+  }))
+  const text = snapshotLines(copies, 'aico', 'drive', false)
+  expect(text).toContain('12 copies of aico')
+  expect(text).toContain(copies[9]?.id)
+  expect(text).not.toContain(copies[10]?.id)
+  expect(text).toContain('2 older: add --all')
+  expect(snapshotLines(copies, 'aico', 'drive', true)).toContain(copies[11]?.id)
+  expect(snapshotLines([], 'aico', 'drive', false)).toContain('No copies of aico')
 })

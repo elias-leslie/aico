@@ -219,7 +219,7 @@ export async function runCheck(config: Config, options: CheckOptions): Promise<C
     for (const { tool, files, argv } of fixScope(config, fixable(root, scope, options, out))) {
       const fixed = spawnSync(argv[0], argv.slice(1), { cwd: root, encoding: 'utf8' })
       out(
-        `CHECK:FIX:${tool}:${files.length} file(s)${fixed.status ? '; fixed what it could, the check below shows what is left' : ''}`,
+        `CHECK:FIX:${tool}:${files.length} file(s)${fixed.status === null ? '; the fixer did not run' : fixed.status ? '; fixed what it could, the check below shows what is left' : ''}`,
       )
     }
   }

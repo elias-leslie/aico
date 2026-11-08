@@ -59,6 +59,10 @@ def test_a_deferred_create_says_why_and_when_it_is_tried_again(monkeypatch):
     monkeypatch.setattr(admin, "emit_json", lambda _, record: output.append(record))
     assert admin.main([*BASE, "--root-socket", "/fixture/gui.sock"]) == 0
     assert output[0]["status"] == "pending" and output[0]["launch"] == launch
+    # Asking for a model keeps the deferral's reason and says what was asked for beside it.
+    output.clear()
+    assert admin.main([*BASE, "--model", "haiku", "--root-socket", "/fixture/gui.sock"]) == 0
+    assert output[0]["launch"] == launch and output[0]["requested"]["model"] == "haiku"
 
 
 def test_create_from_a_session_names_its_launcher(monkeypatch):

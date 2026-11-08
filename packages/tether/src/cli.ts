@@ -733,7 +733,7 @@ export async function main(argv: string[], io: Io = consoleIo): Promise<number> 
         return runNote(io, json, parsed.args.slice(1), withOwnWidget(process.env))
       case 'share': {
         if (sub === 'remove') return runShareRemove(io, json, paths.socket, rest)
-        if (sub === 'list') return runShareList(io, json, paths.socket)
+        if (sub === 'list' && rest.length === 0) return runShareList(io, json, paths.socket)
         const body = shareBody(parsed.args.slice(1), withOwnWidget(process.env), process.cwd())
         if (typeof body === 'string') {
           io.err(`tether share: ${body}`)

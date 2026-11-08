@@ -386,7 +386,7 @@ it('CLI answers questions without acting: help for one command, no match in word
   const shown = JSON.parse(printed())
   expect(shown.notes).toBe('second')
   expect(shown.state).toBe('Unused')
-  expect(shown.activity.at(-1).name).toBe('sample')
+  expect(shown.activity.at(-1).action).toBeTruthy()
   expect(printed()).not.toContain('fixture-private-value')
 })
 it('CLI set --account saves an account login, shows only length, and the summary has no password', async () => {

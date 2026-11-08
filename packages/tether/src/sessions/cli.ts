@@ -133,8 +133,15 @@ const clip = (text: string, max: number) =>
 const HARNESS_TAGS =
   /<\/?(?:task-notification|system-reminder|task-id|tool-use-id|output-file|status|summary|note|result|usage)>/g
 
+const HARNESS_ENVELOPE = /<(?:task-notification|system-reminder)>/
+
 export function formatEvent(event: SessionEvent): string {
-  const text = flat(event.role === 'user' ? event.text.replace(HARNESS_TAGS, ' ') : event.text)
+  // Only a harness notice: someone's own text may well mention <summary>.
+  const text = flat(
+    event.role === 'user' && HARNESS_ENVELOPE.test(event.text)
+      ? event.text.replace(HARNESS_TAGS, ' ')
+      : event.text,
+  )
   const tool = event.tool ?? 'tool'
   const label =
     event.kind === 'tool_call'

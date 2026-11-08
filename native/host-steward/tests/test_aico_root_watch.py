@@ -1096,6 +1096,7 @@ def test_group_is_shells_needs_a_listing_of_only_shells():
 
 def test_wait_help_answers_and_says_a_wait_returns_at_once(capsys):
     assert watcher.main(["wait", "--help"]) == 0
+    assert watcher.main(["wait", "cmd", "--help"]) == 0
     out = capsys.readouterr().out
     assert "session ID|REQ" in out and "returns at once" in out and "--block" in out
     assert watcher.main(["wait"]) == 2

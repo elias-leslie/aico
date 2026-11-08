@@ -705,6 +705,15 @@ describe('routes and command', () => {
   })
 
   it('drops the envelope a harness wraps its notices in', () => {
+    expect(
+      formatEvent({
+        offset: 1,
+        at: '2026-11-08T00:00:00Z',
+        role: 'user',
+        kind: 'text',
+        text: 'add a <summary> element',
+      } as never),
+    ).toContain('add a <summary> element')
     const line = formatEvent({
       offset: 1,
       at: null,

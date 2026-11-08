@@ -37,12 +37,15 @@ const listed = async () =>
   ((await callSocket(paths.socket, 'GET', '/v1/shares')).body as { items: unknown[] }).items
 
 describe('POST /v1/show', () => {
-  it('answers a second share of the same files with the entry already there', async () => {
-    const first = await show({ session: '0123abcd', path: dir })
-    const second = await show({ session: '0123abcd', path: dir })
-    expect(second.status).toBe(201)
-    expect((second.body as { id: string }).id).toBe((first.body as { id: string }).id)
-    expect(await listed()).toEqual([first.body])
+  it('a second share of the same files replaces the entry, so it counts as new', async () => {
+    const first = await show({ session: '0123abcd', path: dir, title: 'Draft' })
+    const kept = await show({ session: '0123abcd', path: dir })
+    expect(kept.status).toBe(201)
+    expect((kept.body as { id: string }).id).not.toBe((first.body as { id: string }).id)
+    expect((kept.body as { title: string }).title).toBe('Draft')
+    const renamed = await show({ session: '0123abcd', path: dir, title: 'Final' })
+    expect((renamed.body as { title: string }).title).toBe('Final')
+    expect(await listed()).toEqual([renamed.body])
   })
 
   it('publishes and keeps a link', async () => {

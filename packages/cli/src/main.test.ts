@@ -5,7 +5,7 @@ import { openTasksDb } from '@aico/tasks'
 import { afterEach, describe, expect, it } from 'vitest'
 import config from '../data/cli.json' with { type: 'json' }
 import { catalog, extensionEnvironment, parseBinding, passiveHelp } from './extensions'
-import { main } from './main'
+import { main, monitorSummary } from './main'
 
 const root = resolve('.')
 const scratch: string[] = []
@@ -156,10 +156,17 @@ describe('CLI cutover', () => {
   )
   it('--help on any sessions verb prints the sessions help', async () => {
     const h = harness()
-    for (const verb of ['inbox', 'confirm', 'wait', 'ack']) {
+    for (const verb of ['inbox', 'confirm', 'ack']) {
       expect(await h.go(['sessions', verb, '--help'])).toBe(0)
       expect(h.calls).toEqual([])
     }
+  })
+  it('sessions send and wait answer --help themselves', async () => {
+    const h = harness()
+    await h.go(['sessions', 'send', 'x', '--help'])
+    expect(h.calls.at(-1)?.argv).toEqual(['aico-hook', 'sessions', 'send', '--help'])
+    await h.go(['sessions', 'wait', 'session', '--help'])
+    expect(h.calls.at(-1)?.argv.slice(-3)).toEqual(['wait', 'session', '--help'])
   })
   it.each([
     'graph',
@@ -961,6 +968,18 @@ describe('aico as the owner CLI', () => {
         `${who}: monitor bogus: dropped; use status, connections, processes, mounts or ${who} logs UNIT`,
       )
     }
+  })
+
+  it('monitor status reads as words, with the raw readings behind --json', () => {
+    const text = monitorSummary({
+      load: [1.5, 2, 3],
+      uptime: 90_000,
+      memory:
+        'MemTotal: 2097152 kB\nMemAvailable: 1048576 kB\nSwapTotal: 1048576 kB\nSwapFree: 0 kB\n',
+      pressure: 'some avg10=0.25 avg60=0 avg300=0 total=1\nfull avg10=0 avg60=0 avg300=0 total=0\n',
+    })
+    expect(text).toContain('Load 1.5 2 3 (1, 5, 15 min), up 1d 1h')
+    expect(text).toContain('Memory 1.0 of 2.0 GB free, swap used 1.0 GB, stalled on memory 0.25%')
   })
 
   it('takes backup and backups alike', async () => {

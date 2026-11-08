@@ -82,7 +82,7 @@ const NATIVE = new Set([
 ])
 const ROUTINE_VERBS = new Set(['context', 'jobs', 'routines', 'agent'])
 /** Commands that answer `X sub --help` about that sub-command themselves. */
-const OWN_SUBCOMMAND_HELP = new Set(['logins'])
+const OWN_SUBCOMMAND_HELP = new Set(['logins', 'grants', 'elevate', 'backups'])
 const CORE = new Set([
   ...NATIVE,
   ...Object.keys(ALIASES),
@@ -477,6 +477,25 @@ async function mockupCommand(cli: Cli, rest: string[]): Promise<number> {
 }
 
 /** `monitor`: a few read-only system views. */
+/** The two lines an agent needs from /proc; `--json` keeps the raw readings. */
+export function monitorSummary(reading: {
+  load: number[]
+  uptime: number
+  memory: string
+  pressure: string
+}): string {
+  const kb = (field: string) =>
+    Number(new RegExp(`^${field}:\\s+(\\d+)`, 'm').exec(reading.memory)?.[1] ?? 0)
+  const gb = (value: number) => (value / 1024 / 1024).toFixed(1)
+  const hours = Math.floor(reading.uptime / 3600)
+  const swapUsed = kb('SwapTotal') - kb('SwapFree')
+  const stalled = /^some avg10=([\d.]+)/m.exec(reading.pressure)?.[1] ?? '?'
+  return [
+    `Load ${reading.load.join(' ')} (1, 5, 15 min), up ${Math.floor(hours / 24)}d ${hours % 24}h`,
+    `Memory ${gb(kb('MemAvailable'))} of ${gb(kb('MemTotal'))} GB free, swap used ${gb(swapUsed)} GB, stalled on memory ${stalled}% of the last 10 s`,
+  ].join('\n')
+}
+
 async function monitorCommand(cli: Cli, rest: string[]): Promise<number> {
   const { env } = cli
   const { out } = cli
@@ -486,20 +505,21 @@ async function monitorCommand(cli: Cli, rest: string[]): Promise<number> {
     out(config.commandHelp.monitor.replaceAll('{cli}', name))
     return 0
   }
-  if (rest[0] === 'status' || rest[0] === 'system-info')
-    out(
-      json({
-        load: loadavg(),
-        uptime: uptime(),
-        memory: readFileSync('/proc/meminfo', 'utf8'),
-        pressure: readFileSync('/proc/pressure/memory', 'utf8'),
-      }),
-    )
-  else if (rest[0] === 'connections')
-    out(readFileSync('/proc/net/tcp', 'utf8') + readFileSync('/proc/net/tcp6', 'utf8'))
+  if (rest[0] === 'status' || rest[0] === 'system-info') {
+    const reading = {
+      load: loadavg(),
+      uptime: uptime(),
+      memory: readFileSync('/proc/meminfo', 'utf8'),
+      pressure: readFileSync('/proc/pressure/memory', 'utf8'),
+    }
+    out(rest.includes('--json') ? json(reading) : monitorSummary(reading))
+  } else if (rest[0] === 'connections')
+    return execute(['ss', rest.includes('--all') ? '-tun' : '-tuln'], env)
   else if (rest[0] === 'mounts') out(readFileSync('/proc/mounts', 'utf8'))
   else if (rest[0] === 'processes')
-    return execute(['ps', '-eo', 'pid,ppid,comm,rss', '--sort=-rss'], env)
+    return rest.includes('--all')
+      ? execute(['ps', '-eo', 'pid,ppid,comm,rss', '--sort=-rss'], env)
+      : execute(['sh', '-c', 'ps -eo pid,ppid,comm,rss --sort=-rss | head -n 21'], env)
   else
     throw new Error(
       `monitor ${rest[0]}: dropped; use status, connections, processes, mounts or ${name} logs UNIT`,
@@ -650,10 +670,15 @@ export async function main(argv: string[], options: Options = {}): Promise<numbe
     // `X sub --help` asks about X: never let the sub-command take --help as a name or act on it.
     const beforeDashes = rest.includes('--') ? rest.slice(0, rest.indexOf('--')) : rest
     if (beforeDashes.slice(1).some((word) => ['--help', '-h'].includes(word))) {
-      if (verb === 'sessions') return main(['sessions', '--help'], options)
+      // wait has help per kind and send explains TO; the rest are one line of the sessions help.
+      if (verb === 'sessions' && rest[0] === 'send')
+        return execute(['aico-hook', 'sessions', 'send', '--help'], env)
+      if (verb === 'sessions' && rest[0] !== 'wait') return main(['sessions', '--help'], options)
       if (
         !OWN_SUBCOMMAND_HELP.has(verb) &&
-        (NATIVE.has(verb) || ALIASES[verb] || ROUTINE_VERBS.has(verb))
+        (NATIVE.has(verb) ||
+          ALIASES[verb] ||
+          (env.AICO_CLI_NAME === 'aico' && ROUTINE_VERBS.has(verb)))
       )
         return delegate([ALIASES[verb]?.[0] ?? verb, '--help'])
     }
