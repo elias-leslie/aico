@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import glance from './glance/Glance.module.css'
 import type { GlanceHead } from './glance/glance-types'
 import { SystemSection } from './SystemSection'
 
@@ -62,6 +63,22 @@ describe('SystemSection', () => {
     expect(screen.getByTestId('system-section')).toHaveAttribute(
       'data-worst',
       'warn',
+    )
+  })
+
+  it('keeps one chip beside the label and puts several under it', () => {
+    heads.backups = { value: '1 late', tone: 'late', needs: 1 }
+    const { unmount } = render(<SystemSection />)
+    expect(screen.getByRole('button', { name: /^System/ })).not.toHaveClass(
+      glance.rowStacked,
+    )
+    unmount()
+    heads.machines = { value: '3 of 8 up', tone: 'warn' }
+    render(<SystemSection />)
+    const row = screen.getByRole('button', { name: /^System/ })
+    expect(row).toHaveClass(glance.rowStacked)
+    expect(row.querySelector(`.${glance.chipsBelow}`)).toHaveTextContent(
+      '3 of 8 machines up',
     )
   })
 

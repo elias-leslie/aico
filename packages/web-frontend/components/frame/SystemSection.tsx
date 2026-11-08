@@ -117,11 +117,18 @@ function machinesWords(value: string | null): string {
   return (value ?? '').replace(/^(\d+ of \d+) up$/, '$1 machines up')
 }
 
-/** The System row's value: a chip for each problem, else "All OK" and how many machines are up. */
+/** The System row's value: a chip for each problem (one beside the label, several under it), else
+ * "All OK" and how many machines are up. */
 function Verdict({ state }: { state: SystemState }) {
   if (state.chips.length > 0)
     return (
-      <span className="ml-auto flex min-w-0 flex-wrap justify-end gap-1">
+      <span
+        className={
+          state.chips.length > 1
+            ? styles.chipsBelow
+            : 'ml-auto flex min-w-0 justify-end'
+        }
+      >
         {state.chips.map((chip) => (
           <span
             key={chip.text}
@@ -267,7 +274,11 @@ export function SystemSection({ popout = false }: { popout?: boolean }) {
       <h2 className={styles.rowHead}>
         <button
           type="button"
-          className={styles.row}
+          className={
+            state.chips.length > 1
+              ? `${styles.row} ${styles.rowStacked}`
+              : styles.row
+          }
           aria-expanded={open}
           onClick={toggle}
         >

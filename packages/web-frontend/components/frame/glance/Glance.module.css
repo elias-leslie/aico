@@ -39,7 +39,7 @@
   color: var(--mist);
 }
 .label {
-  min-width: 0;
+  flex: none;
   color: var(--bone);
   font-size: 13.5px;
   font-weight: 500;
@@ -57,6 +57,21 @@
   flex: none;
   min-height: 0;
   margin-left: auto;
+}
+/* System with several problems: its chips take their own lines under the label, lined up with it,
+   so they never crowd the label or wrap into a jagged right edge at phone width. */
+.rowStacked {
+  flex-wrap: wrap;
+  row-gap: 6px;
+  padding-block: 8px;
+}
+.chipsBelow {
+  display: flex;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+  padding-left: 22px; /* the chevron and its gap */
 }
 .row:focus-visible {
   outline: 2px solid var(--lantern);
