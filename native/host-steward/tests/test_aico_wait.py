@@ -286,3 +286,15 @@ def test_nudge_takes_a_cmd_ref_on_api_18(monkeypatch):
     code, calls, _ = run(monkeypatch, ["nudge", "cmd", CMD_REF],
                          [VERSION_18, (200, {"kind": "cmd", "ref": CMD_REF, "armed": 1})])
     assert code == 0 and calls[1][1] == {"kind": "cmd", "ref": CMD_REF}
+
+
+def test_a_job_wait_on_an_aico_deploy_id_waits_on_aico_deploy_wait(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(admin.shutil, "which", lambda _: "/bin/aico")
+    armed = {**WAIT, "kind": "cmd", "ref": CMD_REF, "until": "succeeded", "created": True}
+    code, calls, _ = run(monkeypatch, ["wait", "job", "aico-123394893697", "--until", "done", "--note", "deploy"],
+                         [VERSION_18, (201, armed)])
+    assert code == 0
+    assert calls[1][1] == {"kind": "cmd", "argv": ["/bin/aico", "deploy", "wait", "aico-123394893697"],
+                           "cwd": str(tmp_path), "until": "succeeded", "waiter": "0a1b2c3d",
+                           "timeoutMinutes": 360, "note": "deploy"}

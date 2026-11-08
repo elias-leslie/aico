@@ -29,6 +29,7 @@ import os
 import re
 import select
 import selectors
+import shutil
 import signal
 import socket
 import subprocess
@@ -2639,9 +2640,12 @@ WAIT_CMD_API = 18
 CMD_REF = r"[0-9a-f]{12}"
 # A cmd wait gives up after this long unless --timeout says otherwise.
 CMD_DEFAULT_MINUTES = 360
+# An aico deploy's job id (packages/ops/src/deploy.ts); `wait job` on one waits on `aico deploy wait ID`.
+AICO_DEPLOY_JOB = r"aico-[0-9a-f]{12}"
 # kind -> (its --until choices, the ref pattern, the ref help) (packages/tether/src/wait-kinds.ts).
 PULL_WAITS = {
-    "job": (("done",), r"[0-9a-f]{8,32}", "a SummitFlow service job id (8+ hex; st service rebuild --detach)"),
+    "job": (("done",), r"[0-9a-f]{8,32}",
+            "a service job id (8+ hex; st service rebuild --detach) or an aico deploy id (aico-<12 hex>)"),
     "reply": (("acked", "closed"), r"[0-9a-f]{6,12}", "a request you sent with st sessions send (its id)"),
     "ask": (("answered",), r"[0-9a-f]{12}", "an owner ask id (tether ask create)"),
     "host": (("connected",), r"[a-z0-9][a-z0-9-]{0,63}", "a remote host name (st aico placement)"),
@@ -2828,6 +2832,13 @@ def wait_main(argv: list[str]) -> int:
               "wait time WHEN NOTE | wait get WAIT [--block] | wait cancel WAIT | waits [--recent]",
               file=sys.stderr)
         return 2
+    if operation == "job" and (deploys := [a for a in argv[1:] if re.fullmatch(AICO_DEPLOY_JOB, a)]):
+        # An aico deploy has no service job file; its own CLI waits for it and exits 0 only on success.
+        rest = [a for a in argv[1:] if a != deploys[0]]
+        if "--until" in rest:
+            del rest[rest.index("--until"):rest.index("--until") + 2]
+        argv = ["cmd", *rest, "--", shutil.which("aico") or "aico", "deploy", "wait", deploys[0]]
+        operation = "cmd"
     pull = PULL_WAITS.get(operation)
     command: list[str] = []
     options = argv[1:]
