@@ -46,7 +46,7 @@ it('warns when the site root goes to a portal and suggests the same-site page th
     suggestion: 'https://school.example.test/login/canvas',
   })
   expect(probe.warning).toBe(
-    'No password field at https://school.example.test/ (it went to https://sso.example.test/portal). https://school.example.test/login/canvas has one: save that as the login page.',
+    'https://school.example.test/ (it went to https://sso.example.test/portal) has no password box; https://school.example.test/login/canvas has one. Use that page instead.',
   )
 })
 it('follows the page own sign-in link first', async () => {
@@ -62,7 +62,7 @@ it('follows the page own sign-in link first', async () => {
 it('says plainly when nothing was found or the site did not answer, and refuses plain http elsewhere', async () => {
   const { fetcher } = site({ 'https://app.example.test/': '<div id="root"></div>' })
   expect((await probeLoginPage('https://app.example.test/', fetcher)).warning).toContain(
-    'If the site builds its form with script this is fine',
+    'Fine if the site draws its form later',
   )
   const down = await probeLoginPage('https://down.example.test/', async () => {
     throw new Error('ENOTFOUND')

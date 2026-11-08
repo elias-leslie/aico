@@ -102,7 +102,7 @@ export async function probeLoginPage(
         finalUrl: landed?.url ?? null,
         password: false,
         suggestion: found.url,
-        warning: `No password field at ${start.href}${landed && landed.url !== start.href ? ` (it went to ${landed.url})` : ''}. ${found.url} has one: save that as the login page.`,
+        warning: `${start.href}${landed && landed.url !== start.href ? ` (it went to ${landed.url})` : ''} has no password box; ${found.url} has one. Use that page instead.`,
       }
   }
   return {
@@ -110,7 +110,7 @@ export async function probeLoginPage(
     password: false,
     suggestion: null,
     warning: landed
-      ? `No password field at ${start.href}${landed.url !== start.href ? ` (it went to ${landed.url})` : ''}. If the site builds its form with script this is fine; otherwise save the page that shows the password box.`
+      ? `${start.href}${landed.url !== start.href ? ` (it went to ${landed.url})` : ''} has no password box. Fine if the site draws its form later; otherwise save the page that shows the password box.`
       : `${start.href} did not answer, so it could not be checked.`,
   }
 }

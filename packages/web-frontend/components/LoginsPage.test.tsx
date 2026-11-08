@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { LoginsPage } from './LoginsPage'
 
@@ -531,9 +531,12 @@ it('lists roles and sessions together under Used by, with All roles for an accou
   expect(usedBy).toHaveTextContent('Dadbot')
   expect(screen.queryByRole('group', { name: 'Sessions' })).toBeNull()
   // Who changed what, on the login itself.
-  expect(
-    screen.getByRole('list', { name: "This login's activity" }),
-  ).toHaveTextContent('allow · a1b2c3d4 · session a1b2c3d4')
+  // The session is named once the session list has loaded.
+  await waitFor(() =>
+    expect(
+      screen.getByRole('list', { name: "This login's activity" }),
+    ).toHaveTextContent('allow · Dadbot · session a1b2c3d4'),
+  )
 })
 it('a lab login that is not an account shows no All roles and ticks only named roles', async () => {
   const lab = {
@@ -592,11 +595,20 @@ it('edits notes and the login page, then offers the page that has a password fie
     target: { value: 'https://school.example.test/home' },
   })
   fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+  const notice = await screen.findByText(
+    'No password field at https://school.example.test/.',
+  )
+  // Shown in the edited login's own row, next to its Edit button, not at the top of a long page.
   expect(
-    await screen.findByText(
-      'No password field at https://school.example.test/.',
-    ),
-  ).toBeInTheDocument()
+    notice.compareDocumentPosition(
+      screen.getByRole('button', { name: 'Edit' }),
+    ) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy()
+  expect(
+    notice.compareDocumentPosition(
+      screen.getByRole('button', { name: /school/ }),
+    ) & Node.DOCUMENT_POSITION_PRECEDING,
+  ).toBeTruthy()
   const edit = fetcher.mock.calls.find(([p]) => p.endsWith('/edit'))
   expect(JSON.parse(String(edit?.[1]?.body))).toEqual({
     notes: 'School check',

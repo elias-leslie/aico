@@ -22,8 +22,8 @@ Logins live in Aico's private secrets folder. Values enter through hidden input 
                                       missing and the command that fixes it
   show NAME                           metadata only (NAME or an account login's site name)
   allow NAME [--role ROLE | --session ID] [--machine NAME]
-                                      give yourself (or ROLE / session ID) what is missing to use
-                                      NAME: machine, role or session. Logged on the login; no owner step
+                                      give yourself (or ROLE; a coordinator: session ID) what is missing
+                                      to use NAME: machine, role or session. Logged; no owner step
   edit NAME [--notes TEXT] [--login-url URL] [--site NAME]
                                       fix notes, the login page (same site) or the site name; the
                                       login page is checked for a password field. Logged
@@ -35,7 +35,7 @@ Logins live in Aico's private secrets folder. Values enter through hidden input 
   get NAME                            only to an owner-only file; never a session log
   run --with NAME[=ENV] ... -- CMD      inject into one command's environment
   grant|revoke NAME --machine NAME | --role ROLE     logged on the login
-  assign SESSION --target TARGET ...  replaces the session's assigned targets; logged
+  assign SESSION --target TARGET ...  coordinator: replaces a session's targets; logged
   unassign SESSION                    removes all target access
   assignments                        list assignments
   remove NAME                         owner only; type the name to confirm

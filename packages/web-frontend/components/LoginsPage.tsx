@@ -86,6 +86,8 @@ interface Probe {
 /** What the page last checked, for one login. */
 interface Checked extends Probe {
   name: string
+  /** Shown in the login's own row (after Edit) rather than at the top (after Add). */
+  inRow?: boolean
 }
 interface Data {
   entries: Entry[]
@@ -238,8 +240,17 @@ export function LoginsPage() {
     }
   }, [])
   /** A login page check after a save: kept only when it found something to say. */
-  const check = (name: string, probe?: Probe) =>
-    setChecked(probe?.warning ? { name, ...probe } : null)
+  const check = (name: string, probe?: Probe, inRow = false) =>
+    setChecked(probe?.warning ? { name, ...probe, inRow } : null)
+  const pageCheck = (c: Checked) => (
+    <PageCheck
+      checked={c}
+      onFixed={(text) => {
+        setChecked(null)
+        void changed(text)
+      }}
+    />
+  )
   useEffect(() => {
     void load()
     api<{ sessions: typeof sessions }>('/api/logins/sessions')
@@ -330,15 +341,7 @@ export function LoginsPage() {
       {!data && !error && <Quiet role="status">Loading logins…</Quiet>}
       {data?.warning && <Notice>{data.warning}</Notice>}
       {message && <Notice>{message}</Notice>}
-      {checked && (
-        <PageCheck
-          checked={checked}
-          onFixed={(text) => {
-            setChecked(null)
-            void changed(text)
-          }}
-        />
-      )}
+      {checked && !checked.inRow && pageCheck(checked)}
       {adding && (
         <AddLogin
           choices={choices}
@@ -381,7 +384,12 @@ export function LoginsPage() {
                       entry={entry}
                       choices={choices}
                       onChanged={changed}
-                      onChecked={check}
+                      onChecked={(name, probe) => check(name, probe, true)}
+                      check={
+                        checked?.inRow && checked.name === entry.name
+                          ? pageCheck(checked)
+                          : undefined
+                      }
                       events={(events ?? []).filter(
                         (e) => e.name === entry.name,
                       )}
@@ -464,7 +472,7 @@ export function LoginsPage() {
       )}
       <Group title="Activity" label="Activity">
         <Row name="Recent activity" meta="The last 30 changes to logins">
-          <Audit events={events} failed={eventsFailed} />
+          <Audit events={events} failed={eventsFailed} who={choices.sessions} />
         </Row>
       </Group>
     </section>
@@ -669,6 +677,7 @@ function LoginRow({
   choices,
   onChanged,
   onChecked,
+  check,
   events,
   revealSeconds,
   readOnly,
@@ -677,6 +686,8 @@ function LoginRow({
   choices: AccessChoices
   onChanged(text: string): Promise<void>
   onChecked(name: string, probe?: Probe): void
+  /** The login page check after an Edit, shown under the page it is about. */
+  check?: ReactNode
   /** This login's activity, oldest first. */
   events: Event[]
   revealSeconds: number
@@ -740,6 +751,7 @@ function LoginRow({
     >
       {entry.lab?.username && <small>Username: {entry.lab.username}</small>}
       {entry.lab?.login_url && <small>Login page: {entry.lab.login_url}</small>}
+      {check}
       {entry.notes && <p>{entry.notes}</p>}
       {entry.lab && <small>Last used: {when(entry.lastUsed)}</small>}
       <Actions>
@@ -1029,7 +1041,7 @@ function AccessPanel({
             .reverse()
             .map((e) => (
               <li key={`${e.at}-${e.action}-${e.actor}`}>
-                {eventLine(e, false)}
+                {eventLine(e, false, choices.sessions)}
               </li>
             ))}
         </ul>
@@ -1191,16 +1203,26 @@ function Assignment({
   )
 }
 /** One activity line: when, what, which login, who, and what changed when it says. */
-const eventLine = (e: Event, named = true) =>
-  [when(e.at), e.action, named ? e.name : null, e.actor, e.detail]
+/** Sessions by id, so activity names the session rather than its id. */
+type Who = { id: string; label: string }[]
+const eventLine = (e: Event, named = true, who: Who = []) =>
+  [
+    when(e.at),
+    e.action,
+    named ? e.name : null,
+    who.find((s) => s.id === e.actor)?.label ?? e.actor,
+    e.detail,
+  ]
     .filter(Boolean)
     .join(' · ')
 function Audit({
   events,
   failed,
+  who,
 }: {
   events: Event[] | null
   failed: boolean
+  who: Who
 }) {
   const recent = events ? events.slice(-30).reverse() : null
   return failed && !recent ? (
@@ -1212,7 +1234,9 @@ function Audit({
   ) : (
     <ul className={kit.activity}>
       {recent.map((e) => (
-        <li key={`${e.at}-${e.action}-${e.name}-${e.actor}`}>{eventLine(e)}</li>
+        <li key={`${e.at}-${e.action}-${e.name}-${e.actor}`}>
+          {eventLine(e, true, who)}
+        </li>
       ))}
     </ul>
   )
@@ -1288,34 +1312,41 @@ function PageCheck({
   onFixed(text: string): void
 }) {
   const [busy, setBusy] = useState(false),
-    [error, setError] = useState('')
+    [error, setError] = useState(''),
+    at = useRef<HTMLDivElement>(null)
   const suggestion = checked.suggestion
+  // On a phone the saved panel closes and the list moves; bring the check into view.
+  useEffect(() => {
+    at.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
+  }, [])
   return (
-    <Notice
-      failed={!!error}
-      actions={
-        suggestion && (
-          <button
-            type="button"
-            className="lantern-btn small"
-            disabled={busy}
-            title={suggestion}
-            onClick={() => {
-              setBusy(true)
-              api(`/api/logins/${encodeURIComponent(checked.name)}/edit`, {
-                login_url: suggestion,
-              })
-                .then((r) => onFixed(r.warning || 'Login page saved.'))
-                .catch((e) => setError((e as Error).message))
-                .finally(() => setBusy(false))
-            }}
-          >
-            Use this page
-          </button>
-        )
-      }
-    >
-      {error || checked.warning}
-    </Notice>
+    <div ref={at}>
+      <Notice
+        failed={!!error}
+        actions={
+          suggestion && (
+            <button
+              type="button"
+              className="lantern-btn small"
+              disabled={busy}
+              title={suggestion}
+              onClick={() => {
+                setBusy(true)
+                api(`/api/logins/${encodeURIComponent(checked.name)}/edit`, {
+                  login_url: suggestion,
+                })
+                  .then((r) => onFixed(r.warning || 'Login page saved.'))
+                  .catch((e) => setError((e as Error).message))
+                  .finally(() => setBusy(false))
+              }}
+            >
+              Use this page
+            </button>
+          )
+        }
+      >
+        {error || checked.warning}
+      </Notice>
+    </div>
   )
 }
