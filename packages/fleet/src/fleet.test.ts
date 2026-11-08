@@ -801,5 +801,7 @@ describe('link Status before and after the first power reading', () => {
     await vi.waitFor(() => expect(latest[0]?.state).toBe('off'))
     fail = true
     await vi.waitFor(() => expect(latest[0]?.state).toBe('warn'))
+    // Its row doesn't turn late from the old contact time, so it can't reach the phone.
+    expect(Date.parse(latest[0]?.next_run as string)).toBeGreaterThan(Date.now())
   })
 })

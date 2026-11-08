@@ -15,7 +15,7 @@ import { hostForwards, hostsFilePath } from './hosts'
 import { type Identity, loadIdentity, validName } from './identity'
 import { loginPeerRpc } from './logins-client'
 import { serveLoginWire } from './logins-wire'
-import { guestPower, peerStatusRow } from './power'
+import { guestPower, POWER_UNREAD_OFF, peerStatusRow } from './power'
 import { type PveRequest, pveRequest } from './proxmox'
 import { pushToolLogins } from './secrets'
 import { type FleetSettings, localAddress, readSettings } from './settings'
@@ -49,6 +49,17 @@ const FORWARDS_BYTES = 4096
 
 /** One connection per unordered machine pair; the lower name is the dialer.
  * Both ends may open channels. Local sockets preserve callers' HTTP/stream APIs. */
+function lastPower(
+  reading: { at: number; value: ReadonlyMap<string, string> } | null | undefined,
+  peer: { name: string; lastSeen: number | null },
+  staleMs: number,
+): string | undefined {
+  if (!reading || reading.at <= (peer.lastSeen ?? 0)) return undefined
+  const power = reading.value.get(peer.name)
+  if (Date.now() - reading.at < staleMs) return power
+  return power === 'stopped' ? POWER_UNREAD_OFF : undefined
+}
+
 export class Fleet {
   private pve?: PveRequest
   private readonly connections = new Map<string, Connection>()
@@ -591,13 +602,9 @@ export class Fleet {
           s,
           peer,
           pins.find((pin) => pin.name === peer.name)?.role,
-          // A reading from before the peer's last contact (one that just dropped), or one too old, is
-          // not evidence it is off.
-          reading &&
-            reading.at > (peer.lastSeen ?? 0) &&
-            Date.now() - reading.at < (s.powerStaleMs ?? 30 * 60_000)
-            ? reading.value.get(peer.name)
-            : undefined,
+          // A reading from before the peer's last contact (one that just dropped) is not evidence it
+          // is off. Nor is one too old: then it was off when last checked, which isn't down either.
+          lastPower(reading, peer, s.powerStaleMs ?? 30 * 60_000),
           this.startedAt,
           this.runningSince.get(peer.name),
         ),

@@ -30,6 +30,9 @@ export function parseGuestPower(value: unknown): Map<string, string> {
 export async function guestPower(call: PveRequest): Promise<Map<string, string>> {
   return parseGuestPower(await call('GET', '/cluster/resources?type=vm'))
 }
+/** `peerStatusRow`'s power when the last reading said stopped and power can't be read any more. */
+export const POWER_UNREAD_OFF = 'unread-off'
+
 export function peerStatusRow(
   settings: Pick<FleetSettings, 'machine' | 'deadMs'>,
   peer: { name: string; connected: boolean; lastSeen: number | null },
@@ -40,6 +43,7 @@ export function peerStatusRow(
   runningSince = 0,
 ): StatusRow {
   const off = Boolean(role) && !peer.connected && power === 'stopped'
+  const unread = Boolean(role) && !peer.connected && power === POWER_UNREAD_OFF
   return {
     id: `fleet/${settings.machine}/${peer.name}`,
     what: `Link to ${peer.name}`,
@@ -52,13 +56,15 @@ export function peerStatusRow(
         ? `Approved ${role}. Connected to ${peer.name}.`
         : off
           ? `${peer.name} is off. Its link will connect when it starts.`
-          : peer.lastSeen
-            ? `Disconnected from ${peer.name}. Reconnecting.`
-            : `Waiting for ${peer.name} to connect.`,
+          : unread
+            ? `${peer.name} was off when last checked, and its power can't be read now.`
+            : peer.lastSeen
+              ? `Disconnected from ${peer.name}. Reconnecting.`
+              : `Waiting for ${peer.name} to connect.`,
     ...(peer.lastSeen ? { last_run: new Date(peer.lastSeen).toISOString() } : {}),
     // Machine rows require a reporting deadline; Status exempts off rows from late.
     next_run: new Date(
-      Math.max(peer.lastSeen ?? startedAt, runningSince) + settings.deadMs,
+      (unread ? Date.now() : Math.max(peer.lastSeen ?? startedAt, runningSince)) + settings.deadMs,
     ).toISOString(),
     actions: [{ kind: 'detail', ref: 'tether hosts' }],
   }

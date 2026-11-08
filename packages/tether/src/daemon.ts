@@ -349,7 +349,10 @@ function createHub(
         ...(context.paths.instance === 'default'
           ? { status: releaseStatusWriter(env, AICO_WEB_DEFAULT_URL) }
           : { update: async () => ({ code: null, stdout: NOTHING_TO_SEND, output: '' }) }),
-        fault: (error) => fleet.fault(error),
+        fault: (error) =>
+          context.paths.instance === 'default'
+            ? fleet.fault(error)
+            : console.error(`[tether:hub] ${String(error)}`),
         uid: process.getuid?.(),
         ports: tetherHubPorts,
         publish: (type, data) => events.publish(type as Parameters<EventBus['publish']>[0], data),
@@ -963,7 +966,9 @@ export async function startDaemon(
   await fleet.start()
   const ready = startLifecycle({ reconcile: reconcileEnabled(env) })
   hosts?.start()
-  const idleOff = hosts ? startIdleOff(context, env, hosts) : null
+  // A test instance doesn't speak for this machine: it powers nothing off.
+  const idleOff =
+    hosts && context.paths.instance === 'default' ? startIdleOff(context, env, hosts) : null
   // Agent state: hook reports always; the poll only where Tether observes tmux.
   const agentStates = new AgentStateTracker((id, record) => {
     // What blocked a session, for the owner's "why did it ask?" (the waiting notice follows it).

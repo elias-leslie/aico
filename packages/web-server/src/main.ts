@@ -302,11 +302,13 @@ function serve(): void {
   })
   // The only Status rows that reach the phone: major ones (status/major.ts) that stayed bad past
   // their window. Recovery ends the notice, so the tray clears.
-  status.onSustained(config.status.major, ({ stayed, recovered }) => {
+  status.onSustained(config.status.major, ({ stayed, recovered, ended }) => {
     for (const item of stayed)
       notify.notifier.receive(sustainedNotice(item, config.publicHost), 'local')
     for (const id of recovered)
       void resolveNotice(notify.notifier, sustainedKey(id), 'Back to normal.')
+    for (const id of ended)
+      void resolveNotice(notify.notifier, sustainedKey(id), "It's off now, so this has ended.")
   })
   notify.register(api)
   registerTrayRoutes(api, {

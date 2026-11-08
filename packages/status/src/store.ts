@@ -382,7 +382,8 @@ export class StatusStore {
     const put = this.db.prepare(
       `INSERT INTO status_seen (id, shown, since, escalated) VALUES (?, ?, ?, 0)
        ON CONFLICT (id) DO UPDATE SET shown = excluded.shown, since = excluded.since,
-         escalated = CASE WHEN excluded.shown IN ('failed', 'late') THEN status_seen.escalated ELSE 0 END`,
+         escalated = CASE WHEN excluded.shown IN ('failed', 'late') THEN status_seen.escalated
+           WHEN excluded.shown = 'off' THEN status_seen.escalated ELSE 0 END`,
     )
     transaction(this.db, () => {
       for (const row of rows) {
@@ -439,15 +440,13 @@ export class StatusStore {
         }
         const since = record.since
         if (!record.escalated && now - since >= windows[major]) stayed.push({ row, major, since })
-      } else if (
-        wasTold.has(row.id) &&
-        (row.shown === 'ok' || row.shown === 'warn' || row.shown === 'off')
-      )
+      } else if (wasTold.has(row.id) && row.shown === 'off') ended.push(row.id)
+      else if (wasTold.has(row.id) && (row.shown === 'ok' || row.shown === 'warn'))
         recovered.push(row.id)
     }
     if (!stayed.length && !recovered.length && !ended.length) return
     try {
-      hook({ stayed, recovered: [...recovered, ...ended] })
+      hook({ stayed, recovered, ended })
     } catch (error) {
       console.error('[status] sustained hook failed; the next pass tries again:', error)
       return

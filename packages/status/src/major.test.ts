@@ -28,7 +28,7 @@ const row = (fields: Record<string, unknown>): StatusRow =>
 function world() {
   const clock = { now: T0 }
   const store = new StatusStore(':memory:', () => clock.now)
-  const told: { stayed: Sustained[]; recovered: string[] }[] = []
+  const told: { stayed: Sustained[]; recovered: string[]; ended: string[] }[] = []
   store.onSustained(WINDOWS, (item) => told.push(item))
   store.syncIntents([
     { machine: 'host', intent: 'always' },
@@ -134,7 +134,33 @@ describe('major rows that stay bad', () => {
         w.step(31 * MIN)
       }
       expect(w.stayed()).toEqual(['guest/web'])
-      expect(w.told.flatMap((t) => t.recovered)).toEqual(['guest/web'])
+      expect(w.told.flatMap((t) => t.ended)).toEqual(['guest/web'])
+      expect(w.told.flatMap((t) => t.recovered)).toEqual([])
+    })
+
+    it('a told backup that itself goes off and comes back failing is not told again', () => {
+      const w = world()
+      const copy = (state: string) => row({ id: 'host/backup/a', kind: 'backup', state })
+      w.store.upsert([host(), copy('ok')])
+      w.store.checkAlerts()
+      w.store.upsert([copy('failed')])
+      w.step(27 * HOUR)
+      expect(w.stayed()).toEqual(['host/backup/a'])
+      for (let i = 0; i < 3; i++) {
+        w.store.upsert([copy('off')])
+        w.step(MIN)
+        w.store.upsert([copy('failed')])
+        w.step(27 * HOUR)
+      }
+      expect(w.stayed()).toEqual(['host/backup/a'])
+      expect(w.told.flatMap((t) => t.ended)).toEqual(['host/backup/a'])
+      expect(w.told.flatMap((t) => t.recovered)).toEqual([])
+      // Well again: the next failure is a new one.
+      w.store.upsert([copy('ok')])
+      w.step(MIN)
+      w.store.upsert([copy('failed')])
+      w.step(27 * HOUR)
+      expect(w.stayed()).toEqual(['host/backup/a', 'host/backup/a'])
     })
 
     it('after its machine was off, a failure not yet told gets its whole window from the return', () => {
