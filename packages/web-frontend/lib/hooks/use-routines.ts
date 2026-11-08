@@ -2,7 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../api-fetch'
-import type { Routine } from '../routines'
+import { markMachinesOff, type Routine } from '../routines'
+import { useStatus } from './use-status'
 
 const ROUTINES_QUERY_KEY = ['routines']
 const POLL_MS = 30_000
@@ -13,6 +14,7 @@ export type RoutineAction = 'run' | 'pause' | 'resume'
 
 /** GET /api/routines: every routine, read often while one is running. */
 export function useRoutines() {
+  const { view } = useStatus()
   const query = useQuery({
     queryKey: ROUTINES_QUERY_KEY,
     queryFn: async () =>
@@ -28,8 +30,13 @@ export function useRoutines() {
     refetchOnWindowFocus: true,
     retry: 1,
   })
+  const off = new Set(
+    view?.rows
+      .filter((row) => row.kind === 'machine' && row.shown === 'off')
+      .map((row) => row.machine),
+  )
   return {
-    routines: query.data ?? null,
+    routines: query.data ? markMachinesOff(query.data, off) : null,
     loading: query.isPending,
     failed: !query.data && query.isError,
     stale: !!query.data && query.isError,

@@ -36,6 +36,8 @@ export interface Routine {
   lastMachine: string | null
   /** Why its state could not be read (its machine did not answer). */
   unreadable?: string
+  /** It couldn't be read because its machine is off: nothing is wrong (Status says so). */
+  machineOff?: true
 }
 
 export type RoutineChip =
@@ -48,6 +50,7 @@ export type RoutineChip =
 
 /** The status chip a routine wears, with its word. Running and paused come before the last result. */
 export function chipOf(routine: Routine): { chip: RoutineChip; word: string } {
+  if (routine.machineOff) return { chip: 'off', word: 'Machine off' }
   if (routine.unreadable) return { chip: 'unknown', word: 'Not known' }
   if (routine.running) return { chip: 'running', word: 'Running' }
   if (routine.paused) return { chip: 'off', word: 'Paused' }
@@ -231,7 +234,23 @@ export const hostsText = (routine: Routine) =>
     : machineLabel(routine.home)
 
 const rank = (r: Routine) =>
-  r.unreadable || r.lastState === 'failed' ? 0 : r.lastState === 'warn' ? 1 : 2
+  r.machineOff
+    ? 2
+    : r.unreadable || r.lastState === 'failed'
+      ? 0
+      : r.lastState === 'warn'
+        ? 1
+        : 2
+
+/** Marks the routines that couldn't be read because their machine is off. */
+export function markMachinesOff(
+  list: readonly Routine[],
+  off: ReadonlySet<string>,
+): Routine[] {
+  return list.map((r) =>
+    r.unreadable && off.has(r.home) ? { ...r, machineOff: true } : r,
+  )
+}
 
 /** Failed routines first, then warnings, then the rest by project and name. */
 function sortRoutines(list: readonly Routine[]): Routine[] {
@@ -250,6 +269,8 @@ export interface RoutineGroup {
   failed: number
   /** Whose state could not be read. */
   unknown: number
+  /** Not read because their machine is off. */
+  off: number
   /** Something here is failed, not known, warning, paused or running. */
   attention: boolean
 }
@@ -266,7 +287,8 @@ export function groupRoutines(list: readonly Routine[]): RoutineGroup[] {
       failed: routines.filter(
         (r) => r.lastState === 'failed' && !r.paused && !r.unreadable,
       ).length,
-      unknown: routines.filter((r) => r.unreadable).length,
+      unknown: routines.filter((r) => r.unreadable && !r.machineOff).length,
+      off: routines.filter((r) => r.machineOff).length,
       attention: routines.some((r) => rank(r) < 2 || r.paused || r.running),
     }))
     .sort(
@@ -283,16 +305,20 @@ export function headOf(list: readonly Routine[]): {
   tone: 'ok' | 'warn' | 'failed' | null
 } {
   const failed = list.filter(
-    (r) => r.lastState === 'failed' && !r.paused,
+    (r) => r.lastState === 'failed' && !r.paused && !r.machineOff,
   ).length
-  const warn = list.filter((r) => r.lastState === 'warn' && !r.paused).length
-  const unknown = list.filter((r) => r.unreadable).length
+  const warn = list.filter(
+    (r) => r.lastState === 'warn' && !r.paused && !r.machineOff,
+  ).length
+  const unknown = list.filter((r) => r.unreadable && !r.machineOff).length
+  const off = list.filter((r) => r.machineOff).length
   const paused = list.filter((r) => r.paused).length
   const parts = [
     plural(list.length, 'routine'),
     failed ? `${failed} failed` : '',
     warn ? plural(warn, 'warning') : '',
     unknown ? `${unknown} not known` : '',
+    off ? `${off} machine off` : '',
     paused ? `${paused} paused` : '',
   ].filter(Boolean)
   return {

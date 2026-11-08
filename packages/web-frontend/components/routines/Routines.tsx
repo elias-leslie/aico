@@ -80,6 +80,7 @@ function whenLine(
   routine: Routine,
   now = Date.now(),
 ): { text: string; next: boolean } {
+  if (routine.machineOff) return { text: '', next: false }
   if (routine.unreadable) return { text: 'state not known', next: false }
   if (routine.running) return { text: 'running now', next: false }
   if (routine.paused) return { text: 'paused', next: false }
@@ -119,6 +120,8 @@ function scheduleLine(routine: Routine): string {
 
 /** What the last run said, or why there is nothing to say. */
 function lastLine(routine: Routine): string {
+  if (routine.machineOff)
+    return `${machineLabel(routine.home)} is off. This runs again when it’s back.`
   if (routine.unreadable)
     return `Couldn’t read it from ${machineLabel(routine.home)}: ${routine.unreadable}`
   if (routine.lastRun === null)
@@ -315,6 +318,14 @@ function Group({ group }: { group: RoutineGroup }) {
         )}
         {group.unknown > 0 && (
           <span className="status-chip unknown">{group.unknown} not known</span>
+        )}
+        {group.off > 0 && (
+          <span
+            className="status-chip off"
+            title={`${machineLabel(group.host)} is off. These run again when it’s back.`}
+          >
+            Off
+          </span>
         )}
       </button>
       {open && (

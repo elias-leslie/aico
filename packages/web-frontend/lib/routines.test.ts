@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  chipOf,
   clockSkip,
+  groupRoutines,
+  headOf,
+  markMachinesOff,
   type Routine,
   scheduleText,
   soonIn,
@@ -180,5 +184,26 @@ describe('a clock change', () => {
     expect(
       timerDelay({ ...late, nextRun: Date.parse('2027-11-07T06:10:00Z') }),
     ).toBe(20)
+  })
+})
+
+describe('routines of a machine that is off', () => {
+  const unread = {
+    kind: 'x',
+    home: 'ws',
+    hosts: ['ws'],
+    unreadable: 'no answer',
+  } as Routine
+  const other = { ...unread, kind: 'y', home: 'gem' } as Routine
+  const list = markMachinesOff([unread, other], new Set(['ws']))
+
+  it('are off, not unknown and not a problem', () => {
+    expect(chipOf(list[0] as Routine).chip).toBe('off')
+    expect(chipOf(list[1] as Routine).chip).toBe('unknown')
+    expect(headOf([list[0] as Routine]).tone).toBeNull()
+    expect(headOf([list[0] as Routine]).value).toBe('1 routine · 1 machine off')
+    expect(headOf(list).tone).toBe('failed')
+    const ws = groupRoutines(list).find((g) => g.host === 'ws')
+    expect(ws).toMatchObject({ unknown: 0, off: 1, attention: false })
   })
 })

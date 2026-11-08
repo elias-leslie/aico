@@ -33,6 +33,7 @@ const routine = (over: Partial<Routine> = {}): Routine => ({
 
 let list: Routine[] | 'down'
 let logLines: string[] = []
+let statusRows: { kind: string; machine: string; shown: string }[] = []
 const posts: { url: string; body: unknown }[] = []
 
 beforeEach(() => {
@@ -52,6 +53,7 @@ beforeEach(() => {
   ]
   posts.length = 0
   logLines = ['line one', 'line two']
+  statusRows = []
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
@@ -65,6 +67,8 @@ beforeEach(() => {
           ),
         )
       }
+      if (url.endsWith('/api/status'))
+        return new Response(JSON.stringify({ machine: 'ws', rows: statusRows }))
       if (list === 'down') return new Response('{}', { status: 502 })
       return new Response(JSON.stringify({ routines: list }))
     }),
@@ -86,6 +90,27 @@ const view = (ui = <RoutinesBody />) =>
   )
 
 describe('Routines', () => {
+  it('shows a machine that is off as off, with no problem to look at', async () => {
+    list = [routine({ kind: 'far', home: 'ws', unreadable: 'no answer' })]
+    statusRows = [{ kind: 'machine', machine: 'ws', shown: 'off' }]
+    const Head = () => (
+      <p data-testid="head">{useRoutinesHead().tone ?? 'calm'}</p>
+    )
+    view(
+      <>
+        <Head />
+        <RoutinesBody />
+      </>,
+    )
+    await waitFor(() =>
+      expect(screen.getByTestId('routine-far').textContent).toContain(
+        'Machine off',
+      ),
+    )
+    expect(screen.getByTestId('head').textContent).toBe('calm')
+    expect(screen.queryByText(/not known/)).toBeNull()
+  })
+
   it('offers no Run or Pause for a routine whose machine is out of reach', async () => {
     list = [routine({ kind: 'far', unreadable: 'ssh timed out' })]
     view()
