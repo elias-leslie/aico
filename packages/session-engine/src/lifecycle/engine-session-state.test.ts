@@ -13,6 +13,7 @@ import { bindCatalog, getWidget, insertWidget, type WidgetRow } from './catalog'
 import {
   configureEngine,
   engineRetirementOperations,
+  ensureSessionSerialized,
   internalSessionState,
   rootManagedGateState,
   verifiedCurrentManagedPane,
@@ -34,6 +35,7 @@ const mocks = vi.hoisted(() => ({
   realReadFileSync: null as unknown as (...args: unknown[]) => unknown,
   scopeIdentity: vi.fn(),
   stopOwnedPaneScope: vi.fn(),
+  resolveLauncher: vi.fn(),
 }))
 
 vi.mock('node:child_process', async (importOriginal) => {
@@ -54,6 +56,7 @@ vi.mock('./owner-scope', async (importOriginal) => ({
   scopeIdentity: mocks.scopeIdentity,
   stopOwnedPaneScope: mocks.stopOwnedPaneScope,
 }))
+vi.mock('./tui/context-support', () => ({ resolveLauncher: mocks.resolveLauncher }))
 
 const INSTANCE = 'enginetest'
 const SERVER = '1'.repeat(32)
@@ -234,6 +237,13 @@ describe('engine session state', () => {
     expect(await rootManagedGateState({ ...row, paneId: '%8' })).toBeNull()
     expect(await rootManagedGateState(row)).toBe('active-workload')
     expect(mocks.execFile).toHaveBeenCalledTimes(9)
+    // A healthy workload remains attachable if its executable was removed
+    // from PATH after launch. No new launcher is needed for this session.
+    store.db.prepare("UPDATE sessions SET tool = 'codex' WHERE id = ?").run(row.id)
+    mocks.resolveLauncher.mockResolvedValue(null)
+    expect(await ensureSessionSerialized(row.id, { cols: 80, rows: 24 })).toBe(true)
+    expect(mocks.resolveLauncher).not.toHaveBeenCalled()
+    expect(mocks.execFileSync).not.toHaveBeenCalled()
   })
 
   it('proves a missing-ID session absent from the exact verified server roster', async () => {

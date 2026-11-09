@@ -173,6 +173,7 @@ import {
 } from './tmux-server-state'
 import { ensureBlankSlateWorkspace, isBlankSlateRoot } from './tui/blank-slate'
 import { ensureContext } from './tui/context'
+import { resolveLauncher } from './tui/context-support'
 import {
   type DeliveryDeps,
   withContextDelivery as deliverContext,
@@ -1697,7 +1698,13 @@ function managedGateState(pane: ManagedPaneProcess, controlGroup: string): Manag
 
 /** `deferred`: host admission refused the agent for now; the pane stays at its
  * inert gate and a later attach retries. Not an ownership problem. */
-type ManagedPaneRecovery = 'recovered' | 'legacy' | 'blocked' | 'blocked-replay' | 'deferred'
+type ManagedPaneRecovery =
+  | 'recovered'
+  | 'legacy'
+  | 'blocked'
+  | 'blocked-replay'
+  | 'deferred'
+  | 'unavailable'
 
 /** Recover a crash between gated pane creation, DB promotion, and the one-time
  * launcher send. Exact AICO markers distinguish a managed gate from historical
@@ -1793,6 +1800,11 @@ async function recoverInterruptedManagedPane(
         sessionSpec(getTui(current.tool ?? 'shell'), current.projectRoot, current.id),
         current.id,
       )
+      const unavailable = await launchUnavailable(current.id, tool, cwdForWidget(current.id))
+      if (unavailable) {
+        fail(current.id, { code: 'workload_unavailable', reason: unavailable })
+        return 'unavailable'
+      }
       const intentRow = persistManagedGateLaunchIntent(current, verified.pid)
       if (!intentRow) return 'blocked'
       const dispatchedRow = markManagedGateDispatched(intentRow)
@@ -2121,6 +2133,24 @@ export function lastEnsureFailure(widgetId: string): EnsureFailure | undefined {
   return ensureFailures.get(widgetId)
 }
 
+/** Check the host executable only for a new direct launch. Entry sessions run
+ * their agent elsewhere; an already-running workload never needs this probe. */
+async function launchUnavailable(
+  widgetId: string,
+  tool: TuiSpec | undefined,
+  cwd: string,
+): Promise<string | null> {
+  const executable = tool?.command[0]
+  if (!tool || !executable || getSessionEntry(widgetId)) return null
+  const launcher = await resolveLauncher(executable, tool, {
+    env: managedEnvironment(widgetId, tool.slug),
+    cwd,
+  })
+  return launcher
+    ? null
+    : `${tool.displayName} cannot start: ${executable} is not installed or executable.`
+}
+
 // Ensure the session's tmux session exists, launching its TUI exactly once on
 // first create. Reattaching finds the session already running and sends
 // nothing — so a live agent is never relaunched.
@@ -2134,6 +2164,7 @@ async function ensureOwnedInternalSession(widgetId: string, size: PtySize): Prom
   const state = await internalSessionState(widgetId)
   if (state === 'present') {
     const recovery = await recoverInterruptedManagedPane(rowBeforeCreate)
+    if (recovery === 'unavailable') return false
     if (recovery === 'deferred') {
       console.warn(
         `[tether:lifecycle] ${widgetId} agent launch deferred by host admission; attaching its inert gate`,
@@ -2187,14 +2218,18 @@ async function ensureOwnedInternalSession(widgetId: string, size: PtySize): Prom
     return fail(widgetId, { code: 'linger_required', reason: durableUnavailableReason })
   }
   const cwd = cwdForWidget(widgetId)
+  const launchTool = sessionSpec(
+    getTui(rowBeforeCreate.tool ?? 'shell'),
+    rowBeforeCreate.projectRoot,
+    widgetId,
+  )
+  const unavailable = await launchUnavailable(widgetId, launchTool, cwd)
+  if (unavailable) return fail(widgetId, { code: 'workload_unavailable', reason: unavailable })
   // Lifecycle ordering is deliberate: create a bare pane first, let tmux move it
   // into its dedicated cgroup, then launch the TUI through that contained shell.
   // Embedding the TUI in new-session lets it fork before tmux's asynchronous
   // cgroup move and was the path that put every tool in app-aico-9189.scope.
-  const tool = await withContextDelivery(
-    sessionSpec(getTui(rowBeforeCreate.tool ?? 'shell'), rowBeforeCreate.projectRoot, widgetId),
-    widgetId,
-  )
+  const tool = await withContextDelivery(launchTool, widgetId)
   const line = sessionLaunchLine(widgetId, tool ? initialLaunchLine(widgetId, tool) : null)
   if (hasPersistedScopeCleanupEvidence(rowBeforeCreate)) {
     console.error(
@@ -2426,6 +2461,13 @@ export async function respawnAndRelaunch(
     }
     if (previous.lifecycleVersion < MANAGED_LIFECYCLE_VERSION)
       return { status: 'workload_unavailable', reason: 'lifecycle-v0 session' }
+    const launchTool = sessionSpec(tool, options.cwd ?? previous.projectRoot, widgetId)
+    const unavailable = await launchUnavailable(
+      widgetId,
+      launchTool,
+      options.cwd ?? cwdForWidget(widgetId),
+    )
+    if (unavailable) return { status: 'workload_unavailable', reason: unavailable }
     const initialState = await internalSessionState(widgetId)
     if (initialState !== 'present') {
       console.error(
@@ -2443,8 +2485,8 @@ export async function respawnAndRelaunch(
     const recovery = await recoverInterruptedManagedPane(previous, { dispatchGate: false })
     previous = getWidget(widgetId)
     if (!previous) return { status: 'not_found' }
-    // `deferred` cannot arise without dispatch; treat it as blocked regardless.
-    if (recovery === 'blocked' || recovery === 'deferred') {
+    // `deferred` and `unavailable` cannot arise without dispatch.
+    if (recovery === 'blocked' || recovery === 'deferred' || recovery === 'unavailable') {
       if (previous.pendingScopeUnit) await reconcileSupersededPendingScope(previous)
       console.error(
         `[tether:lifecycle] replacement blocked: interrupted launch state for ${previous.sessionId} is ambiguous`,
@@ -2529,10 +2571,7 @@ export async function respawnAndRelaunch(
 
     // Built before the pending scope is recorded, so the delivery's file writes
     // never sit inside the replacement's crash window.
-    const launched = await withContextDelivery(
-      sessionSpec(tool, options.cwd ?? previous.projectRoot, widgetId),
-      widgetId,
-    )
+    const launched = await withContextDelivery(launchTool, widgetId)
     let result: RespawnResult = { status: 'replaced' }
     try {
       if (
@@ -2927,6 +2966,12 @@ async function reconcileManagedWidget(row: WidgetRow, useServerSnapshot = false)
 
     if (state === 'present') {
       const recovery = await recoverInterruptedManagedPane(current)
+      if (recovery === 'unavailable') {
+        console.warn(
+          `[tether:lifecycle] preserving ${current.sessionId}: ${lastEnsureFailure(current.id)?.reason}`,
+        )
+        return
+      }
       if (recovery === 'deferred') {
         console.warn(
           `[tether:lifecycle] preserving ${current.sessionId}: agent launch deferred by host admission`,

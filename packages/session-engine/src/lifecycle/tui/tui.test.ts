@@ -1,6 +1,6 @@
 import { execFile, spawn } from 'node:child_process'
 import { EventEmitter } from 'node:events'
-import { existsSync, readFileSync, realpathSync } from 'node:fs'
+import { accessSync, existsSync, readFileSync, type Stats, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -31,6 +31,8 @@ import type { TuiSpec } from './spec'
 vi.mock('node:fs', async (importOriginal) => ({
   ...(await importOriginal<typeof import('node:fs')>()),
   existsSync: vi.fn(),
+  accessSync: vi.fn(),
+  statSync: vi.fn(),
   readFileSync: vi.fn(),
   realpathSync: vi.fn(),
 }))
@@ -57,6 +59,8 @@ function mockPaneResolve(path: string | null): void {
 
 beforeEach(() => {
   mockPaneResolve(null)
+  vi.mocked(accessSync).mockReturnValue(undefined)
+  vi.mocked(statSync).mockReturnValue({ isFile: () => true } as Stats)
 })
 
 function mockCodexHooks(
