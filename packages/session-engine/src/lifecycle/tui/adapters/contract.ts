@@ -146,7 +146,12 @@ export interface TuiAdapter {
   /** Fields of the TuiSpec this tool declares (resume, flags, input line). */
   spec: Pick<
     TuiSpec,
-    'resume' | 'instructions' | 'contextDelivery' | 'modelSelection' | 'inputLine'
+    | 'resume'
+    | 'instructions'
+    | 'contextDelivery'
+    | 'modelSelection'
+    | 'inputLine'
+    | 'blankSlateNative'
   >
   capabilities: Capabilities
   /** Entry API version that first took this tool in `POST /v1/roots` `entry`; null: never. */

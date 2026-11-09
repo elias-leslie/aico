@@ -289,6 +289,7 @@ export const pi: TuiAdapter = {
   },
   launch: { ensureArgs: ['--approve'] },
   spec: {
+    blankSlateNative: { kind: 'command', command: 'pi' },
     resume: {
       sessionIdPattern: UUID_RE,
       arguments: ['--session'],

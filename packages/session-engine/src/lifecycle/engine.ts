@@ -18,13 +18,14 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
   statSync,
   watch,
   writeFileSync,
 } from 'node:fs'
 import { readdir, readFile } from 'node:fs/promises'
 import { homedir, uptime } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { hostAdmissionPath, readHostAdmission } from '@aico/shared/host-admission'
 import { AgentAdmissionDenied } from '@aico/shared/host-pressure'
@@ -1794,13 +1795,27 @@ async function recoverInterruptedManagedPane(
       }
     }
     try {
+      const gateEnvironment = processEnvironment(verified.pid)
+      if (!gateEnvironment) return 'blocked'
+      let gateCwd: string
+      try {
+        gateCwd = readlinkSync(`/proc/${verified.pid}/cwd`)
+      } catch {
+        return 'blocked'
+      }
+      if (processStartTime(verified.pid) !== verified.startTime) return 'blocked'
       // Built before the launch intent is recorded: a dispatched gate is never
       // replayed, so nothing slow sits between that mark and the launch.
       const tool = await withContextDelivery(
         sessionSpec(getTui(current.tool ?? 'shell'), current.projectRoot, current.id),
         current.id,
       )
-      const unavailable = await launchUnavailable(current.id, tool, cwdForWidget(current.id))
+      const unavailable = await launchUnavailable(
+        current.id,
+        tool,
+        gateCwd,
+        Object.fromEntries(gateEnvironment),
+      )
       if (unavailable) {
         fail(current.id, { code: 'workload_unavailable', reason: unavailable })
         return 'unavailable'
@@ -2139,16 +2154,32 @@ async function launchUnavailable(
   widgetId: string,
   tool: TuiSpec | undefined,
   cwd: string,
+  gateEnvironment?: NodeJS.ProcessEnv,
 ): Promise<string | null> {
   const executable = tool?.command[0]
   if (!tool || !executable || getSessionEntry(widgetId)) return null
-  const launcher = await resolveLauncher(executable, tool, {
-    env: managedEnvironment(widgetId, tool.slug),
-    cwd,
-  })
-  return launcher
-    ? null
-    : `${tool.displayName} cannot start: ${executable} is not installed or executable.`
+  const base = { ...cfg().env, ...cfg().graphicalEnv?.() }
+  const environment = gateEnvironment ?? {
+    ...tmuxServerEnvironment(base, passthroughFromEnv(base)),
+    ...managedEnvironment(widgetId, tool.slug),
+  }
+  const commands = [executable]
+  const native = tool.context?.kind === 'blank-slate' ? tool.blankSlateNative : undefined
+  if (native) {
+    const env = { ...environment, ...tool.env, ...tool.deliveredContext?.env }
+    if (native.kind === 'command') commands.push(native.command)
+    else {
+      const target = env[native.variable] || join(env.HOME ?? homedir(), native.path)
+      // The wrapper tests a native path relative to its cwd before execvpe.
+      commands.push(resolve(cwd, target))
+      if (!target.includes('/')) commands.push(target)
+    }
+  }
+  for (const command of commands) {
+    if (!(await resolveLauncher(command, tool, { env: environment, cwd })))
+      return `${tool.displayName} cannot start: ${command} is not installed or executable.`
+  }
+  return null
 }
 
 // Ensure the session's tmux session exists, launching its TUI exactly once on

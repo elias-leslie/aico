@@ -706,6 +706,7 @@ export const claudeCode: TuiAdapter = {
   },
   launch: { ensureArgs: [] },
   spec: {
+    blankSlateNative: { kind: 'home', variable: 'CLAUDE_REAL', path: '.local/bin/claude' },
     resume: { sessionIdPattern: UUID_RE, arguments: ['--resume'] },
     instructions: { arguments: ['--append-system-prompt'] },
     // A CLAUDE.md in an added directory, read like a project's own: it is part of

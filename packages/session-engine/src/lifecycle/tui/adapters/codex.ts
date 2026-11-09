@@ -628,6 +628,7 @@ export const codex: TuiAdapter = {
   },
   launch: { ensureArgs: [] },
   spec: {
+    blankSlateNative: { kind: 'home', variable: 'CODEX_REAL', path: '.local/bin/codex-real' },
     resume: { sessionIdPattern: UUID_RE, arguments: ['resume', '--no-daemon'] },
     instructions: { arguments: ['-c'], key: 'developer_instructions' },
     // Lossless additive developer instructions; hook output is cut to a preview.

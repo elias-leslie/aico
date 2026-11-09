@@ -58,6 +58,11 @@ export interface TuiSpec {
   processName: string
   /** Extra env exported before the command (most TUIs need none). */
   env?: Record<string, string>
+  /** Native executable selected by scripts/aico-blank-slate after its wrapper.
+   * Home targets use the named environment override, else the path under HOME. */
+  blankSlateNative?:
+    | { kind: 'home'; variable: string; path: string }
+    | { kind: 'command'; command: string }
   /** Declarative supplemental-context path; omitted for a bare shell. */
   context?: ContextHook
   /** Native resume capability. The owner validates the opaque session ID with

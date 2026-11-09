@@ -2,15 +2,15 @@
 // resolves a command to.
 
 import { execFile } from 'node:child_process'
-import { accessSync, constants, statSync } from 'node:fs'
+import { accessSync, constants, readFileSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { effectiveTuiPath } from './launch'
 import type { TuiSpec } from './spec'
 
 /** Aico's sign-in launchers on a worker host (scripts/install-worker.sh). Each
  * runs its tool through `tether fleet tool`, so it sits first on the pane PATH
- * ahead of the real command it hands over to. */
+ * and hands over to the absolute executable in its public command map. */
 function credShimDir(env: NodeJS.ProcessEnv): string {
   return join(env.HOME ?? homedir(), '.local', 'lib', 'aico', 'auth-bin')
 }
@@ -21,6 +21,31 @@ function isExecutable(path: string): boolean {
     return statSync(path).isFile()
   } catch {
     return false
+  }
+}
+
+/** The worker installer generates each auth shim from this public command map.
+ * The shim execs that absolute target, regardless of other commands on PATH. */
+function credentialTarget(shim: string, env: NodeJS.ProcessEnv): string | null {
+  const config = env.XDG_CONFIG_HOME || join(env.HOME ?? homedir(), '.config')
+  try {
+    const entries: unknown = JSON.parse(
+      readFileSync(join(config, 'aico', 'tool-commands.json'), 'utf8'),
+    )
+    if (!Array.isArray(entries)) return null
+    let target: string | null = null
+    for (const entry of entries) {
+      if (typeof entry !== 'object' || entry === null) continue
+      const value = entry as Record<string, unknown>
+      if (value.command !== basename(shim)) continue
+      target =
+        typeof value.executable === 'string' && isAbsolute(value.executable)
+          ? value.executable
+          : null
+    }
+    return target && isExecutable(target) ? target : null
+  } catch {
+    return null
   }
 }
 
@@ -73,10 +98,6 @@ export async function resolveLauncher(
   const shimDir = credShimDir(env)
   const trim = (dir: string): string => dir.replace(/\/+$/, '')
   if (trim(dirname(first)) !== shimDir) return { path: first, shim: null }
-  const rest = pathValue
-    .split(':')
-    .filter((entry) => trim(entry) !== shimDir)
-    .join(':')
-  const next = await probeLauncher(name, { ...env, PATH: rest }, options.cwd)
-  return next ? { path: next, shim: join(shimDir, name) } : null
+  const target = credentialTarget(first, env)
+  return target ? { path: target, shim: first } : null
 }

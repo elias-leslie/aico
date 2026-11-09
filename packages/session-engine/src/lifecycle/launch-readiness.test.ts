@@ -16,6 +16,7 @@ import {
 } from './engine'
 import { isNeverAllocatedWidget } from './lifecycle-guard'
 import { setLifecycleInstance } from './ownership'
+import { blankSlateBase } from './tui/blank-slate'
 import { bindToolSource, getTui } from './tui/registry'
 
 // Only the read-only command lookup may run. A regression must never allocate
@@ -63,6 +64,8 @@ beforeAll(async () => {
     mode: 0o700,
   })
   vi.stubEnv('PATH', runnerBin)
+  vi.stubEnv('HOME', dir)
+  vi.stubEnv('TETHER_LIB_DIR', join(dir, 'tether-lib'))
   store = new Store(':memory:')
   bindCatalog(store.db)
   bindToolSource(store)
@@ -197,7 +200,28 @@ describe('direct agent launch readiness', () => {
       writeFileSync(join(shims, `${name}-agent-fixture`), '#!/bin/sh\nexit 0\n', {
         mode: 0o700,
       })
-    const env = { PATH: `${shims}:${join(dir, 'bin')}` }
+    const fallbackBin = join(dir, 'fallback-bin')
+    const nativeBin = join(dir, 'native-bin')
+    const configHome = join(dir, 'pane-config')
+    const config = join(configHome, 'aico')
+    for (const path of [fallbackBin, nativeBin, config]) mkdirSync(path, { recursive: true })
+    writeFileSync(join(fallbackBin, 'missing-agent-fixture'), '#!/bin/sh\nexit 0\n', {
+      mode: 0o700,
+    })
+    const native = join(nativeBin, 'available-native')
+    writeFileSync(native, '#!/bin/sh\nexit 0\n', { mode: 0o700 })
+    writeFileSync(
+      join(config, 'tool-commands.json'),
+      JSON.stringify([
+        {
+          tool: 'missing-agent-fixture',
+          command: 'missing-agent-fixture',
+          executable: join(nativeBin, 'missing-native'),
+        },
+        { tool: 'available-agent-fixture', command: 'available-agent-fixture', executable: native },
+      ]),
+    )
+    const env = { PATH: `${shims}:${fallbackBin}`, XDG_CONFIG_HOME: configHome }
     expect(
       await respawnAndRelaunch(id, { ...present(getTui('missing-agent-fixture')), env }),
     ).toMatchObject({
@@ -232,6 +256,44 @@ describe('direct agent launch readiness', () => {
     expect(await respawnAndRelaunch(id, getTui('missing-agent-fixture'))).toEqual({
       status: 'workload_unavailable',
       reason: 'tmux session state is absent',
+    })
+  })
+
+  it('checks the native Blank Slate target before allocation or replacement', async () => {
+    const root = join(blankSlateBase({ HOME: dir }), 'fixture')
+    const wrapper = join(dir, 'tether-lib', 'scripts', 'aico-blank-slate')
+    mkdirSync(root, { recursive: true })
+    mkdirSync(join(dir, 'tether-lib', 'scripts'), { recursive: true })
+    writeFileSync(wrapper, '#!/bin/sh\nexit 0\n', { mode: 0o700 })
+    const id = 'ea000010'
+    insertWidget(id, 'codex')
+    store.db.prepare('UPDATE sessions SET project_root = ? WHERE id = ?').run(root, id)
+    expect(await ensureSessionSerialized(id, { cols: 80, rows: 24 })).toBe(false)
+    expect(lastEnsureFailure(id)).toMatchObject({
+      code: 'workload_unavailable',
+      reason: expect.stringContaining('codex-real is not installed or executable'),
+    })
+    expect(isNeverAllocatedWidget(present(getWidget(id)))).toBe(true)
+    store.db.prepare('UPDATE sessions SET lifecycle_version = 1 WHERE id = ?').run(id)
+    expect(await respawnAndRelaunch(id, getTui('codex'))).toMatchObject({
+      status: 'workload_unavailable',
+      reason: expect.stringContaining('codex-real is not installed or executable'),
+    })
+    const native = join(dir, '.local', 'bin', 'codex-real')
+    mkdirSync(join(dir, '.local', 'bin'), { recursive: true })
+    writeFileSync(native, '#!/bin/sh\nexit 0\n', { mode: 0o700 })
+    expect(await respawnAndRelaunch(id, getTui('codex'))).toEqual({
+      status: 'workload_unavailable',
+      reason: 'tmux session state is absent',
+    })
+    expect(
+      await respawnAndRelaunch(id, {
+        ...present(getTui('codex')),
+        env: { CODEX_REAL: join(dir, 'missing-native-override') },
+      }),
+    ).toMatchObject({
+      status: 'workload_unavailable',
+      reason: expect.stringContaining('missing-native-override is not installed or executable'),
     })
   })
 })

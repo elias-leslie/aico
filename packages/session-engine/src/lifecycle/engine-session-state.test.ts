@@ -6,15 +6,17 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_INSTANCE, resolvePaths } from '../paths'
 import { Store } from '../store'
+import { AgentAdmission } from './agent-admission'
 import { bindCatalog, getWidget, insertWidget, type WidgetRow } from './catalog'
 import {
   configureEngine,
   engineRetirementOperations,
   ensureSessionSerialized,
   internalSessionState,
+  lastEnsureFailure,
   rootManagedGateState,
   verifiedCurrentManagedPane,
 } from './engine'
@@ -32,6 +34,8 @@ const mocks = vi.hoisted(() => ({
   execFile: vi.fn(),
   execFileSync: vi.fn(),
   readFileSync: vi.fn(),
+  readlinkSync: vi.fn(),
+  cgroupProcessIds: vi.fn(),
   realReadFileSync: null as unknown as (...args: unknown[]) => unknown,
   scopeIdentity: vi.fn(),
   stopOwnedPaneScope: vi.fn(),
@@ -49,7 +53,7 @@ vi.mock('node:child_process', async (importOriginal) => {
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>()
   mocks.realReadFileSync = actual.readFileSync as (...args: unknown[]) => unknown
-  return { ...actual, readFileSync: mocks.readFileSync }
+  return { ...actual, readFileSync: mocks.readFileSync, readlinkSync: mocks.readlinkSync }
 })
 vi.mock('./owner-scope', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./owner-scope')>()),
@@ -57,6 +61,10 @@ vi.mock('./owner-scope', async (importOriginal) => ({
   stopOwnedPaneScope: mocks.stopOwnedPaneScope,
 }))
 vi.mock('./tui/context-support', () => ({ resolveLauncher: mocks.resolveLauncher }))
+vi.mock('./procfs', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./procfs')>()),
+  cgroupProcessIds: mocks.cgroupProcessIds,
+}))
 
 const INSTANCE = 'enginetest'
 const SERVER = '1'.repeat(32)
@@ -131,6 +139,8 @@ afterAll(() => {
   rmSync(dir, { recursive: true, force: true })
 })
 
+afterEach(() => vi.restoreAllMocks())
+
 beforeEach(() => {
   vi.resetAllMocks()
   roster(`${SERVER_PID}\t$3\taico-4369c029\t100`)
@@ -156,6 +166,80 @@ beforeEach(() => {
 })
 
 describe('engine session state', () => {
+  it('uses a surviving gate environment and cwd when checking a recovered launch', async () => {
+    const seeded = seed({ tmuxSessionId: '$3' })
+    const unit = 'tmux-spawn-00000000-0000-4000-8000-000000000002.scope'
+    const group = `/user.slice/user-${process.getuid?.()}.slice/user@${process.getuid?.()}.service/app.slice/${unit}`
+    const invocation = 'c'.repeat(32)
+    store.db
+      .prepare(`UPDATE sessions SET tool = 'codex', pane_id = '%7', scope_unit = ?,
+        scope_invocation_id = ?, launch_state = 'gated', launch_nonce = ? WHERE id = ?`)
+      .run(unit, invocation, 'b'.repeat(32), seeded.id)
+    const row = getWidget(seeded.id) as WidgetRow
+    const target = { socket: SOCKET, session: '$3' }
+    const procRead = mocks.readFileSync.getMockImplementation()
+    mocks.readFileSync.mockImplementation((path: unknown, ...rest: unknown[]) => {
+      if (path === '/proc/4321/stat')
+        return `4321 (bash) ${Array.from({ length: 20 }, (_, i) => (i === 19 ? '123' : '0')).join(' ')}`
+      if (path === '/proc/4321/cgroup') return `0::${group}\n`
+      if (path === '/proc/4321/environ')
+        return [
+          'AICO_OWNER=aico',
+          'AICO_WORKLOAD_CLASS=durable-session',
+          `AICO_WIDGET_ID=${row.id}`,
+          `AICO_SESSION_ID=${row.sessionId}`,
+          `AICO_TMUX_SERVER_ID=${SERVER}`,
+          'AICO_LIFECYCLE_VERSION=1',
+          'AICO_AGENT_SLUG=codex',
+          'AICO_PROJECT_ID=',
+          'HOME=/retained/home',
+          'PATH=/retained/missing-bin',
+          'XDG_CONFIG_HOME=/retained/config',
+          '',
+        ].join('\0')
+      if (path === '/proc/4321/cmdline') return '/bin/bash\0--noprofile\0--norc\0'
+      return procRead?.(path, ...rest)
+    })
+    mocks.readlinkSync.mockReturnValue('/retained/cwd')
+    mocks.cgroupProcessIds.mockReturnValue([4321])
+    mocks.scopeIdentity.mockImplementation(async (name: string) => ({
+      loadState: 'loaded',
+      activeState: 'active',
+      job: '',
+      controlGroup: name === unit ? group : SERVER_CGROUP,
+      invocationId: name === unit ? invocation : SERVER_INVOCATION,
+    }))
+    mocks.execFile.mockImplementation(async (_file: string, args: string[]) => {
+      if (JSON.stringify(args) === JSON.stringify(serverRosterArgs(SOCKET)))
+        return { stdout: `${SERVER_PID}\t$3\taico-${row.id}\t100\n` }
+      if (JSON.stringify(args) === JSON.stringify(listSessionPanesTargetArgs(target)))
+        return { stdout: '%7\t4321\n' }
+      if (JSON.stringify(args) === JSON.stringify(sessionIdTargetArgs(target)))
+        return { stdout: '$3\n' }
+      throw new Error('unexpected subprocess')
+    })
+    const ticket = { commit: vi.fn(), release: vi.fn() }
+    vi.spyOn(AgentAdmission.prototype, 'reserve').mockResolvedValue(ticket)
+    mocks.resolveLauncher.mockResolvedValue(null)
+    expect(await ensureSessionSerialized(row.id, { cols: 80, rows: 24 })).toBe(false)
+    expect(mocks.resolveLauncher).toHaveBeenCalledWith(
+      'codex',
+      expect.anything(),
+      expect.objectContaining({
+        env: expect.objectContaining({
+          HOME: '/retained/home',
+          PATH: '/retained/missing-bin',
+          XDG_CONFIG_HOME: '/retained/config',
+        }),
+        cwd: '/retained/cwd',
+      }),
+    )
+    expect(lastEnsureFailure(row.id)?.code).toBe('workload_unavailable')
+    expect(getWidget(row.id)?.launchState).toBe('gated')
+    expect(ticket.commit).not.toHaveBeenCalled()
+    expect(mocks.execFileSync).not.toHaveBeenCalled()
+  })
+
   it('shares only in-flight server probes and never blocks on synchronous tmux reads', async () => {
     const row = seed({ tmuxSessionId: '$3' })
     roster(`${SERVER_PID}\t$3\taico-${row.id}\t100`)
