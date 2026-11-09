@@ -122,9 +122,9 @@ it('coalesces synthetic provider failures, preserves evidence, and never calls c
   expect(JSON.parse(readFileSync(state.areas.provider.active.brief, 'utf8'))).toEqual(
     rows.map(({ id, what, meaning }) => ({ id, what, meaning })),
   )
-  expect(readFileSync(state.areas.provider.active.staged, 'utf8')).toBe(
-    readFileSync(state.areas.provider.active.brief, 'utf8'),
-  )
+  expect(
+    JSON.parse(readFileSync(state.areas.provider.active.staged, 'utf8')).observations.rows,
+  ).toEqual(JSON.parse(readFileSync(state.areas.provider.active.brief, 'utf8')))
   await Promise.all([shoppingRepairPass(rows, h.io), shoppingRepairPass(rows, h.io)])
   expect(h.calls.filter((c) => c[2] === 'create')).toHaveLength(1)
   h.finish()
@@ -322,7 +322,10 @@ it('gives a failed acceptance back to a new agent in the same repair checkout', 
   expect(creates).toHaveLength(2)
   expect(creates[1]?.[3]).not.toBe(creates[0]?.[3])
   expect(creates[1]).toContain(active.worktree)
-  expect(creates[1]?.[4]).toContain('full acceptance gate failed')
+  expect(JSON.parse(readFileSync(active.staged, 'utf8')).observations.failure).toEqual({
+    stage: 'acceptance',
+    commit: 'b'.repeat(40),
+  })
 })
 
 it('uses a permitted lower-priority subscription route when the preferred agent exits', async () => {
@@ -520,8 +523,281 @@ it('persists a diagnostic correction and restarts in the verified target project
   const launches = h.calls.filter((args) => args[2] === 'create')
   expect(launches).toHaveLength(2)
   expect(launches[1]?.[launches[1].indexOf('--project') + 1]).toBe('portfolio-ai')
-  expect(launches[1]?.[4]).toContain('Independently verify this evidence')
+  expect(
+    JSON.parse(
+      readFileSync(JSON.parse(readFileSync(path, 'utf8')).areas.dadbot.active.staged, 'utf8'),
+    ).observations.reportedCorrection.project,
+  ).toBe('portfolio-ai')
   expect(JSON.parse(readFileSync(path, 'utf8')).areas.dadbot.active.correction.category).toBe(
     'portfolio_internal_error',
   )
+})
+
+it.each(['live', 'base'] as const)(
+  'reconciles a vanished release job with %s deployed without inventing success',
+  async (where) => {
+    const h = fixture()
+    const row = failure('restart')
+    await shoppingRepairPass([row], h.io)
+    const path = join(h.dir, 'shopping-repair/state.json')
+    const state = JSON.parse(readFileSync(path, 'utf8'))
+    const active = state.areas.provider.active
+    const base = 'a'.repeat(40)
+    const commit = 'b'.repeat(40)
+    active.phase = 'releasing'
+    active.handoff = { base, commit, files: ['backend/app/shopping.py'], requests: ['restart'] }
+    active.acceptance = { tree: 'c'.repeat(40), receipt: '/accept.json' }
+    active.releaseUnit = 'shopping-repair-1234'
+    writeFileSync(path, JSON.stringify(state))
+    const live = where === 'live' ? commit : base
+    const calls: string[][] = []
+    const io = {
+      ...h.io,
+      run: async (argv: string[]) => {
+        calls.push(argv)
+        if (argv[0] === 'env') argv = argv.slice(3)
+        if (argv[0] === 'systemctl')
+          return {
+            code: 0,
+            output:
+              'LoadState=not-found\nActiveState=inactive\nSubState=dead\nResult=success\nExecMainStatus=0\nMainPID=0',
+          }
+        if (argv[0]?.endsWith('/scripts/vm-release.sh'))
+          return { code: 0, output: `[guest] current: release ${live.slice(0, 12)}` }
+        if (argv[0] === 'git' && argv.includes('rev-parse')) return { code: 0, output: live }
+        return { code: 1, output: '' }
+      },
+    }
+    await shoppingRepairPass([row], io)
+    const next = JSON.parse(readFileSync(path, 'utf8')).areas.provider.active
+    expect(calls.some((argv) => argv.includes('systemd-run'))).toBe(false)
+    expect(next.handoff).toEqual(active.handoff)
+    if (where === 'live') {
+      expect(next.phase).toBe('replaying')
+      const receipt = JSON.parse(
+        readFileSync(join(h.dir, `shopping-repair/${active.id}-release.json`), 'utf8'),
+      )
+      expect(receipt).toMatchObject({
+        jobResult: 'unknown',
+        recovery: 'live_commit_observed_job_missing',
+        commit,
+      })
+    } else {
+      expect(next.phase).toBe('retrying')
+      expect(next.failedStage).toBe('release-unknown')
+      expect(
+        JSON.parse(
+          readFileSync(join(h.dir, `shopping-repair/${active.releaseUnit}-result.json`), 'utf8'),
+        ),
+      ).toMatchObject({ jobResult: 'unknown', state: 'recovery_needed', liveCommit: base })
+    }
+  },
+)
+
+it('preserves an accepted checkout and reopens repair against a changed live base', async () => {
+  const h = fixture()
+  const row = failure('changed')
+  await shoppingRepairPass([row], h.io)
+  const path = join(h.dir, 'shopping-repair/state.json')
+  const state = JSON.parse(readFileSync(path, 'utf8'))
+  const active = state.areas.provider.active
+  const base = 'a'.repeat(40),
+    commit = 'b'.repeat(40),
+    live = 'c'.repeat(40)
+  active.phase = 'accepted'
+  active.handoff = { base, commit, files: ['backend/app/shopping.py'], requests: ['changed'] }
+  active.acceptance = { tree: 'd'.repeat(40), receipt: '/accept.json' }
+  writeFileSync(path, JSON.stringify(state))
+  const io = {
+    ...h.io,
+    sshAuthSock: '/socket',
+    run: async (argv: string[]) => {
+      if (argv[0]?.endsWith('/scripts/vm-release.sh'))
+        return { code: 0, output: `[guest] current: release ${live.slice(0, 12)}` }
+      if (argv[0] === 'git' && argv.includes(`${live.slice(0, 12)}^{commit}`))
+        return { code: 0, output: live }
+      return h.io.run(argv)
+    },
+  }
+  await shoppingRepairPass([row], io)
+  const next = JSON.parse(readFileSync(path, 'utf8')).areas.provider.active
+  expect(next.phase).toBe('preparing')
+  expect(next.base).toBe(live)
+  expect(next.prior).toMatchObject({
+    base,
+    commit,
+    worktree: active.worktree,
+    acceptance: active.acceptance,
+  })
+  expect(next.worktree).not.toBe(active.worktree)
+  expect(h.calls.some((argv) => argv.includes('systemd-run'))).toBe(false)
+})
+
+it('requires a diagnosis and freezes its agent before retrying a lost release', async () => {
+  const h = fixture()
+  const row = failure('retry')
+  await shoppingRepairPass([row], h.io)
+  const path = join(h.dir, 'shopping-repair/state.json')
+  const state = JSON.parse(readFileSync(path, 'utf8'))
+  const active = state.areas.provider.active
+  const base = 'a'.repeat(40),
+    commit = 'b'.repeat(40)
+  active.phase = 'retrying'
+  active.failedStage = 'release-unknown'
+  active.failedCommit = commit
+  active.releaseUnit = 'shopping-repair-1234'
+  active.handoff = { base, commit, files: ['backend/app/shopping.py'], requests: ['retry'] }
+  active.acceptance = { tree: 'c'.repeat(40), receipt: '/accept.json' }
+  writeFileSync(path, JSON.stringify(state))
+  await shoppingRepairPass([row], h.io)
+  const launch = h.calls.filter((args) => args[2] === 'create').at(-1)
+  expect(launch?.[4]).toContain('handoff schemas')
+  expect(JSON.parse(readFileSync(active.staged, 'utf8')).observations.failure).toEqual({
+    stage: 'release-unknown',
+    commit,
+  })
+  writeFileSync(
+    join(dirname(active.staged), 'handoff.json'),
+    JSON.stringify({
+      version: 1,
+      kind: 'release_retry',
+      base,
+      commit,
+      requests: ['retry'],
+      diagnosis: 'Checked the host and current base; peer agrees a guarded retry is appropriate.',
+    }),
+  )
+  h.finish()
+  await shoppingRepairPass([row], h.io)
+  expect(JSON.parse(readFileSync(path, 'utf8')).areas.provider.active.phase).toBe(
+    'recovering-release',
+  )
+  h.exit()
+  await shoppingRepairPass([row], h.io)
+  const next = JSON.parse(readFileSync(path, 'utf8')).areas.provider.active
+  expect(next.phase).toBe('accepted')
+  expect(next.releaseWorktree).not.toBe(active.releaseWorktree)
+  expect(next.handoff).toEqual(active.handoff)
+  expect(next.releaseDiagnosis).toContain('guarded retry')
+  expect(h.calls.some((args) => args.includes('systemd-run'))).toBe(false)
+})
+
+it('stages complete diagnostic context and schemas while keeping the launch under the real byte limit', async () => {
+  const h = fixture()
+  const row = failure('details')
+  await shoppingRepairPass([row], h.io)
+  const path = join(h.dir, 'shopping-repair/state.json')
+  const state = JSON.parse(readFileSync(path, 'utf8'))
+  const active = state.areas.provider.active
+  const base = 'a'.repeat(40),
+    commit = 'b'.repeat(40),
+    live = 'c'.repeat(40)
+  active.phase = 'launching'
+  active.failedStage = 'release-unknown'
+  active.failedCommit = commit
+  active.releaseUnit = 'shopping-repair-1234'
+  active.handoff = { base, commit, files: ['file'], requests: ['details'] }
+  active.acceptance = { tree: 'd'.repeat(40), receipt: '/receipt' }
+  active.correction = {
+    project: 'portfolio-ai',
+    category: 'portfolio_internal_error',
+    evidence: 'Endpoint reported failure',
+  }
+  active.prior = { base, commit, worktree: '/preserved', acceptance: active.acceptance }
+  state.areas.provider.needsPeer = true
+  const observation = {
+    job: active.releaseUnit,
+    jobResult: 'unknown',
+    liveCommit: live,
+    state: 'recovery_needed',
+  }
+  writeFileSync(
+    join(h.dir, `shopping-repair/${active.releaseUnit}-result.json`),
+    JSON.stringify(observation),
+  )
+  writeFileSync(path, JSON.stringify(state))
+  await shoppingRepairPass([row], { ...h.io, power: async () => 'on' })
+  const staged = JSON.parse(readFileSync(active.staged, 'utf8'))
+  expect(staged.observations).toMatchObject({
+    release: {
+      unit: active.releaseUnit,
+      observed: observation,
+      accepted: active.handoff,
+      acceptance: active.acceptance,
+    },
+    prior: active.prior,
+    reportedCorrection: active.correction,
+    failure: { stage: 'release-unknown', commit },
+  })
+  expect(staged.workflow.handoffs.releaseRetry).toMatchObject({
+    version: 1,
+    kind: 'release_retry',
+    base,
+    commit,
+    requests: ['details'],
+  })
+  expect(staged.workflow.guidance.join(' ')).toContain(
+    'Consult an available peer before proceeding',
+  )
+  expect(staged.workflow.guidance.join(' ')).toContain('owner')
+  expect(staged.workflow.handoffPath).toBe(join(dirname(active.staged), 'handoff.json'))
+  const prompt = h.calls.filter((args) => args[2] === 'create').at(-1)?.[4] ?? ''
+  expect(Buffer.byteLength(prompt, 'utf8')).toBeLessThan(1000)
+  expect(prompt).toContain(active.staged)
+})
+
+it('preserves a successful job result when another revision is live and reopens from the new base', async () => {
+  const h = fixture()
+  const row = failure('superseded')
+  await shoppingRepairPass([row], h.io)
+  const path = join(h.dir, 'shopping-repair/state.json')
+  const state = JSON.parse(readFileSync(path, 'utf8'))
+  const active = state.areas.provider.active
+  const base = 'a'.repeat(40),
+    commit = 'b'.repeat(40),
+    live = 'c'.repeat(40)
+  active.phase = 'releasing'
+  active.releaseUnit = 'shopping-repair-1234'
+  active.handoff = { base, commit, files: ['file'], requests: ['superseded'] }
+  active.acceptance = { tree: 'd'.repeat(40), receipt: '/receipt' }
+  writeFileSync(path, JSON.stringify(state))
+  const io = {
+    ...h.io,
+    run: async (argv: string[]) => {
+      if (argv[0] === 'env') argv = argv.slice(3)
+      if (argv[0] === 'systemctl')
+        return {
+          code: 0,
+          output:
+            'LoadState=loaded\nActiveState=active\nSubState=exited\nMainPID=0\nResult=success\nExecMainStatus=0',
+        }
+      if (argv[0]?.endsWith('/scripts/vm-release.sh'))
+        return { code: 0, output: `[guest] current: release ${live.slice(0, 12)}` }
+      if (argv[0] === 'git' && argv.includes(`${live.slice(0, 12)}^{commit}`))
+        return { code: 0, output: live }
+      return h.io.run(argv)
+    },
+  }
+  await shoppingRepairPass([row], io)
+  let next = JSON.parse(readFileSync(path, 'utf8')).areas.provider.active
+  expect(next.phase).toBe('accepted')
+  expect(next.releaseOutcome).toEqual({
+    unit: active.releaseUnit,
+    result: 'success',
+    liveCommit: live,
+  })
+  expect(
+    JSON.parse(
+      readFileSync(join(h.dir, `shopping-repair/${active.releaseUnit}-result.json`), 'utf8'),
+    ),
+  ).toMatchObject({ jobResult: 'success', state: 'superseded', liveCommit: live })
+  await shoppingRepairPass([row], io)
+  next = JSON.parse(readFileSync(path, 'utf8')).areas.provider.active
+  expect(next.phase).toBe('preparing')
+  expect(next.base).toBe(live)
+  expect(next.prior).toMatchObject({
+    commit,
+    worktree: active.worktree,
+    releaseOutcome: { result: 'success', liveCommit: live },
+  })
 })

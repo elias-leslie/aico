@@ -23,6 +23,19 @@ function userSystemd(argv: string[]): string[] {
   ]
 }
 
+/** Check the executor checkout before executing any script it contains. */
+export async function trustedReleaseCheckout(
+  io: Runner,
+  worktree: string,
+  base: string,
+): Promise<boolean> {
+  const [head, dirty] = await Promise.all([
+    io.run(['git', '-C', worktree, 'rev-parse', '--verify', 'HEAD^{commit}']),
+    io.run(['git', '-C', worktree, 'status', '--porcelain', '--untracked-files=all']),
+  ])
+  return !head.code && head.output.trim() === base && !dirty.code && !dirty.output.trim()
+}
+
 export async function startShoppingRelease(
   io: Runner,
   _projectRoot: string,
@@ -82,7 +95,7 @@ export async function dispatchShoppingRelease(
   unit: string,
   sshAuthSock: string,
   policy?: ShoppingPolicy,
-  receipt?: string,
+  _receipt?: string,
 ): Promise<boolean> {
   if (
     !/^shopping-repair-[0-9a-f-]+$/.test(unit) ||
@@ -105,29 +118,16 @@ export async function dispatchShoppingRelease(
       base,
     ]
   } else if (policy?.release === 'managed') {
-    const common = await io.run([
-      'git',
-      '-C',
-      worktree,
-      'rev-parse',
-      '--path-format=absolute',
-      '--git-common-dir',
-    ])
-    if (common.code || !common.output.trim().startsWith('/') || !receipt?.startsWith('/'))
-      return false
-    // The service source checkout fetches branch refs, while the isolated
-    // agent's commit is detached. Retain a unique ref before invoking it.
+    // The native Aico deploy runner accepts the exact SHA from the shared
+    // object store and uses this trusted base checkout for its project data.
     command = [
-      'bash',
-      '-c',
-      'set -eu; git -C "$1" update-ref "$2" "$3" 0000000000000000000000000000000000000000; exec st service rebuild "$4" --sha "$3" --source-repo "$5" --acceptance "$6"',
-      'shopping-release',
-      worktree,
-      `refs/heads/shopping-repair/${unit}`,
-      commit,
+      'env',
+      `AICO_DEPLOY_ROOT=${worktree}`,
+      'aico',
+      'deploy',
       policy.project,
-      common.output.trim(),
-      receipt,
+      '--sha',
+      commit,
     ]
   } else {
     command = [join(worktree, 'scripts/vm-release.sh'), 'deploy', commit, '--expected-base', base]
@@ -151,7 +151,7 @@ export async function shoppingReleaseResult(
   unit: string,
   commit: string,
   policy?: ShoppingPolicy,
-): Promise<'pending' | 'failed' | 'verified'> {
+): Promise<'pending' | 'failed' | 'verified' | 'recovered' | 'lost' | 'superseded'> {
   if (!/^shopping-repair-[0-9a-f-]+$/.test(unit) || !/^[0-9a-f]{40}$/.test(commit)) return 'failed'
   const result = await io.run(
     userSystemd([
@@ -170,6 +170,17 @@ export async function shoppingReleaseResult(
       return index < 0 ? ['', ''] : [line.slice(0, index), line.slice(index + 1)]
     }),
   )
+  // A missing transient unit has no reliable exit result: systemd reports
+  // default success properties even when it never observed the job.
+  if (
+    fields.LoadState === 'not-found' &&
+    fields.ActiveState === 'inactive' &&
+    fields.SubState === 'dead'
+  ) {
+    const live = await deployedShoppingCommit(io, projectRoot, policy)
+    if (!live) return 'pending'
+    return live === commit ? 'recovered' : 'lost'
+  }
   if (
     fields.LoadState !== 'loaded' ||
     fields.ActiveState === 'activating' ||
@@ -184,5 +195,7 @@ export async function shoppingReleaseResult(
     fields.MainPID !== '0'
   )
     return 'failed'
-  return (await deployedShoppingCommit(io, projectRoot, policy)) === commit ? 'verified' : 'pending'
+  const live = await deployedShoppingCommit(io, projectRoot, policy)
+  if (!live) return 'pending'
+  return live === commit ? 'verified' : 'superseded'
 }

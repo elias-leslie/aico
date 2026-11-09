@@ -65,9 +65,16 @@ it('deploys only a clean candidate from the current deployed base, then requires
   expect(await shoppingReleaseResult(io, '/project', unit, commit)).toBe('failed')
   status =
     'LoadState=loaded\nActiveState=active\nSubState=exited\nMainPID=0\nResult=success\nExecMainStatus=0'
-  expect(await shoppingReleaseResult(io, '/project', unit, commit)).toBe('pending')
+  expect(await shoppingReleaseResult(io, '/project', unit, commit)).toBe('superseded')
   deployed = commit
   expect(await shoppingReleaseResult(io, '/project', unit, commit)).toBe('verified')
+  status =
+    'LoadState=not-found\nActiveState=inactive\nSubState=dead\nMainPID=0\nResult=success\nExecMainStatus=0'
+  expect(await shoppingReleaseResult(io, '/project', unit, commit)).toBe('recovered')
+  deployed = base
+  expect(await shoppingReleaseResult(io, '/project', unit, commit)).toBe('lost')
+  status = 'LoadState=error\nActiveState=inactive\nSubState=dead'
+  expect(await shoppingReleaseResult(io, '/project', unit, commit)).toBe('pending')
 })
 
 it('dispatches project-specific trusted executors and verifies the live revision', async () => {
@@ -119,12 +126,16 @@ it('dispatches project-specific trusted executors and verifies the live revision
     ),
   ).toBe(true)
   const managed = calls.filter((argv) => argv.includes('systemd-run')).at(-1)
-  expect(managed?.join(' ')).toContain('--source-repo')
+  expect(managed).toContain('AICO_DEPLOY_ROOT=/trusted')
+  expect(managed).toContain('aico')
+  expect(managed).toContain('deploy')
   expect(managed?.join(' ')).toContain('--sha')
-  expect(managed?.join(' ')).toContain('update-ref')
+  expect(managed?.join(' ')).not.toContain('--source-repo')
+  expect(managed?.join(' ')).not.toContain('--acceptance')
+  expect(managed).not.toContain('/receipt.json')
   expect(managed).toContain(commit)
   expect(await shoppingReleaseResult(io, '/trusted', unit, commit, aico)).toBe('verified')
-  expect(await shoppingReleaseResult(io, '/trusted', unit, base, aico)).toBe('pending')
+  expect(await shoppingReleaseResult(io, '/trusted', unit, base, aico)).toBe('superseded')
 })
 
 it('rejects a dirty or legacy Dadbot release checkout before running its script', async () => {
