@@ -1,7 +1,24 @@
 import { describe, expect, it, vi } from 'vitest'
-import { needsPublicSearch, publicSearchFallback } from './public-search'
+import { needsPublicSearch, publicSearchFallback, publicSearchUnavailable } from './public-search'
 
 describe('public URL discovery', () => {
+  it('distinguishes provider outages from missing evidence or a policy refusal', () => {
+    expect(publicSearchUnavailable({ error: 'Public search fallback unavailable' })).toBe(true)
+    expect(
+      publicSearchUnavailable({ error: 'Public search fallback unavailable', detail: 'silent' }),
+    ).toBe(true)
+    expect(
+      publicSearchUnavailable({
+        error: 'Public search fallback unavailable',
+        detail: 'model_refused',
+      }),
+    ).toBe(false)
+    expect(
+      publicSearchUnavailable({ error: 'Public search fallback found no matching URLs' }),
+    ).toBe(false)
+    expect(publicSearchUnavailable({ results: [] })).toBe(false)
+  })
+
   it('triggers for failed and empty searches, and for a missing requested site', () => {
     expect(needsPublicSearch('olive oil', { error: 'offline' })).toBe(true)
     expect(needsPublicSearch('olive oil', { results: [] })).toBe(true)

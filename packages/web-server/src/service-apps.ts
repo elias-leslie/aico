@@ -26,7 +26,7 @@ import settings from '../data/service-apps.json' with { type: 'json' }
 import { type AskFallback, askFreeTier, wantsFreeTier } from './ask-free-tier'
 import { objectBody, RAW, type RequestContext, Router, requiredString, sendJson } from './http'
 import { fromLan, type NotifyHub, tetherAsks } from './notify'
-import { needsPublicSearch, publicSearchFallback } from './public-search'
+import { needsPublicSearch, publicSearchFallback, publicSearchUnavailable } from './public-search'
 import { frontedBy } from './service-primary'
 import { HttpError } from './tether'
 
@@ -270,18 +270,34 @@ function serviceAppsRouter(deps: ServiceAppsDeps): Router {
     const shopping = shoppingRequest(body.shopping, app)
     if (
       Number(body.query !== undefined) + Number(body.url !== undefined) !== 1 ||
-      !Object.keys(body).every((key) => ['query', 'url', 'shopping'].includes(key))
+      !Object.keys(body).every((key) => ['query', 'url', 'shopping', 'intent'].includes(key)) ||
+      (body.intent !== undefined && (body.intent !== 'product_offers' || body.query === undefined))
     )
       throw new HttpError(422, 'Send one public search query or URL')
     const verb = body.query !== undefined ? 'search' : 'fetch'
     const value = requiredString(body, verb === 'search' ? 'query' : 'url', { max: 2000 })
     if (!value.trim()) throw new HttpError(422, 'A query or URL is required')
     const web = deps.web ?? { search: searchWeb, fetch: fetchPage }
+    const sharedSearch = () =>
+      web
+        .search(value, { max: settings.evidence.max_results }, { fetch, env })
+        .catch(() => ({ error: 'Shared search unavailable' }))
+    const modelSearch = async (): Promise<Record<string, unknown>> => {
+      try {
+        return await (deps.publicSearch ?? publicSearchFallback)(
+          value,
+          settings.evidence.public_search_model,
+          settings.evidence.max_results,
+          env,
+        )
+      } catch {
+        return { error: 'Public search fallback unavailable' }
+      }
+    }
+    const retail = body.intent === 'product_offers'
     let payload: Record<string, unknown> =
       verb === 'search'
-        ? await web
-            .search(value, { max: settings.evidence.max_results }, { fetch, env })
-            .catch(() => ({ error: 'Shared search unavailable' }))
+        ? await (retail ? modelSearch() : sharedSearch())
         : // The public reader rejects private and credential-bearing URLs; no direct
           // requests to app-selected hosts run on Aico's LAN.
           await web
@@ -291,26 +307,29 @@ function serviceAppsRouter(deps: ServiceAppsDeps): Router {
               { fetch, env },
             )
             .catch(() => ({ error: 'fetch_web_page jina request failed' }))
-    const primaryFailed = Boolean(payload.error)
-    if (verb === 'search' && needsPublicSearch(value, payload)) {
-      try {
-        payload = await (deps.publicSearch ?? publicSearchFallback)(
-          value,
-          settings.evidence.public_search_model,
-          settings.evidence.max_results,
-          env,
-        )
-      } catch {
-        payload = { error: 'Public search fallback unavailable' }
+    let searchFailed = false
+    if (verb === 'search') {
+      if (retail) {
+        // Retail discovery needs the actual model search even when a cheap
+        // provider would return unrelated links. Leads still need page checks.
+        if (needsPublicSearch(value, payload)) {
+          const modelUnavailable = publicSearchUnavailable(payload)
+          payload = await sharedSearch()
+          searchFailed = modelUnavailable && Boolean(payload.error)
+          if (!payload.error)
+            payload.fallback_reason = 'Model-assisted retail discovery unavailable'
+        } else {
+          delete payload.fallback_reason
+        }
+      } else if (needsPublicSearch(value, payload)) {
+        const primaryFailed = Boolean(payload.error)
+        payload = await modelSearch()
+        searchFailed = primaryFailed && publicSearchUnavailable(payload)
       }
     }
     if (verb === 'search') {
-      const failure =
-        primaryFailed &&
-        payload.error === 'Public search fallback unavailable' &&
-        (payload.detail === undefined || payload.detail === 'error' || payload.detail === 'silent')
-      if (failure || !payload.error)
-        shoppingFault(deps, shopping, 'evidence_search_failed', Boolean(failure))
+      if (searchFailed || !payload.error)
+        shoppingFault(deps, shopping, 'evidence_search_failed', searchFailed)
     } else {
       const failure = payload.error === 'fetch_web_page jina request failed'
       if (failure || (!payload.error && payload.status_code === 200))

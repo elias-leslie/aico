@@ -791,6 +791,87 @@ it('falls back when a site-scoped search returns only unrelated domains', async 
   )
 })
 
+it('uses actual model-assisted discovery first for retail offers instead of accepting generic leads', async () => {
+  publicFallback.mockResolvedValueOnce({
+    provider: 'agy-search-web',
+    results: [{ url: 'https://retailer.example/product?variant=blue' }],
+    fallback_reason: 'Shared search failed or returned no requested site URLs',
+  })
+  const response = await call('POST', '/v1/ask/evidence', {
+    query: 'Acme X100 blue price',
+    intent: 'product_offers',
+  })
+  expect(await response.json()).toEqual({
+    provider: 'agy-search-web',
+    results: [{ url: 'https://retailer.example/product?variant=blue' }],
+  })
+  expect(publicFallback).toHaveBeenCalledWith('Acme X100 blue price', 'gemini-3.8-flash', 5, env)
+  expect(search).not.toHaveBeenCalled()
+  expect(page).not.toHaveBeenCalled() // Discovery cannot manufacture a verified fetched offer.
+})
+
+it('retains ordinary search as the retail fallback when the model search is unavailable', async () => {
+  publicFallback.mockResolvedValueOnce({
+    error: 'Public search fallback unavailable',
+    detail: 'error',
+  })
+  search.mockResolvedValueOnce({ results: [{ url: 'https://retailer.example/product' }] })
+  const response = await call('POST', '/v1/ask/evidence', {
+    query: 'Acme X100 price',
+    intent: 'product_offers',
+  })
+  expect(await response.json()).toMatchObject({
+    results: [{ url: 'https://retailer.example/product' }],
+    fallback_reason: 'Model-assisted retail discovery unavailable',
+  })
+  expect(publicFallback.mock.invocationCallOrder[0]).toBeLessThan(
+    search.mock.invocationCallOrder[0] as number,
+  )
+})
+
+it('keeps successful generic searches on the ordinary provider and validates retail intent', async () => {
+  search.mockResolvedValueOnce({ results: [{ url: 'https://example.com/article' }] })
+  await call('POST', '/v1/ask/evidence', { query: 'public article' })
+  expect(publicFallback).not.toHaveBeenCalled()
+  for (const payload of [
+    { query: 'product', intent: 'unknown' },
+    { url: 'https://retailer.example/product', intent: 'product_offers' },
+  ])
+    expect((await call('POST', '/v1/ask/evidence', payload)).status).toBe(422)
+  expect(search).toHaveBeenCalledOnce()
+  expect(page).not.toHaveBeenCalled()
+})
+
+it('reports exhausted retail discovery outages but does not turn a model refusal into a repair', async () => {
+  const shopping = { request_id: '55555555-5555-4555-8555-555555555555', kind: 'item' }
+  publicFallback.mockResolvedValueOnce({
+    error: 'Public search fallback unavailable',
+    detail: 'error',
+  })
+  search.mockResolvedValueOnce({ error: 'Shared search unavailable' })
+  await call('POST', '/v1/ask/evidence', {
+    query: 'public product',
+    intent: 'product_offers',
+    shopping,
+  })
+  expect(status.rows().find(({ row }) => row.id.endsWith(shopping.request_id))?.row).toMatchObject({
+    state: 'failed',
+    meaning: expect.stringContaining('evidence_search_failed'),
+  })
+  const refused = { ...shopping, request_id: '66666666-6666-4666-8666-666666666666' }
+  publicFallback.mockResolvedValueOnce({
+    error: 'Public search fallback unavailable',
+    detail: 'model_refused',
+  })
+  search.mockResolvedValueOnce({ error: 'Shared search unavailable' })
+  await call('POST', '/v1/ask/evidence', {
+    query: 'public product',
+    intent: 'product_offers',
+    shopping: refused,
+  })
+  expect(status.rows().some(({ row }) => row.id.endsWith(refused.request_id))).toBe(false)
+})
+
 it('keeps shared results when a site-scoped search has an official result', async () => {
   search.mockResolvedValueOnce({ results: [{ url: 'https://www.costco.com/item' }] })
   await call('POST', '/v1/ask/evidence', { query: 'site:costco.com olive oil' })

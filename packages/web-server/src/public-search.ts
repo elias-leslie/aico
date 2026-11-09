@@ -4,6 +4,13 @@ import { publicSearch } from '@aico/agent'
 type Payload = Record<string, unknown>
 type Search = typeof publicSearch
 
+export function publicSearchUnavailable(payload: Payload): boolean {
+  return Boolean(
+    payload.error === 'Public search fallback unavailable' &&
+      (payload.detail === undefined || payload.detail === 'error' || payload.detail === 'silent'),
+  )
+}
+
 function site(query: string): string | undefined {
   return /(?:^|\s)site:([a-z0-9.-]+)(?=\s|$)/i.exec(query)?.[1]?.toLowerCase()
 }
