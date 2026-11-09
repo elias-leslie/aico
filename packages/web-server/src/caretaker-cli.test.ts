@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { jobEnv, type StatusRow } from '@aico/status'
 import { afterEach, expect, it, vi } from 'vitest'
 import { POLICY } from './caretaker'
-import { runCaretakerCli } from './caretaker-cli'
+import { runCaretakerCli, shoppingMachinePower } from './caretaker-cli'
 
 vi.mock('@aico/agent', () => ({
   ask: async () => ({ outcome: { kind: 'done', text: 'ready' } }),
@@ -19,6 +19,35 @@ afterEach(() => {
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true })
+})
+
+it('reads guest power separately from workflow failures and preserves unknown', async () => {
+  const fetcher = vi.fn(
+    async () =>
+      new Response(
+        JSON.stringify({
+          failure: null,
+          items: [
+            { machine: 'shopping-vm', state: 'running' },
+            { machine: 'sleeping-vm', state: 'stopped' },
+          ],
+        }),
+      ),
+  )
+  vi.stubGlobal('fetch', fetcher)
+  expect(await shoppingMachinePower('http://local', 'shopping-vm')).toBe('on')
+  expect(await shoppingMachinePower('http://local', 'sleeping-vm')).toBe('off')
+  expect(await shoppingMachinePower('http://local', 'missing-vm')).toBe('unknown')
+  fetcher.mockImplementation(
+    async () =>
+      new Response(
+        JSON.stringify({
+          failure: 'unreachable',
+          items: [{ machine: 'shopping-vm', state: 'running' }],
+        }),
+      ),
+  )
+  expect(await shoppingMachinePower('http://local', 'shopping-vm')).toBe('unknown')
 })
 
 it('reports the caretaker and route-check deadlines from its scheduled interval', async () => {

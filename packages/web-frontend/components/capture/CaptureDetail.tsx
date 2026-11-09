@@ -151,9 +151,8 @@ function ReadingState({ capture }: { capture: Capture }) {
   return null
 }
 
-/** Where the capture is on its way to an owner: the suggestion with its
- * three choices, or waiting, failed or filed. Nothing for an owner Aico has no
- * adapter for beyond the plain reason it stays here. */
+/** Where the capture is on its way to an owner: a suggestion, or waiting,
+ * failed or filed. An unconnected owner can offer a link while it stays here. */
 function RouteBlock({ capture }: { capture: Capture }) {
   const route = capture.route
   const act = useRouteCapture()
@@ -231,6 +230,21 @@ function RouteBlock({ capture }: { capture: Capture }) {
             : `Looks like ${(capture.type ?? 'this').replace(/_/g, ' ')}.`}
         </p>
         {route.note && <p style={{ color: 'var(--mist)' }}>{route.note}</p>}
+        {!route.canSend && route.url && (
+          <a
+            className="lantern-btn min-h-11 self-start"
+            href={route.url}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <ExternalLink
+              className="h-4 w-4"
+              strokeWidth={1.7}
+              aria-hidden="true"
+            />
+            Open {owner}
+          </a>
+        )}
         {route.canSend && buttons('Send')}
         {error}
       </>,

@@ -38,7 +38,7 @@ describe('notes', () => {
     })
 
   /** A read capture the way the extract worker leaves it. */
-  function readCapture(n: number, type: string, extract: unknown, text = 'text') {
+  function readCapture(n: number, type: string, extract: unknown, text = 'text', legacy = false) {
     const row = store.insertCapture({
       clientId: `client-${n}0000`,
       kind: 'image',
@@ -51,15 +51,19 @@ describe('notes', () => {
     return store.finishExtraction(
       row.id,
       { type, text, json: JSON.stringify(extract), route: 'agy' },
-      router().plan(type),
+      router(legacy).plan(type),
     ) as NonNullable<ReturnType<NotesStore['finishExtraction']>>
   }
 
-  const router = () =>
+  const router = (legacy = false) =>
     new CaptureRouter({
       store,
       blobsDir: join(dir, 'blobs'),
-      table: buildTable(null),
+      table: buildTable(
+        legacy
+          ? { types: [{ id: 'grocery_list', label: 'Grocery list', owner: 'notes', auto: true }] }
+          : null,
+      ),
       adapters: new Map([['notes', new NotesOwner(store)]]),
       notices: QUIET,
       log: () => {},
@@ -116,16 +120,16 @@ describe('notes', () => {
     ) // an unchanged text writes nothing
   })
 
-  it('files grocery captures once: struck items unchecked with a hint, retries add nothing', async () => {
+  it('still files legacy Notes grocery captures once and retries add nothing', async () => {
     const reading = {
       items: [
         { item: 'apples', quantity: '3 bags', struck: false, as_written: 'apples 3 bags' },
         { item: 'sea salt', quantity: null, struck: true, as_written: 'sea salt' },
       ],
     }
-    const capture = readCapture(1, 'grocery_list', reading)
+    const capture = readCapture(1, 'grocery_list', reading, 'text', true)
     expect(capture.route_note).toBeNull() // the notes owner is live, so no "coming soon"
-    await router().afterReady(capture)
+    await router(true).afterReady(capture)
 
     const filed = store.getCapture(capture.id)
     const groceries = store.notes.groceries()
@@ -157,7 +161,9 @@ describe('notes', () => {
     expect(store.notes.attachments(groceries.id)).toHaveLength(1)
 
     // A second capture appends after the first.
-    await router().afterReady(readCapture(2, 'grocery_list', { items: [{ item: 'eggs' }] }))
+    await router(true).afterReady(
+      readCapture(2, 'grocery_list', { items: [{ item: 'eggs' }] }, 'text', true),
+    )
     expect(store.notes.items(groceries.id).map((i) => i.text)).toEqual(['sea salt', 'eggs'])
   })
 

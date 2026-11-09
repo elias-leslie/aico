@@ -10,17 +10,10 @@ import {
   Pin,
   Plus,
   Search,
-  ShoppingBasket,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import {
-  GROCERIES_ID,
-  GROCERIES_SOURCE,
-  NO_SCOPE,
-  type NoteSummary,
-  type NotesScope,
-} from '@/lib/api/notes'
+import { NO_SCOPE, type NoteSummary, type NotesScope } from '@/lib/api/notes'
 import { formatWhen } from '@/lib/capture-format'
 import { useNoteProjects } from '@/lib/hooks/use-note-projects'
 import { useNoteLabels, useNotes } from '@/lib/hooks/use-notes'
@@ -221,58 +214,6 @@ function Card({
   )
 }
 
-/** Groceries, always first: a list the capture router fills from photos. */
-function GroceriesShortcut({
-  note,
-  known,
-  scope,
-}: {
-  note: NoteSummary | null
-  known: boolean
-  scope: NotesScope
-}) {
-  const links = useNoteLinks()
-  const photos = note?.attachmentCount ?? 0
-  const text = !known
-    ? ''
-    : note && note.unchecked + note.checked > 0
-      ? counts(note)
-      : photos > 0
-        ? `No items yet · ${photos} ${photos === 1 ? 'photo' : 'photos'}`
-        : 'Nothing on it yet'
-  return (
-    <Link
-      href={links.note(GROCERIES_ID, scope)}
-      data-testid="groceries-shortcut"
-      className="flex items-center gap-3 rounded-lg px-3 py-3 outline-none focus-visible:outline-2 focus-visible:outline-[var(--lantern)]"
-      style={{
-        background: 'var(--paper)',
-        border: '1px solid var(--paper-veil)',
-      }}
-    >
-      <ShoppingBasket
-        className="h-5 w-5 flex-none"
-        strokeWidth={1.7}
-        style={{ color: 'var(--lantern)' }}
-        aria-hidden="true"
-      />
-      <span className="min-w-0 flex-1">
-        <span
-          className="block text-[15px] font-medium"
-          style={{ color: 'var(--bone)' }}
-        >
-          Groceries
-        </span>
-        {text && (
-          <span className="block text-[12px]" style={MUTED}>
-            {text}
-          </span>
-        )}
-      </span>
-    </Link>
-  )
-}
-
 function useDebounced<T>(value: T, ms: number): T {
   const [settled, setSettled] = useState(value)
   useEffect(() => {
@@ -283,7 +224,7 @@ function useDebounced<T>(value: T, ms: number): T {
 }
 
 /** Notes, pinned first and then by latest activity, with the scope switch (this project or
- * All), search, a label filter, the archive, and Groceries on top. `scope` is what the page was
+ * All), search, a label filter, and the archive. `scope` is what the page was
  * opened for; `onScope` widens it to All or narrows it back. */
 export function NoteList({
   scope = NO_SCOPE,
@@ -318,13 +259,8 @@ export function NoteList({
   ].sort()
   const hasLabel = (note: NoteSummary, name: string) =>
     note.labels.some((have) => have.toLowerCase() === name.toLowerCase())
-  const filtering = q !== '' || archived || label !== null || reminders
-  const groceries =
-    list.notes.find((note) => note.source === GROCERIES_SOURCE) ?? null
   const shown = list.notes.filter(
-    (note) =>
-      (label === null || hasLabel(note, label)) &&
-      (filtering || note !== groceries),
+    (note) => label === null || hasLabel(note, label),
   )
   // The reminders view is in time order: what has come due first, then what is coming.
   const nowMs = Date.now()
@@ -363,14 +299,6 @@ export function NoteList({
           New list
         </Link>
       </div>
-
-      {!filtering && (
-        <GroceriesShortcut
-          note={groceries}
-          known={list.loaded && project === undefined}
-          scope={scope}
-        />
-      )}
 
       <div className="flex gap-2">
         <label className="lantern-field min-w-0 flex-1" style={{ height: 44 }}>

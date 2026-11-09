@@ -146,6 +146,67 @@ function localModelOff<T extends { outcome: { kind: string; detail?: unknown } }
   return { ...result, outcome: { ...result.outcome, detail } }
 }
 
+type ShoppingRequest = { request_id: string; kind: 'item' | 'receipt' | 'list' }
+
+/** The service token is still the authority; the optional context is only opaque correlation. */
+function shoppingRequest(value: unknown, app: string): ShoppingRequest | undefined {
+  if (value === undefined) return undefined
+  if (!value || typeof value !== 'object' || Array.isArray(value) || app !== 'portfolio-ai')
+    throw new HttpError(422, 'Invalid Shopping context')
+  const data = value as Record<string, unknown>
+  if (
+    Object.keys(data).length !== 2 ||
+    typeof data.request_id !== 'string' ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(data.request_id) ||
+    (data.kind !== 'item' && data.kind !== 'receipt' && data.kind !== 'list')
+  )
+    throw new HttpError(422, 'Invalid Shopping context')
+  return { request_id: data.request_id, kind: data.kind }
+}
+
+type ShoppingFault = 'ask_provider_failed' | 'evidence_search_failed' | 'evidence_fetch_failed'
+
+function shoppingFault(
+  deps: ServiceAppsDeps,
+  shopping: ShoppingRequest | undefined,
+  code: ShoppingFault,
+  failed: boolean,
+): void {
+  if (!shopping) return
+  const id = `portfolio-ai/shopping-repair/aico/${shopping.request_id}`
+  try {
+    const prior = deps.status.rows().find((stored) => stored.row.id === id)?.row
+    const codes = new Set<ShoppingFault>()
+    if (prior?.state === 'failed') {
+      for (const previous of prior.meaning.split(';', 1)[0]?.split(',') ?? []) {
+        if (
+          previous === 'ask_provider_failed' ||
+          previous === 'evidence_search_failed' ||
+          previous === 'evidence_fetch_failed'
+        )
+          codes.add(previous)
+      }
+    }
+    // Each failed category remains until that operation succeeds for this request.
+    if (failed) codes.add(code)
+    else if (!codes.delete(code)) return
+    const row = {
+      id,
+      project: 'portfolio-ai',
+      machine: machineId(),
+      what: 'Shopping repair',
+      kind: 'job' as const,
+      state: codes.size ? ('failed' as const) : ('ok' as const),
+      meaning: `${codes.size ? [...codes].sort().join(',') : 'verified'}; evidence ${shopping.request_id}; request ${shopping.request_id}`,
+      last_run: new Date().toISOString(),
+    }
+    deps.status.upsert([row])
+    deps.notify.rowsWritten([row])
+  } catch {
+    // Status reporting must not replace an already determined service response.
+  }
+}
+
 function serviceAppsRouter(deps: ServiceAppsDeps): Router {
   const env = deps.env ?? process.env
   const apps = deps.apps ?? SERVICE_APPS
@@ -206,9 +267,10 @@ function serviceAppsRouter(deps: ServiceAppsDeps): Router {
   })
   on('POST', '/v1/ask/evidence', async (ctx, app) => {
     const body = objectBody(await ctx.body())
+    const shopping = shoppingRequest(body.shopping, app)
     if (
-      Object.keys(body).length !== 1 ||
-      !Object.keys(body).every((key) => ['query', 'url'].includes(key))
+      Number(body.query !== undefined) + Number(body.url !== undefined) !== 1 ||
+      !Object.keys(body).every((key) => ['query', 'url', 'shopping'].includes(key))
     )
       throw new HttpError(422, 'Send one public search query or URL')
     const verb = body.query !== undefined ? 'search' : 'fetch'
@@ -222,18 +284,38 @@ function serviceAppsRouter(deps: ServiceAppsDeps): Router {
             .catch(() => ({ error: 'Shared search unavailable' }))
         : // The public reader rejects private and credential-bearing URLs; no direct
           // requests to app-selected hosts run on Aico's LAN.
-          await web.fetch(
-            value,
-            { maxChars: settings.evidence.max_chars, backend: 'jina' },
-            { fetch, env },
-          )
-    if (verb === 'search' && needsPublicSearch(value, payload))
-      payload = await (deps.publicSearch ?? publicSearchFallback)(
-        value,
-        settings.evidence.public_search_model,
-        settings.evidence.max_results,
-        env,
-      )
+          await web
+            .fetch(
+              value,
+              { maxChars: settings.evidence.max_chars, backend: 'jina' },
+              { fetch, env },
+            )
+            .catch(() => ({ error: 'fetch_web_page jina request failed' }))
+    const primaryFailed = Boolean(payload.error)
+    if (verb === 'search' && needsPublicSearch(value, payload)) {
+      try {
+        payload = await (deps.publicSearch ?? publicSearchFallback)(
+          value,
+          settings.evidence.public_search_model,
+          settings.evidence.max_results,
+          env,
+        )
+      } catch {
+        payload = { error: 'Public search fallback unavailable' }
+      }
+    }
+    if (verb === 'search') {
+      const failure =
+        primaryFailed &&
+        payload.error === 'Public search fallback unavailable' &&
+        (payload.detail === undefined || payload.detail === 'error' || payload.detail === 'silent')
+      if (failure || !payload.error)
+        shoppingFault(deps, shopping, 'evidence_search_failed', Boolean(failure))
+    } else {
+      const failure = payload.error === 'fetch_web_page jina request failed'
+      if (failure || (!payload.error && payload.status_code === 200))
+        shoppingFault(deps, shopping, 'evidence_fetch_failed', failure)
+    }
     try {
       const db = openCounter(dataDir(env))
       try {
@@ -255,9 +337,10 @@ function serviceAppsRouter(deps: ServiceAppsDeps): Router {
   on('POST', '/v1/ask', async (ctx, app) => {
     const body = objectBody(await ctx.body())
     const extra = Object.keys(body).find(
-      (key) => !['agent_slug', 'question', 'schema', 'images', 'effort'].includes(key),
+      (key) => !['agent_slug', 'question', 'schema', 'images', 'effort', 'shopping'].includes(key),
     )
     if (extra) throw new HttpError(422, `Unknown ask field: ${extra}`)
+    const shopping = shoppingRequest(body.shopping, app)
     const slug = requiredString(body, 'agent_slug')
     const agents = (apps[app] as App).agents
     const profile = Object.hasOwn(agents, slug) ? agents[slug] : undefined
@@ -281,7 +364,18 @@ function serviceAppsRouter(deps: ServiceAppsDeps): Router {
       }),
       ...(body.effort !== undefined && { effort: body.effort as string }),
     }
-    let result: AskResult & { provider?: string } = await (deps.ask ?? ask)(request, {}, env)
+    const callAsk = async (input: typeof request): Promise<AskResult> => {
+      try {
+        return await (deps.ask ?? ask)(input, {}, env)
+      } catch {
+        return {
+          outcome: { kind: 'error', model: input.model, detail: 'Model service unavailable' },
+          tokens: { input: 0, output: 0 },
+          wallMs: 0,
+        }
+      }
+    }
+    let result: AskResult & { provider?: string } = await callAsk(request)
     let resultProvider = model.provider
     for (const fallbackModel of profile.fallback_models ?? []) {
       if (!wantsFreeTier(result.outcome) && result.outcome.kind !== 'schema_invalid') break
@@ -294,7 +388,7 @@ function serviceAppsRouter(deps: ServiceAppsDeps): Router {
         if (!subscriptionAvailable(fallback.provider, facts, now)) continue
       }
       const first = result
-      const second = await (deps.ask ?? ask)({ ...request, model: fallback.id }, {}, env)
+      const second = await callAsk({ ...request, model: fallback.id })
       result = {
         ...second,
         tokens: {
@@ -311,19 +405,34 @@ function serviceAppsRouter(deps: ServiceAppsDeps): Router {
         `[service-apps] ${app}/${slug}: ${model.id} did not answer, trying the free tier`,
       )
       const previous = result
-      result = await (deps.freeTier ?? askFreeTier)(
-        settings.free_tier,
-        prompted,
-        body.schema,
-        result,
-        env,
-      )
+      try {
+        result = await (deps.freeTier ?? askFreeTier)(
+          settings.free_tier,
+          prompted,
+          body.schema,
+          result,
+          env,
+        )
+      } catch {
+        result = {
+          ...result,
+          outcome: { kind: 'error', model: model.id, detail: 'Model service unavailable' },
+        }
+      }
       if (result.provider === 'gemini-free-tier')
         result.tokens = {
           input: previous.tokens.input + result.tokens.input,
           output: previous.tokens.output + result.tokens.output,
         }
     }
+    if (
+      result.outcome.kind === 'error' ||
+      result.outcome.kind === 'silent' ||
+      result.outcome.kind === 'schema_invalid'
+    )
+      shoppingFault(deps, shopping, 'ask_provider_failed', true)
+    else if (result.outcome.kind === 'done')
+      shoppingFault(deps, shopping, 'ask_provider_failed', false)
     sendJson(
       ctx.res,
       result.outcome.kind === 'done' ? 200 : result.outcome.kind === 'bad_input' ? 422 : 502,

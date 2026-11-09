@@ -41,6 +41,7 @@ describe('manifest route', () => {
       display: 'standalone',
       start_url: '/',
     })
+    expect(body.shortcuts).toEqual([{ name: 'Notes', url: '/notes' }])
     expect(
       body.icons.map((icon: { sizes: string; purpose: string }) => [
         icon.sizes,

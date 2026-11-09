@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { CaptureRouter, routeKey } from './capture-router'
 import { type CaptureRow, NotesStore } from './notes-db'
 import type { Notice } from './notice'
+import { NotesOwner } from './owners/notes'
 import { PortfolioAiOwner, uuidV5 } from './owners/portfolio-ai'
 import type { OwnerAdapter } from './owners/types'
 import { QUIET } from './testing-notices'
@@ -253,15 +254,26 @@ describe('capture router and the portfolio-ai owner', () => {
     expect(existsSync(blobPath(blobs, second?.hash as string))).toBe(true)
   })
 
-  it('leaves notes and unconnected vehicle types ready with a suggestion that says why, and no todo', async () => {
-    const r = router()
+  it('keeps new grocery captures in Aico with a Shopping link even when Notes is connected', async () => {
+    const r = router(new Map([['notes', new NotesOwner(store)]]))
     const grocery = await ready(r, 'grocery_list')
     const car = await ready(r, 'odometer')
-    expect(grocery).toMatchObject({ route_state: 'suggested', owner: 'notes' })
-    expect(r.describe(grocery as never)).toMatchObject({ canSend: false })
-    expect(grocery?.route_note).toContain('Notes')
+    expect(grocery).toMatchObject({
+      status: 'ready',
+      route_state: 'suggested',
+      owner: 'dadbot-shopping',
+    })
+    expect(grocery?.hash).not.toBeNull()
+    expect(store.notes.list({ kind: 'list' }).total).toBe(0)
+    expect(r.describe(grocery as never)).toMatchObject({
+      canSend: false,
+      ownerLabel: 'Dadbot Shopping',
+      url: 'https://dadbot.summitflow.dev/shopping',
+      note: 'This stays in Aico. Add items in Dadbot Shopping yourself.',
+    })
     expect(car?.route_note).toContain("Vehicles isn't connected")
     expect(sent).toHaveLength(0)
+    await expect(r.act(grocery?.id as string, 'send')).rejects.toThrow("isn't set up")
     await expect(r.act(car?.id as string, 'send')).rejects.toThrow("isn't set up")
     // A type nobody takes gets no route at all.
     expect((await ready(r, 'other'))?.route_state).toBeNull()

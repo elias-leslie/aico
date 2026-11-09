@@ -33,7 +33,7 @@ export interface RouteJson {
   notLabel: string | null
   /** The owner is set up, so Send works. */
   canSend: boolean
-  /** The owner's page, once filed (when configured). */
+  /** The owner's page, once filed or for an unconnected suggestion (when configured). */
   url: string | null
 }
 
@@ -96,7 +96,13 @@ export class CaptureRouter {
           : null,
       notLabel: entry?.not_label ?? 'Not this',
       canSend: live && REROUTABLE.includes(row.route_state),
-      url: row.route_state === 'filed' && owner ? (this.deps.ownerUrls?.[owner] ?? null) : null,
+      url: owner
+        ? row.route_state === 'filed'
+          ? (this.deps.ownerUrls?.[owner] ?? null)
+          : row.route_state === 'suggested' && !live
+            ? (table.owner(owner).url ?? null)
+            : null
+        : null,
     }
   }
 

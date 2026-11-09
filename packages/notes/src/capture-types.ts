@@ -30,6 +30,8 @@ export interface OwnerRow {
   label: string
   /** Shown when Aico has no adapter for this owner yet. */
   later?: string
+  /** An HTTPS page to open when this owner has no adapter. */
+  url?: string
 }
 
 export interface CaptureTypeTable {
@@ -73,7 +75,17 @@ function parseType(value: unknown): CaptureTypeRow | null {
 function parseOwner(value: unknown): OwnerRow | null {
   if (!isObject(value)) return null
   const label = text(value.label)
-  return label ? { label, later: text(value.later) } : null
+  let url: string | undefined
+  const rawUrl = text(value.url)
+  if (rawUrl) {
+    try {
+      const parsed = new URL(rawUrl)
+      if (parsed.protocol === 'https:' && !parsed.username && !parsed.password) url = parsed.href
+    } catch {
+      // An invalid link must not prevent the owner from being used.
+    }
+  }
+  return label ? { label, later: text(value.later), url } : null
 }
 
 /** Rows from a raw table; a row that is malformed is skipped and named in `problems`. */

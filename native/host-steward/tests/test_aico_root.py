@@ -390,10 +390,10 @@ COORD = {"name": "_coord", "doc": {"identities": {
     "cc:999999": {"session": "99999999-aaaa-4bbb-8ccc-000000000009", "last": "2026-11-08T11:00:00Z"}}}}
 
 
-def lane_receipts(monkeypatch, session=REPORT_SESSION, report=REPORT):
+def lane_receipts(monkeypatch, session=REPORT_SESSION, report=REPORT, tool="claude-code"):
     def receipt(_self, _path, route, *_a, **_k):
         if route == f"/v1/roots/{ROOT}":
-            return 200, {**DESCRIPTOR, "tool": "claude-code"}
+            return 200, {**DESCRIPTOR, "tool": tool}
         if route == "/v1/sessions/aabbcc01":
             return (200, session) if session else (404, {"error": "not_found"})
         if route == "/v1/sessions/aabbcc01/report":
@@ -416,6 +416,16 @@ def test_status_says_how_the_lane_is_and_what_it_said_bounded(monkeypatch):
     assert view["lastMessage"].startswith("Done.") and len(view["lastMessage"]) == admin.STATUS_MESSAGE_CHARS
     assert view["lastMessageCut"] is True and view["lastActivityAt"] == 2_000
     assert view["model"] == "claude-opus-5-5"
+
+
+def test_agy_root_status_includes_agent_state_and_report(monkeypatch):
+    lane_receipts(monkeypatch, tool="agy")
+    output = []
+    monkeypatch.setattr(admin, "emit_json", lambda _, value: output.append(value))
+    assert admin.main(["root", "status", ROOT]) == 0
+    assert output[0]["state"] == "idle"
+    assert output[0]["lastMessage"].startswith("Done.")
+    assert output[0]["lastActivityAt"] == 2_000
 
 
 def test_age_label_rounds_as_the_shared_time_helper_does():

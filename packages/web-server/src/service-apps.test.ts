@@ -983,3 +983,136 @@ describe('standby in front of the workstation', () => {
     expect(await res.json()).toMatchObject({ requester: 'portfolio-ai' })
   })
 })
+
+it('reports only exhausted Shopping provider failures and verifies the same request', async () => {
+  const shopping = { request_id: '11111111-1111-4111-8111-111111111111', kind: 'item' }
+  const payload = { agent_slug: 'review', question: 'private content', shopping }
+  const id = `portfolio-ai/shopping-repair/aico/${shopping.request_id}`
+  const failure: AskResult = {
+    outcome: { kind: 'error', model: 'codex/gpt-6.1-sol', detail: 'private provider detail' },
+    tokens: { input: 0, output: 0 },
+    wallMs: 1,
+  }
+  run.mockReset()
+  run.mockResolvedValue(failure)
+  expect(
+    (await call('POST', '/v1/ask', { ...payload, shopping: { ...shopping, actor: 'private' } }))
+      .status,
+  ).toBe(422)
+  expect(run).not.toHaveBeenCalled()
+  expect((await call('POST', '/v1/ask', payload)).status).toBe(502)
+  const row = status.rows().find((x) => x.row.id === id)?.row
+  expect(row).toMatchObject({
+    project: 'portfolio-ai',
+    state: 'failed',
+    meaning: expect.stringContaining('ask_provider_failed'),
+  })
+  expect(JSON.stringify(row)).not.toContain('private')
+  run.mockResolvedValue({
+    outcome: { kind: 'bad_input', detail: 'invalid' },
+    tokens: { input: 0, output: 0 },
+    wallMs: 1,
+  })
+  await call('POST', '/v1/ask', payload)
+  expect(status.rows().find((x) => x.row.id === id)?.row.state).toBe('failed')
+  run.mockResolvedValue({
+    outcome: { kind: 'done', model: 'codex/gpt-6.1-sol', text: 'ok' },
+    tokens: { input: 0, output: 0 },
+    wallMs: 1,
+  })
+  await call('POST', '/v1/ask', {
+    ...payload,
+    shopping: { ...shopping, request_id: '22222222-2222-4222-8222-222222222222' },
+  })
+  expect(status.rows().find((x) => x.row.id === id)?.row.state).toBe('failed')
+  await call('POST', '/v1/ask', payload)
+  expect(status.rows().find((x) => x.row.id === id)?.row.state).toBe('ok')
+})
+
+it('reports evidence outages only after fallback failure, not empty results or a policy rejection', async () => {
+  const shopping = { request_id: '33333333-3333-4333-8333-333333333333', kind: 'item' }
+  const id = `portfolio-ai/shopping-repair/aico/${shopping.request_id}`
+  search.mockReset()
+  publicFallback.mockReset()
+  search.mockResolvedValueOnce({ error: 'shared unavailable' })
+  publicFallback.mockResolvedValueOnce({ results: [{ url: 'https://example.com/item' }] })
+  await call('POST', '/v1/ask/evidence', { query: 'private query', shopping })
+  expect(status.rows().find((x) => x.row.id === id)).toBeUndefined()
+  search.mockResolvedValueOnce({ results: [] })
+  publicFallback.mockResolvedValueOnce({ error: 'Public search fallback found no matching URLs' })
+  await call('POST', '/v1/ask/evidence', { query: 'unknown product', shopping })
+  expect(status.rows().find((x) => x.row.id === id)).toBeUndefined()
+  search.mockResolvedValueOnce({ error: 'shared unavailable' })
+  publicFallback.mockResolvedValueOnce({
+    error: 'Public search fallback unavailable',
+    detail: 'model_refused',
+  })
+  await call('POST', '/v1/ask/evidence', { query: 'private query', shopping })
+  expect(status.rows().find((x) => x.row.id === id)).toBeUndefined()
+  search.mockResolvedValueOnce({ error: 'shared unavailable' })
+  publicFallback.mockResolvedValueOnce({ error: 'Public search fallback unavailable' })
+  await call('POST', '/v1/ask/evidence', { query: 'private query', shopping })
+  expect(status.rows().find((x) => x.row.id === id)?.row.state).toBe('failed')
+  run.mockReset()
+  run.mockResolvedValue({
+    outcome: { kind: 'done', model: 'codex/gpt-6.1-sol', text: 'ok' },
+    tokens: { input: 0, output: 0 },
+    wallMs: 1,
+  })
+  await call('POST', '/v1/ask', { agent_slug: 'review', question: 'private', shopping })
+  expect(status.rows().find((x) => x.row.id === id)?.row.state).toBe('failed')
+  search.mockResolvedValueOnce({ results: [{ url: 'https://example.com/item' }] })
+  await call('POST', '/v1/ask/evidence', { query: 'private query', shopping })
+  expect(status.rows().find((x) => x.row.id === id)?.row.state).toBe('ok')
+})
+
+it('waits for Shopping model fallbacks before reporting and keeps independent faults', async () => {
+  server.closeAllConnections()
+  await new Promise<void>((done) => server.close(() => done()))
+  server = await listen({
+    ...apps,
+    'portfolio-ai': {
+      ...apps['portfolio-ai'],
+      agents: {
+        review: {
+          model: 'codex/gpt-6.1-sol',
+          prompts: ['review-prompt'],
+          fallback_models: [{ model: 'local/qwen3-vl:8b-instruct' }],
+        },
+      },
+    },
+  })
+  const shopping = { request_id: '44444444-4444-4444-8444-444444444444', kind: 'receipt' }
+  const payload = { agent_slug: 'review', question: 'private', shopping }
+  const id = `portfolio-ai/shopping-repair/aico/${shopping.request_id}`
+  const failing: AskResult = {
+    outcome: { kind: 'error', model: 'codex/gpt-6.1-sol', detail: 'unavailable' },
+    tokens: { input: 0, output: 0 },
+    wallMs: 1,
+  }
+  const success: AskResult = {
+    outcome: { kind: 'done', model: 'local/qwen3-vl:8b-instruct', text: 'ok' },
+    tokens: { input: 1, output: 1 },
+    wallMs: 1,
+  }
+  run.mockReset()
+  run.mockResolvedValueOnce(failing).mockResolvedValueOnce(success)
+  expect((await call('POST', '/v1/ask', payload)).status).toBe(200)
+  expect(status.rows().find((x) => x.row.id === id)).toBeUndefined()
+  run.mockResolvedValueOnce(failing).mockResolvedValueOnce(failing)
+  expect((await call('POST', '/v1/ask', payload)).status).toBe(502)
+  page.mockResolvedValueOnce({ error: 'fetch_web_page jina request failed' })
+  await call('POST', '/v1/ask/evidence', { url: 'https://example.com/item', shopping })
+  expect(status.rows().find((x) => x.row.id === id)?.row.meaning).toContain(
+    'ask_provider_failed,evidence_fetch_failed',
+  )
+  run.mockResolvedValueOnce(success)
+  await call('POST', '/v1/ask', payload)
+  expect(status.rows().find((x) => x.row.id === id)?.row).toMatchObject({
+    state: 'failed',
+    meaning: expect.stringContaining('evidence_fetch_failed'),
+  })
+  page.mockResolvedValueOnce({ status_code: 200, content: 'ok' })
+  await call('POST', '/v1/ask/evidence', { url: 'https://example.com/item', shopping })
+  expect(status.rows().find((x) => x.row.id === id)?.row.state).toBe('ok')
+})

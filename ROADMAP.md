@@ -2,6 +2,7 @@
 Aico is a Linux companion for people working with terminal AI tools. Agent sessions keep running in the background and open in a browser or on the phone, owned by Tether, the session daemon. It also runs the owner's status, backups, notes and project tooling.
 
 ## Now
+- Family Shopping: model fallback, fault repair and Dadbot handoff (plan: docs/plans/family-shopping.md)
 - Notifications leftovers: home alarm, update ready and phone pairing can't get a Settings switch until the next Android release; the Proxmox sender's own alarms (when no Aico answers) reach the phone but aren't on the shared list
 ## Next
 - Antigravity leftovers (report: /srv/scratch/briefs/usage-burn-2026-11-08/lane12-report.md): agy keeps every conversation on disk with whatever private text it was sent (over 1 GB on the workstation) and no off switch was found, so it needs a cleanup; `search_web` can't be denied on schema calls, so prompt text can reach a Google search

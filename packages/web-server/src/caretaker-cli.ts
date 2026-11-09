@@ -13,6 +13,7 @@ import {
 import { dirname, join } from 'node:path'
 import { ask } from '@aico/agent'
 import { deleteStatusRow, jobSchedule, machineId, postStatusRows } from '@aico/status'
+import { registryProjects } from '@aico/tasks'
 import { generate, silenceBound } from '@aico/video'
 import {
   ANSWER_SCHEMA,
@@ -28,6 +29,7 @@ import {
   pass,
   routeCheck,
 } from './caretaker'
+import { shoppingRepairPass, shoppingRow } from './shopping-repair'
 
 const CARETAKER_USAGE = `Usage: aico caretaker <command>
   run                   one pass: note what is bad, look at earlier actions, act on what has settled
@@ -46,6 +48,27 @@ interface CaretakerIo {
   dataDir: string
   repoRoot: string
   env: NodeJS.ProcessEnv
+}
+
+/** Read power independently of the workflow row; this process proves its own host is on. */
+export async function shoppingMachinePower(
+  baseUrl: string,
+  machine: string,
+): Promise<'on' | 'off' | 'unknown'> {
+  if (machine === machineId()) return 'on'
+  try {
+    const response = await fetch(`${baseUrl}/api/machines/guests?fresh=1`)
+    if (!response.ok) return 'unknown'
+    const snapshot = (await response.json()) as {
+      failure?: unknown
+      items?: { machine?: unknown; state?: unknown }[]
+    }
+    if (snapshot.failure || !Array.isArray(snapshot.items)) return 'unknown'
+    const guest = snapshot.items.find((item) => item.machine === machine)
+    return guest?.state === 'running' ? 'on' : guest?.state === 'stopped' ? 'off' : 'unknown'
+  } catch {
+    return 'unknown'
+  }
 }
 
 const stateFile = (io: CaretakerIo) => join(io.dataDir, 'caretaker', 'state.json')
@@ -78,12 +101,20 @@ function appendLog(io: CaretakerIo, policy: Policy, event: CaretakerEvent): void
 }
 
 /** Runs argv without a shell; `aico` is this release's own script. */
-function runCommand(io: CaretakerIo, argv: string[]): Promise<{ code: number; output: string }> {
+function runCommand(
+  io: CaretakerIo,
+  argv: string[],
+  cwd?: string,
+): Promise<{ code: number; output: string }> {
   const [first, ...rest] = argv
   const program =
     first === 'aico' ? join(io.repoRoot, 'packages/web-server/scripts/aico') : (first as string)
   return new Promise((done) => {
-    const child = spawn(program, rest, { stdio: ['ignore', 'pipe', 'pipe'], env: io.env })
+    const child = spawn(program, rest, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: io.env,
+      ...(cwd ? { cwd } : {}),
+    })
     let output = ''
     const take = (chunk: Buffer) => {
       output = (output + chunk.toString()).slice(-200_000)
@@ -342,7 +373,29 @@ export async function runCaretakerCli(argv: string[], io: CaretakerIo): Promise<
   }
   const state = load(io)
   try {
-    await pass(POLICY, state, deps(io, POLICY))
+    const caretaker = deps(io, POLICY)
+    const rows = await caretaker.rows()
+    await shoppingRepairPass(rows, {
+      dataDir: io.dataDir,
+      projectRoot:
+        registryProjects(io.env).find((project) => project.id === 'portfolio-ai')?.root ?? '',
+      projects: registryProjects(io.env),
+      power: (machine) => shoppingMachinePower(io.baseUrl, machine),
+      sshAuthSock: io.env.SSH_AUTH_SOCK,
+      run: (argv, cwd) => runCommand(io, argv, cwd),
+      log: (text) =>
+        appendLog(io, POLICY, { at: new Date().toISOString(), what: 'shopping-repair', text }),
+    }).catch((error: Error) => {
+      appendLog(io, POLICY, {
+        at: new Date().toISOString(),
+        what: 'shopping-repair-error',
+        text: error.message,
+      })
+    })
+    await pass(POLICY, state, {
+      ...caretaker,
+      rows: async () => rows.filter((row) => !shoppingRow(row.id)),
+    })
     save(io, state)
     await checkRoutes(io, POLICY, state)
     save(io, state)

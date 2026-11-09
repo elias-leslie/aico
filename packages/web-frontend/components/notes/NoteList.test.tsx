@@ -57,6 +57,45 @@ describe('NoteList reminders and labels', () => {
     ])
   })
 
+  it('shows the existing Groceries list as an ordinary note in the list, search, and archive', async () => {
+    const groceries = note('old-groceries-list', {
+      kind: 'list',
+      title: 'Groceries',
+      source: 'aico:groceries',
+      checked: 110,
+    })
+    api.fetchNotes.mockImplementation(
+      async (query: { archived?: boolean }) => ({
+        notes: [{ ...groceries, archived: Boolean(query.archived) }],
+        total: 1,
+      }),
+    )
+    renderList()
+
+    const card = await screen.findByTestId('note-card')
+    expect(card.getAttribute('href')).toBe('/notes?id=old-groceries-list')
+    expect(card.textContent).toContain('110 done')
+    expect(screen.queryByTestId('groceries-shortcut')).toBeNull()
+
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search notes' }), {
+      target: { value: 'Groceries' },
+    })
+    await waitFor(() =>
+      expect(api.fetchNotes).toHaveBeenLastCalledWith(
+        expect.objectContaining({ q: 'Groceries', archived: false }),
+      ),
+    )
+    expect(screen.getByTestId('note-card').textContent).toContain('Groceries')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Archived' }))
+    await waitFor(() =>
+      expect(api.fetchNotes).toHaveBeenLastCalledWith(
+        expect.objectContaining({ q: 'Groceries', archived: true }),
+      ),
+    )
+    expect(screen.getByTestId('note-card').textContent).toContain('110 done')
+  })
+
   it('offers every label the server knows, not only those on the loaded notes', async () => {
     api.fetchNotes.mockResolvedValue({
       notes: [note('a', { labels: ['Car'] })],

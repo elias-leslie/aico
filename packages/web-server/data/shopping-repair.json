@@ -1,0 +1,23 @@
+{
+  "corrections": { "dadbot": ["portfolio-ai"] },
+  "defaultProject": "portfolio-ai",
+  "areas": { "dadbot": "dadbot", "aico": "aico" },
+  "projects": {
+    "portfolio-ai": { "project": "portfolio-ai", "release": "portfolio" },
+    "dadbot": {
+      "project": "dadbot",
+      "release": "dadbot",
+      "machine": "dadbot",
+      "sshHost": "dadbot",
+      "releaseFile": "/srv/dadbot/app/release.json",
+      "replay": {
+        "user": "dadbot",
+        "python": "/srv/dadbot/venv/bin/python",
+        "pythonPath": "/srv/dadbot/app",
+        "module": "dadbot.web.shopping_repair",
+        "config": "/srv/dadbot/app/app.json"
+      }
+    },
+    "aico": { "project": "aico", "release": "managed" }
+  }
+}

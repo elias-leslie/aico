@@ -145,6 +145,30 @@ describe('CaptureDetail route', () => {
     expect(screen.queryByRole('button', { name: 'Send' })).toBeNull()
   })
 
+  it('links to Shopping without saying the capture was sent', () => {
+    show({
+      type: 'grocery_list',
+      route: route({
+        owner: 'dadbot-shopping',
+        ownerLabel: 'Dadbot Shopping',
+        canSend: false,
+        note: 'This stays in Aico. Add items in Dadbot Shopping yourself.',
+        url: 'https://dadbot.summitflow.dev/shopping',
+      }),
+    })
+    const block = screen.getByTestId('capture-route')
+    expect(block).toHaveTextContent(
+      'This stays in Aico. Add items in Dadbot Shopping yourself.',
+    )
+    expect(block).not.toHaveTextContent('Sent to')
+    expect(
+      screen.getByRole('link', { name: 'Open Dadbot Shopping' }),
+    ).toHaveAttribute('href', 'https://dadbot.summitflow.dev/shopping')
+    expect(screen.queryByRole('button', { name: 'Send' })).toBeNull()
+    expect(screen.getByRole('link', { name: /Download/ })).toBeInTheDocument()
+    expect(state.routed).toEqual([])
+  })
+
   it('says it is waiting and offers Send now; says why it failed and offers Try again', () => {
     show({
       route: route({

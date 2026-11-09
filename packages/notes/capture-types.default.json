@@ -1,6 +1,11 @@
 {
   "owners": {
     "portfolio-ai": { "label": "Portfolio AI" },
+    "dadbot-shopping": {
+      "label": "Dadbot Shopping",
+      "url": "https://dadbot.summitflow.dev/shopping",
+      "later": "This stays in Aico. Add items in Dadbot Shopping yourself."
+    },
     "notes": { "label": "Notes", "later": "Notes are coming soon, so this stays here for now." },
     "vehicles": {
       "label": "Vehicles",
@@ -22,11 +27,11 @@
     {
       "id": "grocery_list",
       "label": "Grocery list",
-      "owner": "notes",
-      "auto": true,
+      "owner": "dadbot-shopping",
+      "auto": false,
       "confirm": false,
       "keep_copy": true,
-      "question": "File this as a grocery list?",
+      "question": "Open Dadbot Shopping?",
       "not_label": "Not a grocery list"
     },
     {

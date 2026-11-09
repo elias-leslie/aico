@@ -2296,6 +2296,7 @@ def root_main(argv: list[str]) -> int:
         if args.operation == "status":
             if data.get("tool") in ("codex", "claude-code", "pi") and pinned["status"] == "running":
                 output.update(agent_view(collector, args.request_id, data["tool"], data.get("agentExit")))
+            if data.get("tool") in ("codex", "claude-code", "pi", "agy") and pinned["status"] == "running":
                 output.update(lane_view(collector, control, pinned["hostIdentity"]))
             emit_json(collector, output)
             return 0
