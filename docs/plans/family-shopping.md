@@ -18,7 +18,15 @@ buying credits; private inputs never use public-only Gemini free-tier research.
 Off machines remain off. Credentials, financial approvals, durable-data deletion
 and publication remain owner decisions.
 
-Verification includes model-image transport, fallback eligibility, attributed
-fault reporting, correct-project repair routing, release/replay checks, preserved
-Notes history, and rendered capture/Notes navigation. Portfolio's full matrix
-also requires live receipt reconciliation and Terra/Luna user journeys in Dadbot.
+Released Aico `30d079401311e96342c307f372b99292c40bfc0f` passed 5,624 Vitest tests
+with one skipped and 1,659 Python tests with five skipped; it was healthy at
+17:51 UTC. Its parenthesized-domain search correction passed independent review
+and 40 focused tests. Actual Costco SKU discovery now uses `agy-search-web`,
+returns an exact official URL and reports no errors. Subscription image dispatch,
+eligible fallback and a live repair/peer-help drill were exercised; passing
+contracts cover fault attribution, project repair routing and verified replay.
+Original Notes/history remain, with new captures directed to Dadbot. Portfolio's
+released six-receipt replay and final Terra/Luna journeys passed. Detailed
+evidence and the final normal Costco batch counts are in Portfolio's
+`docs/SHOPPING_VERIFICATION_2026-11-09.md`; clean synthetic photos and offers do
+not establish universal OCR accuracy or current retailer prices.
