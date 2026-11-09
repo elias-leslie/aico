@@ -28,6 +28,86 @@ describe('public URL discovery', () => {
     expect(
       needsPublicSearch('site:costco.com oil', { results: [{ url: 'https://www.costco.com/' }] }),
     ).toBe(false)
+    expect(needsPublicSearch('olive oil', { results: [{ url: 'https://example.com/' }] })).toBe(
+      false,
+    )
+  })
+
+  it.each([
+    '(site:costco.com OR site:costcobusinessdelivery.com) 1221092 Costco item',
+    '(SITE:costco.com) oil',
+  ])('requires a requested domain in parenthesized query %s', (query) => {
+    for (const url of [
+      'https://bing.com/irrelevant',
+      'https://notcostco.com/item',
+      'https://costco.com.example.com/item',
+      'https://costco.com@other.example/item',
+      'https://costco.com:invalid/item',
+      'not a URL',
+    ])
+      expect(needsPublicSearch(query, { results: [{ url }] })).toBe(true)
+  })
+
+  it.each([
+    '(site:costco.com OR site:costcobusinessdelivery.com) oil',
+    'site:costco.com OR site:costcobusinessdelivery.com oil',
+  ])('accepts any requested domain or its subdomains in %s', (query) => {
+    for (const url of [
+      'https://costco.com/item',
+      'https://www.costco.com/item',
+      'https://costcobusinessdelivery.com/item',
+      'https://www.costcobusinessdelivery.com/item',
+    ])
+      expect(needsPublicSearch(query, { results: [{ url }] })).toBe(false)
+  })
+
+  it('filters fallback results to every domain in a parenthesized OR scope', async () => {
+    const search = vi.fn().mockResolvedValue({
+      outcome: {
+        kind: 'done',
+        data: {
+          results: [
+            { title: 'Other', url: 'https://example.com/item' },
+            { title: 'Spoofed suffix', url: 'https://costco.com.example.com/item' },
+            { title: 'Malformed', url: 'not a URL' },
+            { title: 'Costco', url: 'https://www.costco.com/item' },
+            { title: 'Business', url: 'https://www.costcobusinessdelivery.com/item' },
+          ],
+        },
+      },
+    })
+    const result = await publicSearchFallback(
+      '(site:costco.com OR site:costcobusinessdelivery.com) 1221092 Costco item',
+      'model',
+      5,
+      {},
+      search,
+    )
+    expect(result).toMatchObject({
+      result_count: 2,
+      results: [
+        { rank: 1, title: 'Costco', url: 'https://www.costco.com/item' },
+        { rank: 2, title: 'Business', url: 'https://www.costcobusinessdelivery.com/item' },
+      ],
+    })
+  })
+
+  it('reports no matching URLs when an OR-scoped fallback returns only unrelated URLs', async () => {
+    const search = vi.fn().mockResolvedValue({
+      outcome: {
+        kind: 'done',
+        data: { results: [{ title: 'Other', url: 'https://example.com/' }] },
+      },
+    })
+    expect(
+      await publicSearchFallback(
+        '(site:costco.com OR site:costcobusinessdelivery.com) oil',
+        'model',
+        5,
+        {},
+        search,
+      ),
+    ).toMatchObject({ error: 'Public search fallback found no matching URLs' })
   })
 
   it('resolves only Google grounding redirects and filters the actual destination', async () => {

@@ -11,14 +11,17 @@ export function publicSearchUnavailable(payload: Payload): boolean {
   )
 }
 
-function site(query: string): string | undefined {
-  return /(?:^|\s)site:([a-z0-9.-]+)(?=\s|$)/i.exec(query)?.[1]?.toLowerCase()
+function sites(query: string): string[] {
+  const domains: string[] = []
+  for (const match of query.matchAll(/(?:^|[\s(])site:([a-z0-9.-]+)(?=[\s)]|$)/gi))
+    if (match[1]) domains.push(match[1].toLowerCase())
+  return domains
 }
 
-function matchesSite(url: string, domain: string): boolean {
+function matchesSites(url: string, domains: string[]): boolean {
   try {
     const host = new URL(url).hostname.toLowerCase()
-    return host === domain || host.endsWith(`.${domain}`)
+    return domains.some((domain) => host === domain || host.endsWith(`.${domain}`))
   } catch {
     return false
   }
@@ -27,15 +30,15 @@ function matchesSite(url: string, domain: string): boolean {
 export function needsPublicSearch(query: string, payload: Payload): boolean {
   const results = Array.isArray(payload.results) ? payload.results : []
   if (payload.error || !results.length) return true
-  const domain = site(query)
+  const domains = sites(query)
   return Boolean(
-    domain &&
+    domains.length &&
       !results.some(
         (r: unknown) =>
           r &&
           typeof r === 'object' &&
           typeof (r as Payload).url === 'string' &&
-          matchesSite((r as Payload).url as string, domain),
+          matchesSites((r as Payload).url as string, domains),
       ),
   )
 }
@@ -80,7 +83,7 @@ export async function publicSearchFallback(
     if (result.outcome.kind !== 'done')
       return { error: 'Public search fallback unavailable', detail: result.outcome.kind, query }
     const data = result.outcome.data as { results: { title: string; url: string }[] }
-    const domain = site(query)
+    const domains = sites(query)
     const resolved = await Promise.all(
       data.results.map(async (item) => ({
         title: item.title,
@@ -90,7 +93,7 @@ export async function publicSearchFallback(
     const seen = new Set<string>()
     const results = resolved
       .filter((item): item is { title: string; url: string } => {
-        if (!item.url || (domain && !matchesSite(item.url, domain)) || seen.has(item.url))
+        if (!item.url || (domains.length && !matchesSites(item.url, domains)) || seen.has(item.url))
           return false
         seen.add(item.url)
         return true
