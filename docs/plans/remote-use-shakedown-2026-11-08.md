@@ -3,7 +3,7 @@
 The owner requested a proper plan followed by multiple Terra/Luna user testers,
 careful temperature/performance/memory observation, and simple fixes in existing
 seams. Start execution after the preceding walk-away checkpoint is complete.
-No publication, full backup, deliberate heating, real power cut, password changes,
+No publication, full host/VM backup, deliberate heating, real power cut, password changes,
 backup deletion or production-data rewrite is part of this plan.
 
 ## Preserve Claude's completed work
@@ -129,7 +129,10 @@ Three native Terra user testers completed bounded read-only journeys:
   despite missing evidence, a NASDAQ exchange/ticker notice misclassified as broad
   market context, and one scroll-dependent partially covered heading. Root
   confirmed the first two against source/screenshots; their narrow corrections
-  are in progress. The layout observation is not yet an independently reproduced
+  passed review/checks and were released at `4718e784`. Root verified all three
+  vehicle cards show incomplete due status and the original exchange/ticker
+  notice disappeared while other news still rendered. The layout observation is
+  not an independently reproduced
   defect. No financial actions, account changes, refresh jobs or records changed.
 
 Reports and private screenshots remain under
@@ -138,18 +141,45 @@ Portfolio screenshots contain household information; do not publish them.
 
 Standby's supported Codex CLI 0.166.0 now matches the workstation, installed via
 the existing managed admission command and official npm package. Its native
-sign-in is absent; a real Codex device-sign-in process was opened using Aico's
-existing host sign-in action. The owner has a Needs you item to finish it; no
-credentials were copied, altered or printed. The actual READY/reload/end retest
-remains pending that sign-in and deployment of executable readiness checks.
+sign-in was absent; a real Codex device-sign-in process was opened using Aico's
+existing host sign-in action. The first code expired; root supplied a fresh
+direct session link and an Open button on the same Needs you item. The owner
+completed sign-in, native status returned success, and the ask was closed. No
+credentials were copied or printed. A Terra tester then completed the actual
+Standby READY/reload/end journey: response in two seconds, reply retained after
+reload, throwaway ended and browser closed. Trust was accepted only for the
+verified owned Aico project directory. The UI offered no model selector; the
+native response used the default GPT-6.1-Sol. The tester itself used Terra.
+
+Executable readiness was released on both controllers through `cf6e4831` after
+the fresh review caught and the author fixed actual auth-shim targets, retained
+gate environment/cwd, and Blank Slate native targets. Final author checks:
+1,044 related tests passed, one existing skip, types/lint/boundaries/uilint clean.
+Fresh reviewer independently passed 47 focused tests and found no remaining
+supported defect. The false universal Off explanation also passed live rendering.
 
 Portfolio VM180 was started only after its agent cleared overlap. The actual
 guest SSH key differed from the workstation's stale cached IP keys. Root verified
 the public key and fingerprint through Proxmox QGA before updating that IP's
 known-host entry. The existing API forwarder then returned health 200 and the
 temporary frontend forward returned 200. Guest keys, login credentials, aliases
-and forwarding restrictions were unchanged. Restore the guest to its prior off
-state after the owned verification/release work.
+and forwarding restrictions were unchanged. The guest was restored to its prior
+off state after owned verification/release work; all temporary page forwards and
+owned browser sessions were closed.
+
+Portfolio's existing release procedure required an app-level predeployment
+backup. Root used its existing no-prune option under a temporary half-core CPU
+cap: one 104,890,292-byte database/upload archive was added, with all 58 prior
+complete archives retained (59 afterward). No host/VM export ran. The temporary
+override was removed; the same normal half-core backup cap was committed in the
+unit template at `e966a23b` and installed in the guest's native unit. Its actual
+CPUQuotaPerSecUSec was 500ms. Existing retention policy was not rewritten.
+
+At 19:26 EST the actual CBOE endpoint returned HTTP 200 and all three categories
+with empty call/put lists. Portfolio's historical Options activity warning is
+therefore supported by current empty upstream data; its cause is not established.
+No schema failure, closed-market explanation or successful data refresh is
+claimed, and the warning was not artificially cleared.
 
 Current recovery metadata has no waiting sessions on either controller. The
 workstation's boot record has four restored sessions and no failed or pending
@@ -158,5 +188,14 @@ does not prove a current recovery failure or an untested sudden-stop recovery.
 Both controllers' three services, Jobinator's two services and the native guard
 were active with zero automatic restarts at the post-journey check.
 
-Final deployment, resource totals, cleanup and guest-state verification remain
-to be recorded before this shakedown is closed.
+The initial final resource review found 20 two-second samples at or above 80 C,
+none at or above the 85 C guard threshold; peak 84.5 C. The bursts recur roughly
+once a minute during 19:25–19:34 EST, before the later app release/backup. Their
+process is not established. No owned Portfolio page was open in that window.
+Source review identifies expensive health reads as candidates, not a diagnosis.
+Root is coordinating one bounded read-only process/query attribution probe
+before closing this thermal investigation. The existing native guard is healthy;
+the guest is off and gem returned to about 45 C before the probe.
+
+Final process attribution, resource totals, cleanup and guest-state verification
+remain to be recorded before this shakedown is closed.

@@ -1,8 +1,10 @@
 # Proxmox guest states after readiness work
 
-Observed Nov 8 after the controlled gem reboot and live browser test. All states
+Observed Nov 8 after the controlled gem reboot and remote user tests. All states
 below follow the owner's choices. VM 180 was renamed and resized by the Portfolio
-agent, which deliberately left it off. Memory is in GiB.
+agent, which deliberately left it off. It was briefly started for the coordinated
+page/release checks and restored off. A final brief CPU attribution probe is
+coordinated; restore off afterward. Memory is in GiB.
 
 | ID | VM | Cores | Memory | State | Autostart | Intended use |
 |---|---|---:|---:|---|---|---|
