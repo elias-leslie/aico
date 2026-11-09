@@ -20,12 +20,14 @@ and publication remain owner decisions.
 
 Released Aico `cafe7aa6b43992e51e9f7d4061d18f8d57601859` passed 5,660 Vitest tests
 with one skipped and 1,659 Python tests with five skipped; workstation and standby
-are healthy. Its parenthesized-domain search and complete retained-page retrieval
+run that code. HEAD `ced2116d6aab3c4db99b58355b4924566b605360` changes docs only.
+Its parenthesized-domain search and complete retained-page retrieval
 corrections passed independent review. Actual Costco SKU discovery uses
 `agy-search-web`, and the live complete-page guard verified item 1221092 without
 weakening provenance. Retail price discovery uses measured DB task
-`public-retail-discovery` v4 with configured market/currency. It favors actual
-purchase pages and diverse retailer hosts within the existing result budget,
+`public-retail-discovery` v5 (1,080 bytes, seven lines, about 270 tokens) with
+configured market/currency. It favors low-unit-cost mainstream purchase pages
+and diverse retailer hosts within the existing result budget,
 with rejected hosts remaining a soft fallback. Explicit zero retail
 leads remain unknown without a repair; provider and malformed-result failures
 remain distinct. Subscription image dispatch,
@@ -36,8 +38,10 @@ the same public evidence service. Configured challenge/application-error heading
 now preserve HTTP/source provenance while marking incomplete coverage, including
 legacy cached full-page artifacts. Independent review and the full release gate
 passed. Actual LAN fetches correctly classified the observed Walmart challenge
-and Target error shells. The final normal Costco batch processed all 38 candidates:
-48 verified names, 10 misses and 4 public-source errors remain across 62 products.
+and Target error shells. The earlier normal Costco batch processed all 38 candidates
+and reached 48 verified names, 10 misses and 4 errors. The final normal retry
+finished with 48 verified, 14 honest misses and no errors across 62 products;
+the last four errors became misses, with no additional verified names.
 
 Original Notes/history remain, with new captures directed to Dadbot. Portfolio's
 released six-receipt replay and final Terra/Luna journeys passed. Detailed
@@ -45,10 +49,30 @@ evidence and the final normal Costco batch counts are in Portfolio's
 `docs/SHOPPING_VERIFICATION_2026-11-09.md`; clean synthetic photos and offers do
 not establish universal OCR accuracy or current retailer prices.
 
-The shared DB Shopping router prompt is now attachment-aware v3 (1,565 to 1,664
-bytes), with unchanged item/list/receipt/unknown output. It treats full PDF/text
+The shared DB Shopping router prompt is attachment-aware v4: 1,724 bytes,
+12 lines, about 431 tokens, with unchanged item/list/receipt/unknown output. It treats full PDF/text
 contents as evidence and retains receipt processing in Portfolio's existing
 financial intake. Source and prompt changes introduce no provider or paid key.
-The accepted Aico release is verified on workstation and standby; attachment
-consumer release and actual provider-read evidence are tracked in the shared
-Portfolio verification ledger.
+The accepted Aico release is verified on workstation and standby. The deployed
+consumer passed five actual Gemini Flash reads of synthetic text/PDF/scanned
+PDF/image inputs plus all-page OCR and legacy-unknown-cache reread/reuse. Known
+cache entries remain preserved; the required closed schema fixes the observed
+empty-object reply. No household receipt intake or purchases were saved by
+these probes. Six actual Chromium attachment cases passed separately; the new
+Terra attachment journey was blocked by the managed browser, and physical mobile
+camera use remains untested. The shared Portfolio ledger retains that evidence
+and actual Walmart intake and normal price-probe results. The authorized Walmart
+PDF completed with eight source-backed lines, 19 units and a $69.01 total; replay
+preserved all intake counts. The normal price probe returned honest partial
+results without a verified landed-cost alternative. The v5 public discovery
+check returned five mainstream retailer leads in 78.2 seconds; these are leads,
+not verified prices.
+
+
+The final receipt reconciliation consumers are released: Portfolio
+`b5d1ec1c9f09bad6ff9a46594896e416199e40b2` (4,524 backend/836 frontend passes)
+and Dadbot `a5d66334f5d37498dcb28dee91627231b141ec47` (773 passes/50 skips).
+Five receipt Chromium cases separately passed. Normal deployed recovery linked
+all eight Walmart items to the existing $69.01 charge, with unchanged counts
+after replay. The source line subtotals remain distinct from allocated order
+savings. This change needs no additional Aico code deployment.
