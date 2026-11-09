@@ -71,8 +71,6 @@ export interface NoteRevision {
   reason: string
 }
 
-export const GROCERIES_SOURCE = 'aico:groceries'
-export const GROCERIES_ID = 'groceries'
 const NOTE_ID = /^([0-9a-f]{12}|groceries)$/
 
 export const isNoteId = (value: string | null): value is string =>
