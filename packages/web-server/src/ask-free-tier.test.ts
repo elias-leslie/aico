@@ -21,7 +21,7 @@ const answers = (...results: (string | Error)[]) => {
 const SCHEMA = { type: 'object', properties: { n: { type: 'integer' } }, required: ['n'] }
 
 describe('which roles may fall to the free tier', () => {
-  it('only the ones the owner has agreed to: nothing private', () => {
+  it('allows public price research but no private household or financial roles', () => {
     const marked = Object.values(SERVICE_APPS).flatMap((app) =>
       Object.entries(app.agents)
         .filter(([, profile]) => profile.free_tier)
@@ -29,7 +29,7 @@ describe('which roles may fall to the free tier', () => {
     )
     expect(
       marked.filter((slug) => /household|financial|chat|offer|risk|equity/.test(slug)),
-    ).toEqual([])
+    ).toEqual(['household-price-scout'])
   })
 })
 

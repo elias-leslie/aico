@@ -1,4 +1,4 @@
-export { type AskOutcome, type AskResult, ask, askMain } from './ask'
+export { type AskOutcome, type AskResult, ask, askMain, publicSearch } from './ask'
 export { ChatError, type ChatMessage, ChatSessions, type ChatState } from './chats'
 export { dataDir, main, USAGE } from './cli'
 export { type ModelRefusal, type ModelSwap, refusalOf, swapOf } from './outcomes'

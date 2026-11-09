@@ -58,6 +58,13 @@ const page = vi.fn(
     content: 'Public source.',
   }),
 )
+const publicFallback = vi.fn(
+  async (
+    ..._args: Parameters<NonNullable<ServiceAppsDeps['publicSearch']>>
+  ): Promise<Record<string, unknown>> => ({
+    error: 'Public search fallback unavailable',
+  }),
+)
 const receive = vi.fn()
 const tether = vi.fn()
 
@@ -83,7 +90,11 @@ beforeEach(async () => {
   server = await listen(apps)
 })
 /** The listener over this test's stores, and `base` pointing at it. */
-async function listen(served: typeof apps, freeTier?: ServiceAppsDeps['freeTier']) {
+async function listen(
+  served: NonNullable<ServiceAppsDeps['apps']>,
+  freeTier?: ServiceAppsDeps['freeTier'],
+  usageFacts?: ServiceAppsDeps['usageFacts'],
+) {
   const made = createServiceAppsServer({
     status,
     notify: {
@@ -104,7 +115,9 @@ async function listen(served: typeof apps, freeTier?: ServiceAppsDeps['freeTier'
     apps: served,
     ask: run,
     ...(freeTier && { freeTier }),
+    ...(usageFacts && { usageFacts }),
     web: { search, fetch: page },
+    publicSearch: publicFallback,
     prompt: (slug) => (slug === 'review-prompt' ? 'Review carefully.' : null),
   })
   await new Promise<void>((done) => made.listen(0, '127.0.0.1', done))
@@ -124,6 +137,21 @@ const call = (method: string, path: string, body?: unknown, headers: Record<stri
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', ...headers },
     ...(body !== undefined && { body: JSON.stringify(body) }),
   })
+
+it('uses subscription Gemini and local fallback for private household vision roles', () => {
+  const roles = SERVICE_APPS['portfolio-ai']?.agents
+  for (const slug of ['household-receipt-vision', 'household-shelf-tag-vision']) {
+    expect(roles?.[slug]).toMatchObject({
+      model: 'gemini-3.8-flash',
+      fallback_models: [
+        { model: 'codex/gpt-6.1-sol', subscription_only: true },
+        { model: 'local/qwen3-vl:8b-instruct' },
+      ],
+    })
+    expect(roles?.[slug]?.free_tier).not.toBe(true)
+  }
+  expect(roles?.['household-price-scout']?.free_tier).toBe(true)
+})
 
 it('takes a token only directly on the LAN and never via browser or proxy headers', async () => {
   expect((await call('GET', '/v1/ask/config')).status).toBe(200)
@@ -252,6 +280,300 @@ it('falls to the free tier only for a role marked for it, and says so', async ()
   expect((await to('review')).status).toBe(200)
   expect(free).toHaveBeenCalledTimes(2)
   warn.mockRestore()
+})
+
+it('uses the local vision fallback on image provider failure while keeping request and accounting', async () => {
+  server.closeAllConnections()
+  await new Promise((done) => server.close(done))
+  server = await listen({
+    ...apps,
+    'portfolio-ai': {
+      ...apps['portfolio-ai'],
+      agents: {
+        review: {
+          model: 'gemini-3.8-flash',
+          fallback_models: [{ model: 'local/qwen3-vl:8b-instruct' }],
+          prompts: ['review-prompt'],
+        },
+      },
+    },
+  })
+  const images = [{ data: 'eA==', mimeType: 'image/png' }]
+  const schema = { type: 'object' }
+  run.mockReset()
+  run.mockResolvedValueOnce({
+    outcome: { kind: 'error', model: 'gemini-3.8-flash', detail: 'unavailable' },
+    tokens: { input: 2, output: 1 },
+    wallMs: 3,
+  })
+  run.mockResolvedValueOnce({
+    outcome: { kind: 'done', model: 'local/qwen3-vl:8b-instruct', text: '{}' },
+    tokens: { input: 5, output: 4 },
+    wallMs: 7,
+  })
+  const response = await call('POST', '/v1/ask', {
+    agent_slug: 'review',
+    question: 'Read',
+    images,
+    schema,
+  })
+  expect(response.status).toBe(200)
+  expect(await response.json()).toMatchObject({
+    provider: 'local',
+    outcome: { kind: 'done', model: 'local/qwen3-vl:8b-instruct' },
+    tokens: { input: 7, output: 5 },
+    wallMs: 10,
+  })
+  expect(run).toHaveBeenCalledTimes(2)
+  expect(run.mock.calls[1]?.[0]).toMatchObject({
+    model: 'local/qwen3-vl:8b-instruct',
+    images,
+    schema,
+    question: 'Review carefully.\n\nRead',
+  })
+
+  run.mockClear()
+  run.mockResolvedValueOnce({
+    outcome: { kind: 'bad_input', detail: 'Invalid inline image' },
+    tokens: { input: 0, output: 0 },
+    wallMs: 1,
+  })
+  expect(
+    (await call('POST', '/v1/ask', { agent_slug: 'review', question: 'Read', images })).status,
+  ).toBe(422)
+  expect(run).toHaveBeenCalledTimes(1)
+
+  run.mockClear()
+  run.mockResolvedValueOnce({
+    outcome: {
+      kind: 'schema_invalid',
+      model: 'gemini-3.8-flash',
+      errors: ['wrong shape'],
+      text: '{}',
+    },
+    tokens: { input: 0, output: 0 },
+    wallMs: 1,
+  })
+  run.mockResolvedValueOnce({
+    outcome: { kind: 'done', model: 'local/qwen3-vl:8b-instruct', text: '{}' },
+    tokens: { input: 0, output: 0 },
+    wallMs: 1,
+  })
+  expect(
+    (await call('POST', '/v1/ask', { agent_slug: 'review', question: 'Read', images, schema }))
+      .status,
+  ).toBe(200)
+  expect(run).toHaveBeenCalledTimes(2)
+
+  run.mockClear()
+  run.mockResolvedValueOnce({
+    outcome: { kind: 'tool_denied', model: 'gemini-3.8-flash', detail: 'image read denied' },
+    tokens: { input: 0, output: 0 },
+    wallMs: 1,
+  })
+  expect(
+    (await call('POST', '/v1/ask', { agent_slug: 'review', question: 'Read', images, schema }))
+      .status,
+  ).toBe(502)
+  expect(run).toHaveBeenCalledTimes(1)
+
+  run.mockClear()
+  run.mockResolvedValueOnce({
+    outcome: { kind: 'error', model: 'gemini-3.8-flash', detail: 'unavailable' },
+    tokens: { input: 0, output: 0 },
+    wallMs: 1,
+  })
+  run.mockResolvedValueOnce({
+    outcome: { kind: 'error', model: 'local/qwen3-vl:8b-instruct', detail: 'connection failed' },
+    tokens: { input: 0, output: 0 },
+    wallMs: 1,
+  })
+  const failed = await call('POST', '/v1/ask', { agent_slug: 'review', question: 'Read', images })
+  expect(failed.status).toBe(502)
+  expect(await failed.json()).toMatchObject({
+    provider: 'local',
+    outcome: { detail: expect.stringContaining("workstation's GPU") },
+  })
+  run.mockImplementation(async () => ({
+    outcome: { kind: 'done', model: 'codex/gpt-6.1-sol', text: 'OK' },
+    tokens: { input: 1, output: 1 },
+    wallMs: 1,
+  }))
+})
+
+it('tries declared fallbacks in order and never routes around refusals or invalid input', async () => {
+  server.closeAllConnections()
+  await new Promise((done) => server.close(done))
+  const free = vi.fn(async () => ({
+    outcome: { kind: 'done' as const, model: 'flash', text: 'free' },
+    tokens: { input: 1, output: 1 },
+    wallMs: 3,
+    provider: 'gemini-free-tier',
+  }))
+  let codexUsedPercent = 10
+  let unreadable = false
+  const usageFacts: NonNullable<ServiceAppsDeps['usageFacts']> = (now) => ({
+    collected_at: now,
+    readings: [
+      {
+        provider: 'codex',
+        window_minutes: 10080,
+        observed_at: now,
+        used_percent: codexUsedPercent,
+        resets_at: new Date(Date.parse(now) + 60_000).toISOString(),
+        source: 'test',
+      },
+    ],
+    credits: { codex: { balance: 50, pace_per_day_7d: 0, earliest_expiry: null } },
+    refusals: [],
+    ...(unreadable && { unreadable: { codex: 'collection failed' } }),
+  })
+  server = await listen(
+    {
+      ...apps,
+      'portfolio-ai': {
+        ...apps['portfolio-ai'],
+        agents: {
+          review: {
+            model: 'gemini-3.8-flash',
+            fallback_models: [
+              { model: 'codex/gpt-6.1-sol', subscription_only: true },
+              { model: 'local/qwen3-vl:8b-instruct' },
+            ],
+            free_tier: true,
+            prompts: ['review-prompt'],
+          },
+        },
+      },
+    },
+    free,
+    usageFacts,
+  )
+  const image = [{ data: 'eA==', mimeType: 'image/png' }]
+  const payload = {
+    agent_slug: 'review',
+    question: 'Read',
+    images: image,
+    schema: { type: 'object' },
+  }
+  const failure = (model: string): AskResult => ({
+    outcome: { kind: 'error', model, detail: 'unavailable' },
+    tokens: { input: 1, output: 1 },
+    wallMs: 1,
+  })
+  const answer = (model: string): AskResult => ({
+    outcome: { kind: 'done', model, text: '{}' },
+    tokens: { input: 2, output: 2 },
+    wallMs: 2,
+  })
+
+  run.mockReset()
+  run
+    .mockResolvedValueOnce(failure('gemini-3.8-flash'))
+    .mockResolvedValueOnce(answer('codex/gpt-6.1-sol'))
+  const codex = await call('POST', '/v1/ask', payload)
+  expect(codex.status).toBe(200)
+  expect(await codex.json()).toMatchObject({
+    provider: 'codex',
+    outcome: { model: 'codex/gpt-6.1-sol' },
+    tokens: { input: 3, output: 3 },
+    wallMs: 3,
+  })
+  expect(run.mock.calls.map(([request]) => request.model)).toEqual([
+    'gemini-3.8-flash',
+    'codex/gpt-6.1-sol',
+  ])
+  expect(run.mock.calls[1]?.[0]).toMatchObject({ images: image, schema: payload.schema })
+
+  codexUsedPercent = 100
+  run.mockClear()
+  run
+    .mockResolvedValueOnce(failure('gemini-3.8-flash'))
+    .mockResolvedValueOnce(answer('local/qwen3-vl:8b-instruct'))
+  const credits = await call('POST', '/v1/ask', payload)
+  expect(credits.status).toBe(200)
+  expect(await credits.json()).toMatchObject({ provider: 'local' })
+  expect(run.mock.calls.map(([request]) => request.model)).toEqual([
+    'gemini-3.8-flash',
+    'local/qwen3-vl:8b-instruct',
+  ])
+
+  codexUsedPercent = 10
+  unreadable = true
+  run.mockClear()
+  run
+    .mockResolvedValueOnce(failure('gemini-3.8-flash'))
+    .mockResolvedValueOnce(answer('local/qwen3-vl:8b-instruct'))
+  expect((await call('POST', '/v1/ask', payload)).status).toBe(200)
+  expect(run.mock.calls.map(([request]) => request.model)).toEqual([
+    'gemini-3.8-flash',
+    'local/qwen3-vl:8b-instruct',
+  ])
+  unreadable = false
+
+  run.mockClear()
+  run
+    .mockResolvedValueOnce(failure('gemini-3.8-flash'))
+    .mockResolvedValueOnce(failure('codex/gpt-6.1-sol'))
+    .mockResolvedValueOnce(answer('local/qwen3-vl:8b-instruct'))
+  const local = await call('POST', '/v1/ask', payload)
+  expect(local.status).toBe(200)
+  expect(await local.json()).toMatchObject({
+    provider: 'local',
+    outcome: { model: 'local/qwen3-vl:8b-instruct' },
+    tokens: { input: 4, output: 4 },
+    wallMs: 4,
+  })
+  expect(run.mock.calls.map(([request]) => request.model)).toEqual([
+    'gemini-3.8-flash',
+    'codex/gpt-6.1-sol',
+    'local/qwen3-vl:8b-instruct',
+  ])
+  expect(free).not.toHaveBeenCalled()
+
+  run.mockClear()
+  run
+    .mockResolvedValueOnce(failure('gemini-3.8-flash'))
+    .mockResolvedValueOnce(failure('codex/gpt-6.1-sol'))
+    .mockResolvedValueOnce(failure('local/qwen3-vl:8b-instruct'))
+  const publicText = await call('POST', '/v1/ask', {
+    agent_slug: 'review',
+    question: 'Public page',
+  })
+  expect(publicText.status).toBe(200)
+  expect(await publicText.json()).toMatchObject({
+    provider: 'gemini-free-tier',
+    tokens: { input: 4, output: 4 },
+  })
+  expect(free).toHaveBeenCalledTimes(1)
+  free.mockClear()
+
+  run.mockClear()
+  run
+    .mockResolvedValueOnce(failure('gemini-3.8-flash'))
+    .mockResolvedValueOnce(failure('codex/gpt-6.1-sol'))
+    .mockResolvedValueOnce(failure('local/qwen3-vl:8b-instruct'))
+  expect((await call('POST', '/v1/ask', payload)).status).toBe(502)
+  expect(free).not.toHaveBeenCalled()
+
+  for (const outcome of [
+    { kind: 'bad_input', detail: 'Invalid inline image' },
+    {
+      kind: 'model_refused',
+      model: 'gemini-3.8-flash',
+      refusal: { kind: 'refusal', category: 'safety', detail: 'refused' },
+    },
+    { kind: 'refused', reason: 'model_denied', detail: 'policy denied' },
+    { kind: 'model_swap', requested: 'gemini-3.8-flash', served: 'other' },
+    { kind: 'tool_denied', model: 'gemini-3.8-flash', detail: 'denied' },
+  ] as AskResult['outcome'][]) {
+    run.mockClear()
+    run.mockResolvedValueOnce({ outcome, tokens: { input: 0, output: 0 }, wallMs: 1 })
+    await call('POST', '/v1/ask', payload)
+    expect(run).toHaveBeenCalledTimes(1)
+    expect(free).not.toHaveBeenCalled()
+  }
+  run.mockImplementation(async () => answer('codex/gpt-6.1-sol'))
 })
 
 const row = {
@@ -442,7 +764,7 @@ it('keeps public evidence behind the app token and counts each search and fetch'
   ).toBe(200)
   expect(page).toHaveBeenCalledWith(
     'https://example.com/careers',
-    { maxChars: 12000, backend: 'jina' },
+    { maxChars: 50000, backend: 'jina' },
     expect.anything(),
   )
   const db = openCounter(dir)
@@ -454,6 +776,25 @@ it('keeps public evidence behind the app token and counts each search and fetch'
   } finally {
     db.close()
   }
+})
+
+it('falls back when a site-scoped search returns only unrelated domains', async () => {
+  search.mockResolvedValueOnce({ results: [{ url: 'https://bing.com/irrelevant' }] })
+  publicFallback.mockResolvedValueOnce({ results: [{ url: 'https://www.costco.com/item' }] })
+  const response = await call('POST', '/v1/ask/evidence', { query: 'site:costco.com olive oil' })
+  expect(await response.json()).toMatchObject({ results: [{ url: 'https://www.costco.com/item' }] })
+  expect(publicFallback).toHaveBeenCalledWith(
+    'site:costco.com olive oil',
+    'gemini-3.8-flash',
+    5,
+    env,
+  )
+})
+
+it('keeps shared results when a site-scoped search has an official result', async () => {
+  search.mockResolvedValueOnce({ results: [{ url: 'https://www.costco.com/item' }] })
+  await call('POST', '/v1/ask/evidence', { query: 'site:costco.com olive oil' })
+  expect(publicFallback).not.toHaveBeenCalled()
 })
 
 it('refuses private and credential-bearing evidence URLs without a network fetch', async () => {

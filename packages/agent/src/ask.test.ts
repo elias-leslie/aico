@@ -15,7 +15,7 @@ import {
 } from '@earendil-works/pi-ai'
 import { getAgentDir } from '@earendil-works/pi-coding-agent'
 import { describe, expect, it, vi } from 'vitest'
-import { ask, askMain, fileBlocks } from './ask'
+import { ask, askMain, fileBlocks, publicSearch } from './ask'
 import policyData from './fixtures/policy.json' with { type: 'json' }
 import { HARNESS } from './rules'
 import { jsonIn } from './schema'
@@ -246,6 +246,118 @@ describe('claude -p', () => {
 })
 
 describe('agy', () => {
+  it('requires a completed search tool call and applies the public search lockdown', async () => {
+    const step = JSON.stringify({
+      event: 'step_update',
+      step_update: { step_type: 'tool', tool_name: 'search_web', state: 'DONE' },
+    })
+    const output = agyResult({
+      response: '{"results":[{"title":"Example","url":"https://example.com/"}]}',
+    })
+    const agy = fakeBin(
+      'agy-public-search',
+      `cp .agents/agents/aico-public-search.md "${dir}/search-agent.md"\n${echoing(step)}\n${echoing(output)}`,
+    )
+    const result = await publicSearch('public query', 'gemini-3.8-flash', {
+      context,
+      bins: { agy },
+    })
+    expect(result.outcome).toMatchObject({
+      kind: 'done',
+      data: { results: [{ url: 'https://example.com/' }] },
+    })
+    const args = readFileSync(`${agy}.args`, 'utf8')
+    expect(args).toContain('aico-public-search')
+    expect(args).toContain('read_file(*)')
+    expect(args).toContain('command(*)')
+    expect(args).toContain('read_url(*)')
+    expect(args).not.toContain('--json-schema')
+    expect(readFileSync(`${dir}/search-agent.md`, 'utf8')).toContain('tools: [search_web]')
+    const noCall = fakeBin('agy-public-no-call', echoing(output))
+    expect(
+      (await publicSearch('public query', 'gemini-3.8-flash', { context, bins: { agy: noCall } }))
+        .outcome,
+    ).toMatchObject({ kind: 'error', detail: expect.stringContaining('no completed search_web') })
+  })
+
+  it('stages images for the restricted reader and removes them after a structured answer', async () => {
+    const agy = fakeBin(
+      'agy-image',
+      `pwd > "${dir}/agy-image.cwd"\ncat image-1.png > "${dir}/agy-image.first"\ncat image-2.jpg > "${dir}/agy-image.second"\nstat -c %a image-1.png > "${dir}/agy-image.mode"\ncp .agy-settings.json "${dir}/agy-image.settings"\ncp .agents/agents/aico-image-reader.md "${dir}/agy-image.agent"\n${echoing(agyResult({ response: '```json\n{"answer":42}\n```' }))}`,
+    )
+    const result = await ask(
+      request('gemini-3.8-flash', {
+        images: [
+          { data: 'eA==', mimeType: 'image/png' },
+          { data: 'eQ==', mimeType: 'image/jpeg' },
+        ],
+        schema: SCHEMA,
+      }),
+      { context, bins: { agy } },
+    )
+    expect(result.outcome).toMatchObject({ kind: 'done', data: { answer: 42 } })
+    const scratch = readFileSync(`${dir}/agy-image.cwd`, 'utf8').trim()
+    const args = readFileSync(`${agy}.args`, 'utf8').split('\n')
+    expect(args.join('\n')).toContain(`${scratch}/image-1.png`)
+    expect(args.join('\n')).toContain(`${scratch}/image-2.jpg`)
+    expect(args.join('\n')).toContain('Open the attached images to read them')
+    expect(args.join('\n')).not.toContain('You have no tools and must not call any')
+    expect(args).not.toContain('--json-schema')
+    expect(args).toContain('aico-image-reader')
+    expect(readFileSync(`${dir}/agy-image.agent`, 'utf8')).toContain('tools: [read_file]')
+    expect(readFileSync(`${dir}/agy-image.first`, 'utf8')).toBe('x')
+    expect(readFileSync(`${dir}/agy-image.second`, 'utf8')).toBe('y')
+    expect(readFileSync(`${dir}/agy-image.mode`, 'utf8').trim()).toBe('600')
+    const permissions = JSON.parse(readFileSync(`${dir}/agy-image.settings`, 'utf8')).permissions
+    expect(permissions.allow).toEqual([`read_file(${scratch})`])
+    expect(permissions.deny).toEqual(
+      expect.arrayContaining(['write_file(*)', 'command(*)', 'read_file(/etc)']),
+    )
+    expect(existsSync(scratch)).toBe(false)
+  })
+
+  it('cleans staged images after a provider failure and rejects invalid images before launch', async () => {
+    const agy = fakeBin(
+      'agy-image-error',
+      `pwd > "${dir}/agy-image-error.cwd"\n${echoing(agyResult({ status: 'ERROR', error: 'unavailable' }))}`,
+    )
+    const result = await ask(
+      request('gemini-3.8-flash', { images: [{ data: 'eA==', mimeType: 'image/png' }] }),
+      { context, bins: { agy } },
+    )
+    expect(result.outcome).toMatchObject({
+      kind: 'error',
+      detail: expect.stringContaining('unavailable'),
+    })
+    expect(existsSync(readFileSync(`${dir}/agy-image-error.cwd`, 'utf8').trim())).toBe(false)
+    const never = fakeBin('agy-image-invalid', echoing(agyResult({})))
+    expect(
+      (
+        await ask(
+          request('gemini-3.8-flash', { images: [{ data: 'not base64', mimeType: 'image/png' }] }),
+          { context, bins: { agy: never } },
+        )
+      ).outcome,
+    ).toMatchObject({ kind: 'bad_input' })
+    expect(existsSync(`${never}.args`)).toBe(false)
+
+    const wrongSchema = fakeBin(
+      'agy-image-wrong-schema',
+      echoing(agyResult({ response: '{"answer":"not an integer"}' })),
+    )
+    expect(
+      (
+        await ask(
+          request('gemini-3.8-flash', {
+            images: [{ data: 'eA==', mimeType: 'image/png' }],
+            schema: SCHEMA,
+          }),
+          { context, bins: { agy: wrongSchema } },
+        )
+      ).outcome,
+    ).toMatchObject({ kind: 'schema_invalid' })
+  })
+
   it('refuses a prompt too big for one argument instead of calling agy "not installed"', async () => {
     const agy = fakeBin('agy-big', echoing(agyResult({})))
     const huge = { question: 'x'.repeat(200 * 1024) }
@@ -291,6 +403,18 @@ describe('agy', () => {
     expect(result.outcome).toMatchObject({
       kind: 'error',
       detail: expect.stringContaining('authentication failed'),
+    })
+  })
+
+  it('keeps a structured agy safety refusal distinct from a provider outage', async () => {
+    const agy = fakeBin(
+      'agy-refusal',
+      echoing(agyResult({ status: 'ERROR', response: '', error: 'cyber_policy: blocked' })),
+    )
+    const result = await ask(request('gemini-3.8-flash'), { context, bins: { agy } })
+    expect(result.outcome).toMatchObject({
+      kind: 'model_refused',
+      refusal: { kind: 'refusal', category: 'cyber' },
     })
   })
 

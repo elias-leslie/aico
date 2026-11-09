@@ -18,18 +18,34 @@
         },
         "household-list-parser": {
           "model": "gemini-3.8-flash",
+          "fallback_models": [
+            { "model": "codex/gpt-6.1-sol", "subscription_only": true },
+            { "model": "local/qwen3-vl:8b-instruct" }
+          ],
           "prompts": ["household-list-parser-system-prompt"]
         },
         "household-receipt-vision": {
-          "model": "local/qwen3-vl:8b-instruct",
+          "model": "gemini-3.8-flash",
+          "fallback_models": [
+            { "model": "codex/gpt-6.1-sol", "subscription_only": true },
+            { "model": "local/qwen3-vl:8b-instruct" }
+          ],
           "prompts": ["household-receipt-vision-system-prompt"]
         },
         "household-shelf-tag-vision": {
-          "model": "local/qwen3-vl:8b-instruct",
+          "model": "gemini-3.8-flash",
+          "fallback_models": [
+            { "model": "codex/gpt-6.1-sol", "subscription_only": true },
+            { "model": "local/qwen3-vl:8b-instruct" }
+          ],
           "prompts": []
         },
         "credit-card-offer-reviewer": {
           "model": "gemini-4-argon",
+          "fallback_models": [
+            { "model": "codex/gpt-6.1-sol", "subscription_only": true },
+            { "model": "local/qwen3-vl:8b-instruct" }
+          ],
           "prompts": ["credit-card-offer-reviewer-system-prompt"]
         },
         "chat": {
@@ -38,10 +54,16 @@
         },
         "household-price-scout": {
           "model": "gemini-3.8-flash",
-          "prompts": ["household-price-scout-system-prompt"]
+          "fallback_models": [{ "model": "codex/gpt-6.1-sol", "subscription_only": true }],
+          "prompts": ["household-price-scout-system-prompt"],
+          "free_tier": true
         },
         "financial-document-reviewer": {
           "model": "gemini-4-argon",
+          "fallback_models": [
+            { "model": "codex/gpt-6.1-sol", "subscription_only": true },
+            { "model": "local/qwen3-vl:8b-instruct" }
+          ],
           "prompts": [
             "financial-document-reviewer-system-prompt",
             "financial-document-reviewer-money-rules",
@@ -50,6 +72,7 @@
         },
         "credit-card-researcher": {
           "model": "gemini-4-argon",
+          "fallback_models": [{ "model": "codex/gpt-6.1-sol", "subscription_only": true }],
           "prompts": ["credit-card-researcher-system-prompt"],
           "free_tier": true
         }
@@ -152,6 +175,7 @@
   },
   "evidence": {
     "max_results": 5,
-    "max_chars": 12000
+    "public_search_model": "gemini-3.8-flash",
+    "max_chars": 50000
   }
 }

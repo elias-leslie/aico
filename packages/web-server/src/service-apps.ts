@@ -2,6 +2,7 @@
 // the browser server: a service token cannot open sessions, run commands or read
 // another app's rows, prompts or asks.
 import { createHash, timingSafeEqual } from 'node:crypto'
+import { existsSync } from 'node:fs'
 import { createServer, type IncomingMessage, type RequestListener, type Server } from 'node:http'
 import { join } from 'node:path'
 import { type AskResult, ask, dataDir } from '@aico/agent'
@@ -10,15 +11,31 @@ import { privateFile, secretsDir } from '@aico/fleet/secrets'
 import { NoticeError, parseNotice } from '@aico/notify'
 import { machineId, parseRow, RowError, type StatusStore } from '@aico/status'
 import type { TetherClient } from '@aico/tether-client'
+import {
+  type Facts,
+  loadFacts,
+  loadPlans,
+  openUsage,
+  optionUsage,
+  plansPath,
+  usageDbPath,
+  windowFacts,
+} from '@aico/usage'
 import { count, counterRow, fetchPage, openCounter, searchWeb, today } from '@aico/webtools'
 import settings from '../data/service-apps.json' with { type: 'json' }
 import { type AskFallback, askFreeTier, wantsFreeTier } from './ask-free-tier'
 import { objectBody, RAW, type RequestContext, Router, requiredString, sendJson } from './http'
 import { fromLan, type NotifyHub, tetherAsks } from './notify'
+import { needsPublicSearch, publicSearchFallback } from './public-search'
 import { frontedBy } from './service-primary'
 import { HttpError } from './tether'
 
-type Profile = { model: string; prompts: string[]; free_tier?: boolean }
+type Profile = {
+  model: string
+  prompts: string[]
+  free_tier?: boolean
+  fallback_models?: { model: string; subscription_only?: boolean }[]
+}
 type App = { machine: string; agents: Record<string, Profile>; prompts: string[] }
 type Apps = Record<string, App>
 export const SERVICE_APPS: Apps = settings.apps
@@ -32,10 +49,38 @@ export interface ServiceAppsDeps {
   primary?: string | null
   apps?: Apps
   ask?: typeof ask
+  /** Current subscription facts, injectable for isolated tests. */
+  usageFacts?: (now: string) => Facts | null
   /** The Gemini free tier, for a role marked free_tier when its own model can't answer. */
   freeTier?: AskFallback
   prompt?: (slug: string) => string | null
   web?: { search: typeof searchWeb; fetch: typeof fetchPage }
+  publicSearch?: typeof publicSearchFallback
+}
+
+/** Unknown or stale usage cannot establish that a subscription call avoids credits. */
+function subscriptionAvailable(provider: string, facts: Facts | null, now: string): boolean {
+  if (!facts?.collected_at || facts.unreadable?.[provider]) return false
+  return (
+    optionUsage(provider, windowFacts(facts.readings, now), facts.credits, facts.plan_ended)
+      .status === 'ok'
+  )
+}
+
+function productUsageFacts(env: NodeJS.ProcessEnv, now: string): Facts | null {
+  const dir = dataDir(env)
+  const path = usageDbPath(dir)
+  if (!existsSync(path)) return null
+  try {
+    const db = openUsage(path)
+    try {
+      return loadFacts(db, loadPlans(plansPath(dir)), now)
+    } finally {
+      db.close()
+    }
+  } catch {
+    return null
+  }
 }
 
 /** Hashes live in Aico's owner-only secrets folder; raw tokens stay in the apps. */
@@ -170,9 +215,11 @@ function serviceAppsRouter(deps: ServiceAppsDeps): Router {
     const value = requiredString(body, verb === 'search' ? 'query' : 'url', { max: 2000 })
     if (!value.trim()) throw new HttpError(422, 'A query or URL is required')
     const web = deps.web ?? { search: searchWeb, fetch: fetchPage }
-    const payload =
+    let payload: Record<string, unknown> =
       verb === 'search'
-        ? await web.search(value, { max: settings.evidence.max_results }, { fetch, env })
+        ? await web
+            .search(value, { max: settings.evidence.max_results }, { fetch, env })
+            .catch(() => ({ error: 'Shared search unavailable' }))
         : // The public reader rejects private and credential-bearing URLs; no direct
           // requests to app-selected hosts run on Aico's LAN.
           await web.fetch(
@@ -180,6 +227,13 @@ function serviceAppsRouter(deps: ServiceAppsDeps): Router {
             { maxChars: settings.evidence.max_chars, backend: 'jina' },
             { fetch, env },
           )
+    if (verb === 'search' && needsPublicSearch(value, payload))
+      payload = await (deps.publicSearch ?? publicSearchFallback)(
+        value,
+        settings.evidence.public_search_model,
+        settings.evidence.max_results,
+        env,
+      )
     try {
       const db = openCounter(dataDir(env))
       try {
@@ -216,25 +270,47 @@ function serviceAppsRouter(deps: ServiceAppsDeps): Router {
     if (body.effort !== undefined && typeof body.effort !== 'string')
       throw new HttpError(422, 'effort must be a string')
     const prompted = [...profile.prompts.map(readPrompt), question].join('\n\n')
-    let result: AskResult & { provider?: string } = await (deps.ask ?? ask)(
-      {
-        model: model.id,
-        cwd: process.cwd(),
-        question: prompted,
-        ...(body.schema !== undefined && { schema: body.schema }),
-        // ask validates every image and its combined size before dispatch.
-        ...(body.images !== undefined && {
-          images: body.images as { data: string; mimeType: string }[],
-        }),
-        ...(body.effort !== undefined && { effort: body.effort as string }),
-      },
-      {},
-      env,
-    )
+    const request = {
+      model: model.id,
+      cwd: process.cwd(),
+      question: prompted,
+      ...(body.schema !== undefined && { schema: body.schema }),
+      // ask validates every image and its combined size before dispatch.
+      ...(body.images !== undefined && {
+        images: body.images as { data: string; mimeType: string }[],
+      }),
+      ...(body.effort !== undefined && { effort: body.effort as string }),
+    }
+    let result: AskResult & { provider?: string } = await (deps.ask ?? ask)(request, {}, env)
+    let resultProvider = model.provider
+    for (const fallbackModel of profile.fallback_models ?? []) {
+      if (!wantsFreeTier(result.outcome) && result.outcome.kind !== 'schema_invalid') break
+      const fallback = catalog.get(fallbackModel.model)
+      if (!fallback || fallback.provider === 'claude')
+        throw new HttpError(503, 'App fallback model is unavailable')
+      if (fallbackModel.subscription_only) {
+        const now = new Date().toISOString()
+        const facts = deps.usageFacts ? deps.usageFacts(now) : productUsageFacts(env, now)
+        if (!subscriptionAvailable(fallback.provider, facts, now)) continue
+      }
+      const first = result
+      const second = await (deps.ask ?? ask)({ ...request, model: fallback.id }, {}, env)
+      result = {
+        ...second,
+        tokens: {
+          input: first.tokens.input + second.tokens.input,
+          output: first.tokens.output + second.tokens.output,
+        },
+        wallMs: first.wallMs + second.wallMs,
+        provider: fallback.provider,
+      }
+      resultProvider = fallback.provider
+    }
     if (profile.free_tier && body.images === undefined && wantsFreeTier(result.outcome)) {
       console.warn(
         `[service-apps] ${app}/${slug}: ${model.id} did not answer, trying the free tier`,
       )
+      const previous = result
       result = await (deps.freeTier ?? askFreeTier)(
         settings.free_tier,
         prompted,
@@ -242,11 +318,16 @@ function serviceAppsRouter(deps: ServiceAppsDeps): Router {
         result,
         env,
       )
+      if (result.provider === 'gemini-free-tier')
+        result.tokens = {
+          input: previous.tokens.input + result.tokens.input,
+          output: previous.tokens.output + result.tokens.output,
+        }
     }
     sendJson(
       ctx.res,
       result.outcome.kind === 'done' ? 200 : result.outcome.kind === 'bad_input' ? 422 : 502,
-      localModelOff(model.provider, result),
+      localModelOff(resultProvider, result),
     )
     return RAW
   })

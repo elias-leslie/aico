@@ -1,8 +1,8 @@
 // `aico prompt-model MODEL "question"`: one question to one model, no tools, an answer or a typed
 // failure. The model goes through the same rules as a run (route() deny rows for the
 // role and project, the harness's provider allowlist). Claude runs only as `claude -p`
-// with tools off and never with an Anthropic API key; Gemini runs as `agy -p` with its tools
-// locked off (@aico/shared/agy-lockdown); Codex and
+// with tools off and never with an Anthropic API key; Gemini runs as `agy -p` with tools
+// locked down, allowing only a staged-image reader for image requests; Codex and
 // the OpenCode Go models run through pi-ai with the harness's providers. The only time
 // bound is on wire silence (data/harness.json, `ask`): that long with no bytes from the
 // model means a dead connection and the call stops. With --schema the answer is checked
@@ -10,12 +10,20 @@
 
 import { type ChildProcess, spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs'
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { basename, join, resolve, sep } from 'node:path'
 import { parseArgs } from 'node:util'
 import { Catalog, contextDbPath, route } from '@aico/context'
-import { agyAnswerFlags } from '@aico/shared/agy-lockdown'
+import { agyAnswerFlags, agyReaderFlags } from '@aico/shared/agy-lockdown'
 import type { AssistantMessage, Models } from '@earendil-works/pi-ai'
 import { getAgentDir } from '@earendil-works/pi-coding-agent'
 import { dataDir } from './cli'
@@ -75,6 +83,8 @@ export interface AskRequest {
   images?: { data: string; mimeType: string }[]
   role?: string
   effort?: string
+  /** Internal public-only discovery mode; never accepts attachments. */
+  publicSearch?: boolean
   cwd: string
 }
 
@@ -337,25 +347,53 @@ async function viaClaude(
   return { outcome: { text, data: result.structured_output }, tokens }
 }
 
-/** `agy -p` with its tools denied (see agyAnswerFlags), so an answer that needed one is a typed failure. */
+/** `agy -p` answers from text, or reads only staged images under the existing reader policy. */
 async function viaAgy(
   entry: { id: string },
   prompt: string,
   req: AskRequest,
   schema: unknown,
   deps: AskDeps,
+  harness: Harness,
   silenceMs: number,
   scratch: string,
 ): Promise<Answer> {
   let lockdown: string[]
   try {
-    lockdown = agyAnswerFlags(scratch, schema !== undefined)
+    if (req.publicSearch) {
+      const agentDir = join(scratch, '.agents', 'agents')
+      mkdirSync(agentDir, { recursive: true })
+      writeFileSync(
+        join(agentDir, 'aico-public-search.md'),
+        '---\nname: aico-public-search\ndescription: Search the public web\nmainAgent: true\nsubagent: false\ntools: [search_web]\n---\nUse search_web for public URL discovery.\n',
+      )
+      lockdown = ['--agent', 'aico-public-search', ...agyAnswerFlags(scratch, true)]
+    } else if (req.images?.length) {
+      const paths = req.images.map((image, index) => {
+        const extension = image.mimeType.slice('image/'.length).replace('jpeg', 'jpg')
+        const path = join(scratch, `image-${index + 1}.${extension}`)
+        writeFileSync(path, Buffer.from(image.data, 'base64'), { mode: 0o600 })
+        return path
+      })
+      prompt += `\n\nOpen and read the attached images:\n${paths.join('\n')}`
+      const agentDir = join(scratch, '.agents', 'agents')
+      mkdirSync(agentDir, { recursive: true })
+      writeFileSync(
+        join(agentDir, 'aico-image-reader.md'),
+        '---\nname: aico-image-reader\ndescription: Read attached images\nmainAgent: true\nsubagent: false\ntools: [read_file]\n---\nAnswer from the supplied text and attached images.\n',
+      )
+      lockdown = ['--agent', 'aico-image-reader', ...agyReaderFlags(scratch)]
+    } else {
+      lockdown = agyAnswerFlags(scratch, schema !== undefined)
+    }
   } catch (error) {
     return failed(entry.id, `could not set up agy's limits: ${(error as Error).message}`)
   }
   const args = ['-p', prompt, ...lockdown, '--model', entry.id, '--output-format', 'stream-json']
   if (req.effort) args.push('--effort', req.effort)
-  if (schema !== undefined) args.push('--json-schema', JSON.stringify(schema))
+  // With a custom agent agy's native schema mode can fail to finish. Validate its JSON ourselves.
+  if (schema !== undefined && !req.images?.length && !req.publicSearch)
+    args.push('--json-schema', JSON.stringify(schema))
   // agy takes the prompt as an argument, and Linux refuses a single argument of 128 KiB or more with
   // E2BIG. Its stdin is no way round: seen live, it cuts a prompt there at about 175 KB and still
   // says SUCCESS, answering from the first part.
@@ -372,9 +410,21 @@ async function viaAgy(
   const run = await runCli(deps.bins?.agy ?? 'agy', args, null, process.env, scratch, silenceMs)
   if (run.silent) return silentOutcome(entry.id, silenceMs)
   if (run.missing) return failed(entry.id, 'the agy command is not installed')
-  const found = jsonLines(run.lines)
-    .reverse()
-    .find((line) => line.event === 'result')
+  const events = jsonLines(run.lines)
+  if (
+    req.publicSearch &&
+    !events.some((line) => {
+      const step = line.step_update as Record<string, unknown> | undefined
+      return (
+        line.event === 'step_update' &&
+        step?.step_type === 'tool' &&
+        step.tool_name === 'search_web' &&
+        step.state === 'DONE'
+      )
+    })
+  )
+    return failed(entry.id, 'public search unavailable: no completed search_web call was observed')
+  const found = events.reverse().find((line) => line.event === 'result')
   const result = found?.result as Record<string, unknown> | undefined
   if (!result)
     return failed(entry.id, `agy ended without a result (exit ${run.code}): ${run.stderr.trim()}`)
@@ -387,16 +437,25 @@ async function viaAgy(
       outcome: {
         kind: 'tool_denied',
         model: entry.id,
-        detail: `the model tried to use a tool (${denied.map((d) => d.display_name ?? d.action).join(', ')}) and has none here`,
+        detail: `the model tried to use a tool (${denied.map((d) => d.display_name ?? d.action).join(', ')}) that is not allowed here`,
       },
       tokens,
     }
-  if (result.status !== 'SUCCESS')
+  if (result.status !== 'SUCCESS') {
+    const refusal = refusalOf(
+      {
+        stopReason: 'error',
+        errorMessage: String(result.error ?? result.status ?? ''),
+      } as AssistantMessage,
+      harness,
+    )
+    if (refusal) return { outcome: { kind: 'model_refused', model: entry.id, refusal }, tokens }
     return failed(
       entry.id,
       `agy: ${String(result.error ?? result.status ?? 'failed')} ${response}`.trim(),
       tokens,
     )
+  }
   if (!response.trim() && result.structured_output === undefined)
     return failed(entry.id, 'agy answered with nothing', tokens)
   return { outcome: { text: response, data: result.structured_output }, tokens }
@@ -628,6 +687,8 @@ export async function ask(
   })
   const bad = (detail: string) => finish({ kind: 'bad_input', detail })
 
+  if (req.publicSearch && (req.files?.length || req.images?.length))
+    return bad('Public search does not accept files or images')
   if (req.images !== undefined) {
     if (!Array.isArray(req.images) || req.images.length > 4)
       return bad('Send at most four inline images')
@@ -669,11 +730,18 @@ export async function ask(
     if (denied) return finish(denied)
   }
 
-  if (req.images?.length && run !== 'pi-ai' && run !== 'ollama')
-    return bad('Inline images need a Codex or local model')
+  if (req.publicSearch && run !== 'agy')
+    return bad('Public search requires the subscription Gemini CLI')
+  if (req.images?.length && run !== 'pi-ai' && run !== 'ollama' && run !== 'agy')
+    return bad('Inline images need an image-capable Gemini, Codex or local model')
   const silenceMs = deps.silenceMs ?? harness.ask.wire_silence_seconds * 1000
+  const agyImageReader = run === 'agy' && Boolean(req.images?.length)
   const system = [
-    harness.ask.prompt,
+    req.publicSearch
+      ? 'Use search_web to discover URLs for the supplied public query. Return search results only; do not invent URLs or prices.'
+      : agyImageReader
+        ? 'Answer using only the supplied text and attached images. Open the attached images to read them; use no other tools.'
+        : harness.ask.prompt,
     ...(req.schema !== undefined
       ? [
           `Reply with only one JSON value that fits this JSON Schema, and nothing else:\n${JSON.stringify(req.schema)}`,
@@ -688,7 +756,16 @@ export async function ask(
       run === 'claude'
         ? await viaClaude(entry, `${system}\n\n${user}`, req, req.schema, deps, silenceMs, scratch)
         : run === 'agy'
-          ? await viaAgy(entry, `${system}\n\n${user}`, req, req.schema, deps, silenceMs, scratch)
+          ? await viaAgy(
+              entry,
+              `${system}\n\n${user}`,
+              req,
+              req.schema,
+              deps,
+              harness,
+              silenceMs,
+              scratch,
+            )
           : run === 'ollama'
             ? await viaOllama(entry.id, user, system, req, harness, silenceMs, egress, env)
             : await viaPi(entry, user, system, req, deps, harness, silenceMs, egress)
@@ -708,6 +785,36 @@ export async function ask(
   return finish(
     { kind: 'done', model: entry.id, text: JSON.stringify(found.value), data: found.value },
     answer.tokens,
+  )
+}
+
+/** Public web discovery only: never carries attachments or app prompts. */
+export function publicSearch(query: string, model: string, deps: AskDeps = {}, env = process.env) {
+  return ask(
+    {
+      model,
+      cwd: process.cwd(),
+      question: query,
+      publicSearch: true,
+      schema: {
+        type: 'object',
+        properties: {
+          results: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: { title: { type: 'string' }, url: { type: 'string' } },
+              required: ['title', 'url'],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ['results'],
+        additionalProperties: false,
+      },
+    },
+    deps,
+    env,
   )
 }
 
