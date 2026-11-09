@@ -89,6 +89,7 @@
         "household-price-scout-system-prompt",
         "household-receipt-vision-system-prompt",
         "household-shopping-photo-router",
+        "household-shopping-catalog-match",
         "household-transaction-audit-json-contract",
         "household-transaction-audit-system-prompt",
         "portfolio-thesis-generation-system",
