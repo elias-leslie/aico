@@ -231,6 +231,14 @@ Actual mobile-carrier access, handset notification receipt, a mains-loss recover
 and full-machine restore remain outside the evidence described above. The owner
 declined the unwired power-cut test; notification Tests remains off as chosen.
 
+One operator-visibility limit remains: Standby's direct root-SSH inspection of
+Proxmox-native timer rows was unavailable. Their actual health was verified from
+the workstation, and the native guard does not depend on that SSH path. Standby's
+existing Proxmox VM API inventory works; its managed service command also worked
+when invoked with the normal pane PATH. No root keys or new administrative access
+were copied to broaden the boundary. This is not evidence that a native timer is
+failed or that Standby itself is down.
+
 Remaining: None within the agreed bounded shakedown scope. Historical burst
 attribution and the explicit untested recovery/network limits are not represented
 as proved or silently replaced by assumptions.
