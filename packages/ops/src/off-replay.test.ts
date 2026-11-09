@@ -9,7 +9,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { peerStatusRow } from '@aico/fleet/power'
 import { type AlertBatch, type StatusRow, StatusStore } from '@aico/status'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   appendMachine,
   backupJob,
@@ -73,6 +73,7 @@ const temp = () => {
   return dir
 }
 afterEach(() => {
+  vi.useRealTimers()
   for (const dir of made.splice(0)) rmSync(dir, { recursive: true, force: true })
 })
 const cfg = () => {
@@ -421,6 +422,8 @@ describe('the notices that fired because a machine was off', () => {
 
   describe('running-job', () => {
     it('a row posted when its run starts is not late while the run works', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(T0)
       const s = status()
       s.beat()
       const c = cfg()
