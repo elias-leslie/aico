@@ -146,7 +146,7 @@ function localModelOff<T extends { outcome: { kind: string; detail?: unknown } }
   return { ...result, outcome: { ...result.outcome, detail } }
 }
 
-type ShoppingRequest = { request_id: string; kind: 'item' | 'receipt' | 'list' }
+type ShoppingRequest = { request_id: string; kind: 'auto' | 'item' | 'receipt' | 'list' }
 
 /** The service token is still the authority; the optional context is only opaque correlation. */
 function shoppingRequest(value: unknown, app: string): ShoppingRequest | undefined {
@@ -158,7 +158,10 @@ function shoppingRequest(value: unknown, app: string): ShoppingRequest | undefin
     Object.keys(data).length !== 2 ||
     typeof data.request_id !== 'string' ||
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(data.request_id) ||
-    (data.kind !== 'item' && data.kind !== 'receipt' && data.kind !== 'list')
+    (data.kind !== 'auto' &&
+      data.kind !== 'item' &&
+      data.kind !== 'receipt' &&
+      data.kind !== 'list')
   )
     throw new HttpError(422, 'Invalid Shopping context')
   return { request_id: data.request_id, kind: data.kind }

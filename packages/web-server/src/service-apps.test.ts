@@ -1110,6 +1110,25 @@ it('reports only exhausted Shopping provider failures and verifies the same requ
   expect(status.rows().find((x) => x.row.id === id)?.row.state).toBe('ok')
 })
 
+it('accepts automatic photo routing context before the photo type is known', async () => {
+  const shopping = { request_id: '77777777-7777-4777-8777-777777777777', kind: 'auto' }
+  run.mockResolvedValueOnce({
+    outcome: { kind: 'done', model: 'gemini-3.8-flash', text: '{"kind":"list"}' },
+    tokens: { input: 0, output: 0 },
+    wallMs: 1,
+  })
+  expect(
+    (
+      await call('POST', '/v1/ask', {
+        agent_slug: 'review',
+        question: 'Classify this photo.',
+        shopping,
+      })
+    ).status,
+  ).toBe(200)
+  expect(run).toHaveBeenCalledOnce()
+})
+
 it('reports evidence outages only after fallback failure, not empty results or a policy rejection', async () => {
   const shopping = { request_id: '33333333-3333-4333-8333-333333333333', kind: 'item' }
   const id = `portfolio-ai/shopping-repair/aico/${shopping.request_id}`
