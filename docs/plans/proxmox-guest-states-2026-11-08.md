@@ -3,8 +3,9 @@
 Observed Nov 8 after the controlled gem reboot and remote user tests. All states
 below follow the owner's choices. VM 180 was renamed and resized by the Portfolio
 agent, which deliberately left it off. It was briefly started for the coordinated
-page/release checks and restored off. A final brief CPU attribution probe is
-coordinated; restore off afterward. Memory is in GiB.
+page/release checks and one brief read-only CPU attribution probe, then restored
+off. The final live API state and active configuration were checked. Memory is
+in GiB.
 
 | ID | VM | Cores | Memory | State | Autostart | Intended use |
 |---|---|---:|---:|---|---|---|

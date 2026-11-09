@@ -188,14 +188,49 @@ does not prove a current recovery failure or an untested sudden-stop recovery.
 Both controllers' three services, Jobinator's two services and the native guard
 were active with zero automatic restarts at the post-journey check.
 
-The initial final resource review found 20 two-second samples at or above 80 C,
+The initial final resource review found 20 observations at or above 80 C,
 none at or above the 85 C guard threshold; peak 84.5 C. The bursts recur roughly
 once a minute during 19:25–19:34 EST, before the later app release/backup. Their
 process is not established. No owned Portfolio page was open in that window.
 Source review identifies expensive health reads as candidates, not a diagnosis.
-Root is coordinating one bounded read-only process/query attribution probe
-before closing this thermal investigation. The existing native guard is healthy;
-the guest is off and gem returned to about 45 C before the probe.
+Root completed one coordinated, bounded read-only process/query attribution
+probe. `/health/detailed` returned 200 in 3.505 seconds; the request window used
+2.09 CPU-seconds in the API and 0.95 in PostgreSQL. Guest parallel PostgreSQL
+workers were observed, but no named aggregate-query family was captured.
+Temperature peaked at 67.375 C during that request and returned to 47.375 C.
+The earlier minute-spaced 84.5 C bursts were not reproduced and remain
+unattributed. No performance change was made from a source-only hypothesis.
+No confirmed overheating or sustained pressure was observed.
 
-Final process attribution, resource totals, cleanup and guest-state verification
-remain to be recorded before this shakedown is closed.
+## Closed checkpoint
+
+The temporary resource log covers 18:59–19:58 EST (1,924 observations). Peak
+workstation temperature was 72.375 C; gem peaked at 84.5 C. There were zero
+configured temperature/pressure breaches and zero new standby OOM events.
+Workstation memory full-pressure avg10 briefly reached 0.36, below its configured
+limit, and ended at zero; gem stayed at zero. Ending available memory was about
+27.0 GB on the workstation and 28.8 GB on gem. Standby's higher cgroup total was
+predominantly reclaimable release/package file cache, not evidence of a leak.
+
+Both attribution samplers and the temporary two-second observer were stopped.
+The native 15-second guard remains active, zero automatic restarts, normal mode,
+fresh heartbeat, 50-percent-of-one-core normal backup cap and open admission;
+its later live check reported 48 C. No permanent extra polling service was added.
+
+VM180 was shut down again immediately after the one-request probe. VM100 and
+VM180 are confirmed stopped; the six selected containers and Dadbot remain on.
+Active Proxmox configuration and the API inventory match the linked full guest
+table, including BlackBox autostart and browser on-demand/no-autostart. All owned
+test sessions/browsers, expired/completed sign-in sessions, temporary forwards
+and own overlap handshakes are closed. There are no open owner asks.
+
+The first new-owner full scheduled Drive copies were not forced during this
+shakedown; their ordinary schedules are restored and old verified copies remain
+retained. This checkpoint does not claim those future runs have succeeded.
+Actual mobile-carrier access, handset notification receipt, a mains-loss recovery,
+and full-machine restore remain outside the evidence described above. The owner
+declined the unwired power-cut test; notification Tests remains off as chosen.
+
+Remaining: None within the agreed bounded shakedown scope. Historical burst
+attribution and the explicit untested recovery/network limits are not represented
+as proved or silently replaced by assumptions.
