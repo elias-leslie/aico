@@ -20,7 +20,7 @@ and publication remain owner decisions.
 
 Released Aico `cafe7aa6b43992e51e9f7d4061d18f8d57601859` passed 5,660 Vitest tests
 with one skipped and 1,659 Python tests with five skipped; workstation and standby
-run that code. HEAD `ced2116d6aab3c4db99b58355b4924566b605360` changes docs only.
+run that code. Later documentation checkpoints retain the same runtime code.
 Its parenthesized-domain search and complete retained-page retrieval
 corrections passed independent review. Actual Costco SKU discovery uses
 `agy-search-web`, and the live complete-page guard verified item 1221092 without
