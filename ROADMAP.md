@@ -3,7 +3,6 @@ Aico is a Linux companion for people working with terminal AI tools. Agent sessi
 
 ## Now
 - Run the approved remote-use shakedown after the walk-away checkpoint: preserve Claude's completed work, use Terra user testers, monitor host resources, and verify minimal fixes (plan: docs/plans/remote-use-shakedown-2026-11-08.md)
-- Finish the Nov 8 interrupted work and walk-away checks, including the approved backup ownership/streaming simplification and host thermal guard, Aico checkpoints, VM 180 space, then a controlled gem reboot and owner-selected guest states (plan: docs/plans/walk-away-readiness-2026-11-08.md)
 - Notifications leftovers: home alarm, update ready and phone pairing can't get a Settings switch until the next Android release; the Proxmox sender's own alarms (when no Aico answers) reach the phone but aren't on the shared list
 ## Next
 - Antigravity leftovers (report: /srv/scratch/briefs/usage-burn-2026-11-08/lane12-report.md): agy keeps every conversation on disk with whatever private text it was sent (over 1 GB on the workstation) and no off switch was found, so it needs a cleanup; `search_web` can't be denied on schema calls, so prompt text can reach a Google search

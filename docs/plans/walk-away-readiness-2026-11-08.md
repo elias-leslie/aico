@@ -57,7 +57,8 @@ work's ROADMAP line when its agreed scope is complete.
   uncorrected-error detection remains enabled. Do not reopen the false ECC warning.
 - BlackBox is on with autostart, as requested. Its health check passed after reboot.
   The asset registry's old parked setting was subsequently found and corrected in
-  source; live registry verification is still pending this checkpoint's deployment.
+  source; both controllers now run the corrected checkpoint and live registry
+  verification passed.
 - Cinderwake's three pinned voice environments are restored. Dependencies/imports,
   61 seeds and reference builds pass. SoX is installed. No acting A/B or new GPU
   rendering is claimed. The abandoned inactive proof-stuck routine was removed.
@@ -123,7 +124,10 @@ snapshot IDs into the new repository's receipts. No forget/prune was run manuall
 
 The native backup health check was found to inspect only the local owner's API,
 so it misread moved sources as missing. A minimal owner-aware coverage read is
-being implemented; verification and deployment remain open. Keep actual copy
+committed in `87d77eae`, `1a023a77` and `cc8b8ede`, reviewed and deployed
+on both controllers. Live coverage reads both repositories and the native backup
+check reports fresh copies. Read deadlines use the existing transient-unit seam;
+current-owner off semantics are preserved. Keep actual copy
 coverage separate from each owner's run health and retain repository provenance.
 
 ## Controlled reboot and browser lifecycle
@@ -156,10 +160,15 @@ resource log. Follow-up browser commit `3355648a` explains lazy startup without
 calling the saved session unusable, and answers fixture help successfully. Its
 1,261-test gate passed; both controllers now run it and live help exits zero.
 
-## Remaining before this checkpoint closes
+## Checkpoint complete (19:05 EST)
 
-- Verify and deploy owner-aware backup health and BlackBox registry correction.
-- Verify final live state and document any honest remaining limits.
-- Remove only this work's ROADMAP line when those are complete.
-- Then execute the separately approved remote-use shakedown, starting with Claude's
-  existing reports and unfinished work rather than repeating or abandoning it.
+Aico `cc8b8ede` deployed successfully on both controllers. The installed native
+backup and asset checks pass and their live Status rows were refreshed. An
+additional reproduced lost-completion-reply defect (`ea036cf2`, `73258eb4`) is
+fixed in the existing jobs runner: the completed Sunday digest now shows OK,
+its actual completion and next Sunday's deadline, without resending the digest.
+The real lifecycle tests fail before the fix, pass afterwards, and fresh review
+confirmed the active-read-loss case. Settled future jobs gain no repeated reads.
+
+Remaining: None within this checkpoint's agreed scope. The separately approved
+remote-use shakedown is now executing under its own plan and ROADMAP line.
