@@ -868,6 +868,12 @@ it('uses actual model-assisted discovery first for retail offers instead of acce
     5,
     env,
     `${retailTask}\n\n${JSON.stringify({ query: 'Acme X100 blue price', market: 'US', currency: 'USD' })}`,
+    undefined,
+    undefined,
+    {
+      rejectedUrls: [],
+      nonPurchaseUrls: settings.evidence.purposes.product_offers.non_purchase_urls,
+    },
   )
   expect(prompt).toHaveBeenCalledWith(settings.evidence.purposes.product_offers.prompt)
   expect(search).not.toHaveBeenCalled()
@@ -892,6 +898,12 @@ it('passes public failed leads to the configured retail task for discovery refin
     5,
     env,
     `${retailTask}\n\n${JSON.stringify({ query: 'extra virgin olive oil price', market: 'US', currency: 'USD', rejected_urls })}`,
+    undefined,
+    undefined,
+    {
+      rejectedUrls: rejected_urls,
+      nonPurchaseUrls: settings.evidence.purposes.product_offers.non_purchase_urls,
+    },
   )
   expect(search).not.toHaveBeenCalled()
   expect(page).not.toHaveBeenCalled()
@@ -943,8 +955,8 @@ it('returns a completed empty retail search through the real helper without fall
   const modelSearch = vi.fn().mockResolvedValue({
     outcome: { kind: 'done', data: { results: [] } },
   })
-  publicFallback.mockImplementationOnce((query, model, max, env, task) =>
-    publicSearchFallback(query, model, max, env, task, modelSearch),
+  publicFallback.mockImplementationOnce((query, model, max, env, task, _search, _fetch, retail) =>
+    publicSearchFallback(query, model, max, env, task, modelSearch, undefined, retail),
   )
   const shopping = { request_id: '88888888-8888-4888-8888-888888888888', kind: 'item' }
   const response = await call('POST', '/v1/ask/evidence', {
@@ -960,6 +972,31 @@ it('returns a completed empty retail search through the real helper without fall
   expect(status.rows().some(({ row }) => row.id.endsWith(shopping.request_id))).toBe(false)
 })
 
+it('returns policy-only excluded retail results as an empty discovery without a repair', async () => {
+  const modelSearch = vi.fn().mockResolvedValue({
+    outcome: {
+      kind: 'done',
+      data: { results: [{ title: 'Search', url: 'https://www.target.com/s/oil' }] },
+    },
+  })
+  publicFallback.mockImplementationOnce((query, model, max, env, task, _search, _fetch, retail) =>
+    publicSearchFallback(query, model, max, env, task, modelSearch, undefined, retail),
+  )
+  const shopping = { request_id: '99999999-9999-4999-8999-999999999999', kind: 'item' }
+  const response = await call('POST', '/v1/ask/evidence', {
+    query: 'oil',
+    intent: 'product_offers',
+    shopping,
+  })
+  expect(await response.json()).toMatchObject({
+    status: 'no_results',
+    result_count: 0,
+    results: [],
+  })
+  expect(search).not.toHaveBeenCalled()
+  expect(status.rows().some(({ row }) => row.id.endsWith(shopping.request_id))).toBe(false)
+})
+
 it('keeps unusable retail URLs distinct from unavailable discovery', async () => {
   publicFallback.mockResolvedValueOnce({ error: 'Public search fallback found no matching URLs' })
   const response = await call('POST', '/v1/ask/evidence', {
@@ -969,6 +1006,24 @@ it('keeps unusable retail URLs distinct from unavailable discovery', async () =>
   expect(await response.json()).toMatchObject({
     error: 'Public search fallback found no matching URLs',
   })
+  expect(search).not.toHaveBeenCalled()
+})
+
+it('reports malformed completed retail discovery without falling back to shared search', async () => {
+  const modelSearch = vi.fn().mockResolvedValue({
+    outcome: { kind: 'done', data: { results: [{ url: 'https://www.target.com/s/oil' }] } },
+  })
+  publicFallback.mockImplementationOnce((query, model, max, env, task, _search, _fetch, retail) =>
+    publicSearchFallback(query, model, max, env, task, modelSearch, undefined, retail),
+  )
+  search.mockResolvedValue({ results: [{ url: 'https://retailer.example/product' }] })
+  const response = await call('POST', '/v1/ask/evidence', {
+    query: 'oil',
+    intent: 'product_offers',
+  })
+  search.mockResolvedValue({ results: [] })
+  expect(await response.json()).toMatchObject({ error: 'Public search fallback malformed result' })
+  expect(modelSearch).toHaveBeenCalledOnce()
   expect(search).not.toHaveBeenCalled()
 })
 

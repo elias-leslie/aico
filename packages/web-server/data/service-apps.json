@@ -182,7 +182,18 @@
       "product_offers": {
         "prompt": "public-retail-discovery",
         "market": "US",
-        "currency": "USD"
+        "currency": "USD",
+        "non_purchase_urls": [
+          { "host": "target.com", "path_prefix": "/s/" },
+          { "host": "target.com", "query_key": "showOnlyQuestions", "query_value": "true" },
+          { "host": "walmart.com", "path_prefix": "/browse/" },
+          { "host": "walmart.com", "path_prefix": "/c/kp/" },
+          {
+            "host": "californiaoliveranch.com",
+            "path_prefix": "/collections/",
+            "except_path_contains": "/products/"
+          }
+        ]
       }
     },
     "max_chars": 50000

@@ -1,7 +1,122 @@
 import { describe, expect, it, vi } from 'vitest'
+import settings from '../data/service-apps.json' with { type: 'json' }
 import { needsPublicSearch, publicSearchFallback, publicSearchUnavailable } from './public-search'
 
 describe('public URL discovery', () => {
+  const policy = settings.evidence.purposes.product_offers.non_purchase_urls
+  const retailSearch = async (urls: string[], rejectedUrls: string[] = [], query = 'oil') => {
+    const search = vi.fn().mockResolvedValue({
+      outcome: { kind: 'done', data: { results: urls.map((url) => ({ title: url, url })) } },
+    })
+    return publicSearchFallback(query, 'model', 5, {}, 'Retail task', search, undefined, {
+      rejectedUrls,
+      nonPurchaseUrls: policy,
+    })
+  }
+
+  it('diversifies hosts in stable rounds before limiting retail leads', async () => {
+    const urls = [
+      'https://a.example/1',
+      'https://a.example/2',
+      'https://b.example/1',
+      'https://a.example/3',
+      'https://c.example/1',
+      'https://b.example/2',
+      'https://d.example/1',
+    ]
+    const result = await retailSearch(urls)
+    expect(result.results).toEqual(
+      [urls[0], urls[2], urls[4], urls[6], urls[1]].map((url, i) => ({
+        rank: i + 1,
+        title: url,
+        url,
+      })),
+    )
+  })
+
+  it('prefers new hosts but retains rejected hosts as a stable fallback', async () => {
+    const urls = [
+      'https://www.old.example/1',
+      'https://new.example/1',
+      'https://old.example/2',
+      'https://new.example/2',
+      'https://other.example/1',
+    ]
+    const result = await retailSearch(urls, ['https://old.example/failed'])
+    expect((result.results as { url: string }[]).map(({ url }) => url)).toEqual([
+      urls[1],
+      urls[4],
+      urls[3],
+      urls[0],
+      urls[2],
+    ])
+    const same = await retailSearch(
+      urls.filter((url) => url.includes('old.example')),
+      [urls[0] as string],
+    )
+    expect((same.results as { url: string }[]).map(({ url }) => url)).toEqual([urls[0], urls[2]])
+  })
+
+  it('filters only configured non-purchase roles while retaining product routes', async () => {
+    const urls = [
+      'https://www.target.com/s/oil',
+      'https://www.target.com/p/item?showOnlyQuestions=true',
+      'https://www.walmart.com/browse/food/oil',
+      'https://www.walmart.com/c/kp/olive-oil',
+      'https://www.californiaoliveranch.com/collections/oil',
+      'https://www.target.com/p/item?showOnlyQuestions=false',
+      'https://www.walmart.com/ip/item',
+      'https://www.californiaoliveranch.com/collections/oil/products/item',
+      'https://www.californiaoliveranch.com/products/item',
+    ]
+    const result = await retailSearch(urls)
+    expect((result.results as { url: string }[]).map(({ url }) => url)).toEqual([
+      urls[5],
+      urls[6],
+      urls[7],
+      urls[8],
+    ])
+    expect(await retailSearch(urls.slice(0, 5))).toMatchObject({
+      status: 'no_results',
+      results: [],
+    })
+    expect(await retailSearch([])).toMatchObject({ status: 'no_results', results: [] })
+  })
+
+  it('preserves deduplication and site constraints, and reports invalid excluded mixes as failures', async () => {
+    const url = 'https://www.target.com/p/item'
+    const result = await retailSearch(
+      [url, url, 'https://target.com.example.com/p/item'],
+      [],
+      'site:target.com oil',
+    )
+    expect(result.results).toEqual([{ rank: 1, title: url, url }])
+    for (const bad of [
+      'not a URL',
+      'http://127.0.0.1/private',
+      'https://target.com.example.com/p/item',
+    ]) {
+      expect(
+        await retailSearch(['https://target.com/s/oil', bad], [], 'site:target.com oil'),
+      ).toHaveProperty('error')
+    }
+    const failure = vi.fn().mockResolvedValue({ outcome: { kind: 'error' } })
+    expect(
+      await publicSearchFallback('oil', 'model', 5, {}, 'Retail task', failure, undefined, {
+        rejectedUrls: [],
+        nonPurchaseUrls: policy,
+      }),
+    ).toMatchObject({ error: 'Public search fallback unavailable', detail: 'error' })
+    const malformed = vi.fn().mockResolvedValue({
+      outcome: { kind: 'done', data: { results: [{ url: 'https://target.com/s/oil' }] } },
+    })
+    expect(
+      await publicSearchFallback('oil', 'model', 5, {}, 'Retail task', malformed, undefined, {
+        rejectedUrls: [],
+        nonPurchaseUrls: policy,
+      }),
+    ).toMatchObject({ error: 'Public search fallback malformed result' })
+  })
   it('keeps generic empty searches and invalid retail URLs distinct from explicit empty retail results', async () => {
     const empty = vi.fn().mockResolvedValue({
       outcome: { kind: 'done', data: { results: [] } },

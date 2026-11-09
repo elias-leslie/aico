@@ -321,7 +321,10 @@ function serviceAppsRouter(deps: ServiceAppsDeps): Router {
           currency: purpose.currency,
           ...(body.rejected_urls !== undefined && { rejected_urls: body.rejected_urls }),
         })}`
-        return await discover(...args, task)
+        return await discover(...args, task, undefined, undefined, {
+          rejectedUrls: (body.rejected_urls ?? []) as string[],
+          nonPurchaseUrls: purpose.non_purchase_urls,
+        })
       } catch {
         return { error: 'Public search fallback unavailable' }
       }
