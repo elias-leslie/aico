@@ -297,19 +297,28 @@ function serviceAppsRouter(deps: ServiceAppsDeps): Router {
       web
         .search(value, { max: settings.evidence.max_results }, { fetch, env })
         .catch(() => ({ error: 'Shared search unavailable' }))
+    const retail = body.intent === 'product_offers'
     const modelSearch = async (): Promise<Record<string, unknown>> => {
       try {
-        return await (deps.publicSearch ?? publicSearchFallback)(
+        const discover = deps.publicSearch ?? publicSearchFallback
+        const args = [
           value,
           settings.evidence.public_search_model,
           settings.evidence.max_results,
           env,
-        )
+        ] as const
+        if (!retail) return await discover(...args)
+        const purpose = settings.evidence.purposes.product_offers
+        const task = `${readPrompt(purpose.prompt)}\n\n${JSON.stringify({
+          query: value,
+          market: purpose.market,
+          currency: purpose.currency,
+        })}`
+        return await discover(...args, task)
       } catch {
         return { error: 'Public search fallback unavailable' }
       }
     }
-    const retail = body.intent === 'product_offers'
     let payload: Record<string, unknown> =
       verb === 'search'
         ? await (retail ? modelSearch() : sharedSearch())
@@ -329,10 +338,9 @@ function serviceAppsRouter(deps: ServiceAppsDeps): Router {
       if (retail) {
         // Retail discovery needs the actual model search even when a cheap
         // provider would return unrelated links. Leads still need page checks.
-        if (needsPublicSearch(value, payload)) {
-          const modelUnavailable = publicSearchUnavailable(payload)
+        if (publicSearchUnavailable(payload)) {
           payload = await sharedSearch()
-          searchFailed = modelUnavailable && Boolean(payload.error)
+          searchFailed = Boolean(payload.error)
           if (!payload.error)
             payload.fallback_reason = 'Model-assisted retail discovery unavailable'
         } else {

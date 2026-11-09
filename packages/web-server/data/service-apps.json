@@ -178,6 +178,13 @@
   "evidence": {
     "max_results": 5,
     "public_search_model": "gemini-3.8-flash",
+    "purposes": {
+      "product_offers": {
+        "prompt": "public-retail-discovery",
+        "market": "US",
+        "currency": "USD"
+      }
+    },
     "max_chars": 50000
   }
 }

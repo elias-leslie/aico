@@ -75,14 +75,24 @@ export async function publicSearchFallback(
   model: string,
   max: number,
   env: NodeJS.ProcessEnv,
+  task?: string,
   search: Search = publicSearch,
   fetcher: typeof fetch = fetch,
 ): Promise<Payload> {
   try {
-    const result = await search(query, model, {}, env)
+    const result = await search(task ?? query, model, {}, env)
     if (result.outcome.kind !== 'done')
       return { error: 'Public search fallback unavailable', detail: result.outcome.kind, query }
     const data = result.outcome.data as { results: { title: string; url: string }[] }
+    if (task !== undefined && Array.isArray(data.results) && data.results.length === 0)
+      return {
+        provider: 'agy-search-web',
+        query,
+        search_type: 'text',
+        status: 'no_results',
+        result_count: 0,
+        results: [],
+      }
     const domains = sites(query)
     const resolved = await Promise.all(
       data.results.map(async (item) => ({

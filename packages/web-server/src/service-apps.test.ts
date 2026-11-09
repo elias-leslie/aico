@@ -16,6 +16,8 @@ import { StatusStore } from '@aico/status'
 import type { TetherClient } from '@aico/tether-client'
 import { fetchPage, openCounter, type searchWeb, today } from '@aico/webtools'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import settings from '../data/service-apps.json' with { type: 'json' }
+import { publicSearchFallback } from './public-search'
 import {
   createServiceAppsServer,
   SERVICE_APPS,
@@ -67,6 +69,14 @@ const publicFallback = vi.fn(
 )
 const receive = vi.fn()
 const tether = vi.fn()
+const retailTask = 'Configured retail discovery task.'
+const prompt = vi.fn((slug: string) =>
+  slug === 'review-prompt'
+    ? 'Review carefully.'
+    : slug === settings.evidence.purposes.product_offers.prompt
+      ? retailTask
+      : null,
+)
 
 beforeEach(async () => {
   vi.clearAllMocks()
@@ -118,7 +128,7 @@ async function listen(
     ...(usageFacts && { usageFacts }),
     web: { search, fetch: page },
     publicSearch: publicFallback,
-    prompt: (slug) => (slug === 'review-prompt' ? 'Review carefully.' : null),
+    prompt,
   })
   await new Promise<void>((done) => made.listen(0, '127.0.0.1', done))
   base = `http://127.0.0.1:${(made.address() as AddressInfo).port}`
@@ -852,7 +862,14 @@ it('uses actual model-assisted discovery first for retail offers instead of acce
     provider: 'agy-search-web',
     results: [{ url: 'https://retailer.example/product?variant=blue' }],
   })
-  expect(publicFallback).toHaveBeenCalledWith('Acme X100 blue price', 'gemini-3.8-flash', 5, env)
+  expect(publicFallback).toHaveBeenCalledWith(
+    'Acme X100 blue price',
+    'gemini-3.8-flash',
+    5,
+    env,
+    `${retailTask}\n\n${JSON.stringify({ query: 'Acme X100 blue price', market: 'US', currency: 'USD' })}`,
+  )
+  expect(prompt).toHaveBeenCalledWith(settings.evidence.purposes.product_offers.prompt)
   expect(search).not.toHaveBeenCalled()
   expect(page).not.toHaveBeenCalled() // Discovery cannot manufacture a verified fetched offer.
 })
@@ -874,6 +891,56 @@ it('retains ordinary search as the retail fallback when the model search is unav
   expect(publicFallback.mock.invocationCallOrder[0]).toBeLessThan(
     search.mock.invocationCallOrder[0] as number,
   )
+})
+
+it('returns a completed empty retail search through the real helper without fallback or a repair', async () => {
+  const modelSearch = vi.fn().mockResolvedValue({
+    outcome: { kind: 'done', data: { results: [] } },
+  })
+  publicFallback.mockImplementationOnce((query, model, max, env, task) =>
+    publicSearchFallback(query, model, max, env, task, modelSearch),
+  )
+  const shopping = { request_id: '88888888-8888-4888-8888-888888888888', kind: 'item' }
+  const response = await call('POST', '/v1/ask/evidence', {
+    query: 'Acme X100 price',
+    intent: 'product_offers',
+    shopping,
+  })
+  const result = await response.json()
+  expect(result).toMatchObject({ status: 'no_results', result_count: 0, results: [] })
+  expect(result).not.toHaveProperty('error')
+  expect(search).not.toHaveBeenCalled()
+  expect(modelSearch).toHaveBeenCalledOnce()
+  expect(status.rows().some(({ row }) => row.id.endsWith(shopping.request_id))).toBe(false)
+})
+
+it('keeps unusable retail URLs distinct from unavailable discovery', async () => {
+  publicFallback.mockResolvedValueOnce({ error: 'Public search fallback found no matching URLs' })
+  const response = await call('POST', '/v1/ask/evidence', {
+    query: 'Acme X100 price',
+    intent: 'product_offers',
+  })
+  expect(await response.json()).toMatchObject({
+    error: 'Public search fallback found no matching URLs',
+  })
+  expect(search).not.toHaveBeenCalled()
+})
+
+it('reports an unavailable required retail prompt honestly when shared discovery also fails', async () => {
+  prompt.mockReturnValueOnce(null)
+  search.mockResolvedValueOnce({ error: 'Shared search unavailable' })
+  const shopping = { request_id: '77777777-7777-4777-8777-777777777777', kind: 'item' }
+  const response = await call('POST', '/v1/ask/evidence', {
+    query: 'Acme X100 price',
+    intent: 'product_offers',
+    shopping,
+  })
+  expect(await response.json()).toMatchObject({ error: 'Shared search unavailable' })
+  expect(publicFallback).not.toHaveBeenCalled()
+  expect(status.rows().find(({ row }) => row.id.endsWith(shopping.request_id))?.row).toMatchObject({
+    state: 'failed',
+    meaning: expect.stringContaining('evidence_search_failed'),
+  })
 })
 
 it('keeps successful generic searches on the ordinary provider and validates retail intent', async () => {
@@ -910,7 +977,6 @@ it('reports exhausted retail discovery outages but does not turn a model refusal
     error: 'Public search fallback unavailable',
     detail: 'model_refused',
   })
-  search.mockResolvedValueOnce({ error: 'Shared search unavailable' })
   await call('POST', '/v1/ask/evidence', {
     query: 'public product',
     intent: 'product_offers',

@@ -2,6 +2,45 @@ import { describe, expect, it, vi } from 'vitest'
 import { needsPublicSearch, publicSearchFallback, publicSearchUnavailable } from './public-search'
 
 describe('public URL discovery', () => {
+  it('keeps generic empty searches and invalid retail URLs distinct from explicit empty retail results', async () => {
+    const empty = vi.fn().mockResolvedValue({
+      outcome: { kind: 'done', data: { results: [] } },
+    })
+    expect(await publicSearchFallback('query', 'model', 5, {}, undefined, empty)).toMatchObject({
+      error: 'Public search fallback found no matching URLs',
+    })
+    const invalid = vi.fn().mockResolvedValue({
+      outcome: { kind: 'done', data: { results: [{ title: 'Invalid', url: 'not a URL' }] } },
+    })
+    expect(
+      await publicSearchFallback('query', 'model', 5, {}, 'Retail task', invalid),
+    ).toMatchObject({
+      error: 'Public search fallback found no matching URLs',
+    })
+  })
+
+  it('sends the configured task to model discovery while preserving the original query scope', async () => {
+    const query = 'site:retailer.example olive oil'
+    const task = 'Configured retail task and public query data.'
+    const search = vi.fn().mockResolvedValue({
+      outcome: {
+        kind: 'done',
+        data: {
+          results: [
+            { title: 'Retailer', url: 'https://retailer.example/product' },
+            { title: 'Other', url: 'https://other.example/article' },
+          ],
+        },
+      },
+    })
+    const result = await publicSearchFallback(query, 'model', 5, {}, task, search)
+    expect(search).toHaveBeenCalledWith(task, 'model', {}, {})
+    expect(result).toMatchObject({
+      query,
+      results: [{ title: 'Retailer', url: 'https://retailer.example/product' }],
+    })
+  })
+
   it('distinguishes provider outages from missing evidence or a policy refusal', () => {
     expect(publicSearchUnavailable({ error: 'Public search fallback unavailable' })).toBe(true)
     expect(
@@ -81,6 +120,7 @@ describe('public URL discovery', () => {
       'model',
       5,
       {},
+      undefined,
       search,
     )
     expect(result).toMatchObject({
@@ -90,6 +130,12 @@ describe('public URL discovery', () => {
         { rank: 2, title: 'Business', url: 'https://www.costcobusinessdelivery.com/item' },
       ],
     })
+    expect(search).toHaveBeenCalledWith(
+      '(site:costco.com OR site:costcobusinessdelivery.com) 1221092 Costco item',
+      'model',
+      {},
+      {},
+    )
   })
 
   it('reports no matching URLs when an OR-scoped fallback returns only unrelated URLs', async () => {
@@ -105,6 +151,7 @@ describe('public URL discovery', () => {
         'model',
         5,
         {},
+        undefined,
         search,
       ),
     ).toMatchObject({ error: 'Public search fallback found no matching URLs' })
@@ -135,6 +182,7 @@ describe('public URL discovery', () => {
       'gemini-3.8-flash',
       5,
       {},
+      undefined,
       search,
       fetcher,
     )
@@ -148,7 +196,7 @@ describe('public URL discovery', () => {
 
   it('returns an unavailable result on failure and no unrelated results on an empty match', async () => {
     const fail = vi.fn().mockResolvedValue({ outcome: { kind: 'error' } })
-    expect(await publicSearchFallback('query', 'model', 5, {}, fail)).toMatchObject({
+    expect(await publicSearchFallback('query', 'model', 5, {}, undefined, fail)).toMatchObject({
       error: 'Public search fallback unavailable',
     })
     const other = vi.fn().mockResolvedValue({
@@ -157,7 +205,9 @@ describe('public URL discovery', () => {
         data: { results: [{ title: 'wrong', url: 'https://example.com/' }] },
       },
     })
-    expect(await publicSearchFallback('site:costco.com oil', 'model', 5, {}, other)).toMatchObject({
+    expect(
+      await publicSearchFallback('site:costco.com oil', 'model', 5, {}, undefined, other),
+    ).toMatchObject({
       error: 'Public search fallback found no matching URLs',
     })
   })
