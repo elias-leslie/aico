@@ -76,3 +76,14 @@ Five receipt Chromium cases separately passed. Normal deployed recovery linked
 all eight Walmart items to the existing $69.01 charge, with unchanged counts
 after replay. The source line subtotals remain distinct from allocated order
 savings. This change needs no additional Aico code deployment.
+
+
+The final normal post-release price probe using public discovery v5 completed
+in 450.28 seconds: correct synthetic placard read, nine fetched retailer leads,
+one unmatched candidate, no verified landed-cost recommendation. Discovery
+consumed 323.26 seconds. A read-only audit found source configuration already
+uses Gemini 3.8 Flash and exposes no per-request model/effort override. The
+existing keyless route took 1.142 seconds but produced only two product-page
+leads among ten results; it was not promoted unchanged. No model/configuration
+or billing change followed that audit. Portfolio's ledger retains the measured
+results and explicit live-price speed/coverage and phone/user-test limits.
