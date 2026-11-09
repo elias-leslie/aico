@@ -193,10 +193,7 @@ export function StatusBody({
       {offRows.length > 0 && (
         <section className="status-group" aria-label="Off">
           <Fold open={showOff} onToggle={() => onOffOpen(!showOff)}>
-            <b>{offRows.length} off</b>{' '}
-            <span className="status-muted">
-              · their machine is off, so nothing is reported
-            </span>
+            <b>{offRows.length} off</b>
           </Fold>
           {showOff && rowsOf(offRows)}
         </section>

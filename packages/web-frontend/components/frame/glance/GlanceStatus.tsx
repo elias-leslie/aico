@@ -333,7 +333,6 @@ export function GlanceStatus() {
             <section aria-label="Off">
               <Fold
                 label={`${off.length} off`}
-                note="their machine is off, so nothing is reported"
                 open={showOff}
                 onToggle={() => setOffOpen(!offOpen)}
               />
