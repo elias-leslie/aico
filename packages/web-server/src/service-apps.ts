@@ -27,6 +27,7 @@ import {
   fetchPage,
   fullPageContent,
   openCounter,
+  publicFallbackAllowed,
   searchWeb,
   today,
 } from '@aico/webtools'
@@ -282,11 +283,16 @@ function serviceAppsRouter(deps: ServiceAppsDeps): Router {
     if (
       Number(body.query !== undefined) + Number(body.url !== undefined) !== 1 ||
       !Object.keys(body).every((key) =>
-        ['query', 'url', 'shopping', 'intent', 'full_content'].includes(key),
+        ['query', 'url', 'shopping', 'intent', 'full_content', 'rejected_urls'].includes(key),
       ) ||
       (body.full_content !== undefined &&
         (body.url === undefined || typeof body.full_content !== 'boolean')) ||
-      (body.intent !== undefined && (body.intent !== 'product_offers' || body.query === undefined))
+      (body.intent !== undefined &&
+        (body.intent !== 'product_offers' || body.query === undefined)) ||
+      (body.rejected_urls !== undefined &&
+        (body.intent !== 'product_offers' ||
+          !Array.isArray(body.rejected_urls) ||
+          body.rejected_urls.some((url) => typeof url !== 'string' || !publicFallbackAllowed(url))))
     )
       throw new HttpError(422, 'Send one public search query or URL')
     const verb = body.query !== undefined ? 'search' : 'fetch'
@@ -313,6 +319,7 @@ function serviceAppsRouter(deps: ServiceAppsDeps): Router {
           query: value,
           market: purpose.market,
           currency: purpose.currency,
+          ...(body.rejected_urls !== undefined && { rejected_urls: body.rejected_urls }),
         })}`
         return await discover(...args, task)
       } catch {

@@ -4,6 +4,7 @@
 
 import { isIP } from 'node:net'
 import ipaddr from 'ipaddr.js'
+import coverage from '../data/source-coverage.json' with { type: 'json' }
 import { loadArtifact, saveArtifact } from './artifacts'
 import { extractHtml, type Page } from './extract'
 import { type FocusMeta, normalizeWhitespace, selectFocused } from './focus'
@@ -136,6 +137,19 @@ function extractPage(contentType: string, raw: string, tokens: string | null): P
   return page
 }
 
+/** Match page titles and the first heading, not a product's incidental error-page quotation. */
+function sourceFailure(page: { content?: unknown; title?: unknown }): string | undefined {
+  if (typeof page.content !== 'string') return undefined
+  const headings = [
+    typeof page.title === 'string' ? page.title : undefined,
+    page.content.match(/^Title:\s*(.+)$/m)?.[1],
+    page.content.match(/^#{1,6}\s+(.+)$/m)?.[1],
+  ].map((value) => normalizeWhitespace(value ?? '').toLowerCase())
+  return Object.entries(coverage.incomplete_headings).find(([, observed]) =>
+    observed.some((heading) => headings.includes(normalizeWhitespace(heading).toLowerCase())),
+  )?.[0]
+}
+
 function view(page: Page, max: number, focusQuery: string | undefined) {
   const query = normalizeWhitespace(focusQuery ?? '')
   const focus = selectFocused(page.content, query || null, max)
@@ -181,13 +195,12 @@ function build(
     payload.selected_chunk_count = meta.selected_chunk_count
     payload.candidate_chunk_count = meta.candidate_chunk_count
   } else if (shown.query) payload.focused = false
-  payload.content_complete = Boolean(shown.content) && !shown.truncated && !meta.focused
+  const failure = sourceFailure(page)
+  payload.content_complete = Boolean(shown.content) && !shown.truncated && !meta.focused && !failure
   if (!payload.content_complete)
-    payload.incomplete_reason = meta.focused
-      ? 'focus_selection'
-      : shown.truncated
-        ? 'character_limit'
-        : 'empty_extraction'
+    payload.incomplete_reason =
+      failure ??
+      (meta.focused ? 'focus_selection' : shown.truncated ? 'character_limit' : 'empty_extraction')
   return payload
 }
 
@@ -403,7 +416,7 @@ export async function fetchPage(url: string, options: FetchOptions, deps: Deps):
   if (fallbackFailure) payload.fallback_failure = fallbackFailure
   if (thin) {
     payload.content_complete = false
-    payload.incomplete_reason = 'sparse_dynamic_shell'
+    payload.incomplete_reason = sourceFailure(page) ?? 'sparse_dynamic_shell'
   }
   return retain(payload, page.content, max, deps.env)
 }
@@ -414,7 +427,10 @@ export function fullPageContent(payload: Payload, url: string, env: NodeJS.Proce
   if (payload.error) return payload
   if (!publicFallbackAllowed(url) || payload.url !== url) return unavailable()
   if (payload.status_code !== 200) return payload
-  if (payload.content_complete === true && payload.truncated !== true) return payload
+  if (payload.content_complete === true && payload.truncated !== true) {
+    const failure = sourceFailure(payload)
+    return failure ? { ...payload, content_complete: false, incomplete_reason: failure } : payload
+  }
   // A retained extraction cannot repair a partial source, selected focus or failed request.
   if (payload.incomplete_reason !== 'character_limit' || payload.truncated !== true) return payload
   if (typeof payload.artifact_id !== 'string' || !/^[a-f0-9]{32}$/.test(payload.artifact_id))
@@ -443,6 +459,8 @@ export function fullPageContent(payload: Payload, url: string, env: NodeJS.Proce
     record.full_content_chars !== record.content.length
   )
     return unavailable()
+  const failure = sourceFailure(record)
+  if (failure) return { ...payload, content_complete: false, incomplete_reason: failure }
   const complete: Payload = {
     ...payload,
     content: record.content,
@@ -504,7 +522,7 @@ export function refocus(
   })
   // A cached view cannot strengthen the original source's coverage claim.
   payload.content_complete = false
-  if (!shown.truncated && !shown.meta.focused)
+  if (!shown.truncated && !shown.meta.focused && !sourceFailure(page))
     payload.incomplete_reason = 'source_completeness_unverified'
   return payload
 }

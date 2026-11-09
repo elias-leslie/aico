@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { runWebCli, type WebIo } from './cli'
 import { count, counterRow, openCounter, today } from './counter'
 import { extractHtml } from './extract'
-import { fetchPage, fullPageContent, publicFallbackAllowed } from './fetch'
+import { fetchPage, fullPageContent, publicFallbackAllowed, refocus } from './fetch'
 import { selectFocused } from './focus'
 import { parseLite, parseRss } from './search'
 
@@ -96,6 +96,130 @@ describe('output shape', () => {
 })
 
 describe('aico web', () => {
+  it.each([
+    { heading: 'Robot or human?', reason: 'challenge_page' },
+    {
+      heading: 'Oops! Something went wrong! Please try again.',
+      reason: 'application_error',
+    },
+  ])(
+    'retains HTTP 200 $reason pages without claiming complete source evidence',
+    async ({ heading, reason }) => {
+      const url = 'https://retailer.example/product'
+      const content = `Title: Retailer\n\nURL Source: ${url}\n\n# ${heading}\n\nTry again.`
+      const h = harness({ 'https://r.jina.ai/': () => new Response(content) })
+      const page = await fetchPage(url, { backend: 'jina' }, h.io)
+      expect(page).toMatchObject({
+        url,
+        status_code: 200,
+        fetch_backend: 'jina',
+        content,
+        content_complete: false,
+        incomplete_reason: reason,
+      })
+      const artifact = JSON.parse(readFileSync(String(page.artifact_path), 'utf8'))
+      expect(artifact).toMatchObject({ content, incomplete_reason: reason })
+      expect(fullPageContent(page, url, h.io.env)).toEqual(page)
+      expect(refocus(String(page.artifact_id), {}, h.io)).toMatchObject({
+        content_complete: false,
+        incomplete_reason: reason,
+        network_access: false,
+      })
+    },
+  )
+
+  it.each(['jina', 'direct'])(
+    'keeps real product pages complete when they mention an error using %s',
+    async (backend) => {
+      const url = 'https://retailer.example/product'
+      const h = harness({
+        'https://r.jina.ai/': () =>
+          new Response(
+            `Title: Olive Oil\n\nURL Source: ${url}\n\n# Olive Oil\n\n$12.99, 32 fl oz.\n\n## Robot or human?\n\nOops! Something went wrong! Please try again.`,
+          ),
+        [url]: () =>
+          html(
+            '<title>Olive Oil</title><article><h1>Olive Oil</h1><p>$12.99, 32 fl oz.</p><h2>Robot or human?</h2><p>Oops! Something went wrong! Please try again.</p></article>',
+          ),
+      })
+      const page = await fetchPage(url, { backend }, h.io)
+      expect(page).toMatchObject({ content_complete: true, status_code: 200 })
+      expect(page).not.toHaveProperty('incomplete_reason')
+    },
+  )
+
+  it.each([
+    { title: 'Robot or human?', reason: 'challenge_page' },
+    { title: 'Oops! Something went wrong! Please try again.', reason: 'application_error' },
+  ])('marks a direct HTTP 200 $reason incomplete', async ({ title, reason }) => {
+    const url = 'https://retailer.example/product'
+    const h = harness({
+      [url]: () =>
+        html(`<title>${title}</title><article><h1>${title}</h1><p>Try again.</p></article>`),
+    })
+    expect(await fetchPage(url, { backend: 'direct' }, h.io)).toMatchObject({
+      url,
+      status_code: 200,
+      fetch_backend: 'direct',
+      content_complete: false,
+      incomplete_reason: reason,
+    })
+  })
+
+  it('does not restore a display-limited challenge as complete evidence', async () => {
+    const url = 'https://retailer.example/product'
+    const content = `Title: Robot or human?\n\nURL Source: ${url}\n\n${'Page chrome. '.repeat(5000)}`
+    const h = harness({ 'https://r.jina.ai/': () => new Response(content) })
+    const page = await fetchPage(url, { backend: 'jina', maxChars: 50000 }, h.io)
+    expect(page).toMatchObject({
+      truncated: true,
+      content_complete: false,
+      incomplete_reason: 'challenge_page',
+    })
+    expect(fullPageContent(page, url, h.io.env)).toEqual(page)
+  })
+
+  it.each([
+    { heading: 'Robot or human?', reason: 'challenge_page' },
+    { heading: 'Oops! Something went wrong! Please try again.', reason: 'application_error' },
+  ])('reclassifies a legacy complete cached $reason', async ({ heading, reason }) => {
+    const url = 'https://retailer.example/product'
+    const content = `URL Source: ${url}\n\n# ${heading}\n\nTry again.`
+    const h = harness({ 'https://r.jina.ai/': () => new Response(content) })
+    const legacy: Record<string, unknown> = {
+      ...(await fetchPage(url, { backend: 'jina' }, h.io)),
+      content_complete: true,
+    }
+    delete legacy.incomplete_reason
+    expect(fullPageContent(legacy, url, h.io.env)).toEqual({
+      ...legacy,
+      content_complete: false,
+      incomplete_reason: reason,
+    })
+  })
+
+  it.each([
+    { heading: 'Robot or human?', reason: 'challenge_page' },
+    { heading: 'Oops! Something went wrong! Please try again.', reason: 'application_error' },
+  ])('does not promote a legacy character-limited cached $reason', async ({ heading, reason }) => {
+    const url = 'https://retailer.example/product'
+    const content = `URL Source: ${url}\n\n${'Navigation chrome. '.repeat(3000)}\n\n# ${heading}\n\nTry again.`
+    const h = harness({ 'https://r.jina.ai/': () => new Response(content) })
+    const legacy: Record<string, unknown> = {
+      ...(await fetchPage(url, { backend: 'jina', maxChars: 50000 }, h.io)),
+      incomplete_reason: 'character_limit',
+    }
+    expect(String(legacy.content)).not.toContain(heading)
+    const path = String(legacy.artifact_path)
+    const record = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>
+    writeFileSync(path, JSON.stringify({ ...record, incomplete_reason: 'character_limit' }))
+    expect(fullPageContent(legacy, url, h.io.env)).toEqual({
+      ...legacy,
+      content_complete: false,
+      incomplete_reason: reason,
+    })
+  })
+
   it('returns complete retained public text without increasing the ordinary page limit', async () => {
     const url = 'https://www.costcobusinessdelivery.com/p/-/artisan-buns/100338289'
     const content =

@@ -874,6 +874,52 @@ it('uses actual model-assisted discovery first for retail offers instead of acce
   expect(page).not.toHaveBeenCalled() // Discovery cannot manufacture a verified fetched offer.
 })
 
+it('passes public failed leads to the configured retail task for discovery refinement', async () => {
+  const rejected_urls = [
+    'https://retailer.example/product?variant=blue',
+    'https://other.example/search/oil',
+  ]
+  publicFallback.mockResolvedValueOnce({ results: [] })
+  const response = await call('POST', '/v1/ask/evidence', {
+    query: 'extra virgin olive oil price',
+    intent: 'product_offers',
+    rejected_urls,
+  })
+  expect(response.status).toBe(200)
+  expect(publicFallback).toHaveBeenCalledWith(
+    'extra virgin olive oil price',
+    'gemini-3.8-flash',
+    5,
+    env,
+    `${retailTask}\n\n${JSON.stringify({ query: 'extra virgin olive oil price', market: 'US', currency: 'USD', rejected_urls })}`,
+  )
+  expect(search).not.toHaveBeenCalled()
+  expect(page).not.toHaveBeenCalled()
+})
+
+it('rejects retail feedback misuse and non-public failed URLs before discovery', async () => {
+  for (const payload of [
+    { query: 'oil', rejected_urls: [] },
+    { url: 'https://retailer.example/product', rejected_urls: [] },
+    { query: 'oil', intent: 'product_offers', rejected_urls: null },
+    { query: 'oil', intent: 'product_offers', rejected_urls: 'https://retailer.example/product' },
+    { query: 'oil', intent: 'product_offers', rejected_urls: [42] },
+    { query: 'oil', intent: 'product_offers', rejected_urls: [], artifact_id: 'a'.repeat(32) },
+    ...[
+      'http://127.0.0.1/private',
+      'http://10.0.0.1/private',
+      'https://nas.lan/product',
+      'https://user:password@retailer.example/product',
+      'https://retailer.example/product?token=secret',
+      '/tmp/page.json',
+    ].map((url) => ({ query: 'oil', intent: 'product_offers', rejected_urls: [url] })),
+  ])
+    expect((await call('POST', '/v1/ask/evidence', payload)).status).toBe(422)
+  expect(publicFallback).not.toHaveBeenCalled()
+  expect(search).not.toHaveBeenCalled()
+  expect(page).not.toHaveBeenCalled()
+})
+
 it('retains ordinary search as the retail fallback when the model search is unavailable', async () => {
   publicFallback.mockResolvedValueOnce({
     error: 'Public search fallback unavailable',
