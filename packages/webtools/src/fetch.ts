@@ -408,6 +408,51 @@ export async function fetchPage(url: string, options: FetchOptions, deps: Deps):
   return retain(payload, page.content, max, deps.env)
 }
 
+/** Restore only display-limited text from this public fetch's own retained extraction. */
+export function fullPageContent(payload: Payload, url: string, env: NodeJS.ProcessEnv): Payload {
+  const unavailable = () => ({ ...payload, error: 'fetch_web_page full content unavailable' })
+  if (payload.error) return payload
+  if (!publicFallbackAllowed(url) || payload.url !== url) return unavailable()
+  if (payload.status_code !== 200) return payload
+  if (payload.content_complete === true && payload.truncated !== true) return payload
+  // A retained extraction cannot repair a partial source, selected focus or failed request.
+  if (payload.incomplete_reason !== 'character_limit' || payload.truncated !== true) return payload
+  if (typeof payload.artifact_id !== 'string' || !/^[a-f0-9]{32}$/.test(payload.artifact_id))
+    return unavailable()
+  let record: Payload
+  try {
+    record = loadArtifact(payload.artifact_id, env)
+  } catch {
+    return unavailable()
+  }
+  const coverage = record.coverage as Payload | undefined
+  if (
+    record.artifact_content_scope !== 'full_extracted_text' ||
+    record.artifact_kind === 'raw_response' ||
+    record.error ||
+    record.url !== url ||
+    record.final_url !== payload.final_url ||
+    record.fetch_backend !== payload.fetch_backend ||
+    record.status_code !== payload.status_code ||
+    record.incomplete_reason !== 'character_limit' ||
+    record.truncated !== true ||
+    record.focused === true ||
+    coverage?.sparse_dynamic_shell === true ||
+    typeof record.content !== 'string' ||
+    !record.content.trim() ||
+    record.full_content_chars !== record.content.length
+  )
+    return unavailable()
+  const complete: Payload = {
+    ...payload,
+    content: record.content,
+    truncated: false,
+    content_complete: true,
+  }
+  delete complete.incomplete_reason
+  return complete
+}
+
 export function refocus(
   artifact: string,
   options: { maxChars?: number; focusQuery?: string | undefined },

@@ -21,7 +21,15 @@ import {
   usageDbPath,
   windowFacts,
 } from '@aico/usage'
-import { count, counterRow, fetchPage, openCounter, searchWeb, today } from '@aico/webtools'
+import {
+  count,
+  counterRow,
+  fetchPage,
+  fullPageContent,
+  openCounter,
+  searchWeb,
+  today,
+} from '@aico/webtools'
 import settings from '../data/service-apps.json' with { type: 'json' }
 import { type AskFallback, askFreeTier, wantsFreeTier } from './ask-free-tier'
 import { objectBody, RAW, type RequestContext, Router, requiredString, sendJson } from './http'
@@ -273,7 +281,11 @@ function serviceAppsRouter(deps: ServiceAppsDeps): Router {
     const shopping = shoppingRequest(body.shopping, app)
     if (
       Number(body.query !== undefined) + Number(body.url !== undefined) !== 1 ||
-      !Object.keys(body).every((key) => ['query', 'url', 'shopping', 'intent'].includes(key)) ||
+      !Object.keys(body).every((key) =>
+        ['query', 'url', 'shopping', 'intent', 'full_content'].includes(key),
+      ) ||
+      (body.full_content !== undefined &&
+        (body.url === undefined || typeof body.full_content !== 'boolean')) ||
       (body.intent !== undefined && (body.intent !== 'product_offers' || body.query === undefined))
     )
       throw new HttpError(422, 'Send one public search query or URL')
@@ -310,6 +322,8 @@ function serviceAppsRouter(deps: ServiceAppsDeps): Router {
               { fetch, env },
             )
             .catch(() => ({ error: 'fetch_web_page jina request failed' }))
+    if (verb === 'fetch' && body.full_content === true)
+      payload = fullPageContent(payload, value, env)
     let searchFailed = false
     if (verb === 'search') {
       if (retail) {
@@ -334,7 +348,9 @@ function serviceAppsRouter(deps: ServiceAppsDeps): Router {
       if (searchFailed || !payload.error)
         shoppingFault(deps, shopping, 'evidence_search_failed', searchFailed)
     } else {
-      const failure = payload.error === 'fetch_web_page jina request failed'
+      const failure =
+        payload.error === 'fetch_web_page jina request failed' ||
+        payload.error === 'fetch_web_page full content unavailable'
       if (failure || (!payload.error && payload.status_code === 200))
         shoppingFault(deps, shopping, 'evidence_fetch_failed', failure)
     }

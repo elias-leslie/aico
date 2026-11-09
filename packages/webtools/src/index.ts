@@ -2,4 +2,4 @@
 
 export { runWebCli, USAGE, type WebIo } from './cli'
 export { count, counterRow, openCounter, today, webtoolsDbPath } from './counter'
-export { fetchBatch, fetchPage, refocus, research, searchWeb } from './fetch'
+export { fetchBatch, fetchPage, fullPageContent, refocus, research, searchWeb } from './fetch'

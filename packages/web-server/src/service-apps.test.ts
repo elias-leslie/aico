@@ -71,7 +71,7 @@ const tether = vi.fn()
 beforeEach(async () => {
   vi.clearAllMocks()
   dir = mkdtempSync(join(tmpdir(), 'aico-apps-test-'))
-  env = { AICO_DATA_DIR: dir }
+  env = { AICO_DATA_DIR: dir, AICO_WEB_CACHE_DIR: join(dir, 'cache') }
   for (const [app, value] of [
     ['portfolio-ai', token],
     ['jobinator-4000', otherToken],
@@ -778,6 +778,53 @@ it('keeps public evidence behind the app token and counts each search and fetch'
   }
 })
 
+it('returns full retained public evidence only when a URL fetch explicitly requests it', async () => {
+  const url = 'https://www.costcobusinessdelivery.com/p/-/artisan-buns/100338289'
+  const content =
+    `URL Source: ${url}\n\n# Artisan Buns\n\nItem 1221092\n${'Public page text. '.repeat(3500)}`.trim()
+  page.mockImplementationOnce((target, options, deps) =>
+    fetchPage(target, options, {
+      ...deps,
+      fetch: (async () => new Response(content)) as typeof fetch,
+    }),
+  )
+  const response = await call('POST', '/v1/ask/evidence', { url, full_content: true })
+  expect(response.status).toBe(200)
+  expect(await response.json()).toMatchObject({
+    url,
+    status_code: 200,
+    content,
+    content_complete: true,
+    truncated: false,
+  })
+  expect(page).toHaveBeenCalledWith(url, { maxChars: 50000, backend: 'jina' }, expect.anything())
+})
+
+it('rejects full-content query misuse, non-booleans and caller-selected artifacts before I/O', async () => {
+  for (const payload of [
+    { query: 'public item', full_content: true },
+    { query: 'public item', full_content: false },
+    { url: 'https://public.example/product', full_content: 'true' },
+    { url: 'https://public.example/product', full_content: null },
+    { url: 'https://public.example/product', full_content: true, artifact_id: 'a'.repeat(32) },
+    { url: 'https://public.example/product', full_content: true, artifact_path: '/tmp/page.json' },
+  ])
+    expect((await call('POST', '/v1/ask/evidence', payload)).status).toBe(422)
+  expect(search).not.toHaveBeenCalled()
+  expect(page).not.toHaveBeenCalled()
+  expect(
+    (
+      await call(
+        'POST',
+        '/v1/ask/evidence',
+        { url: 'https://public.example/product', full_content: true },
+        { authorization: 'Bearer wrong' },
+      )
+    ).status,
+  ).toBe(401)
+  expect(page).not.toHaveBeenCalled()
+})
+
 it('falls back when a site-scoped search returns only unrelated domains', async () => {
   search.mockResolvedValueOnce({ results: [{ url: 'https://bing.com/irrelevant' }] })
   publicFallback.mockResolvedValueOnce({ results: [{ url: 'https://www.costco.com/item' }] })
@@ -879,16 +926,24 @@ it('keeps shared results when a site-scoped search has an official result', asyn
 })
 
 it('refuses private and credential-bearing evidence URLs without a network fetch', async () => {
-  page.mockImplementationOnce(fetchPage)
-  const response = await call('POST', '/v1/ask/evidence', { url: 'http://127.0.0.1/private' })
-  expect(await response.json()).toMatchObject({ error: expect.stringContaining('rejects private') })
-  page.mockImplementationOnce(fetchPage)
-  const credentials = await call('POST', '/v1/ask/evidence', {
-    url: 'https://example.com/?token=private',
-  })
-  expect(await credentials.json()).toMatchObject({
-    error: expect.stringContaining('credential-bearing'),
-  })
+  for (const full_content of [false, true]) {
+    page.mockImplementationOnce(fetchPage)
+    const response = await call('POST', '/v1/ask/evidence', {
+      url: 'http://127.0.0.1/private',
+      full_content,
+    })
+    expect(await response.json()).toMatchObject({
+      error: expect.stringContaining('rejects private'),
+    })
+    page.mockImplementationOnce(fetchPage)
+    const credentials = await call('POST', '/v1/ask/evidence', {
+      url: 'https://example.com/?token=private',
+      full_content,
+    })
+    expect(await credentials.json()).toMatchObject({
+      error: expect.stringContaining('credential-bearing'),
+    })
+  }
 })
 
 it('routes migrated Portfolio defaults through models the subscription CLI serves', async () => {

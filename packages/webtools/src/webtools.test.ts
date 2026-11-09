@@ -1,11 +1,11 @@
-import { mkdtempSync, readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { runWebCli, type WebIo } from './cli'
 import { count, counterRow, openCounter, today } from './counter'
 import { extractHtml } from './extract'
-import { publicFallbackAllowed } from './fetch'
+import { fetchPage, fullPageContent, publicFallbackAllowed } from './fetch'
 import { selectFocused } from './focus'
 import { parseLite, parseRss } from './search'
 
@@ -96,6 +96,81 @@ describe('output shape', () => {
 })
 
 describe('aico web', () => {
+  it('returns complete retained public text without increasing the ordinary page limit', async () => {
+    const url = 'https://www.costcobusinessdelivery.com/p/-/artisan-buns/100338289'
+    const content =
+      `URL Source: ${url}\n\n# Artisan Buns\n\nItem 1221092\n${'Public page text. '.repeat(3500)}`.trim()
+    const h = harness({ 'https://r.jina.ai/': () => new Response(content) })
+    const bounded = await fetchPage(url, { backend: 'jina', maxChars: 50000 }, h.io)
+    expect(bounded).toMatchObject({ truncated: true, content_complete: false })
+    expect(String(bounded.content)).toHaveLength(50000)
+
+    const full = fullPageContent(bounded, url, h.io.env)
+    expect(full).toMatchObject({
+      url,
+      status_code: 200,
+      fetch_backend: 'jina',
+      content,
+      truncated: false,
+      content_complete: true,
+      coverage: bounded.coverage,
+    })
+    expect(full).not.toHaveProperty('incomplete_reason')
+    expect(h.calls).toHaveLength(1)
+    expect(bounded).toMatchObject({ truncated: true, content_complete: false })
+  })
+
+  it.each([
+    { name: 'another URL', change: { url: 'https://other.example/product' } },
+    { name: 'another final URL', change: { final_url: 'https://other.example/product' } },
+    { name: 'another HTTP status', change: { status_code: 206 } },
+    { name: 'another backend', change: { fetch_backend: 'direct' } },
+    { name: 'a raw response', change: { artifact_kind: 'raw_response' } },
+    { name: 'a partial source', change: { incomplete_reason: 'source_truncated' } },
+    { name: 'inconsistent length', change: { full_content_chars: 7 } },
+  ])('does not promote retained text with $name', async ({ change }) => {
+    const url = 'https://public.example/product'
+    const h = harness({ 'https://r.jina.ai/': () => new Response('Public text. '.repeat(5000)) })
+    const bounded = await fetchPage(url, { backend: 'jina', maxChars: 50000 }, h.io)
+    const path = String(bounded.artifact_path)
+    const record = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>
+    writeFileSync(path, JSON.stringify({ ...record, ...change }))
+    const full = fullPageContent(bounded, url, h.io.env)
+    expect(full).toMatchObject({
+      error: 'fetch_web_page full content unavailable',
+      truncated: true,
+      content_complete: false,
+      content: bounded.content,
+    })
+  })
+
+  it('preserves public URL refusals and genuinely incomplete sources', async () => {
+    const h = harness({})
+    const url = 'http://127.0.0.1/private'
+    const refused = await fetchPage(url, { backend: 'jina' }, h.io)
+    expect(fullPageContent(refused, url, h.io.env)).toEqual(refused)
+    expect(h.calls).toEqual([])
+    const incomplete = {
+      url: 'https://public.example/product',
+      truncated: true,
+      content_complete: false,
+      incomplete_reason: 'source_truncated',
+      content: 'Partial source',
+    }
+    expect(fullPageContent(incomplete, incomplete.url, h.io.env)).toEqual(incomplete)
+  })
+
+  it('does not turn an HTTP partial response into complete evidence', async () => {
+    const url = 'https://public.example/product'
+    const h = harness({
+      'https://r.jina.ai/': () =>
+        new Response('Partial public text. '.repeat(3000), { status: 206 }),
+    })
+    const partial = await fetchPage(url, { backend: 'jina', maxChars: 50000 }, h.io)
+    expect(partial).toMatchObject({ status_code: 206, content_complete: false })
+    expect(fullPageContent(partial, url, h.io.env)).toEqual(partial)
+  })
+
   it('searches, falls back to Bing when DuckDuckGo fails, and counts the call as a fallback', async () => {
     const h = harness({
       'https://lite.duckduckgo.com': () => new Response('blocked', { status: 429 }),
