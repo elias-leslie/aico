@@ -102,3 +102,61 @@ independent work while waiting.
 Long network partitions can duplicate a reminder/digest slot after its lease
 expires (`lane2-failover-report.md`). This documented tradeoff is not evidence of
 a new failure and does not justify adding consensus machinery for a solo setup.
+
+## Execution evidence
+
+The preceding checkpoint was closed at `c655fa7a`. Owner-aware backup health,
+BlackBox presence and recovered routine completion were checked on both installed
+controllers at `cc8b8ede`; native backup/asset checks were healthy. No full backup
+was started to clear a historical stopped-run result.
+
+Three native Terra user testers completed bounded read-only journeys:
+
+- Aico at 390x844 and Status at 1440x900: navigation, Status, Backups, Routines,
+  Machines and Files passed. A throwaway Workstation Codex session replied READY,
+  survived reload and ended. Standby failed to launch Codex: the actual pane said
+  `exec: codex: not found`, preserved exit 127, and contained only fallback Bash.
+  Both throwaway sessions and the tester's browser were ended.
+- Jobinator at 390x844 and 1280x800: Today/Discover navigation, no-match search and
+  recovery, application filtering and page width passed. Standby's read-only
+  Status/Backups/Machines/Routines pages rendered. Duplicate reviewer labels and
+  the false universal explanation of Off rows were independently source-checked.
+  Jobinator's label fix `0b9098d` passed managed checks, was deployed by its recorded
+  CT191 procedure after the generic facade explicitly refused remote deployment,
+  and root verified distinct rendered choices. No AI/preferences were changed.
+- Portfolio at 390x844 and 1280x800: main navigation, no-match search/recovery and
+  natural loading/incomplete states passed. The tester found a vehicle all-clear
+  despite missing evidence, a NASDAQ exchange/ticker notice misclassified as broad
+  market context, and one scroll-dependent partially covered heading. Root
+  confirmed the first two against source/screenshots; their narrow corrections
+  are in progress. The layout observation is not yet an independently reproduced
+  defect. No financial actions, account changes, refresh jobs or records changed.
+
+Reports and private screenshots remain under
+`/srv/scratch/readiness-remote-shakedown/{aico-user,apps-user,portfolio-user}`.
+Portfolio screenshots contain household information; do not publish them.
+
+Standby's supported Codex CLI 0.166.0 now matches the workstation, installed via
+the existing managed admission command and official npm package. Its native
+sign-in is absent; a real Codex device-sign-in process was opened using Aico's
+existing host sign-in action. The owner has a Needs you item to finish it; no
+credentials were copied, altered or printed. The actual READY/reload/end retest
+remains pending that sign-in and deployment of executable readiness checks.
+
+Portfolio VM180 was started only after its agent cleared overlap. The actual
+guest SSH key differed from the workstation's stale cached IP keys. Root verified
+the public key and fingerprint through Proxmox QGA before updating that IP's
+known-host entry. The existing API forwarder then returned health 200 and the
+temporary frontend forward returned 200. Guest keys, login credentials, aliases
+and forwarding restrictions were unchanged. Restore the guest to its prior off
+state after the owned verification/release work.
+
+Current recovery metadata has no waiting sessions on either controller. The
+workstation's boot record has four restored sessions and no failed or pending
+entries. Standby's older restore record refers to an already-ended session; it
+does not prove a current recovery failure or an untested sudden-stop recovery.
+Both controllers' three services, Jobinator's two services and the native guard
+were active with zero automatic restarts at the post-journey check.
+
+Final deployment, resource totals, cleanup and guest-state verification remain
+to be recorded before this shakedown is closed.
